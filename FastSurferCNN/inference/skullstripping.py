@@ -20,7 +20,6 @@ compatible with the macacaMRINN skullstripping API.
 """
 
 import logging
-import subprocess
 from pathlib import Path
 from typing import Dict, Optional, Union, Any
 
@@ -307,40 +306,11 @@ def skullstripping(
         
         predictor = RunModelOnData(**predictor_kwargs)
         
-        # Load input image
-        logger.info(f"Loading input image: {input_image}")
-        input_img_native = nib.load(input_image)
-        
-        # Conform image before prediction (critical for good results!)
-        # The models were trained on conformed images, so non-conformed images give poor results
-        logger.info("Conforming image to standard space...")
-        conform_kwargs = {
-            "threshold_1mm": predictor.conform_to_1mm_threshold,
-            "vox_size": predictor.vox_size,
-            "orientation": predictor.orientation,
-            "img_size": predictor.image_size,
-        }
-        
-        if not is_conform(input_img_native, **conform_kwargs, verbose=True):
-            logger.info("Image needs conforming (voxel size, orientation, or dimensions)...")
-            conformed_img = conform(input_img_native, **conform_kwargs)
-        else:
-            logger.info("Image is already conformed")
-            conformed_img = input_img_native
-        
-        # Run prediction on conformed image
-        logger.info("Running FastSurferCNN segmentation on conformed image...")
-        pred_data = predictor.get_prediction(str(input_image), conformed_img)
-
-        # # Save the segmentation to the output path (in conformed space)
-        # seg_output_path = str(output_path).replace('.nii.gz', '_seg.nii.gz')
-        # logger.info(f"Saving segmentation to: {seg_output_path}")
-        # predictor.save_img(
-        #     seg_output_path,
-        #     pred_data,
-        #     conformed_img,
-        #     dtype=np.int16
-        # )
+        # Load and run prediction
+        # get_prediction() automatically handles conforming and sets up context
+        # for native space resampling
+        logger.info(f"Loading and processing input image: {input_image}")
+        pred_data = predictor.get_prediction(image_name=str(input_image))
 
         # Extract brain mask from segmentation
         logger.info("Extracting brain mask from segmentation...")
@@ -353,41 +323,13 @@ def skullstripping(
         # Ensure binary mask (0 or 1)
         brain_mask = (brain_mask > 0).astype(np.uint8)
         
-        # Save brain mask (in conformed space)
+        # Save brain mask (automatically resampled back to native space)
         logger.info(f"Saving brain mask to: {output_path}")
         predictor.save_img(
-            output_path,
-            brain_mask,
-            conformed_img,
+            save_as=output_path,
+            data=brain_mask,
             dtype=np.uint8
         )
-
-        # resample back to the native space, since potentially conformed
-        if not is_conform(input_img_native, **conform_kwargs, verbose=True):
-            logger.info("Resampling brain mask back to native space...")
-            # use 3dresample in afni
-            command_3dresample = [
-                '3dresample',
-                '-input', str(output_path),
-                '-prefix', str(output_path),
-                '-master', str(input_image),
-                '-overwrite'
-            ]
-            try:
-                result = subprocess.run(
-                    command_3dresample,
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-                if result.returncode == 0:
-                    logger.info(f"Brain mask resampled back to native space: {output_path}")
-                else:
-                    logger.error(f"Failed to resample brain mask back to native space: {result.stderr}")
-                    raise RuntimeError(f"Failed to resample brain mask back to native space: {result.stderr}")
-            except FileNotFoundError:
-                logger.error("3dresample command not found. Please ensure AFNI is installed and in your PATH.")
-                raise RuntimeError("3dresample command not found. Please ensure AFNI is installed and in your PATH.")
         
         logger.info("Skullstripping completed successfully")
         

@@ -20,6 +20,7 @@ This is the FastSurfer/predict.py script, the backbone for whole brain segmentat
 # IMPORTS
 import copy
 import shutil
+import subprocess
 import sys
 from collections.abc import Iterator
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
@@ -393,6 +394,12 @@ class RunModelOnData:
         self.image_size = image_size
         self.fix_wm_islands = fix_wm_islands
 
+        # Context for native space resampling
+        self._input_master_path: Path | None = None
+        self._input_native_img: nib.analyze.SpatialImage | None = None
+        self._conformed_img: nib.analyze.SpatialImage | None = None
+        self._conform_kwargs: dict = {}
+
         self.sf = 1.0
 
         self.device = find_device(device)
@@ -633,7 +640,9 @@ class RunModelOnData:
         self.current_plane = plane
 
     def get_prediction(
-        self, image_name: str, img: nib.analyze.SpatialImage | None = None,
+        self,
+        image_name: str,
+        img: nib.analyze.SpatialImage | None = None,
     ) -> np.ndarray:
         """
         Run and get prediction.
@@ -643,7 +652,9 @@ class RunModelOnData:
         image_name : str
             Original image filename (used for logging/identification).
         img : nib.analyze.SpatialImage, optional
-            Image object. If None, will be loaded from image_name.
+            Image object in native space. If None, will be loaded from image_name.
+            Will be automatically conformed if needed, and context will be captured
+            for automatic native space resampling in save_img().
 
         Returns
         -------
@@ -653,6 +664,29 @@ class RunModelOnData:
         # Load image if not provided
         if img is None:
             img = nib.load(image_name)
+        
+        # Store the native image and set up context for resampling
+        conform_kwargs = {
+            "threshold_1mm": self.conform_to_1mm_threshold,
+            "vox_size": self.vox_size,
+            "orientation": self.orientation,
+            "img_size": self.image_size,
+        }
+        
+        # Store input context for automatic resampling
+        self._input_master_path = Path(image_name)
+        self._input_native_img = img
+        self._conform_kwargs = conform_kwargs
+        
+        # Conform image if needed
+        if not is_conform(img, **conform_kwargs, verbose=True):
+            LOGGER.info("Conforming image to standard space...")
+            img = conform(img, **conform_kwargs)
+        else:
+            LOGGER.info("Image is already conformed")
+        
+        # Store conformed image for use as reference in save_img
+        self._conformed_img = img
         
         # Extract data, zoom, and affine from image
         orig_data = np.asanyarray(img.dataobj)
@@ -713,11 +747,15 @@ class RunModelOnData:
         self,
         save_as: str | Path,
         data: np.ndarray | torch.Tensor,
-        ref_image: nib.analyze.SpatialImage,
         dtype: type | None = None,
+        resample_to_native: bool = True,
     ) -> None:
         """
-        Save image as a file.
+        Save image as a file, with automatic resampling back to native space.
+        
+        Uses the conformed image from the last get_prediction() call as reference.
+        The image will be automatically resampled back to the original input's 
+        native space if conforming was performed and resample_to_native is True.
 
         Parameters
         ----------
@@ -725,10 +763,11 @@ class RunModelOnData:
             Filename to give the image.
         data : np.ndarray, torch.Tensor
             Image data.
-        orig : nib.analyze.SpatialImage
-            Original Image.
         dtype : type, optional
             Data type to use for saving the image. If None, the original data type is used.
+        resample_to_native : bool, default=True
+            If True, resample the image back to native space if conforming was performed.
+            Set to False to keep the image in conformed space (e.g., for orig.mgz).
         """
         save_as = Path(save_as)
         # Create output directory if it does not already exist.
@@ -736,25 +775,83 @@ class RunModelOnData:
             LOGGER.info(f"Output image directory {save_as.parent} does not exist. Creating it now...")
             save_as.parent.mkdir(parents=True)
 
+        # Use stored conformed image as reference
+        if self._conformed_img is None:
+            raise ValueError("save_img() requires get_prediction() to be called first")
+        
         np_data = data if isinstance(data, np.ndarray) else data.cpu().numpy()
         if dtype is not None:
-            _header = ref_image.header.copy()
+            _header = self._conformed_img.header.copy()
             _header.set_data_dtype(dtype)
         else:
-            _header = ref_image.header
-        du.save_image(_header, ref_image.affine, np_data, save_as, dtype=dtype)
+            _header = self._conformed_img.header
+        du.save_image(_header, self._conformed_img.affine, np_data, save_as, dtype=dtype)
         LOGGER.info(f"Successfully saved image {'asynchronously ' if self._async_io else ''}as {save_as}.")
+        
+        # Automatically resample back to native space if context is available and requested
+        if resample_to_native and self._input_master_path is not None and self._input_native_img is not None:
+            # Check if resampling is needed
+            if not is_conform(self._input_native_img, **self._conform_kwargs, verbose=True):
+                LOGGER.info(f"Resampling {save_as.name} back to native space...")
+                
+                # Use FreeSurfer's mri_vol2vol for .mgz files, 3dresample for NIfTI files
+                is_mgz = str(save_as).endswith('.mgz')
+                
+                if is_mgz:
+                    # Use FreeSurfer's mri_vol2vol for .mgz files
+                    command_resample = [
+                        'mri_vol2vol',
+                        '--mov', str(save_as),
+                        '--targ', str(self._input_master_path),
+                        '--o', str(save_as),
+                        '--regheader'
+                    ]
+                    tool_name = "mri_vol2vol"
+                    tool_package = "FreeSurfer"
+                else:
+                    # Use AFNI's 3dresample for NIfTI files
+                    command_resample = [
+                        '3dresample',
+                        '-input', str(save_as),
+                        '-prefix', str(save_as),
+                        '-master', str(self._input_master_path),
+                        '-overwrite'
+                    ]
+                    tool_name = "3dresample"
+                    tool_package = "AFNI"
+                
+                try:
+                    result = subprocess.run(
+                        command_resample,
+                        capture_output=True,
+                        text=True,
+                        check=False
+                    )
+                    if result.returncode == 0:
+                        LOGGER.info(f"Successfully resampled {save_as.name} back to native space")
+                    else:
+                        LOGGER.error(f"Failed to resample {save_as.name} back to native space: {result.stderr}")
+                        raise RuntimeError(f"Failed to resample back to native space: {result.stderr}")
+                except FileNotFoundError:
+                    LOGGER.error(f"{tool_name} command not found. Please ensure {tool_package} is installed and in your PATH.")
+                    raise RuntimeError(f"{tool_name} command not found. Please ensure {tool_package} is installed and in your PATH.")
+            else:
+                LOGGER.debug(f"Image {save_as.name} is already in native space, no resampling needed")
 
     def async_save_img(
         self,
         save_as: str | Path,
         data: np.ndarray | torch.Tensor,
-        orig: nib.analyze.SpatialImage,
         dtype: type | None = None,
+        resample_to_native: bool = True,
     ) -> Future[None]:
         """
         Save the image asynchronously and return a concurrent.futures.Future to track,
         when this finished.
+        
+        Uses the conformed image from the last get_prediction() call as reference.
+        The image will be automatically resampled back to the original input's 
+        native space if conforming was performed and resample_to_native is True.
 
         Parameters
         ----------
@@ -762,17 +859,18 @@ class RunModelOnData:
             Filename to give the image.
         data : np.ndarray, torch.Tensor
             Image data.
-        orig : nib.analyze.SpatialImage
-            Original Image.
         dtype : type, optional
             Data type to use for saving the image. If None, the original data type is used.
+        resample_to_native : bool, default=True
+            If True, resample the image back to native space if conforming was performed.
+            Set to False to keep the image in conformed space (e.g., for orig.mgz).
 
         Returns
         -------
         Future[None]
             A Future object to synchronize (and catch/handle exceptions in the save_img method).
         """
-        return self.pool.submit(self.save_img, save_as, data, orig, dtype)
+        return self.pool.submit(self.save_img, save_as, data, dtype, resample_to_native)
 
     def set_up_model_params(
             self,
