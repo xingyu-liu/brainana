@@ -21,7 +21,8 @@ This module contains post-segmentation processing steps including:
 """
 
 __all__ = [
-    "step1_fix_v1_wm",
-    "step2_reduce_to_aseg",
+    "fix_v1_wm",
+    "reduce_to_aseg",
+    "postseg_utils",
 ]
 

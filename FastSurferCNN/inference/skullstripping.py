@@ -20,9 +20,9 @@ compatible with the macacaMRINN skullstripping API.
 """
 
 import logging
+import subprocess
 from pathlib import Path
 from typing import Dict, Optional, Union, Any
-from macacaMRIprep.utils.mri import run_command
 
 import nibabel as nib
 import numpy as np
@@ -34,7 +34,7 @@ from FastSurferCNN.inference.predict import (
     MASK_EROSION_SIZE,
 )
 from FastSurferCNN.data_loader.conform import conform, is_conform
-import FastSurferCNN.postprocessing.step2_reduce_to_aseg as rta
+from FastSurferCNN.postprocessing.postseg_utils import create_mask
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,6 @@ def skullstripping(
             - 'batch_size': Batch size for inference (default: 1)
             - 'vox_size': Voxel size option (default: 'min')
             - 'orientation': Target orientation (default: 'lia')
-            - 'skip_two_pass': Skip two-pass refinement for faster processing (default: False)
             - 'base_dir': Base directory for pretrained_model (default: FastSurferCNN root)
         
     Returns:
@@ -279,22 +278,34 @@ def skullstripping(
     
     try:
         # Initialize predictor
-        predictor = RunModelOnData(
-            atlas_name=atlas_name,
-            atlas_metadata=atlas_metadata,
-            ckpt_ax=checkpoints.get('axial'),
-            ckpt_cor=checkpoints.get('coronal'),
-            ckpt_sag=checkpoints.get('sagittal'),
-            device=device_str,
-            viewagg_device=device_str,
-            threads=config.get('threads', 1),
-            batch_size=config.get('batch_size', 1),
-            vox_size=config.get('vox_size', 'min'),
-            orientation=config.get('orientation', 'lia'),
-            image_size=config.get('image_size', True),
-            async_io=False,  # No async for simple skullstripping
-            conform_to_1mm_threshold=config.get('conform_to_1mm_threshold', 0.95),
-        )
+        # Preprocessing parameters (vox_size, orientation, image_size, conform_to_1mm_threshold)
+        # are loaded from checkpoint by RunModelOnData. Only pass them if explicitly
+        # provided in config as user overrides.
+        predictor_kwargs = {
+            'atlas_name': atlas_name,
+            'atlas_metadata': atlas_metadata,
+            'ckpt_ax': checkpoints.get('axial'),
+            'ckpt_cor': checkpoints.get('coronal'),
+            'ckpt_sag': checkpoints.get('sagittal'),
+            'device': device_str,
+            'viewagg_device': device_str,
+            'threads': config.get('threads', 1),
+            'batch_size': config.get('batch_size', 1),
+            'async_io': False,  # No async for simple skullstripping
+        }
+        
+        # Only add preprocessing parameters if explicitly provided in config
+        # (RunModelOnData will load them from checkpoint otherwise)
+        if 'vox_size' in config:
+            predictor_kwargs['vox_size'] = config['vox_size']
+        if 'orientation' in config:
+            predictor_kwargs['orientation'] = config['orientation']
+        if 'image_size' in config:
+            predictor_kwargs['image_size'] = config['image_size']
+        if 'conform_to_1mm_threshold' in config:
+            predictor_kwargs['conform_to_1mm_threshold'] = config['conform_to_1mm_threshold']
+        
+        predictor = RunModelOnData(**predictor_kwargs)
         
         # Load input image
         logger.info(f"Loading input image: {input_image}")
@@ -333,7 +344,7 @@ def skullstripping(
 
         # Extract brain mask from segmentation
         logger.info("Extracting brain mask from segmentation...")
-        brain_mask = rta.create_mask(
+        brain_mask = create_mask(
             pred_data.copy(),
             MASK_DILATION_SIZE,
             MASK_EROSION_SIZE
@@ -362,12 +373,21 @@ def skullstripping(
                 '-master', str(input_image),
                 '-overwrite'
             ]
-            returncode, stdout, stderr = run_command(command_3dresample, step_logger=logger)
-            if returncode == 0:
-                logger.info(f"Brain mask resampled back to native space: {output_path}")
-            else:
-                logger.error(f"Failed to resample brain mask back to native space: {stderr}")
-                raise RuntimeError(f"Failed to resample brain mask back to native space: {stderr}")
+            try:
+                result = subprocess.run(
+                    command_3dresample,
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if result.returncode == 0:
+                    logger.info(f"Brain mask resampled back to native space: {output_path}")
+                else:
+                    logger.error(f"Failed to resample brain mask back to native space: {result.stderr}")
+                    raise RuntimeError(f"Failed to resample brain mask back to native space: {result.stderr}")
+            except FileNotFoundError:
+                logger.error("3dresample command not found. Please ensure AFNI is installed and in your PATH.")
+                raise RuntimeError("3dresample command not found. Please ensure AFNI is installed and in your PATH.")
         
         logger.info("Skullstripping completed successfully")
         

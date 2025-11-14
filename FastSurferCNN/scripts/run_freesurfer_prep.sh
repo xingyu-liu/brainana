@@ -2,7 +2,7 @@
 
 # Set paths
 root_dir=/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training
-fastsurfer_dir=/home/star/github/others/FastSurfer
+fastsurfer_dir=/home/star/github/banana
 
 # Input options (uncomment one):
     # --t1 ${root_dir}/training_data/T1w_images/site-uwmadison_sub-1003_T1w.nii.gz \
@@ -19,17 +19,16 @@ fastsurfer_dir=/home/star/github/others/FastSurfer
     # --output_dir ${root_dir}/test_prediction_output/test_2pass_seg \
     # --plane_weight_coronal 0 --plane_weight_axial 1 --plane_weight_sagittal 0 \
 
-cd /home/star/github/others/FastSurfer && export PYTHONPATH=/home/star/github/others/FastSurfer:$PYTHONPATH && \
-python3 FastSurferCNN/inference/predict.py \
+cd ${fastsurfer_dir} && export PYTHONPATH=${fastsurfer_dir}:$PYTHONPATH && \
+python3 FastSurferCNN/inference/freesurfer_subfolder_prepare.py \
     --t1 ${root_dir}/training_data/T1w_images/site-UNCWisconsin_sub-001_ses-28months_T1w.nii.gz \
-    --output_dir ${root_dir}/test_prediction_output/test_monkey_002_standalone \
+    --output_dir ${root_dir}/test_prediction_output/test_monkey_002_freesurfer \
     --plane_weight_coronal 0.4 --plane_weight_axial 0.4 --plane_weight_sagittal 0.2 \
-    --ckpt_cor /home/star/github/others/FastSurfer/FastSurferCNN/pretrained_model/coronal.pkl \
-    --ckpt_ax /home/star/github/others/FastSurfer/FastSurferCNN/pretrained_model/axial.pkl \
-    --ckpt_sag /home/star/github/others/FastSurfer/FastSurferCNN/pretrained_model/sagittal.pkl \
+    --ckpt_cor ${fastsurfer_dir}/FastSurferCNN/pretrained_model/T1w_seg-ARM2_coronal.pkl \
+    --ckpt_ax ${fastsurfer_dir}/FastSurferCNN/pretrained_model/T1w_seg-ARM2_axial.pkl \
+    --ckpt_sag ${fastsurfer_dir}/FastSurferCNN/pretrained_model/T1w_seg-ARM2_sagittal.pkl \
     --viewagg_device cuda \
     --batch_size 8 \
-    --output_format standalone \
     --fixv1
 
 
