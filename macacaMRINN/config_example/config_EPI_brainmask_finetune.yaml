@@ -1,0 +1,107 @@
+# ============================================================================
+# REQUIRED PARAMETERS (no defaults - must be provided)
+# ============================================================================
+modal: EPI
+label: brainmask
+experiment_name: finetune_v1
+dataset: /mnt/DataDrive3/xliu/monkey_training_groundtruth/training_data/EPI_brainmask/sample_balanced.json
+
+# ============================================================================
+# OUTPUT CONFIGURATION (no defaults - must be provided)
+# ============================================================================
+output_base_dir: /mnt/DataDrive3/xliu/monkey_training_groundtruth/training_output
+
+# ============================================================================
+# MODEL CONFIGURATION
+# ============================================================================
+num_input_slices: 3
+num_conv_block: 5
+kernel_root: 16
+use_inst_norm: true
+num_classes: 2
+pretrained_model_path: /mnt/DataDrive3/xliu/monkey_training_groundtruth/unet_models/orig/T1w_brainmask.pth
+
+# ============================================================================
+# TRAINING CONFIGURATION
+# ============================================================================
+training_mode: fine_tuning  # Training mode: 'scratch', 'fine_tuning', 'continual_learning'
+num_epochs: 100
+batch_size: 8
+enable_dynamic_batch_sizing: true
+learning_rate: 2.0e-05
+weight_decay: 0.00001
+
+# Loss function
+loss_type: combined
+
+# Learning rate scheduling
+use_cosine_scheduler: false
+scheduler_factor: 0.5
+min_lr: 1e-07
+warmup_epochs: 5
+
+# Training control
+patience: 15
+early_stopping_min_delta: 0.001  # Less sensitive than continual learning
+early_stopping_restore_best_weights: true
+dropout_rate: 0.2
+gradient_clip_norm: 0.5
+
+# Advanced training features
+mixed_precision: true
+enable_augmentation: true
+
+# ============================================================================
+# DATA CONFIGURATION
+# ============================================================================
+rescale_dim: 256
+validation_split: 0.15
+test_split: 0.15
+validation_frequency: 1
+validation_metrics:
+  dice: true
+  iou: true
+  precision: true
+  recall: true
+  hausdorff: true
+
+# ============================================================================
+# SYSTEM CONFIGURATION
+# ============================================================================
+device: auto
+random_seed: 42
+log_level: INFO  # DEBUG, INFO, WARNING, ERROR
+
+# ============================================================================
+# AUGMENTATION CONFIGURATION
+# ============================================================================
+augmentation_config:
+  enable_flips: true
+  enable_rotation: true
+  enable_noise: true
+  enable_brightness: true
+  enable_field_bias: true
+  rotation_angle: 15
+  noise_std: 0.02
+  brightness_range:
+  - -0.2
+  - 0.2
+  contrast_range:
+  - 0.8
+  - 1.2
+  bias_strength_range:
+  - 0.15
+  - 0.45
+  spatial_freq_range:
+  - 0.2
+  - 0.7
+  num_peaks_range:
+  - 1
+  - 3
+
+# ============================================================================
+# TRAINING LOGGING CONFIGURATION
+# ============================================================================
+enable_progress_bars: true
+track_training_metrics: true
+track_validation_metrics: true

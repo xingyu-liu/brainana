@@ -1,0 +1,183 @@
+@startuml macacaMRIprep_Component_Architecture
+
+!theme plain
+skinparam componentStyle rectangle
+skinparam componentFontSize 10
+skinparam packageFontSize 12
+skinparam packageFontStyle bold
+
+package "macacaMRIprep System" {
+    
+    component "Command Line Interface" as CLI {
+        [preproc.main] as cli_main
+    }
+    
+    component "BIDS Dataset Processor" as BIDS {
+        [BIDSDatasetProcessor] as bids_processor
+        [BaseJob] as base_job
+        [AnatomicalJob] as anat_job
+        [FunctionalJob] as func_job
+    }
+    
+    component "Workflow Processors" as WORKFLOW {
+        [BasePreprocessingWorkflow] as base_workflow
+        [FunctionalProcessor] as func_processor
+        [AnatomicalProcessor] as anat_processor
+
+        note right of anat_processor
+            Processes anatomical MRI data:
+            - Bias correction
+            - Skullstripping
+            - Registration to template
+        end note
+        
+        note right of func_processor
+            Processes functional MRI data:
+            - Slice timing correction
+            - Motion correction
+            - Despiking
+            - Bias correction
+            - Skullstripping
+            - Registration to target
+        end note
+    }
+    
+    component "Pipeline Management" as PIPELINE {
+        [Pipeline] as pipeline
+        [PipelineState] as pipeline_state
+    }
+    
+    component "Processing Operations" as OPERATIONS {
+        package "Preprocessing" {
+            [slice_timing_correction] as slice_timing
+            [motion_correction] as motion_corr
+            [despike] as despike
+            [bias_correction] as bias_corr
+            [precheck] as precheck_func
+        }
+        
+        package "Registration" {
+            [ants_register] as ants_reg
+            [ants_apply_transforms] as ants_apply
+            [compose_ants_registration_cmd] as ants_cmd
+        }
+        
+        package "Skullstripping" {
+            [skullstripping] as skull_api
+            [UNet2d] as unet_model
+            [predict_brain_mask] as mask_pred
+            [ModelConfig] as model_config
+        }
+        
+        package "Validation" {
+            [validate_input_file] as input_val
+            [validate_output_file] as output_val
+            [ensure_working_directory] as work_dir_val
+        }
+    }
+    
+    component "Quality Control" as QC {
+        [create_motion_correction_qc] as motion_qc
+        [create_skullstripping_qc] as skull_qc
+        [create_registration_qc] as reg_qc
+        [create_bias_correction_qc] as bias_qc
+        [generate_qc_report] as qc_reports
+        [SnapshotProcessor] as qc_snapshots
+
+    }
+    
+    component "Configuration Management" as CONFIG {
+        [Config] as config
+        [load_config] as config_loader
+        [validate_config] as config_val
+        [validate_paths] as path_val
+    }
+    
+    component "Utilities" as UTILS {
+        package "System" {
+            [run_command] as cmd_exec
+            [check_dependency] as dep_check
+        }
+        
+        package "MRI" {
+            [calculate_func_tmean] as temp_mean
+            [reorient_image_to_target] as img_reorient
+            [check_image_shape] as img_shape
+            [check_image_resolution] as img_res
+        }
+        
+        package "Templates" {
+            [resolve_template] as template_res
+            [resolve_template_file] as template_file
+            [list_available_templates] as template_list
+            [validate_template_spec] as template_val
+            [get_template_manager] as template_mgr
+        }
+        
+        package "BIDS" {
+            [parse_bids_entities] as bids_parser
+            [create_bids_filename] as filename_gen
+            [get_filename_stem] as filename_stem
+            [find_bids_metadata] as bids_meta
+        }
+        
+        package "Logging" {
+            [setup_logging] as log_setup
+            [get_logger] as log_get
+            [setup_workflow_logging] as workflow_log
+            [setup_step_logging] as step_log
+        }
+    }
+    
+    component "Environment" as ENV {
+        [check_environment] as env_check
+        [check_dependencies] as dep_mgr
+    }
+    
+    component "External Dependencies" as EXTERNAL {
+        [AFNI] as afni
+        [ANTs] as ants
+        [PyTorch] as pytorch
+        [Nibabel] as nibabel
+        [BIDS] as bids_lib
+        [Matplotlib] as matplotlib
+        [NumPy] as numpy
+        [Pandas] as pandas
+    }
+}
+
+' Relationships
+CLI --> BIDS : uses
+CLI --> CONFIG : loads
+CLI --> ENV : checks
+CLI --> UTILS : uses
+
+BIDS --> WORKFLOW : creates
+BIDS --> QC : generates reports
+
+WORKFLOW --> PIPELINE : uses
+WORKFLOW --> OPERATIONS : calls
+WORKFLOW --> QC : creates snapshots
+
+PIPELINE --> OPERATIONS : executes
+
+OPERATIONS --> UTILS : uses
+OPERATIONS --> EXTERNAL : depends on
+
+QC --> UTILS : uses
+QC --> EXTERNAL : uses
+
+CONFIG --> UTILS : provides settings
+ENV --> EXTERNAL : validates
+
+' External dependencies
+OPERATIONS ..> AFNI : uses
+OPERATIONS ..> ANTs : uses
+OPERATIONS ..> PyTorch : uses
+OPERATIONS ..> Nibabel : uses
+BIDS ..> BIDS : uses
+QC ..> Matplotlib : uses
+UTILS ..> NumPy : uses
+UTILS ..> Pandas : uses
+
+@enduml 

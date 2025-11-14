@@ -1,0 +1,147 @@
+# ============================================================================
+# REQUIRED PARAMETERS (no defaults - must be provided)
+# ============================================================================
+modal: T1w
+label: brainmask
+experiment_name: scratch_v1
+dataset: /mnt/DataDrive3/xliu/monkey_training_groundtruth/training_data/T1w_brainmask/sample_balanced.json
+
+# ============================================================================
+# OUTPUT CONFIGURATION (no defaults - must be provided)
+# ============================================================================
+output_base_dir: /mnt/DataDrive3/xliu/monkey_training_groundtruth/training_output
+
+# ============================================================================
+# MODEL CONFIGURATION
+# ============================================================================
+num_input_slices: 5
+num_conv_block: 5
+kernel_root: 16
+use_inst_norm: true
+num_classes: 2  # 0:non-brain, 1:CSF, 2:gray matter, 3:subcortex, 4:white matter 5:others
+pretrained_model_path: None
+
+# ============================================================================
+# TRAINING CONFIGURATION
+# ============================================================================
+training_mode: scratch  # Training mode: 'scratch', 'fine_tuning', 'continual_learning'
+
+num_epochs: 150
+batch_size: 8
+enable_dynamic_batch_sizing: true
+learning_rate: 4.0e-04
+weight_decay: 0.0001
+
+# Loss function
+loss_type: combined
+
+# Learning rate scheduling
+use_cosine_scheduler: false
+scheduler_factor: 0.5
+min_lr: 1e-07
+warmup_epochs: 12
+
+# Training control
+patience: 25
+early_stopping_min_delta: 0.001  # Less sensitive than continual learning
+early_stopping_restore_best_weights: true
+dropout_rate: 0.2
+gradient_clip_norm: 0.5
+
+# Advanced training features
+mixed_precision: true
+enable_augmentation: true
+
+# ============================================================================
+# DATA CONFIGURATION
+# ============================================================================
+rescale_dim: 384
+validation_split: 0.15
+test_split: 0.15
+validation_frequency: 1
+validation_metrics:
+  dice: true
+  iou: true
+  precision: true
+  recall: true
+  hausdorff: true
+
+# ============================================================================
+# SYSTEM CONFIGURATION
+# ============================================================================
+device: auto
+random_seed: 42
+log_level: INFO  # DEBUG, INFO, WARNING, ERROR
+
+# ============================================================================
+# AUGMENTATION CONFIGURATION
+# ============================================================================
+augmentation_config:
+  enable_flips: true
+  enable_rotation: true
+  enable_noise: true
+  enable_brightness: true
+  enable_field_bias: true
+  rotation_angle: 180
+  noise_std: 0.02
+  brightness_range:
+  - -0.2
+  - 0.2
+  contrast_range:
+  - 0.8
+  - 1.2
+  bias_strength_range:
+  - 0.15
+  - 0.45
+  spatial_freq_range:
+  - 0.2
+  - 0.7
+  num_peaks_range:
+  - 1
+  - 3
+
+# ============================================================================
+# TRAINING LOGGING CONFIGURATION
+# ============================================================================
+enable_progress_bars: true
+track_training_metrics: true
+track_validation_metrics: true
+
+
+# ============================================================================
+# MULTI-CLASS SEGMENTATION NOTES
+# ============================================================================
+# Class mapping for brain segmentation:
+# 0: Non-brain (background)
+# 1: Cerebrospinal fluid (CSF)
+# 2: Gray matter
+# 3: Subcortical structures
+# 4: White matter
+#
+# Training recommendations:
+# - Use CrossEntropy or Combined loss for better multi-class performance
+# - Consider longer training (150+ epochs) for convergence
+# - Smaller batch sizes to fit larger models in memory
+# - Be careful with data augmentation to preserve anatomical relationships
+# - Monitor per-class metrics during validation
+#
+# Expected dataset format:
+# Option 1 - Directory structure:
+# dataset/
+#   images/
+#     subject001.nii.gz
+#     subject002.nii.gz
+#     ...
+#   labels/
+#     subject001_segmentation.nii.gz  # Contains integer labels 0-5
+#     subject002_segmentation.nii.gz
+#     ...
+# 
+# Option 2 - JSON file with file lists:
+# dataset: /path/to/sample_balanced.json
+# JSON format:
+# {
+#   "images": ["/path/to/image1.nii.gz", "/path/to/image2.nii.gz", ...],
+#   "labels": ["/path/to/label1.nii.gz", "/path/to/label2.nii.gz", ...],
+#   "count": 123
+# }
