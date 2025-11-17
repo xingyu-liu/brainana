@@ -133,6 +133,7 @@ def skullstripping(
     logger: Optional[logging.Logger] = None,
     config: Optional[Dict[str, Any]] = None,
     output_data_format: Literal["mgz", "nifti"] = "nifti",
+    enable_crop_2round: bool = False,
 ) -> Dict[str, str]:
     """
     Perform skullstripping using FastSurferCNN segmentation model.
@@ -162,6 +163,11 @@ def skullstripping(
             - 'base_dir': Base directory for pretrained_model (default: FastSurferCNN root)
         output_data_format: {"mgz", "nifti"}, default="nifti"
             Output file format. "mgz" saves as .mgz (MGH format), "nifti" saves as .nii.gz (NIfTI format).
+        enable_crop_2round: bool, default=False
+            If True, enable two-pass refinement: after first pass, if brain occupies < 20% of FOV
+            and image dimension > model height, crop image to brain region and run second pass.
+            First-pass outputs are moved to output_dir/pass_1/, and cropped input is saved as
+            output_dir/input_cropped.{ext}. Final outputs are in cropped image's native space.
             
         Note: Preprocessing parameters (vox_size, orientation, image_size, conform_to_1mm_threshold)
         are automatically read from checkpoint metadata (required), ensuring consistency
@@ -234,18 +240,33 @@ def skullstripping(
         # Try without atlas constraint
         checkpoints = _find_checkpoints(base_dir, modality_name, None, model_type="seg")
         
-        # Try to extract atlas from first found checkpoint
+        # Try to extract atlas from found checkpoints
+        # Check all found checkpoints to ensure they're from the same atlas
+        extracted_atlases = set()
         for ckpt_path in checkpoints.values():
             if ckpt_path is not None:
                 extracted_atlas = _extract_atlas_from_checkpoint(ckpt_path)
                 if extracted_atlas:
-                    atlas_name = extracted_atlas
-                    logger.info(f"Auto-detected atlas: {atlas_name}")
-                    # Re-find checkpoints with known atlas
-                    checkpoints = _find_checkpoints(
-                        base_dir, modality_name, atlas_name, model_type="seg"
-                    )
-                break
+                    extracted_atlases.add(extracted_atlas)
+        
+        if extracted_atlases:
+            if len(extracted_atlases) > 1:
+                logger.warning(
+                    f"Found checkpoints from multiple atlases: {extracted_atlases}. "
+                    f"Using first atlas: {sorted(extracted_atlases)[0]}"
+                )
+            atlas_name = sorted(extracted_atlases)[0]
+            logger.info(f"Auto-detected atlas: {atlas_name}")
+            # Re-find checkpoints with known atlas
+            checkpoints = _find_checkpoints(
+                base_dir, modality_name, atlas_name, model_type="seg"
+            )
+        else:
+            # If we can't extract atlas but found checkpoints, proceed with what we have
+            logger.warning(
+                "Could not extract atlas from checkpoints. "
+                "Proceeding with found checkpoints (atlas may be inconsistent)."
+            )
     
     # Validate that at least one checkpoint is found
     found_planes = [plane for plane, ckpt in checkpoints.items() if ckpt is not None]
@@ -299,8 +320,8 @@ def skullstripping(
             threads=config.get('threads', 1),
             batch_size=config.get('batch_size', 1),
             fix_wm_islands=False,  # Not needed for skullstripping
-            resample_to_native=True,
             output_data_format=output_data_format,
+            enable_crop_2round=enable_crop_2round,
         )
         
         logger.info("Skullstripping completed successfully")

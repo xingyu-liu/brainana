@@ -19,7 +19,9 @@ This is the FastSurfer/predict.py script, the backbone for whole brain segmentat
 
 # Standard library imports
 import copy
+import shutil
 import sys
+import traceback
 from pathlib import Path
 from typing import Any, Literal
 
@@ -72,6 +74,10 @@ CHECKPOINT_PATHS_FILE = FASTSURFER_ROOT / "FastSurferCNN/config/checkpoint_paths
 # Brain mask creation parameters
 MASK_DILATION_SIZE = 5  # Dilation kernel size for mask creation
 MASK_EROSION_SIZE = 4   # Erosion kernel size for mask creation
+
+# Two-pass refinement parameters
+TWO_PASS_BRAIN_RATIO_THRESHOLD = 0.20  # Trigger refinement if brain occupies < 20% of FOV
+TWO_PASS_CROP_MARGIN = 0.08  # 8% margin around brain bounding box
 
 # ============================================================================
 # Validation helpers
@@ -250,6 +256,172 @@ def load_multiplane_configs(
         )
 
     return (cfg_fin, cfg_cor, cfg_sag, cfg_ax)
+
+
+def crop_image_to_brain_mask(
+    image_path: Path | str,
+    brain_mask_path: Path | str,
+    margin: float = 0.1,
+    save_path: Path | str | None = None,
+) -> nib.analyze.SpatialImage:
+    """
+    Crop image to brain mask region with margin.
+    
+    Parameters
+    ----------
+    image_path : Path, str
+        Path to input image to crop
+    brain_mask_path : Path, str
+        Path to brain mask image (binary mask, same shape as input image)
+    margin : float, default=0.1
+        Margin to add as percentage of brain bounding box size
+    save_path : Path, str, optional
+        If provided, save the cropped image as NIfTI to this path
+        
+    Returns
+    -------
+    nib.analyze.SpatialImage
+        Cropped image with updated affine matrix
+    """
+    # Load image and mask from paths
+    img = nib.load(image_path)
+    img_data = np.asanyarray(img.dataobj)
+    brain_mask_img = nib.load(brain_mask_path)
+    brain_mask = np.asanyarray(brain_mask_img.dataobj)
+    
+    # Validate dimensions match
+    if img_data.shape != brain_mask.shape:
+        raise ValueError(
+            f"Image shape {img_data.shape} does not match brain mask shape {brain_mask.shape}"
+        )
+    
+    # Check if brain mask has any non-zero values
+    if np.all(brain_mask == 0):
+        raise ValueError("Brain mask is empty (all zeros). Cannot determine crop region.")
+    
+    # Find bounding box of brain area
+    brain_area = np.where(brain_mask != 0)
+    if len(brain_area) == 0 or len(brain_area[0]) == 0:
+        raise ValueError("Brain mask has no non-zero voxels. Cannot determine crop region.")
+    
+    # Get number of dimensions from np.where result (should match mask dimensions)
+    n_dims = len(brain_area)
+    mask_ndims = len(brain_mask.shape)
+    
+    if n_dims != mask_ndims:
+        raise ValueError(
+            f"Mismatch: np.where returned {n_dims} dimensions but mask has {mask_ndims} dimensions. "
+            f"Mask shape: {brain_mask.shape}, brain_area length: {len(brain_area)}"
+        )
+    
+    if n_dims < 2 or n_dims > 3:
+        raise ValueError(f"Expected 2D or 3D brain mask, got {n_dims}D mask with shape {brain_mask.shape}")
+    
+    # Calculate bounding box for each dimension [min, max]
+    # dim_range shape: (n_dims, 2) where dim_range[i, 0] = min, dim_range[i, 1] = max for dimension i
+    dim_range = np.array([[np.min(brain_area[i]), np.max(brain_area[i])] for i in range(n_dims)])
+    dim_length = dim_range[:, 1] - dim_range[:, 0] + 1  # +1 because range is inclusive
+    
+    # Add margin to the brain area
+    margin_pixels = (margin * dim_length).astype(int)
+    dim_range[:, 0] = dim_range[:, 0] - margin_pixels
+    dim_range[:, 1] = dim_range[:, 1] + margin_pixels
+    
+    # Clamp to image boundaries
+    for i in range(n_dims):
+        if dim_range[i, 0] < 0:
+            dim_range[i, 0] = 0
+        if dim_range[i, 1] >= img_data.shape[i]:
+            dim_range[i, 1] = img_data.shape[i] - 1
+    
+    # Create slices based on number of dimensions
+    if n_dims == 3:
+        xmin, xmax = int(dim_range[0, 0]), int(dim_range[0, 1]) + 1
+        ymin, ymax = int(dim_range[1, 0]), int(dim_range[1, 1]) + 1
+        zmin, zmax = int(dim_range[2, 0]), int(dim_range[2, 1]) + 1
+        crop_slices = (slice(xmin, xmax), slice(ymin, ymax), slice(zmin, zmax))
+    elif n_dims == 2:
+        xmin, xmax = int(dim_range[0, 0]), int(dim_range[0, 1]) + 1
+        ymin, ymax = int(dim_range[1, 0]), int(dim_range[1, 1]) + 1
+        crop_slices = (slice(xmin, xmax), slice(ymin, ymax))
+    else:
+        raise ValueError(f"Unsupported number of dimensions: {n_dims}")
+    
+    # Crop the image data
+    cropped_data = img_data[crop_slices]
+    
+    # Update affine to account for cropping (translate origin)
+    cropped_affine = img.affine.copy()
+    # Calculate translation in world coordinates
+    if n_dims == 3:
+        origin_voxel = np.array([xmin, ymin, zmin, 1.0])
+    else:
+        origin_voxel = np.array([xmin, ymin, 0, 1.0])
+    origin_world = img.affine @ origin_voxel
+    cropped_affine[:3, 3] = origin_world[:3]
+    
+    # Create new image with cropped data and updated affine
+    cropped_img = nib.MGHImage(cropped_data, cropped_affine, img.header.copy())
+    
+    # Save as NIfTI if save_path is provided
+    if save_path is not None:
+        save_path = Path(save_path)
+        # Ensure output directory exists
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Use the dtype from the input image
+        save_dtype = img_data.dtype
+        cropped_data_save = cropped_data.astype(save_dtype)
+        
+        # Create NIfTI image with cropped affine and header
+        cropped_nii = nib.Nifti1Image(cropped_data_save, cropped_affine, img.header.copy())
+        # Update header data type
+        cropped_nii.header.set_data_dtype(save_dtype)
+        
+        # Save the NIfTI file
+        nib.save(cropped_nii, save_path)
+    
+    return cropped_img
+
+
+def _should_apply_refinement(
+    brain_mask: np.ndarray,
+    orig_img: nib.analyze.SpatialImage,
+    model_height: int,
+) -> tuple[bool, float, int]:
+    """
+    Determine if two-pass refinement should be applied.
+    
+    Parameters
+    ----------
+    brain_mask : np.ndarray
+        Binary brain mask
+    orig_img : nib.analyze.SpatialImage
+        Original image
+    model_height : int
+        Model height from checkpoint config
+        
+    Returns
+    -------
+    tuple[bool, float, int]
+        (should_refine, brain_ratio, max_orig_dim)
+        should_refine: True if refinement should be applied
+        brain_ratio: Ratio of brain volume to total volume
+        max_orig_dim: Maximum dimension of original image
+    """
+    brain_volume = np.sum(brain_mask > 0)
+    total_volume = np.prod(brain_mask.shape)
+    brain_ratio = brain_volume / total_volume
+    
+    orig_shape = orig_img.shape
+    max_orig_dim = max(orig_shape)
+    
+    should_refine = (
+        brain_ratio < TWO_PASS_BRAIN_RATIO_THRESHOLD
+        and max_orig_dim > model_height
+    )
+    
+    return should_refine, brain_ratio, max_orig_dim
 
 
 # ============================================================================
@@ -849,6 +1021,159 @@ class RunModelOnData:
 # High-level API functions
 # ============================================================================
 
+def _apply_two_pass_refinement(
+    input_image: Path,
+    output_dir: Path,
+    file_ext: str,
+    atlas_name: str,
+    atlas_metadata: dict | None,
+    ckpt_ax: Path | None,
+    ckpt_sag: Path | None,
+    ckpt_cor: Path | None,
+    device: str,
+    viewagg_device: str,
+    threads: int,
+    batch_size: int,
+    plane_weight_coronal: float | None,
+    plane_weight_axial: float | None,
+    plane_weight_sagittal: float | None,
+    fix_wm_islands: bool,
+    output_data_format: Literal["mgz", "nifti"],
+) -> bool:
+    """
+    Apply two-pass refinement: crop image and run fresh segmentation.
+    
+    This function moves first-pass outputs to pass_1/ directory, crops the 
+    ORIGINAL input image using the brain mask, then runs a completely fresh
+    segmentation on the cropped image. This avoids any state/affine issues
+    from reusing the predictor.
+    
+    Parameters
+    ----------
+    input_image : Path
+        Original input image path
+    output_dir : Path
+        Output directory
+    file_ext : str
+        File extension for output files
+    atlas_name : str
+        Name of the atlas
+    atlas_metadata : dict, optional
+        Atlas metadata from checkpoint
+    ckpt_ax, ckpt_cor, ckpt_sag : Path, optional
+        Checkpoint paths for each plane
+    device : str
+        Device to run inference on
+    viewagg_device : str
+        Device to run view aggregation on
+    threads : int
+        Number of threads for CPU operations
+    batch_size : int
+        Batch size for inference
+    plane_weight_coronal, plane_weight_axial, plane_weight_sagittal : float, optional
+        Weights for multi-view prediction
+    fix_wm_islands : bool
+        Whether to apply WM island correction
+    output_data_format : {"mgz", "nifti"}
+        Output file format
+        
+    Returns
+    -------
+    bool
+        True if refinement completed successfully, False if it failed
+    """
+    pass_1_dir = output_dir / "pass_1"
+    pass_1_dir.mkdir(parents=True, exist_ok=True)
+    
+    LOGGER.info("Applying two-pass refinement...")
+    LOGGER.info(f"  Moving first-pass outputs to {pass_1_dir.name}/")
+    
+    # Define first-pass files
+    first_pass_files = {
+        "segmentation": output_dir / f"segmentation{file_ext}",
+        "mask": output_dir / f"mask{file_ext}",
+    }
+    
+    # Check for hemimask
+    hemi_mask_path = output_dir / f"mask_hemi{file_ext}"
+    if hemi_mask_path.exists():
+        first_pass_files["hemimask"] = hemi_mask_path
+    
+    try:
+        # Step 1: Move first-pass outputs to pass_1 directory
+        for key, src_path in first_pass_files.items():
+            if src_path.exists():
+                dst_path = pass_1_dir / src_path.name
+                shutil.move(str(src_path), str(dst_path))
+                LOGGER.info(f"  Moved {key}: {src_path.name}")
+        
+        # Step 2: Crop ORIGINAL input image using first-pass mask
+        mask_path = pass_1_dir / f"mask{file_ext}"
+        cropped_input_path = output_dir / f"input_cropped{file_ext}"
+        
+        LOGGER.info(f"  Cropping original input to brain region (margin={TWO_PASS_CROP_MARGIN*100:.0f}%)...")
+        
+        # Load original image to get its shape for logging
+        orig_img = nib.load(input_image)
+        
+        cropped_img = crop_image_to_brain_mask(
+            str(input_image),  # Crop the ORIGINAL input image
+            str(mask_path),     # Using mask from first pass
+            margin=TWO_PASS_CROP_MARGIN,
+            save_path=cropped_input_path,
+        )
+        
+        LOGGER.info(f"  ✓ Cropped: {orig_img.shape} → {cropped_img.shape}")
+        LOGGER.info(f"  ✓ Space saved: {np.prod(orig_img.shape) / np.prod(cropped_img.shape):.1f}x reduction")
+        LOGGER.info(f"  ✓ Saved cropped input: {cropped_input_path.name}")
+        
+        # Step 3: Run FRESH segmentation on cropped image (starting from scratch)
+        LOGGER.info("  Running 2nd pass with fresh predictor on cropped image...")
+        LOGGER.info("  (This runs the full pipeline from scratch - no state reuse)")
+        
+        run_segmentation(
+            input_image=cropped_input_path,
+            output_dir=output_dir,  # Outputs go back to main directory
+            atlas_name=atlas_name,
+            atlas_metadata=atlas_metadata,
+            ckpt_ax=ckpt_ax,
+            ckpt_sag=ckpt_sag,
+            ckpt_cor=ckpt_cor,
+            device=device,
+            viewagg_device=viewagg_device,
+            threads=threads,
+            batch_size=batch_size,
+            plane_weight_coronal=plane_weight_coronal,
+            plane_weight_axial=plane_weight_axial,
+            plane_weight_sagittal=plane_weight_sagittal,
+            fix_wm_islands=fix_wm_islands,
+            output_data_format=output_data_format,
+            enable_crop_2round=False,  # Don't recurse!
+        )
+        
+        LOGGER.info("  ✓ Two-pass refinement completed successfully")
+        return True
+        
+    except Exception as e:
+        LOGGER.error(f"  ✗ Two-pass refinement failed: {e}")
+        LOGGER.debug(f"  Error details: {traceback.format_exc()}")
+        LOGGER.warning("  Falling back to first-pass prediction")
+        LOGGER.info(f"  First-pass outputs are available in {pass_1_dir.name}/")
+        
+        # Try to restore first-pass outputs to main directory
+        try:
+            LOGGER.info("  Restoring first-pass outputs to main directory...")
+            for key, src_path in first_pass_files.items():
+                dst_path = pass_1_dir / src_path.name
+                if dst_path.exists():
+                    shutil.copy(str(dst_path), str(src_path))
+                    LOGGER.info(f"  Restored {key}: {src_path.name}")
+        except Exception as restore_error:
+            LOGGER.error(f"  Failed to restore first-pass outputs: {restore_error}")
+        
+        return False
+
+
 def run_segmentation(
     input_image: str | Path,
     output_dir: str | Path,
@@ -865,8 +1190,8 @@ def run_segmentation(
     plane_weight_axial: float | None = None,
     plane_weight_sagittal: float | None = None,
     fix_wm_islands: bool = True,
-    resample_to_native: bool = True,
     output_data_format: Literal["mgz", "nifti"] = "nifti",
+    enable_crop_2round: bool = False,
 ) -> dict[str, Path]:
     """
     Run segmentation and save outputs (segmentation, mask, hemimask) to output directory.
@@ -905,11 +1230,15 @@ def run_segmentation(
         Weights for multi-view prediction
     fix_wm_islands : bool, default=True
         Whether to apply WM island correction
-    resample_to_native : bool, default=True
-        Whether to resample outputs back to native space
     output_data_format : {"mgz", "nifti"}, default="nifti"
         Output file format. "mgz" saves as .mgz (MGH format), "nifti" saves as .nii.gz (NIfTI format).
         Resampling uses pure Python (in-memory), no external tools needed.
+    enable_crop_2round : bool, default=False
+        If True, enable two-pass refinement: after first pass, if brain occupies < 20% of FOV
+        and image dimension > model height, crop the ORIGINAL input image to brain region 
+        and run a completely fresh segmentation on it. First-pass outputs are moved to 
+        output_dir/pass_1/, cropped input is saved as output_dir/input_cropped.{ext}, and 
+        final outputs (from second pass) are saved to main output_dir in cropped image's native space.
         
     Note
     ----
@@ -923,8 +1252,8 @@ def run_segmentation(
         Dictionary with keys:
         - 'segmentation': Path to saved segmentation file
         - 'mask': Path to saved brain mask file
-        - 'hemimask': Path to saved hemisphere mask file
-        - 'conformed_image': Path to conformed image (if saved)
+        - 'hemimask': Path to saved hemisphere mask file (if created)
+        - 'input_cropped': Path to cropped input (if two-pass refinement was applied)
     """
     input_image = Path(input_image)
     output_dir = Path(output_dir)
@@ -963,7 +1292,8 @@ def run_segmentation(
     seg_path = output_dir / f"segmentation{file_ext}"
     seg_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if resample_to_native and predictor._should_resample():
+    # Always resample to native space
+    if predictor._should_resample():
         LOGGER.info("Resampling segmentation to native space...")
         pred_data_final = predictor._resample_to_native(
             pred_data, interpolation="nearest"
@@ -978,7 +1308,7 @@ def run_segmentation(
             dtype=np.int16,
         )
     else:
-        # No resampling needed - save conformed segmentation directly
+        # Input was already conformed - save directly (still in native space)
         LOGGER.info("No resampling needed - input was already conformed")
         data_utils.save_image(
             predictor._conformed_img.header,
@@ -1008,8 +1338,8 @@ def run_segmentation(
         hemi_mask = None
 
     # Save mask and hemimask
-    # Get reference image for header/affine (native if resampled, conformed otherwise)
-    if resample_to_native and predictor._should_resample():
+    # Get reference image for header/affine (always use native if available)
+    if predictor._should_resample():
         reference_img = predictor._input_native_img
     else:
         reference_img = predictor._conformed_img
@@ -1039,12 +1369,71 @@ def run_segmentation(
     else:
         hemi_mask_path = None
 
+    # Build result dictionary
     result = {
         "segmentation": seg_path,
         "mask": mask_path,
     }
     if hemi_mask_path is not None:
         result["hemimask"] = hemi_mask_path
+
+    # Check if two-pass refinement is needed
+    if enable_crop_2round:
+        # Get model height from checkpoint config
+        model_height = predictor.cfg_fin.MODEL.HEIGHT
+        
+        # Check if refinement should be applied
+        should_refine, brain_ratio, max_orig_dim = _should_apply_refinement(
+            brain_mask, reference_img, model_height
+        )
+        
+        LOGGER.info(f"Checking two-pass refinement criteria...")
+        LOGGER.info(f"  Brain occupancy: {brain_ratio*100:.1f}% of FOV")
+        LOGGER.info(f"  Image dimensions: {reference_img.shape} (max: {max_orig_dim})")
+        LOGGER.info(f"  Model height: {model_height}")
+        
+        if should_refine:
+            LOGGER.info(
+                f"  → Applying two-pass refinement "
+                f"(brain < {TWO_PASS_BRAIN_RATIO_THRESHOLD*100:.0f}%, dim > {model_height})"
+            )
+            
+            # Apply two-pass refinement (runs fresh segmentation on cropped image)
+            refinement_applied = _apply_two_pass_refinement(
+                input_image=input_image,
+                output_dir=output_dir,
+                file_ext=file_ext,
+                atlas_name=atlas_name,
+                atlas_metadata=atlas_metadata,
+                ckpt_ax=ckpt_ax,
+                ckpt_sag=ckpt_sag,
+                ckpt_cor=ckpt_cor,
+                device=device,
+                viewagg_device=viewagg_device,
+                threads=threads,
+                batch_size=batch_size,
+                plane_weight_coronal=plane_weight_coronal,
+                plane_weight_axial=plane_weight_axial,
+                plane_weight_sagittal=plane_weight_sagittal,
+                fix_wm_islands=fix_wm_islands,
+                output_data_format=output_data_format,
+            )
+            
+            # If refinement succeeded, update result paths to reflect second-pass outputs
+            # (which are already saved by the fresh run_segmentation call)
+            if refinement_applied:
+                LOGGER.info("  ✓ Second-pass outputs are now in main directory")
+                # Update result dict to include cropped input
+                result["input_cropped"] = output_dir / f"input_cropped{file_ext}"
+        else:
+            if brain_ratio >= TWO_PASS_BRAIN_RATIO_THRESHOLD:
+                LOGGER.info(
+                    f"  → Skipping refinement (brain occupancy >= {TWO_PASS_BRAIN_RATIO_THRESHOLD*100:.0f}%)"
+                )
+            else:
+                LOGGER.info(
+                    f"  → Skipping refinement (image dimension <= {model_height})"
+                )
 
     return result
 

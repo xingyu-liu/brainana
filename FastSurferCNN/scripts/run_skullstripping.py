@@ -56,7 +56,9 @@ def main():
             device_id='auto',
             logger=logger,
             config=config,
-            output_data_format="mgz"
+            output_data_format="nifti",
+            enable_crop_2round=True,
+
         )
         
         logger.info("=" * 80)

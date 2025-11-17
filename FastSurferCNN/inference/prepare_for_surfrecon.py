@@ -431,7 +431,6 @@ def prepare_freesurfer_subject(
                 plane_weight_axial=plane_weight_axial,
                 plane_weight_sagittal=plane_weight_sagittal,
                 fix_wm_islands=not skip_wm_correction,
-                resample_to_native=False,  # Keep in conformed space for FS
             )
             
             # Step 4: Reorganize outputs to FS structure
