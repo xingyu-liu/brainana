@@ -17,13 +17,14 @@ import os
 from collections.abc import MutableSequence
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, TypedDict, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast, overload
 
 import requests
 import torch
 import yacs.config
 import yaml
 
+from FastSurferCNN.config.defaults import get_cfg_defaults
 from FastSurferCNN.utils import Plane, logging
 from FastSurferCNN.utils.parser_defaults import FASTSURFER_ROOT
 
@@ -49,9 +50,12 @@ CheckpointConfigFields = Literal["checkpoint", "config", "url"]
 
 
 @lru_cache
-def load_checkpoint_config(filename: Path | str = YAML_DEFAULT) -> CheckpointConfigDict:
+def load_paths_yaml(filename: Path | str = YAML_DEFAULT) -> CheckpointConfigDict:
     """
-    Load the plane dictionary from the yaml file.
+    Load checkpoint paths configuration from YAML file.
+    
+    This function reads a YAML file that contains checkpoint file paths,
+    config file paths, and download URLs for different model planes.
 
     Parameters
     ----------
@@ -91,26 +95,35 @@ def load_checkpoint_config(filename: Path | str = YAML_DEFAULT) -> CheckpointCon
     return data
 
 
+# Backward compatibility alias
+def load_checkpoint_config(filename: Path | str = YAML_DEFAULT) -> CheckpointConfigDict:
+    """Deprecated: Use load_paths_yaml() instead."""
+    return load_paths_yaml(filename)
+
+
 @overload
-def load_checkpoint_config_defaults(
+def get_paths_from_yaml(
         filetype: Literal["checkpoint", "config"],
         filename: str | Path = YAML_DEFAULT,
 ) -> dict[Plane, Path]: ...
 
 
 @overload
-def load_checkpoint_config_defaults(
+def get_paths_from_yaml(
         configtype: Literal["url"],
         filename: str | Path = YAML_DEFAULT,
 ) -> list[str]: ...
 
 @lru_cache
-def load_checkpoint_config_defaults(
+def get_paths_from_yaml(
         configtype: CheckpointConfigFields,
         filename: str | Path = YAML_DEFAULT,
 ) -> dict[Plane, Path] | list[str]:
     """
-    Get the default value for a specific plane or the url.
+    Extract specific field from checkpoint paths YAML file.
+    
+    This function loads the YAML configuration file and returns
+    a specific field (checkpoint paths, config paths, or URLs).
 
     Parameters
     ----------
@@ -132,7 +145,16 @@ def load_checkpoint_config_defaults(
     if configtype not in ("url", "checkpoint", "config"):
         raise ValueError("Type must be 'url', 'checkpoint' or 'config'")
 
-    return load_checkpoint_config(filename)[configtype]
+    return load_paths_yaml(filename)[configtype]
+
+
+# Backward compatibility alias
+def load_checkpoint_config_defaults(
+        configtype: CheckpointConfigFields,
+        filename: str | Path = YAML_DEFAULT,
+) -> dict[Plane, Path] | list[str]:
+    """Deprecated: Use get_paths_from_yaml() instead."""
+    return get_paths_from_yaml(configtype, filename)
 
 
 def create_checkpoint_dir(expr_dir: os.PathLike, expr_num: int):
@@ -208,7 +230,7 @@ def get_checkpoint_path(
     return list(prior_model_paths)
 
 
-def load_from_checkpoint(
+def restore_model_state_from_checkpoint(
         checkpoint_path: str | Path,
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer | None = None,
@@ -217,7 +239,10 @@ def load_from_checkpoint(
         drop_classifier: bool = False,
 ):
     """
-    Load the model from the given experiment number.
+    Restore model, optimizer, and scheduler states from checkpoint.
+    
+    This function loads a checkpoint and restores the model weights,
+    and optionally the optimizer and scheduler states for resuming training.
 
     Parameters
     ----------
@@ -239,9 +264,7 @@ def load_from_checkpoint(
     loaded_epoch : int
         Epoch number.
     """
-    # WARNING: weights_only=False can cause unsafe code execution, but here the
-    # checkpoint can be considered to be from a safe source
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    checkpoint = read_checkpoint_file(checkpoint_path)
 
     if drop_classifier:
         classifier_conv = ["classifier.conv.weight", "classifier.conv.bias"]
@@ -260,6 +283,21 @@ def load_from_checkpoint(
             scheduler.load_state_dict(checkpoint["scheduler_state"])
 
     return checkpoint["epoch"] + 1, checkpoint.get("best_metric", None)
+
+
+# Backward compatibility alias
+def load_from_checkpoint(
+        checkpoint_path: str | Path,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer | None = None,
+        scheduler: Scheduler | None = None,
+        fine_tune: bool = False,
+        drop_classifier: bool = False,
+):
+    """Deprecated: Use restore_model_state_from_checkpoint() instead."""
+    return restore_model_state_from_checkpoint(
+        checkpoint_path, model, optimizer, scheduler, fine_tune, drop_classifier
+    )
 
 
 def save_checkpoint(
@@ -429,6 +467,106 @@ def save_best_checkpoint(
     torch.save(checkpoint, checkpoint_dir / "Best_training_state.pkl")
 
 
+def read_checkpoint_file(
+    checkpoint_path: Path | str,
+    map_location: str | torch.device = "cpu",
+) -> dict[str, Any]:
+    """
+    Load checkpoint file as dictionary.
+    
+    This is the centralized function for loading checkpoint files.
+    All checkpoint loading should use this function.
+    
+    Parameters
+    ----------
+    checkpoint_path : Path, str
+        Path to checkpoint file
+    map_location : str, torch.device, default="cpu"
+        Device to map tensors to when loading. Can be "cpu", "cuda", 
+        torch.device object, etc.
+        
+    Returns
+    -------
+    dict
+        Checkpoint dictionary with keys: model_state, optimizer_state, 
+        config, atlas_metadata, epoch, best_metric, etc.
+        
+    Raises
+    ------
+    FileNotFoundError
+        If checkpoint file doesn't exist
+    """
+    checkpoint_path = Path(checkpoint_path)
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+    
+    # WARNING: weights_only=False can cause unsafe code execution, but here the
+    # checkpoint can be considered to be from a safe source
+    return torch.load(checkpoint_path, map_location=map_location, weights_only=False)
+
+
+# Backward compatibility alias
+def load_checkpoint_data(checkpoint_path: Path | str) -> dict[str, Any]:
+    """
+    Deprecated: Use read_checkpoint_file() instead.
+    
+    Load checkpoint data from file (shared helper).
+    """
+    return read_checkpoint_file(checkpoint_path, map_location="cpu")
+
+
+def extract_training_config(checkpoint_path: Path | str, batch_size: int = 1) -> yacs.config.CfgNode:
+    """
+    Extract training configuration from checkpoint file.
+    
+    Reads the checkpoint and extracts the training configuration (hyperparameters,
+    data settings, etc.) that was used during training.
+    
+    Parameters
+    ----------
+    checkpoint_path : Path, str
+        Path to checkpoint file
+    batch_size : int, default=1
+        Batch size for testing/inference
+        
+    Returns
+    -------
+    yacs.config.CfgNode
+        Configuration object with training settings
+        
+    Raises
+    ------
+    ValueError
+        If checkpoint doesn't contain config
+    """
+    checkpoint = read_checkpoint_file(checkpoint_path)
+    
+    if 'config' not in checkpoint:
+        raise ValueError(f"Checkpoint {checkpoint_path} does not contain config!")
+    
+    # Parse config from checkpoint (saved as YAML string)
+    config_str = checkpoint['config']
+    config_dict = yaml.safe_load(config_str)
+    
+    # Convert back to CfgNode
+    cfg = get_cfg_defaults()
+    cfg.merge_from_other_cfg(yacs.config.CfgNode(config_dict))
+    
+    # Set up for inference
+    cfg.OUT_LOG_NAME = "fastsurfer"
+    cfg.TEST.BATCH_SIZE = batch_size
+    cfg.MODEL.OUT_TENSOR_WIDTH = cfg.DATA.PADDED_SIZE
+    cfg.MODEL.OUT_TENSOR_HEIGHT = cfg.DATA.PADDED_SIZE
+    
+    return cfg
+
+
+# Backward compatibility alias
+def load_config_from_checkpoint(checkpoint_path: Path | str, batch_size: int = 1) -> yacs.config.CfgNode:
+    """Deprecated: Use extract_training_config() instead."""
+    return extract_training_config(checkpoint_path, batch_size)
+
+
 def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
     """
     Extract atlas metadata from a checkpoint without loading the full model.
@@ -465,7 +603,7 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
     """
     try:
         # Load checkpoint without loading model weights
-        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+        checkpoint = read_checkpoint_file(checkpoint_path)
         
         # Try new format first (Phase 2: with atlas_metadata)
         if "atlas_metadata" in checkpoint:

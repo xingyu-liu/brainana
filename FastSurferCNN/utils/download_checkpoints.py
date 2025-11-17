@@ -14,9 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from CerebNet.utils.checkpoint import (
-    YAML_DEFAULT as CEREBNET_YAML,
-)
 from FastSurferCNN.utils import PLANES
 from FastSurferCNN.utils.checkpoint import (
     YAML_DEFAULT as VINN_YAML,
@@ -24,22 +21,12 @@ from FastSurferCNN.utils.checkpoint import (
 from FastSurferCNN.utils.checkpoint import (
     check_and_download_ckpts,
     get_checkpoints,
-    load_checkpoint_config_defaults,
+    get_paths_from_yaml,
 )
-from HypVINN.utils.checkpoint import (
-    YAML_DEFAULT as HYPVINN_YAML,
-)
-
 
 class ConfigCache:
     def vinn_url(self):
-        return load_checkpoint_config_defaults("url", filename=VINN_YAML)
-
-    def cerebnet_url(self):
-        return load_checkpoint_config_defaults("url", filename=CEREBNET_YAML)
-
-    def hypvinn_url(self):
-        return load_checkpoint_config_defaults("url", filename=HYPVINN_YAML)
+        return get_paths_from_yaml("url", filename=VINN_YAML)
 
     def all_urls(self):
         return self.vinn_url() + self.cerebnet_url() + self.hypvinn_url()
@@ -113,33 +100,13 @@ def main(
     try:
         # FastSurferVINN checkpoints
         if vinn or all:
-            vinn_config = load_checkpoint_config_defaults(
+            vinn_config = get_paths_from_yaml(
                 "checkpoint",
                 filename=VINN_YAML,
             )
             get_checkpoints(
                 *(vinn_config[plane] for plane in PLANES),
                 urls=defaults.vinn_url() if url is None else [url]
-            )
-        # CerebNet checkpoints
-        if cerebnet or all:
-            cerebnet_config = load_checkpoint_config_defaults(
-                "checkpoint",
-                filename=CEREBNET_YAML,
-            )
-            get_checkpoints(
-                *(cerebnet_config[plane] for plane in PLANES),
-                urls=defaults.cerebnet_url() if url is None else [url],
-            )
-        # HypVINN checkpoints
-        if hypvinn or all:
-            hypvinn_config = load_checkpoint_config_defaults(
-                "checkpoint",
-                filename=HYPVINN_YAML,
-            )
-            get_checkpoints(
-                *(hypvinn_config[plane] for plane in PLANES),
-                urls=defaults.hypvinn_url() if url is None else [url],
             )
         for fname in files:
             check_and_download_ckpts(

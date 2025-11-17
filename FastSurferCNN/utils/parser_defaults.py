@@ -429,8 +429,8 @@ def add_plane_flags(
             return None
         return Path(__value)
 
-    from FastSurferCNN.utils.checkpoint import load_checkpoint_config_defaults
-    defaults = load_checkpoint_config_defaults(configtype, defaults_path)
+    from FastSurferCNN.utils.checkpoint import get_paths_from_yaml
+    defaults = get_paths_from_yaml(configtype, defaults_path)
 
     for plane, filepath in files.items():
         # If filepath is None, keep default as None (optional plane)

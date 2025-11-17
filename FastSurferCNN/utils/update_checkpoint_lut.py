@@ -71,7 +71,8 @@ def update_checkpoint_metadata(
         # Load checkpoint
         if verbose:
             print("Loading checkpoint...")
-        checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+        from FastSurferCNN.utils.checkpoint import read_checkpoint_file
+        checkpoint = read_checkpoint_file(checkpoint_path, map_location='cpu')
         
         # Check if atlas_metadata exists
         if 'atlas_metadata' not in checkpoint:
@@ -139,7 +140,7 @@ def update_checkpoint_metadata(
                 if verbose:
                     print(f"\n💾 Creating backup: {backup_path.name}")
                 torch.save(
-                    torch.load(checkpoint_path, map_location='cpu', weights_only=False),
+                    read_checkpoint_file(checkpoint_path, map_location='cpu'),
                     backup_path
                 )
             
@@ -151,14 +152,14 @@ def update_checkpoint_metadata(
             # Verify
             if verbose:
                 print("🔍 Verifying update...")
-            verify = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+            verify = read_checkpoint_file(checkpoint_path, map_location='cpu')
             verify_mapping = verify['atlas_metadata']['dense_to_sparse_mapping']
             
             if verify_mapping != new_mapping:
                 if verbose:
                     print("❌ Verification failed! Restoring backup...")
                 torch.save(
-                    torch.load(backup_path, map_location='cpu', weights_only=False),
+                    read_checkpoint_file(backup_path, map_location='cpu'),
                     checkpoint_path
                 )
                 return False

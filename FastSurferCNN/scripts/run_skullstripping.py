@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 # Test parameters
 input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_2pass_seg.nii.gz"
+output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping"
 modal = "anat"
-output_path = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test.nii.gz"
 
 def main():
     logger.info("=" * 80)
@@ -33,7 +33,7 @@ def main():
     logger.info("=" * 80)
     logger.info(f"Input image: {input_image}")
     logger.info(f"Modal: {modal}")
-    logger.info(f"Output path: {output_path}")
+    logger.info(f"Output directory: {output_dir}")
     logger.info("=" * 80)
     
     # Check if input file exists
@@ -52,7 +52,7 @@ def main():
         result = skullstripping(
             input_image=input_image,
             modal=modal,
-            output_path=output_path,
+            output_dir=output_dir,
             device_id='auto',
             logger=logger,
             config=config
@@ -64,12 +64,12 @@ def main():
         logger.info("=" * 80)
         
         # Verify output file exists
-        output_file = Path(output_path)
+        output_file = Path(result['brain_mask'])
         if output_file.exists():
-            logger.info(f"Output file created: {output_path}")
+            logger.info(f"Output file created: {result['brain_mask']}")
             logger.info(f"File size: {output_file.stat().st_size} bytes")
         else:
-            logger.error(f"Output file not found: {output_path}")
+            logger.error(f"Output file not found: {result['brain_mask']}")
             
     except Exception as e:
         logger.error(f"Test failed with error: {e}", exc_info=True)

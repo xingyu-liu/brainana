@@ -24,7 +24,7 @@ import torch
 import yacs.config
 from torch.utils.data import Dataset
 
-from FastSurferCNN.data_loader import data_utils as du
+from FastSurferCNN.data_loader import data_utils as data_ultils
 from FastSurferCNN.utils import logging
 
 logger = logging.getLogger(__name__)
@@ -66,12 +66,12 @@ class MultiScaleOrigDataThickSlices(Dataset):
         self.base_res = cfg.MODEL.BASE_RES
 
         if self.plane == "sagittal":
-            orig_data = du.transform_sagittal(orig_data)
+            orig_data = data_ultils.transform_sagittal(orig_data)
             self.zoom = np.asarray(orig_zoom)[[2, 1]]
             logger.info(f"Loading Sagittal with input voxelsize {self.zoom}")
 
         elif self.plane == "axial":
-            orig_data = du.transform_axial(orig_data)
+            orig_data = data_ultils.transform_axial(orig_data)
             self.zoom = np.asarray(orig_zoom)[[2, 0]]
             logger.info(f"Loading Axial with input voxelsize {self.zoom}")
 
@@ -80,7 +80,7 @@ class MultiScaleOrigDataThickSlices(Dataset):
             logger.info(f"Loading Coronal with input voxelsize {self.zoom}")
 
         # Create thick slices
-        orig_thick = du.get_thick_slices(orig_data, self.slice_thickness)
+        orig_thick = data_ultils.get_thick_slices(orig_data, self.slice_thickness)
         orig_thick = np.transpose(orig_thick, (2, 0, 1, 3))
         self.images = orig_thick
         self.count = self.images.shape[0]

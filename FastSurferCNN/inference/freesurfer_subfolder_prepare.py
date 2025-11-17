@@ -24,6 +24,7 @@ Prepares subjects for FreeSurfer surface reconstruction by:
 
 import argparse
 import copy
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Literal
@@ -38,19 +39,18 @@ import numpy as np
 
 import FastSurferCNN.postprocessing.fix_v1_wm as fix_v1_wm
 import FastSurferCNN.postprocessing.reduce_to_aseg as rta
-from FastSurferCNN.postprocessing.postseg_utils import create_mask, create_hemisphere_masks
+from FastSurferCNN.data_loader import data_utils as data_ultils
 from FastSurferCNN.data_loader.conform import conform, is_conform
 from FastSurferCNN.inference.predict import (
-    RunModelOnData,
-    MASK_DILATION_SIZE,
-    MASK_EROSION_SIZE,
+    run_segmentation,
     setup_atlas_from_checkpoints,
     validate_checkpoints,
 )
+from FastSurferCNN.inference.skullstripping import skullstripping
 from FastSurferCNN.seg_statistics.quick_qc import check_volume
 from FastSurferCNN.utils import PLANES, Plane, logging, parser_defaults
 from FastSurferCNN.utils.arg_types import OrientationType, VoxSizeOption
-from FastSurferCNN.utils.checkpoint import get_checkpoints, load_checkpoint_config_defaults
+from FastSurferCNN.utils.checkpoint import get_checkpoints, get_paths_from_yaml
 from FastSurferCNN.utils.common import find_device, handle_cuda_memory_exception
 from FastSurferCNN.utils.logging import setup_logging
 
@@ -60,136 +60,113 @@ LOGGER = logging.getLogger(__name__)
 CHECKPOINT_PATHS_FILE = FASTSURFER_ROOT / "FastSurferCNN/config/checkpoint_paths.yaml"
 
 
-def _save_orig_mgz(
+def _conform_and_save_orig_mgz(
+    input_image: Path | str,
     output_dir: Path,
-    predictor: "RunModelOnData",
-) -> None:
-    """Save orig.mgz from the conformed image stored by get_prediction().
-    
-    Note: orig.mgz should remain in conformed space (not resampled to native).
+    vox_size: VoxSizeOption = "min",
+    orientation: OrientationType = "lia",
+    image_size: bool = True,
+    conform_to_1mm_threshold: float = 0.95,
+) -> Path:
     """
-    mri_dir = output_dir / "mri"
-    mri_dir.mkdir(parents=True, exist_ok=True)
-    conf_file = mri_dir / "orig.mgz"
-    predictor.save_img(conf_file, np.asanyarray(predictor._conformed_img.dataobj), dtype=np.uint8, resample_to_native=False)
-    LOGGER.info(f"Saved: {conf_file.name}")
-
-
-def _create_and_save_masks(
-    pred_data: np.ndarray,
-    output_dir: Path,
-    predictor: "RunModelOnData",
-) -> None:
-    """Create and save brain mask and hemisphere mask."""
-    LOGGER.info("Creating brain and hemisphere masks...")
-    try:
-        brain_mask = create_mask(copy.deepcopy(pred_data), MASK_DILATION_SIZE, MASK_EROSION_SIZE)
-        hemi_mask = create_hemisphere_masks(brain_mask, pred_data, lut_path=predictor.lut_path)
-        
-        mask_path = output_dir / "mri" / "mask.mgz"
-        predictor.save_img(mask_path, brain_mask, dtype=np.uint8, resample_to_native=False)
-        LOGGER.info(f"  Saved: {mask_path.name}")
-        
-        hemi_mask_path = output_dir / "mri" / "mask_hemi.mgz"
-        predictor.save_img(hemi_mask_path, hemi_mask, dtype=np.uint8, resample_to_native=False)
-        LOGGER.info(f"  Saved: {hemi_mask_path.name}")
-    except Exception as e:
-        LOGGER.warning(f"Could not create masks: {e}")
-
-
-def process_image_freesurfer_pipeline(
-    output_dir: Path,
-    predictor: "RunModelOnData",
-    orig_img: nib.analyze.SpatialImage,
-    orig_name: str | Path,
-    pred_name: str = "mri/aparc+aseg.deep.mgz",
-) -> tuple[np.ndarray, nib.analyze.SpatialImage]:
-    """
-    Process image through FreeSurfer pipeline: conform, predict, save masks.
+    Conform input image to FreeSurfer standard space and save as orig.mgz.
     
     Parameters
     ----------
+    input_image : Path | str
+        Path to input image
     output_dir : Path
-        Subject directory for FreeSurfer structure (output_dir/mri/...)
-    predictor : RunModelOnData
-        Model runner with loaded checkpoints
-    orig_img : nib.analyze.SpatialImage
-        Original input image in native space
-    orig_name : str | Path
-        Original image path for logging
-    pred_name : str
-        Relative path for prediction file (e.g., "mri/aparc.ARM2atlas+aseg.deep.mgz")
+        Output directory (FreeSurfer subject directory)
+    vox_size : VoxSizeOption
+        Voxel size option
+    orientation : OrientationType
+        Target orientation
+    image_size : bool
+        Whether to enforce standard image size
+    conform_to_1mm_threshold : float
+        Threshold for conforming to 1mm resolution
     
     Returns
     -------
-    tuple[np.ndarray, nib.analyze.SpatialImage]
-        (prediction_data_in_conformed_space, conformed_image)
+    Path
+        Path to saved orig.mgz file
     """
-    # Run prediction (automatically conforms and sets up context)
-    LOGGER.info("Running prediction...")
-    pred_data = predictor.get_prediction(str(orig_name), orig_img)
+    from FastSurferCNN.utils.arg_types import vox_size as _vox_size
     
-    # Save orig.mgz from conformed image
-    _save_orig_mgz(output_dir, predictor)
+    input_image = Path(input_image)
+    mri_dir = output_dir / "mri"
+    mri_dir.mkdir(parents=True, exist_ok=True)
+    orig_mgz = mri_dir / "orig.mgz"
     
-    # Save prediction (uses context set by get_prediction)
-    pred_file = output_dir / pred_name
-    pred_file.parent.mkdir(parents=True, exist_ok=True)
-    LOGGER.info(f"Saving prediction: {pred_file.name}")
-    predictor.save_img(pred_file, pred_data, dtype=np.int16, resample_to_native=False)
+    LOGGER.info(f"Loading and conforming input image: {input_image}")
+    orig_img = nib.load(input_image)
     
-    # Create and save masks
-    _create_and_save_masks(pred_data, output_dir, predictor)
+    # Check if conforming is needed
+    conform_kwargs = {
+        "threshold_1mm": conform_to_1mm_threshold,
+        "vox_size": _vox_size(vox_size) if isinstance(vox_size, str) else vox_size,
+        "orientation": orientation,
+        "img_size": image_size,
+    }
     
-    return pred_data, predictor._conformed_img
+    if not is_conform(orig_img, **conform_kwargs, verbose=True):
+        LOGGER.info("Conforming image to FreeSurfer standard space...")
+        conformed_img = conform(orig_img, **conform_kwargs)
+    else:
+        LOGGER.info("Image is already conformed")
+        conformed_img = orig_img
+    
+    # Save conformed image as orig.mgz (in conformed space, not resampled to native)
+    conformed_data = np.asanyarray(conformed_img.dataobj)
+    data_ultils.save_image(
+        conformed_img.header.copy(),
+        conformed_img.affine,
+        conformed_data,
+        orig_mgz,
+        dtype=np.uint8
+    )
+    LOGGER.info(f"Saved conformed image: {orig_mgz}")
+    
+    return orig_mgz
 
 
 def apply_v1_wm_fixing(
-    pred_data: np.ndarray,
+    seg_file: Path,
     output_dir: Path,
-    predictor: "RunModelOnData",
+    lut_path: Path,
     tpl_t1w: str,
     tpl_wm: str,
-) -> np.ndarray:
+) -> None:
     """
     Apply V1 white matter fixing using template registration.
     
     Parameters
     ----------
-    pred_data : np.ndarray
-        Current segmentation data
+    seg_file : Path
+        Path to segmentation file
     output_dir : Path
         Subject directory
-    predictor : RunModelOnData
-        Model runner object
+    lut_path : Path
+        Path to LUT file
     tpl_t1w : str
         Path to template T1w image
     tpl_wm : str
         Path to template WM probability map
-    
-    Returns
-    -------
-    np.ndarray
-        Corrected segmentation data
     """
     LOGGER.info("Applying V1 white matter correction...")
     
     try:
         # File paths
-        seg_file = output_dir / "mri" / "aparc+aseg.deep.mgz"
         t1w_file = output_dir / "mri" / "orig.mgz"
         mask_file = output_dir / "mri" / "mask.mgz"
         hemi_mask_file = output_dir / "mri" / "mask_hemi.mgz"
         
-        # Ensure masks exist
-        if not mask_file.exists():
-            brain_mask = create_mask(copy.deepcopy(pred_data), MASK_DILATION_SIZE, MASK_EROSION_SIZE)
-            predictor.save_img(mask_file, brain_mask, dtype=np.uint8, resample_to_native=False)
-        
-        if not hemi_mask_file.exists():
-            brain_mask = nib.load(mask_file).get_fdata().astype(np.int16)
-            hemi_mask = create_hemisphere_masks(brain_mask, pred_data, lut_path=predictor.lut_path)
-            predictor.save_img(hemi_mask_file, hemi_mask, dtype=np.uint8, resample_to_native=False)
+        # Ensure required files exist
+        if not all(f.exists() for f in [seg_file, t1w_file, mask_file, hemi_mask_file]):
+            raise FileNotFoundError(
+                f"Required files missing for V1 fixing. "
+                f"Need: {seg_file}, {t1w_file}, {mask_file}, {hemi_mask_file}"
+            )
         
         # Run V1 WM fixing
         fix_v1_wm(
@@ -197,7 +174,7 @@ def apply_v1_wm_fixing(
             t1w_f=str(t1w_file),
             mask_f=str(mask_file),
             hemi_mask_f=str(hemi_mask_file),
-            lut_path=str(predictor.lut_path),
+            lut_path=str(lut_path),
             tpl_t1w_f=tpl_t1w,
             tpl_wm_f=tpl_wm,
             roi_name='V1',
@@ -206,23 +183,17 @@ def apply_v1_wm_fixing(
             verbose=True
         )
         
-        # Reload corrected segmentation
-        pred_img = nib.load(seg_file)
-        pred_data = np.asarray(pred_img.dataobj).astype(np.int16)
-        
         LOGGER.info("  ✓ V1 WM correction completed")
-        return pred_data
         
     except Exception as e:
         LOGGER.error(f"  ✗ V1 WM correction failed: {e}")
-        LOGGER.warning("  Continuing with uncorrected segmentation")
-        return pred_data
+        raise
 
 
 def create_aseg(
-    pred_data: np.ndarray,
+    seg_file: Path,
     output_dir: Path,
-    predictor: "RunModelOnData",
+    lut_path: Path,
 ) -> None:
     """
     Create and save aseg file from segmentation prediction.
@@ -231,33 +202,41 @@ def create_aseg(
     
     Parameters
     ----------
-    pred_data : np.ndarray
-        Segmentation prediction data
+    seg_file : Path
+        Path to segmentation file
     output_dir : Path
         Subject directory
-    predictor : RunModelOnData
-        Model runner object
+    lut_path : Path
+        Path to LUT file
     """
     LOGGER.info("Creating aseg (converting to FreeSurfer label conventions)...")
     
-    # Load brain mask
+    # Load segmentation and mask
+    pred_img = nib.load(seg_file)
+    pred_data = np.asarray(pred_img.dataobj).astype(np.int16)
+    
     mask_path = output_dir / "mri" / "mask.mgz"
     if not mask_path.exists():
-        LOGGER.warning(f"Brain mask not found at {mask_path}, creating it...")
-        brain_mask = create_mask(copy.deepcopy(pred_data), MASK_DILATION_SIZE, MASK_EROSION_SIZE)
-        predictor.save_img(mask_path, brain_mask, dtype=np.uint8, resample_to_native=False)
-    else:
-        brain_mask = nib.load(mask_path).get_fdata().astype(np.uint8)
+        raise FileNotFoundError(f"Brain mask not found at {mask_path}")
+    brain_mask = nib.load(mask_path).get_fdata().astype(np.uint8)
     
     # Convert to aseg format
-    aseg = rta.reduce_to_aseg(pred_data, lut_path=predictor.lut_path, verbose=True)
+    aseg = rta.reduce_to_aseg(pred_data, lut_path=lut_path, verbose=True)
     aseg[brain_mask == 0] = 0
     
     # Save aseg
     aseg_path = output_dir / "mri" / "aseg.auto_noCC.mgz"
     aseg_dtype = np.int16 if np.any(aseg < 0) else np.uint8
+    
+    # Use the same header/affine as the segmentation
+    data_ultils.save_image(
+        pred_img.header.copy(),
+        pred_img.affine,
+        aseg,
+        aseg_path,
+        dtype=aseg_dtype
+    )
     LOGGER.info(f"Saving aseg: {aseg_path.name}")
-    predictor.save_img(aseg_path, aseg, dtype=aseg_dtype, resample_to_native=False)
 
 
 def _validate_v1_templates(tpl_t1w: str, tpl_wm: str) -> None:
@@ -274,55 +253,6 @@ def _validate_v1_templates(tpl_t1w: str, tpl_wm: str) -> None:
         )
 
 
-def _build_predictor_kwargs(
-    atlas_name: str,
-    atlas_metadata: dict[str, Any],
-    ckpt_ax: Path | None,
-    ckpt_sag: Path | None,
-    ckpt_cor: Path | None,
-    device: str,
-    viewagg_device: str,
-    threads: int,
-    batch_size: int,
-    async_io: bool,
-    plane_weight_coronal: float | None,
-    plane_weight_axial: float | None,
-    plane_weight_sagittal: float | None,
-    skip_wm_correction: bool,
-    vox_size: VoxSizeOption,
-    orientation: OrientationType,
-    image_size: bool,
-    conform_to_1mm_threshold: float,
-) -> dict[str, Any]:
-    """Build kwargs for RunModelOnData, only including non-default preprocessing params."""
-    kwargs = {
-        'atlas_name': atlas_name,
-        'atlas_metadata': atlas_metadata,
-        'ckpt_ax': ckpt_ax,
-        'ckpt_sag': ckpt_sag,
-        'ckpt_cor': ckpt_cor,
-        'device': device,
-        'viewagg_device': viewagg_device,
-        'threads': threads,
-        'batch_size': batch_size,
-        'async_io': async_io,
-        'plane_weight_coronal': plane_weight_coronal,
-        'plane_weight_axial': plane_weight_axial,
-        'plane_weight_sagittal': plane_weight_sagittal,
-        'fix_wm_islands': not skip_wm_correction,
-    }
-    
-    # Only add preprocessing parameters if explicitly provided (not using defaults)
-    if vox_size != "min":
-        kwargs['vox_size'] = vox_size
-    if orientation != "lia":
-        kwargs['orientation'] = orientation
-    if image_size is not True:
-        kwargs['image_size'] = image_size
-    if conform_to_1mm_threshold != 0.95:
-        kwargs['conform_to_1mm_threshold'] = conform_to_1mm_threshold
-    
-    return kwargs
 
 
 def prepare_freesurfer_subject(
@@ -404,7 +334,7 @@ def prepare_freesurfer_subject(
     try:
         # Download checkpoints if needed
         LOGGER.info("Checking or downloading checkpoints...")
-        urls = load_checkpoint_config_defaults("url", filename=CHECKPOINT_PATHS_FILE)
+        urls = get_paths_from_yaml("url", filename=CHECKPOINT_PATHS_FILE)
         get_checkpoints(ckpt_ax, ckpt_cor, ckpt_sag, urls=urls)
         
         # Extract atlas information from checkpoints
@@ -420,39 +350,165 @@ def prepare_freesurfer_subject(
         subject_dir.mkdir(parents=True, exist_ok=True)
         LOGGER.info(f"Subject directory: {subject_dir}")
 
-        # Build predictor
-        predictor_kwargs = _build_predictor_kwargs(
-            atlas_name, atlas_metadata, ckpt_ax, ckpt_sag, ckpt_cor,
-            device, viewagg_device, threads, batch_size, async_io,
-            plane_weight_coronal, plane_weight_axial, plane_weight_sagittal,
-            skip_wm_correction, vox_size, orientation, image_size, conform_to_1mm_threshold
-        )
-        predictor = RunModelOnData(**predictor_kwargs)
-
-        # Load and process image
-        orig_img = nib.load(orig_name)
-        pred_data, conformed_img = process_image_freesurfer_pipeline(
+        # Step 1: Conform and save orig.mgz
+        LOGGER.info("=" * 80)
+        LOGGER.info("Step 1: Conforming input image to FreeSurfer standard space")
+        LOGGER.info("=" * 80)
+        orig_mgz = _conform_and_save_orig_mgz(
+            input_image=orig_name,
             output_dir=subject_dir,
-            predictor=predictor,
-            orig_img=orig_img,
-            orig_name=orig_name,
-            pred_name=pred_name
+            vox_size=vox_size,
+            orientation=orientation,
+            image_size=image_size,
+            conform_to_1mm_threshold=conform_to_1mm_threshold,
         )
-        LOGGER.info(f"Prediction saved: {pred_name}")
+
+        # Step 2: Run skullstripping on conformed image
+        LOGGER.info("=" * 80)
+        LOGGER.info("Step 2: Running skullstripping on conformed image")
+        LOGGER.info("=" * 80)
+        mask_path = subject_dir / "mri" / "mask.mgz"
+        mask_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Apply V1 WM fixing if requested
-        if fixv1:
-            pred_data = apply_v1_wm_fixing(
-                pred_data, subject_dir, predictor, tpl_t1w, tpl_wm
+        # Convert device to device_id format for skullstripping
+        if device == "auto":
+            device_id = "auto"
+        elif device == "cpu":
+            device_id = -1
+        else:
+            # Extract GPU index from "cuda:0" format
+            device_id = int(device.split(":")[-1]) if ":" in device else 0
+        
+        skullstripping_config = {
+            'atlas': atlas_name,
+            'batch_size': batch_size,
+            'threads': threads if threads > 0 else 1,
+        }
+        # Only add preprocessing params if not defaults
+        if vox_size != "min":
+            skullstripping_config['vox_size'] = vox_size
+        if orientation != "lia":
+            skullstripping_config['orientation'] = orientation
+        if image_size is not True:
+            skullstripping_config['image_size'] = image_size
+        if conform_to_1mm_threshold != 0.95:
+            skullstripping_config['conform_to_1mm_threshold'] = conform_to_1mm_threshold
+        
+        skullstripping(
+            input_image=str(orig_mgz),
+            modal="anat",  # Always anat for T1w
+            output_path=str(mask_path),
+            device_id=device_id,
+            logger=LOGGER,
+            config=skullstripping_config
+        )
+        LOGGER.info(f"Brain mask saved: {mask_path}")
+
+        # Step 3: Run segmentation on conformed image
+        LOGGER.info("=" * 80)
+        LOGGER.info("Step 3: Running segmentation on conformed image")
+        LOGGER.info("=" * 80)
+        
+        # Create temporary directory for segmentation outputs
+        import tempfile
+        temp_seg_dir = Path(tempfile.mkdtemp(prefix="fastsurfer_seg_"))
+        
+        try:
+            # Run segmentation (will create seg, mask, hemimask)
+            seg_results = run_segmentation(
+                input_image=str(orig_mgz),
+                output_dir=temp_seg_dir,
+                atlas_name=atlas_name,
+                atlas_metadata=atlas_metadata,
+                ckpt_ax=ckpt_ax,
+                ckpt_cor=ckpt_cor,
+                ckpt_sag=ckpt_sag,
+                device=device,
+                viewagg_device=viewagg_device,
+                threads=threads if threads > 0 else 1,
+                batch_size=batch_size,
+                vox_size=vox_size,
+                orientation=orientation,
+                image_size=image_size,
+                async_io=async_io,
+                conform_to_1mm_threshold=conform_to_1mm_threshold,
+                plane_weight_coronal=plane_weight_coronal,
+                plane_weight_axial=plane_weight_axial,
+                plane_weight_sagittal=plane_weight_sagittal,
+                fix_wm_islands=not skip_wm_correction,
+                seg_filename="segmentation.mgz",
+                mask_filename="mask.mgz",
+                hemimask_filename="mask_hemi.mgz",
+                resample_to_native=False,  # Keep in conformed space for FS
+            )
+            
+            # Step 4: Reorganize outputs to FS structure
+            LOGGER.info("=" * 80)
+            LOGGER.info("Step 4: Reorganizing outputs to FreeSurfer structure")
+            LOGGER.info("=" * 80)
+            
+            mri_dir = subject_dir / "mri"
+            mri_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Move segmentation to FS structure
+            seg_file = mri_dir / pred_name
+            seg_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(seg_results['segmentation'], seg_file)
+            LOGGER.info(f"Segmentation saved: {seg_file}")
+            
+            # Copy mask (overwrite the one from skullstripping with the one from segmentation)
+            shutil.copy2(seg_results['mask'], mask_path)
+            LOGGER.info(f"Brain mask saved: {mask_path}")
+            
+            # Copy hemisphere mask if available
+            if 'hemimask' in seg_results:
+                hemi_mask_path = mri_dir / "mask_hemi.mgz"
+                shutil.copy2(seg_results['hemimask'], hemi_mask_path)
+                LOGGER.info(f"Hemisphere mask saved: {hemi_mask_path}")
+            
+            # Get LUT path for aseg creation
+            fastsurfercnn_dir = Path(__file__).resolve().parent.parent
+            atlas_dir = fastsurfercnn_dir / f"atlas/atlas-{atlas_name}"
+            lut_path = atlas_dir / f"{atlas_name}_ColorLUT.tsv"
+            
+            # Apply V1 WM fixing if requested
+            if fixv1:
+                LOGGER.info("=" * 80)
+                LOGGER.info("Step 5: Applying V1 white matter correction")
+                LOGGER.info("=" * 80)
+                apply_v1_wm_fixing(
+                    seg_file=seg_file,
+                    output_dir=subject_dir,
+                    lut_path=lut_path,
+                    tpl_t1w=tpl_t1w,
+                    tpl_wm=tpl_wm,
+                )
+
+            # Create aseg
+            LOGGER.info("=" * 80)
+            LOGGER.info("Step 6: Creating aseg file")
+            LOGGER.info("=" * 80)
+            create_aseg(
+                seg_file=seg_file,
+                output_dir=subject_dir,
+                lut_path=lut_path,
             )
 
-        # Create aseg
-        create_aseg(pred_data, subject_dir, predictor)
-
-        # Run QC statistics
-        LOGGER.info("Computing segmentation volume statistics...")
-        seg_voxvol = np.prod(conformed_img.header.get_zooms())
-        check_volume(pred_data, seg_voxvol)
+            # Run QC statistics
+            LOGGER.info("Computing segmentation volume statistics...")
+            conformed_img = nib.load(orig_mgz)
+            pred_img = nib.load(seg_file)
+            pred_data = np.asarray(pred_img.dataobj)
+            seg_voxvol = np.prod(conformed_img.header.get_zooms())
+            check_volume(pred_data, seg_voxvol)
+            
+        finally:
+            # Clean up temporary directory
+            try:
+                shutil.rmtree(temp_seg_dir)
+                LOGGER.debug(f"Cleaned up temporary directory: {temp_seg_dir}")
+            except Exception as e:
+                LOGGER.warning(f"Could not clean up temporary directory {temp_seg_dir}: {e}")
             
     except RuntimeError as e:
         if not handle_cuda_memory_exception(e):

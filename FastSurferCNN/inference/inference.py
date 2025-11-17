@@ -220,16 +220,15 @@ class Inference:
         # make sure the model is, where it is supposed to be
         self.model.to(load_device)
 
-        # WARNING: weights_only=False can cause unsafe code execution, but here the
-        # checkpoint can be considered to be from a safe source
-        model_state = torch.load(ckpt, map_location=load_device, weights_only=False)
-        self.model.load_state_dict(model_state["model_state"])
+        # Load checkpoint using centralized function
+        from FastSurferCNN.utils.checkpoint import read_checkpoint_file, extract_atlas_metadata
+        checkpoint = read_checkpoint_file(ckpt, map_location=load_device)
+        self.model.load_state_dict(checkpoint["model_state"])
 
         # Phase 1: Extract atlas metadata from checkpoint
         # This ensures we use the EXACT same label mapping as during training
         atlas_metadata = None
         try:
-            from FastSurferCNN.utils.checkpoint import extract_atlas_metadata
             atlas_metadata = extract_atlas_metadata(ckpt)
             
             if atlas_metadata:

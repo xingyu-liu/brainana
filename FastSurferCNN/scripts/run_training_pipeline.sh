@@ -17,8 +17,8 @@
 # ============================================================================
 
 # YAML config file (SINGLE SOURCE OF TRUTH - like macacaMRINN!)
-export PYTHONPATH="/home/star/github/others/FastSurfer:$PYTHONPATH"
-YAML_CONFIG=/home/star/github/others/FastSurfer/FastSurferCNN/config/FastSurferVINN_ARM2_coronal.yaml
+export PYTHONPATH="/home/star/github/banana:$PYTHONPATH"
+YAML_CONFIG=/home/star/github/banana/FastSurferCNN/config/FastSurferVINN_ARM2_sagittal.yaml
 
 # ============================================================================
 # STEP 1: Split Data into Train/Val

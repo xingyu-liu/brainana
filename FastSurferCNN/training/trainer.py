@@ -423,7 +423,8 @@ class Trainer:
                 logger.info(f"Loading pretrained model from {self.cfg.TRAIN.PRETRAINED_MODEL}")
                 
                 # Check actual number of classes in the pretrained checkpoint
-                checkpoint = torch.load(self.cfg.TRAIN.PRETRAINED_MODEL, map_location="cpu", weights_only=False)
+                from FastSurferCNN.utils.checkpoint import read_checkpoint_file
+                checkpoint = read_checkpoint_file(self.cfg.TRAIN.PRETRAINED_MODEL, map_location="cpu")
                 
                 # Find classifier weight to determine number of classes in checkpoint
                 classifier_key = None

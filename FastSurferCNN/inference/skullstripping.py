@@ -20,6 +20,7 @@ compatible with the macacaMRINN skullstripping API.
 """
 
 import logging
+import shutil
 from pathlib import Path
 from typing import Dict, Optional, Union, Any
 
@@ -27,13 +28,9 @@ import nibabel as nib
 import numpy as np
 
 from FastSurferCNN.inference.predict import (
-    RunModelOnData,
+    run_segmentation,
     setup_atlas_from_checkpoints,
-    MASK_DILATION_SIZE,
-    MASK_EROSION_SIZE,
 )
-from FastSurferCNN.data_loader.conform import conform, is_conform
-from FastSurferCNN.postprocessing.postseg_utils import create_mask
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +132,7 @@ def _extract_atlas_from_checkpoint(ckpt_path: Path) -> Optional[str]:
 def skullstripping(
     input_image: Union[str, Path],
     modal: str,
-    output_path: Union[str, Path],
+    output_dir: Union[str, Path],
     device_id: Union[int, str] = 'auto',
     logger: Optional[logging.Logger] = None,
     config: Optional[Dict[str, Any]] = None
@@ -146,15 +143,20 @@ def skullstripping(
     This function provides the same interface as the macacaMRINN skullstripping API
     but uses FastSurferCNN internally for brain mask generation.
     
-    The function:
+    The function calls `run_segmentation` which:
     1. Runs FastSurferCNN segmentation on the input image
     2. Extracts brain mask from the segmentation using morphological operations
-    3. Saves the brain mask to the output path
+    3. Creates hemisphere mask from the segmentation
+    4. Saves all outputs (segmentation, brain mask, hemisphere mask) to the output directory
+    
+    Note: Masks are created from the resampled segmentation (using nearest-neighbor
+    interpolation), so they are already binary and in native space without needing
+    additional resampling or binarization.
     
     Args:
         input_image: Path to the input image (T1w, EPI, etc.)
         modal: 'anat' or 'func' (modality)
-        output_path: Path to save the brain mask
+        output_dir: Directory to save all output files (segmentation, mask, hemimask)
         device_id: GPU device to use ('auto', -1 for CPU, or specific GPU index)
         logger: Logger instance (optional)
         config: Model configuration (optional)
@@ -166,7 +168,9 @@ def skullstripping(
         
     Returns:
         Dictionary with output file paths:
-        - 'brain_mask': Path to the generated brain mask
+        - 'brain_mask': Path to the generated brain mask (binary, values 0 or 1)
+        - 'segmentation': Path to the segmentation file (optional)
+        - 'hemimask': Path to the hemisphere mask file (optional)
         - 'input_image': Path to the input image
         
     Raises:
@@ -194,8 +198,8 @@ def skullstripping(
         logger.error(f"Input image not found: {input_image}")
         raise FileNotFoundError(f"Input image not found: {input_image}")
 
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     if modal not in ['anat', 'func']:
         logger.error(f"Invalid modality: {modal}. Must be 'anat' or 'func'")
@@ -276,68 +280,50 @@ def skullstripping(
         device_str = f'cuda:{device_id}' if isinstance(device_id, int) else str(device_id)
     
     try:
-        # Initialize predictor
-        # Preprocessing parameters (vox_size, orientation, image_size, conform_to_1mm_threshold)
-        # are loaded from checkpoint by RunModelOnData. Only pass them if explicitly
-        # provided in config as user overrides.
-        predictor_kwargs = {
-            'atlas_name': atlas_name,
-            'atlas_metadata': atlas_metadata,
-            'ckpt_ax': checkpoints.get('axial'),
-            'ckpt_cor': checkpoints.get('coronal'),
-            'ckpt_sag': checkpoints.get('sagittal'),
-            'device': device_str,
-            'viewagg_device': device_str,
-            'threads': config.get('threads', 1),
-            'batch_size': config.get('batch_size', 1),
-            'async_io': False,  # No async for simple skullstripping
-        }
-        
-        # Only add preprocessing parameters if explicitly provided in config
-        # (RunModelOnData will load them from checkpoint otherwise)
-        if 'vox_size' in config:
-            predictor_kwargs['vox_size'] = config['vox_size']
-        if 'orientation' in config:
-            predictor_kwargs['orientation'] = config['orientation']
-        if 'image_size' in config:
-            predictor_kwargs['image_size'] = config['image_size']
-        if 'conform_to_1mm_threshold' in config:
-            predictor_kwargs['conform_to_1mm_threshold'] = config['conform_to_1mm_threshold']
-        
-        predictor = RunModelOnData(**predictor_kwargs)
-        
-        # Load and run prediction
-        # get_prediction() automatically handles conforming and sets up context
-        # for native space resampling
-        logger.info(f"Loading and processing input image: {input_image}")
-        pred_data = predictor.get_prediction(image_name=str(input_image))
-
-        # Extract brain mask from segmentation
-        logger.info("Extracting brain mask from segmentation...")
-        brain_mask = create_mask(
-            pred_data.copy(),
-            MASK_DILATION_SIZE,
-            MASK_EROSION_SIZE
-        )
-        
-        # Ensure binary mask (0 or 1)
-        brain_mask = (brain_mask > 0).astype(np.uint8)
-        
-        # Save brain mask (automatically resampled back to native space)
-        logger.info(f"Saving brain mask to: {output_path}")
-        predictor.save_img(
-            save_as=output_path,
-            data=brain_mask,
-            dtype=np.uint8
+        # Run segmentation using the high-level API
+        # This will create segmentation, mask, and hemimask
+        logger.info(f"Running segmentation on {input_image}")
+        seg_results = run_segmentation(
+            input_image=input_image,
+            output_dir=output_dir,
+            atlas_name=atlas_name,
+            atlas_metadata=atlas_metadata,
+            ckpt_ax=checkpoints.get('axial'),
+            ckpt_cor=checkpoints.get('coronal'),
+            ckpt_sag=checkpoints.get('sagittal'),
+            device=device_str,
+            viewagg_device=device_str,
+            threads=config.get('threads', 1),
+            batch_size=config.get('batch_size', 1),
+            async_io=False,
+            fix_wm_islands=False,  # Not needed for skullstripping
+            seg_filename="segmentation.mgz",  # Not used, but required
+            mask_filename="mask.mgz",
+            hemimask_filename="mask_hemi.mgz",  # Not used, but created
+            resample_to_native=True,
+            # Only add preprocessing parameters if explicitly provided in config
+            **{k: v for k, v in config.items() 
+               if k in ['vox_size', 'orientation', 'image_size', 'conform_to_1mm_threshold']}
         )
         
         logger.info("Skullstripping completed successfully")
+        logger.info(f"Output files saved to: {output_dir}")
+        logger.info(f"  - Segmentation: {seg_results.get('segmentation')}")
+        logger.info(f"  - Brain mask: {seg_results.get('mask')}")
+        if 'hemimask' in seg_results:
+            logger.info(f"  - Hemisphere mask: {seg_results.get('hemimask')}")
         
-        # Return the same format as the old API
-        return {
-            'brain_mask': str(output_path),
+        # Return all output file paths
+        result = {
+            'brain_mask': str(seg_results['mask']),
             'input_image': str(input_image)
         }
+        if 'segmentation' in seg_results:
+            result['segmentation'] = str(seg_results['segmentation'])
+        if 'hemimask' in seg_results:
+            result['hemimask'] = str(seg_results['hemimask'])
+        
+        return result
         
     except Exception as e:
         logger.error(f"Skullstripping failed: {str(e)}")
