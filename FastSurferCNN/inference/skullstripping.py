@@ -23,10 +23,8 @@ import logging
 from pathlib import Path
 from typing import Dict, Optional, Union, Any, Literal
 
-from FastSurferCNN.inference.predict import (
-    run_segmentation,
-    setup_atlas_from_checkpoints,
-)
+from FastSurferCNN.inference.api import run_segmentation
+from FastSurferCNN.inference.predictor_utils import setup_atlas_from_checkpoints
 
 logger = logging.getLogger(__name__)
 

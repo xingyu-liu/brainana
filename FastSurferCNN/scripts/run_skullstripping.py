@@ -56,7 +56,7 @@ def main():
             device_id='auto',
             logger=logger,
             config=config,
-            output_data_format="nifti",
+            output_data_format="mgz",
             enable_crop_2round=True,
 
         )

@@ -41,8 +41,8 @@ import FastSurferCNN.postprocessing.fix_v1_wm as fix_v1_wm
 import FastSurferCNN.postprocessing.reduce_to_aseg as rta
 from FastSurferCNN.data_loader import data_utils as data_ultils
 from FastSurferCNN.data_loader.conform import conform, is_conform
-from FastSurferCNN.inference.predict import (
-    run_segmentation,
+from FastSurferCNN.inference.api import run_segmentation
+from FastSurferCNN.inference.predictor_utils import (
     setup_atlas_from_checkpoints,
     validate_checkpoints,
 )

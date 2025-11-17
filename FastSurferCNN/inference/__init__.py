@@ -19,13 +19,17 @@ This module contains all inference-related functionality for running
 predictions on MRI data.
 """
 
+from . import api
 from . import inference
-from . import predict
+from . import predictor
+from . import predictor_utils
 from . import skullstripping
 
 __all__ = [
-    "predict",
+    "api",
     "inference",
+    "predictor",
+    "predictor_utils",
     "skullstripping",
 ]
 
