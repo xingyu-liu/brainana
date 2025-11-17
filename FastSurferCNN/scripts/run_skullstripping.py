@@ -55,7 +55,8 @@ def main():
             output_dir=output_dir,
             device_id='auto',
             logger=logger,
-            config=config
+            config=config,
+            output_data_format="mgz"
         )
         
         logger.info("=" * 80)

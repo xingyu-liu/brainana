@@ -20,12 +20,8 @@ compatible with the macacaMRINN skullstripping API.
 """
 
 import logging
-import shutil
 from pathlib import Path
-from typing import Dict, Optional, Union, Any
-
-import nibabel as nib
-import numpy as np
+from typing import Dict, Optional, Union, Any, Literal
 
 from FastSurferCNN.inference.predict import (
     run_segmentation,
@@ -135,7 +131,8 @@ def skullstripping(
     output_dir: Union[str, Path],
     device_id: Union[int, str] = 'auto',
     logger: Optional[logging.Logger] = None,
-    config: Optional[Dict[str, Any]] = None
+    config: Optional[Dict[str, Any]] = None,
+    output_data_format: Literal["mgz", "nifti"] = "nifti",
 ) -> Dict[str, str]:
     """
     Perform skullstripping using FastSurferCNN segmentation model.
@@ -143,15 +140,14 @@ def skullstripping(
     This function provides the same interface as the macacaMRINN skullstripping API
     but uses FastSurferCNN internally for brain mask generation.
     
-    The function calls `run_segmentation` which:
-    1. Runs FastSurferCNN segmentation on the input image
-    2. Extracts brain mask from the segmentation using morphological operations
-    3. Creates hemisphere mask from the segmentation
-    4. Saves all outputs (segmentation, brain mask, hemisphere mask) to the output directory
+    The function implements an efficient "input space → model space → input space" workflow:
+    1. Runs FastSurferCNN segmentation on the input image (in model space)
+    2. Resamples segmentation back to native input space (in-memory, single operation)
+    3. Creates brain mask and hemisphere mask from the resampled segmentation
+    4. Saves all outputs to the output directory (all in native input space)
     
-    Note: Masks are created from the resampled segmentation (using nearest-neighbor
-    interpolation), so they are already binary and in native space without needing
-    additional resampling or binarization.
+    All outputs are automatically in the same space as the input image, providing
+    a seamless user experience without manual resampling.
     
     Args:
         input_image: Path to the input image (T1w, EPI, etc.)
@@ -162,9 +158,14 @@ def skullstripping(
         config: Model configuration (optional)
             - 'atlas': Atlas name (e.g., 'ARM2', 'ARM3'). If not provided, auto-detected from checkpoints
             - 'batch_size': Batch size for inference (default: 1)
-            - 'vox_size': Voxel size option (default: 'min')
-            - 'orientation': Target orientation (default: 'lia')
+            - 'threads': Number of threads for CPU operations (default: 1)
             - 'base_dir': Base directory for pretrained_model (default: FastSurferCNN root)
+        output_data_format: {"mgz", "nifti"}, default="nifti"
+            Output file format. "mgz" saves as .mgz (MGH format), "nifti" saves as .nii.gz (NIfTI format).
+            
+        Note: Preprocessing parameters (vox_size, orientation, image_size, conform_to_1mm_threshold)
+        are automatically read from checkpoint metadata (required), ensuring consistency
+        with the training configuration.
         
     Returns:
         Dictionary with output file paths:
@@ -241,7 +242,9 @@ def skullstripping(
                     atlas_name = extracted_atlas
                     logger.info(f"Auto-detected atlas: {atlas_name}")
                     # Re-find checkpoints with known atlas
-                    checkpoints = _find_checkpoints(base_dir, modality_name, atlas_name)
+                    checkpoints = _find_checkpoints(
+                        base_dir, modality_name, atlas_name, model_type="seg"
+                    )
                 break
     
     # Validate that at least one checkpoint is found
@@ -295,15 +298,9 @@ def skullstripping(
             viewagg_device=device_str,
             threads=config.get('threads', 1),
             batch_size=config.get('batch_size', 1),
-            async_io=False,
             fix_wm_islands=False,  # Not needed for skullstripping
-            seg_filename="segmentation.mgz",  # Not used, but required
-            mask_filename="mask.mgz",
-            hemimask_filename="mask_hemi.mgz",  # Not used, but created
             resample_to_native=True,
-            # Only add preprocessing parameters if explicitly provided in config
-            **{k: v for k, v in config.items() 
-               if k in ['vox_size', 'orientation', 'image_size', 'conform_to_1mm_threshold']}
+            output_data_format=output_data_format,
         )
         
         logger.info("Skullstripping completed successfully")

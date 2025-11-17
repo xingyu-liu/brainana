@@ -427,18 +427,10 @@ def prepare_freesurfer_subject(
                 viewagg_device=viewagg_device,
                 threads=threads if threads > 0 else 1,
                 batch_size=batch_size,
-                vox_size=vox_size,
-                orientation=orientation,
-                image_size=image_size,
-                async_io=async_io,
-                conform_to_1mm_threshold=conform_to_1mm_threshold,
                 plane_weight_coronal=plane_weight_coronal,
                 plane_weight_axial=plane_weight_axial,
                 plane_weight_sagittal=plane_weight_sagittal,
                 fix_wm_islands=not skip_wm_correction,
-                seg_filename="segmentation.mgz",
-                mask_filename="mask.mgz",
-                hemimask_filename="mask_hemi.mgz",
                 resample_to_native=False,  # Keep in conformed space for FS
             )
             

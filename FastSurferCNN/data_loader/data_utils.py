@@ -235,10 +235,10 @@ def load_maybe_conform(
 
 # Save image routine
 def save_image(
-        header_info: _Header,
-        affine_info: npt.NDArray[float],
+        header: _Header,
+        affine: npt.NDArray[float],
         img_array: np.ndarray,
-        save_as: str | Path,
+        output_f: str | Path,
         dtype: npt.DTypeLike | None = None
 ) -> None:
     """
@@ -248,36 +248,58 @@ def save_image(
 
     Parameters
     ----------
-    header_info : _Header
+    header : _Header
         Image header information.
-    affine_info : npt.NDArray[float]
+    affine : npt.NDArray[float]
         Image affine information.
     img_array : np.ndarray
         An array containing image data.
-    save_as : Path, str
+    output_f : Path, str
         Name under which to save prediction; this determines output file format.
     dtype : npt.DTypeLike, optional
         Image array type; if provided, the image object is explicitly set to match this type.
     """
-    save_as = Path(save_as)
-    valid_ext = save_as.suffix[1:] in SUPPORTED_OUTPUT_FILE_FORMATS or save_as.suffixes[-2:] == [".nii", ".gz"]
-    assert valid_ext, f"Output filename does not contain a supported file format {SUPPORTED_OUTPUT_FILE_FORMATS}!"
+    output_f = Path(output_f)
+    valid_ext = output_f.suffix[1:] in SUPPORTED_OUTPUT_FILE_FORMATS or output_f.suffixes[-2:] == [".nii", ".gz"]
+    if not valid_ext:
+        raise ValueError(
+            f"Output filename does not contain a supported file format {SUPPORTED_OUTPUT_FILE_FORMATS}! "
+            f"Got: {output_f.suffixes}"
+        )
 
-    mgh_img = None
-    if save_as.suffix == ".mgz":
-        mgh_img = nib.MGHImage(img_array, affine_info, header_info)
-    elif save_as.suffix == ".nii" or save_as.suffixes[-2:] == [".nii", ".gz"]:
-        mgh_img = nib.nifti1.Nifti1Pair(img_array, affine_info, header_info)
+    # Save image with header and affine
+    # The header contains useful metadata beyond spatial info
+    
+    if output_f.suffix == ".mgz":
+        # MGH format only supports specific dtypes: uint8, int16, int32, float32
+        # Convert unsupported dtypes (like int64) to supported ones
+        if img_array.dtype == np.int64:
+            # Convert int64 to int32 (safe for label/mask values < 2^31)
+            img_array = img_array.astype(np.int32)
+        elif img_array.dtype == np.uint64:
+            img_array = img_array.astype(np.uint32)
+        elif img_array.dtype == np.float64:
+            img_array = img_array.astype(np.float32)
+        
+        # Create MGH image with header and affine
+        mgh_img = nib.MGHImage(img_array, affine, header)
+                
+    elif output_f.suffix == ".nii" or output_f.suffixes[-2:] == [".nii", ".gz"]:
+        # Create NIfTI image with header and affine
+        mgh_img = nib.nifti1.Nifti1Image(img_array, affine, header)
+    else:
+        # This should never happen due to the check above, but add for safety
+        raise ValueError(f"Unsupported file format: {output_f.suffixes}")
 
     if dtype is not None:
         mgh_img.set_data_dtype(dtype)
 
-    if save_as.suffix in (".mgz", ".nii"):
-        nib.save(mgh_img, save_as)
-    elif save_as.suffixes[-2:] == [".nii", ".gz"]:
+    if output_f.suffix in (".mgz", ".nii"):
+        nib.save(mgh_img, output_f)
+    elif output_f.suffixes[-2:] == [".nii", ".gz"]:
         # For correct outputs, nii.gz files should be saved using the nifti1
         # sub-module's save():
-        nib.nifti1.save(mgh_img, str(save_as))
+        nib.nifti1.save(mgh_img, str(output_f))
 
 
 # Transformation for mapping
