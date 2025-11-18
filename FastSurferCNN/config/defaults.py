@@ -3,13 +3,13 @@ from yacs.config import CfgNode as CN
 _C = CN()
 
 # ---------------------------------------------------------------------------- #
-# Path Management - Single Source of Truth
+# Path Management
 # ---------------------------------------------------------------------------- #
-# Base directory for all paths (new format - recommended)
-_C.BASE_DIR = ""
+# Direct path to training data directory (contains HDF5 files)
+_C.training_data_dir = ""
 
-# Output directory suffix relative to BASE_DIR (new format)
-_C.LOG_DIR_SUFFIX = ""
+# Direct path to output directory (for training logs, checkpoints, etc.)
+_C.output_dir = ""
 
 # ---------------------------------------------------------------------------- #
 # Model options

@@ -4,7 +4,7 @@
 Split monkey MRI data into training and validation sets
 
 This script uses the config_utils module to resolve paths from YAML config.
-All paths are derived from BASE_DIR in the YAML file (single source of truth).
+All paths are derived from training_data_dir and output_dir in the YAML file.
 Supports any atlas via command line or environment variable.
 """
 
@@ -137,7 +137,7 @@ def main():
     
     # Load config from YAML using unified config utilities
     cfg = load_yaml_config(args.config)
-    paths = get_paths_from_config(cfg, args.config)
+    paths = get_paths_from_config(cfg)
     
     # Determine atlas name from config (single source of truth)
     atlas_name = args.atlas or os.environ.get('ATLAS_NAME')
@@ -157,7 +157,6 @@ def main():
     seed = cfg.get('RNG_SEED', 42)
     
     print(f"Configuration from YAML: {args.config}")
-    print(f"  Base directory:  {paths['base_dir']}")
     print(f"  Data directory:  {data_dir}")
     print(f"  Atlas:           {atlas_name}")
     print(f"  Val split:       {args.val_split}")

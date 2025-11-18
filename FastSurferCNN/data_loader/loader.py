@@ -166,6 +166,28 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
 
         dataset = dset.MultiScaleDatasetVal(data_path, cfg, transform)
 
+    # Validate that dataset is not empty
+    if len(dataset) == 0:
+        error_msg = (
+            f"ERROR: Dataset is empty (0 samples found)!\n"
+            f"  Mode: {mode}\n"
+            f"  HDF5 path: {data_path}\n"
+            f"  Plane: {cfg.DATA.PLANE}\n"
+            f"  Expected sizes: {cfg.DATA.SIZES}\n\n"
+            f"Possible causes:\n"
+            f"  1. HDF5 file was created but no subjects were processed\n"
+            f"  2. All subjects were filtered out during HDF5 creation\n"
+            f"  3. HDF5 file structure doesn't match expected sizes\n"
+            f"  4. Data split file filtered out all subjects\n\n"
+            f"Please check:\n"
+            f"  - Run step2_create_hdf5.py with --split_type {mode} to generate data\n"
+            f"  - Verify subjects exist in the data directory\n"
+            f"  - Check data_split.json if using train/val split\n"
+            f"  - Inspect HDF5 file structure: h5dump -H {data_path} | head -50"
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
     dataloader = DataLoader(
         dataset,
         batch_size=cfg.TRAIN.BATCH_SIZE,

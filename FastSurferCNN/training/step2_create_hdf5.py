@@ -955,7 +955,7 @@ def main():
     
     # Load ALL parameters from YAML using unified config utilities
     cfg = load_yaml_config(args.config)
-    paths = get_paths_from_config(cfg, args.config)
+    paths = get_paths_from_config(cfg)
     
     # Determine atlas name from YAML config (CLASS_OPTIONS) or command line
     atlas_name = args.atlas or cfg['DATA']['CLASS_OPTIONS'][0] or os.environ.get('ATLAS_NAME', 'ARM2')
@@ -1000,7 +1000,6 @@ def main():
             subject_filter = set(split[args.split_type])
     
     print(f"Configuration from YAML: {args.config}")
-    print(f"  Base dir:      {paths['base_dir']}")
     print(f"  Data dir:      {data_dir}")
     print(f"  Plane:         {plane}")
     print(f"  Target size:   {target_size}×{target_size}")

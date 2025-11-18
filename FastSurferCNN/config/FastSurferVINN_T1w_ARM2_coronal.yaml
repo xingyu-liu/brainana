@@ -1,18 +1,18 @@
 # ==============================================================================
-# BASE DIRECTORY - Single Source of Truth for All Paths
+# PATH CONFIGURATION - Direct Paths (Simpler Format)
 # ==============================================================================
-# Change this one line to move the entire project to a different location
-BASE_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training"
+# Direct path to training data directory (contains HDF5 files)
+training_data_dir: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_data/T1w_seg-ARM2"
 
-# Output directory suffix (relative to BASE_DIR)
-LOG_DIR_SUFFIX: "training_output/ARM2_finetune_sagittal_v3"
+# Direct path to output directory (for training logs, checkpoints, etc.)
+output_dir: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/ARM2_finetune_coronal_v4"
 
 # ==============================================================================
 # MODEL ARCHITECTURE
 # ==============================================================================
 MODEL: 
   MODEL_NAME: "FastSurferVINN"
-  NUM_CLASSES: 36  # ARM2 Atlas sagittal: 36 classes (35 unique key_nohemi + background)
+  NUM_CLASSES: 71  # ARM2 Atlas: 71 classes (all labels from roiinfo.txt + 0 if not present)
   LOSS_FUNC: "combined"
   NUM_FILTERS: 71
   NUM_FILTERS_INTERPOL: 32
@@ -38,7 +38,7 @@ TRAIN:
   NUM_EPOCHS: 100
   NUM_STEPS: 10
   FINE_TUNE: true
-  PRETRAINED_MODEL: "/home/star/github/banana/FastSurferCNN/pretrained_model/T1w_seg-ARM2_sagittal.pkl"
+  PRETRAINED_MODEL: "/home/star/github/banana/FastSurferCNN/pretrained_model/T1w_seg-ARM2_coronal.pkl"
   CHECKPOINT_PERIOD: 5
   NUM_WORKERS: 4
   EARLY_STOPPING: true
@@ -53,10 +53,11 @@ TEST:
 # ==============================================================================
 # DATA CONFIGURATION
 # ==============================================================================
-# Note: HDF5 paths are auto-derived from BASE_DIR and PLANE
-# Structure: {BASE_DIR}/training_data/monkey_ARM2_{PLANE}_{train|val}.hdf5
+# Note: HDF5 paths are auto-derived from training_data_dir and PLANE
+# Structure: {training_data_dir}/{PLANE}_{train|val}.hdf5
+# Example: {training_data_dir}/coronal_train.hdf5
 DATA:
-  PLANE: "sagittal"        # Training plane: coronal, axial, or sagittal
+  PLANE: "coronal"         # Training plane: coronal, axial, or sagittal
   CLASS_OPTIONS: ["ARM2"]  # Atlas type
   SIZES: [256]             # Image dimensions (first value used as target_size)
   PADDED_SIZE: 256         # ✅ CHANGED: No extra padding! (saves memory & computation)

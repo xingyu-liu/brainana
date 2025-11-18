@@ -198,10 +198,23 @@ class MultiScaleDataset(Dataset):
                     )
                     continue
 
-            logger.info(
-                f"Successfully indexed {self.count} samples from {dataset_path} with plane {cfg.DATA.PLANE} " \
-                f"in {time.time() - start:.3f} seconds (using lazy loading)"
-            )
+            if self.count == 0:
+                logger.error(
+                    f"WARNING: No samples found in HDF5 file!\n"
+                    f"  File: {dataset_path}\n"
+                    f"  Plane: {cfg.DATA.PLANE}\n"
+                    f"  Expected sizes: {cfg.DATA.SIZES}\n"
+                    f"  This will cause training to fail. Please check:\n"
+                    f"    1. HDF5 file was created successfully\n"
+                    f"    2. Subjects were processed during HDF5 creation\n"
+                    f"    3. HDF5 file structure matches expected sizes\n"
+                    f"    4. Data split file includes subjects for this split"
+                )
+            else:
+                logger.info(
+                    f"Successfully indexed {self.count} samples from {dataset_path} with plane {cfg.DATA.PLANE} " \
+                    f"in {time.time() - start:.3f} seconds (using lazy loading)"
+                )
 
     def _open_hdf5_file(self):
         """Open HDF5 file for reading (used for lazy loading)."""
@@ -443,10 +456,23 @@ class MultiScaleDatasetVal(Dataset):
                     )
                     continue
 
-        logger.info(
-            f"Successfully indexed {self.count} samples from {dataset_path} with plane {cfg.DATA.PLANE} " \
-            f"in {time.time() - start:.3f} seconds (using lazy loading)"
-        )
+        if self.count == 0:
+            logger.error(
+                f"WARNING: No samples found in HDF5 file!\n"
+                f"  File: {dataset_path}\n"
+                f"  Plane: {cfg.DATA.PLANE}\n"
+                f"  Expected sizes: {cfg.DATA.SIZES}\n"
+                f"  This will cause training to fail. Please check:\n"
+                f"    1. HDF5 file was created successfully\n"
+                f"    2. Subjects were processed during HDF5 creation\n"
+                f"    3. HDF5 file structure matches expected sizes\n"
+                f"    4. Data split file includes subjects for this split"
+            )
+        else:
+            logger.info(
+                f"Successfully indexed {self.count} samples from {dataset_path} with plane {cfg.DATA.PLANE} " \
+                f"in {time.time() - start:.3f} seconds (using lazy loading)"
+            )
 
     def _open_hdf5_file(self):
         """Open HDF5 file for reading (used for lazy loading)."""
