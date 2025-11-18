@@ -108,7 +108,7 @@ class RunModelOnData:
 
     def __init__(
         self,
-        atlas_name: str,
+        atlas_name: str | None,
         atlas_metadata: dict | None = None,
         ckpt_ax: Path | None = None,
         ckpt_sag: Path | None = None,
@@ -129,13 +129,12 @@ class RunModelOnData:
 
         Parameters
         ----------
-        atlas_name : str
-            Name of the atlas (e.g., "ARM2", "ARM3"). This determines which LUT
-            and label mappings to use.
+        atlas_name : str | None
+            Name of the atlas (e.g., "ARM2", "ARM3") for multi-class tasks.
+            None for binary brain mask tasks (NUM_CLASSES=2).
         atlas_metadata : dict, optional
-            Atlas metadata extracted from checkpoint. If provided, uses the
-            dense_to_sparse mapping from the checkpoint (guarantees exact match
-            with training). If None, derives mapping from atlas_name.
+            Atlas metadata extracted from checkpoint. Required for multi-class tasks.
+            For binary tasks, should have is_binary_task=True.
         ckpt_ax : Path, optional
             Path to checkpoint file for axial plane.
         ckpt_sag : Path, optional
@@ -194,52 +193,7 @@ class RunModelOnData:
 
         LOGGER.info(f"Running view aggregation on {self.viewagg_device}")
 
-        # Initialize atlas and LUT
-        LOGGER.info(f"Initializing with atlas: {atlas_name}")
-
-        fastsurfercnn_dir = Path(__file__).resolve().parent.parent
-        atlas_dir = fastsurfercnn_dir / f"atlas/atlas-{atlas_name}"
-        lut_path = atlas_dir / f"{atlas_name}_ColorLUT.tsv"
-
-        if not lut_path.exists():
-            raise ValueError(
-                f"ColorLUT not found for atlas '{atlas_name}' at {lut_path}. "
-                "Please verify the atlas is installed correctly."
-            )
-
-        self.lut_path = lut_path
-        self.lut = data_utils.read_classes_from_lut(lut_path)
-        LOGGER.info(f"  Loaded LUT: {lut_path.name}")
-
-        # Use the EXACT same dense-to-sparse mapping as training
-        if (
-            atlas_metadata
-            and atlas_metadata.get("dense_to_sparse_mapping") is not None
-        ):
-            # Use the exact mapping from checkpoint (gold standard)
-            self.labels = atlas_metadata["dense_to_sparse_mapping"]
-            self.torch_labels = torch.from_numpy(self.labels)
-            LOGGER.info(
-                f"  Label mapping: from checkpoint ({len(self.labels)} classes)"
-            )
-        else:
-            # Fallback: derive from AtlasManager
-            try:
-                atlas_manager = AtlasManager(atlas_name, atlas_dir=atlas_dir)
-                self.labels = atlas_manager.get_dense_to_sparse_mapping()
-                self.torch_labels = torch.from_numpy(self.labels)
-                LOGGER.info(
-                    f"  Label mapping: from AtlasManager ({len(self.labels)} classes)"
-                )
-                LOGGER.warning(
-                    "  Checkpoint metadata not available - using AtlasManager fallback"
-                )
-            except Exception as e:
-                raise RuntimeError(
-                    f"Failed to initialize label mapping for atlas '{atlas_name}': {e}. "
-                    "Please verify your atlas installation is complete."
-                ) from e
-        
+        # Load configs first to determine if binary mode
         self.cfg_fin, cfg_cor, cfg_sag, cfg_ax = load_multiplane_configs(
             ckpt_ax=ckpt_ax,
             ckpt_cor=ckpt_cor,
@@ -270,6 +224,57 @@ class RunModelOnData:
                 "At least one checkpoint must be provided."
             )
         self.num_classes = max(cfg.MODEL.NUM_CLASSES for cfg in valid_configs)
+        self.is_binary = (self.num_classes == 2)
+        
+        # Initialize atlas and LUT based on mode
+        if self.is_binary:
+            # Binary brain mask mode - no atlas needed
+            LOGGER.info(f"Binary segmentation mode detected (NUM_CLASSES={self.num_classes})")
+            LOGGER.info("No atlas mapping required for brain mask task")
+            self.labels = None
+            self.torch_labels = None
+            self.lut_path = None
+            self.lut = None
+        else:
+            # Multi-class mode - require atlas
+            if atlas_name is None:
+                raise ValueError(
+                    "Multi-class mode requires atlas_name. "
+                    "For binary brain mask (NUM_CLASSES=2), use NUM_CLASSES=2 in checkpoint."
+                )
+            
+            LOGGER.info(f"Multi-class segmentation mode (NUM_CLASSES={self.num_classes})")
+            LOGGER.info(f"Initializing with atlas: {atlas_name}")
+
+            fastsurfercnn_dir = Path(__file__).resolve().parent.parent
+            atlas_dir = fastsurfercnn_dir / f"atlas/atlas-{atlas_name}"
+            lut_path = atlas_dir / f"{atlas_name}_ColorLUT.tsv"
+
+            if not lut_path.exists():
+                raise ValueError(
+                    f"ColorLUT not found for atlas '{atlas_name}' at {lut_path}. "
+                    "Please verify the atlas is installed correctly."
+                )
+
+            self.lut_path = lut_path
+            self.lut = data_utils.read_classes_from_lut(lut_path)
+            LOGGER.info(f"  Loaded LUT: {lut_path.name}")
+
+            # Use the EXACT same dense-to-sparse mapping as training
+            # Require atlas_metadata from checkpoint (no fallbacks)
+            if not atlas_metadata or atlas_metadata.get("dense_to_sparse_mapping") is None:
+                raise RuntimeError(
+                    f"Multi-class mode requires atlas metadata with dense_to_sparse_mapping. "
+                    f"Checkpoint for atlas '{atlas_name}' is missing required metadata. "
+                    f"Please ensure the checkpoint was saved with atlas_metadata."
+                )
+            
+            # Use the exact mapping from checkpoint
+            self.labels = atlas_metadata["dense_to_sparse_mapping"]
+            self.torch_labels = torch.from_numpy(self.labels)
+            LOGGER.info(
+                f"  Label mapping: from checkpoint ({len(self.labels)} classes)"
+            )
 
         self.models = {}
         for plane, view in self.view_ops.items():

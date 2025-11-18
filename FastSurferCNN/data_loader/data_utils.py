@@ -1019,21 +1019,21 @@ def get_labels_from_lut(
 
 def map_prediction_sagittal2full(
         prediction_sag: npt.NDArray,
-        num_classes: int = 51,
-        lut: str | None = None,
+        num_classes: int,
         atlas_name: str | None = None
 ) -> np.ndarray:
     """
     Remap the prediction on the sagittal network to full label space used by coronal and axial networks.
 
-    Create full aparc.DKTatlas+aseg.mgz.
+    For binary tasks (num_classes==2), no remapping needed - all planes use same label space.
+    For multi-class, expands merged hemisphere labels to bilateral space.
 
     Parameters
     ----------
     prediction_sag : npt.NDArray
         Sagittal prediction (labels).
     num_classes : int
-        Number of SAGITTAL classes (96 for full classes, 51 for hemi split, 21 for aseg) (Default value = 51).
+        Number of SAGITTAL classes.
     lut : Optional[str]
         Look-up table listing class labels (Default value = None).
     atlas_name : Optional[str]
@@ -1044,7 +1044,11 @@ def map_prediction_sagittal2full(
     np.ndarray
         Remapped prediction.
     """
-    # Use atlas manager for flexible atlas support
+    # Binary brain mask mode - no hemisphere expansion needed
+    if num_classes == 2:
+        return prediction_sag  # Already correct - brain is brain regardless of hemisphere
+    
+    # Multi-class mode - use atlas-specific expansion mapping
     from atlas.atlas_manager import get_atlas_manager
     import os
     

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
 """
-Split monkey MRI data into training and validation sets
+Split data into training and validation sets
 
 This script uses the config_utils module to resolve paths from YAML config.
 All paths are derived from training_data_dir and output_dir in the YAML file.
-Supports any atlas via command line or environment variable.
+Works with both binary and multi-class segmentation tasks.
 """
 
 import argparse
@@ -23,20 +23,17 @@ from FastSurferCNN.utils.config_utils import load_yaml_config, get_paths_from_co
 
 def split_data(
     data_dir,
-    atlas_name="ARM3",
     val_split=0.2,
     seed=42,
     min_train_subjects=5
 ):
     """
-    Split monkey data into train/val sets
+    Split data into train/val sets
     
     Parameters
     ----------
     data_dir : Path
-        Directory containing T1w_images and T1w_atlas-{ATLAS_NAME}
-    atlas_name : str
-        Name of the atlas (e.g., ARM2, ARM3)
+        Directory containing 'images' and 'labels' subdirectories
     val_split : float
         Fraction of data to use for validation
     seed : int
@@ -45,20 +42,34 @@ def split_data(
         Minimum number of subjects to keep for training
     """
     data_dir = Path(data_dir)
-    image_dir = data_dir / "T1w_images"
-    label_dir = data_dir / f"T1w_atlas-{atlas_name}"
+    image_dir = data_dir / "images"
+    label_dir = data_dir / "labels"
     
-    # Get all subjects
+    # Get all image files (any .nii.gz files)
     image_files = sorted(image_dir.glob("*.nii.gz"))
-    # Handle .nii.gz files properly (two extensions)
-    subjects = [f.name.split(".nii.gz")[0].replace("_T1w", "") for f in image_files]
+    # Extract subject names (remove .nii.gz extension)
+    subjects = [f.name.replace('.nii.gz', '') for f in image_files]
     
-    # Remove any subjects without labels
+    # Remove any subjects without corresponding labels
+    # Label files have suffix: image "abcde.nii.gz" -> label "abcde_xxx.nii.gz"
     valid_subjects = []
     for subj in subjects:
-        label_file = label_dir / f"{subj}_T1w_atlas-{atlas_name}.nii.gz"
-        if label_file.exists():
+        # Look for label file that starts with subject name followed by underscore
+        label_pattern = f"{subj}_*.nii.gz"
+        label_matches = list(label_dir.glob(label_pattern))
+        
+        if len(label_matches) == 0:
+            # No label file found - skip this subject
+            continue
+        elif len(label_matches) == 1:
+            # Exactly one match - valid
             valid_subjects.append(subj)
+        else:
+            # Multiple matches found - print warning and skip
+            print(f"Warning: Multiple label files found for subject {subj}:")
+            for match in label_matches:
+                print(f"  - {match.name}")
+            print(f"  Skipping subject {subj} (expected exactly one match)")
     
     print(f"Total subjects: {len(subjects)}")
     print(f"Valid subjects (with labels): {len(valid_subjects)}")
@@ -128,29 +139,11 @@ def main():
         default=0.2,
         help="Fraction for validation (default: 0.2 = 20%%, can override YAML)"
     )
-    parser.add_argument(
-        "--atlas", type=str, default=None,
-        help="Atlas name (e.g., ARM2, ARM3). If not provided, uses ATLAS_NAME env var or defaults to ARM2"
-    )
-    
     args = parser.parse_args()
     
     # Load config from YAML using unified config utilities
     cfg = load_yaml_config(args.config)
     paths = get_paths_from_config(cfg)
-    
-    # Determine atlas name from config (single source of truth)
-    atlas_name = args.atlas or os.environ.get('ATLAS_NAME')
-    if not atlas_name:
-        # Extract from config using same logic as config_utils
-        if 'CLASS_OPTIONS' in cfg.get('DATA', {}):
-            atlas_name = cfg['DATA']['CLASS_OPTIONS'][0]
-        elif 'ATLAS_NAME' in cfg:
-            atlas_name = cfg['ATLAS_NAME']
-        else:
-            atlas_name = 'ARM2'  # Fallback default
-    
-    print(f"Using atlas: {atlas_name}")
     
     # Get data directory and seed from resolved paths
     data_dir = paths['data_dir']
@@ -158,14 +151,12 @@ def main():
     
     print(f"Configuration from YAML: {args.config}")
     print(f"  Data directory:  {data_dir}")
-    print(f"  Atlas:           {atlas_name}")
     print(f"  Val split:       {args.val_split}")
     print(f"  Random seed:     {seed}")
     print()
     
     split_data(
         data_dir=data_dir,
-        atlas_name=atlas_name,
         val_split=args.val_split,
         seed=seed,
         min_train_subjects=5

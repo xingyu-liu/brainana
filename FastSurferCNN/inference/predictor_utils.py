@@ -70,7 +70,7 @@ def setup_atlas_from_checkpoints(
     ckpt_ax: Path | None,
     ckpt_cor: Path | None,
     ckpt_sag: Path | None,
-) -> tuple[str, dict]:
+) -> tuple[str | None, dict]:
     """
     Extract and validate atlas metadata from checkpoint files.
 
@@ -85,17 +85,17 @@ def setup_atlas_from_checkpoints(
 
     Returns
     -------
-    tuple[str, dict]
-        Atlas name and full atlas metadata dictionary.
+    tuple[str | None, dict]
+        Atlas name (None for binary tasks) and full atlas metadata dictionary.
 
     Raises
     ------
     RuntimeError
-        If no atlas metadata found or checkpoints use different atlases.
+        If no atlas metadata found, checkpoints use different atlases, or mode mismatch.
     """
     LOGGER.info("Extracting atlas information from checkpoints...")
 
-    # Try to extract atlas from each checkpoint (they should all be the same atlas)
+    # Try to extract atlas from each checkpoint (they should all be the same)
     atlas_metadatas = {}
     plane_checkpoints = [
         ("axial", ckpt_ax),
@@ -108,10 +108,18 @@ def setup_atlas_from_checkpoints(
             metadata = extract_atlas_metadata(ckpt_path)
             if metadata:
                 atlas_metadatas[plane] = metadata
-                LOGGER.info(
-                    f"  {plane.capitalize():9s}: {metadata['atlas_name']} "
-                    f"({metadata['num_classes']} classes)"
-                )
+                is_binary = metadata.get("is_binary_task", False)
+                if is_binary:
+                    LOGGER.info(
+                        f"  {plane.capitalize():9s}: Binary task "
+                        f"({metadata['num_classes']} classes)"
+                    )
+                else:
+                    atlas_name = metadata.get("atlas_name", "Unknown")
+                    LOGGER.info(
+                        f"  {plane.capitalize():9s}: {atlas_name} "
+                        f"({metadata['num_classes']} classes)"
+                    )
 
     if not atlas_metadatas:
         raise RuntimeError(
@@ -119,19 +127,39 @@ def setup_atlas_from_checkpoints(
             "Please verify your checkpoint files are valid and contain atlas information."
         )
 
-    # Validate that all checkpoints use the same atlas
-    atlas_names = {meta["atlas_name"] for meta in atlas_metadatas.values()}
-    if len(atlas_names) > 1:
+    # Validate that all checkpoints use the same mode (binary vs multi-class)
+    is_binary_flags = {meta.get("is_binary_task", False) for meta in atlas_metadatas.values()}
+    if len(is_binary_flags) > 1:
         raise RuntimeError(
-            f"Checkpoint atlas mismatch: {atlas_names}. "
-            "All checkpoints must be trained on the same atlas."
+            "Checkpoint mode mismatch: Some checkpoints are binary, others are multi-class. "
+            "All checkpoints must use the same task type."
         )
+    
+    is_binary = list(is_binary_flags)[0]
+    
+    if is_binary:
+        # Binary task - no atlas needed
+        atlas_name = None
+        atlas_metadata = list(atlas_metadatas.values())[0]
+        LOGGER.info("✓ Validated: Binary brain mask task")
+    else:
+        # Multi-class task - validate that all checkpoints use the same atlas
+        atlas_names = {meta.get("atlas_name") for meta in atlas_metadatas.values()}
+        if None in atlas_names:
+            raise RuntimeError(
+                "Multi-class checkpoints missing atlas_name in metadata. "
+                "Please ensure all checkpoints were saved with complete atlas metadata."
+            )
+        if len(atlas_names) > 1:
+            raise RuntimeError(
+                f"Checkpoint atlas mismatch: {atlas_names}. "
+                "All checkpoints must be trained on the same atlas."
+            )
 
-    # Use the atlas from any checkpoint (they're all the same)
-    atlas_name = list(atlas_metadatas.values())[0]["atlas_name"]
-    atlas_metadata = list(atlas_metadatas.values())[0]
-
-    LOGGER.info(f"✓ Validated atlas: {atlas_name}")
+        # Use the atlas from any checkpoint (they're all the same)
+        atlas_name = list(atlas_names)[0]
+        atlas_metadata = list(atlas_metadatas.values())[0]
+        LOGGER.info(f"✓ Validated atlas: {atlas_name}")
 
     return atlas_name, atlas_metadata
 

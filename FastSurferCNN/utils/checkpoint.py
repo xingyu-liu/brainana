@@ -345,33 +345,48 @@ def save_checkpoint(
         "config": cfg.dump(),
     }
 
-    # Phase 2: Add atlas metadata to checkpoint for robust inference
+    # Add task metadata to checkpoint for robust inference
     # This ensures the checkpoint is self-contained and doesn't rely on external LUT files
     try:
-        from FastSurferCNN.atlas.atlas_manager import AtlasManager
+        num_classes = cfg.MODEL.NUM_CLASSES
+        is_binary = (num_classes == 2)
         
-        # Extract atlas name from config
-        atlas_name = None
-        if hasattr(cfg.DATA, 'CLASS_OPTIONS') and cfg.DATA.CLASS_OPTIONS:
-            atlas_name = cfg.DATA.CLASS_OPTIONS[0]
-        
-        if atlas_name:
-            # Initialize AtlasManager to get the dense_to_sparse mapping
-            # This is the CRITICAL mapping that converts model output indices to label IDs
-            atlas_manager = AtlasManager(atlas_name)
-            dense_to_sparse = atlas_manager.get_dense_to_sparse_mapping()
-            
+        # Binary brain mask mode - no atlas needed
+        if is_binary:
             checkpoint["atlas_metadata"] = {
-                "atlas_name": atlas_name.upper(),
-                "num_classes": cfg.MODEL.NUM_CLASSES,
+                "is_binary_task": True,
+                "num_classes": num_classes,
                 "plane": cfg.DATA.PLANE,
-                "dense_to_sparse_mapping": dense_to_sparse.tolist(),  # Convert numpy array to list for serialization
+                "task_type": "binary_brainmask",
             }
-            LOGGER.info(f"Saving checkpoint with atlas metadata: {atlas_name} ({cfg.MODEL.NUM_CLASSES} classes)")
+            LOGGER.info(f"Saving checkpoint with binary task metadata ({num_classes} classes)")
         else:
-            LOGGER.warning("Could not extract atlas name from config - checkpoint will not contain atlas metadata")
+            # Multi-class mode - save atlas metadata
+            from FastSurferCNN.atlas.atlas_manager import AtlasManager
+            
+            # Extract atlas name from config
+            atlas_name = None
+            if hasattr(cfg.DATA, 'CLASS_OPTIONS') and cfg.DATA.CLASS_OPTIONS:
+                atlas_name = cfg.DATA.CLASS_OPTIONS[0]
+            
+            if atlas_name:
+                # Initialize AtlasManager to get the dense_to_sparse mapping
+                # This is the CRITICAL mapping that converts model output indices to label IDs
+                atlas_manager = AtlasManager(atlas_name)
+                dense_to_sparse = atlas_manager.get_dense_to_sparse_mapping()
+                
+                checkpoint["atlas_metadata"] = {
+                    "is_binary_task": False,
+                    "atlas_name": atlas_name.upper(),
+                    "num_classes": num_classes,
+                    "plane": cfg.DATA.PLANE,
+                    "dense_to_sparse_mapping": dense_to_sparse.tolist(),  # Convert numpy array to list for serialization
+                }
+                LOGGER.info(f"Saving checkpoint with atlas metadata: {atlas_name} ({num_classes} classes)")
+            else:
+                LOGGER.warning("Could not extract atlas name from config - checkpoint will not contain atlas metadata")
     except Exception as e:
-        LOGGER.warning(f"Failed to add atlas metadata to checkpoint: {e}")
+        LOGGER.warning(f"Failed to add metadata to checkpoint: {e}")
         # Continue saving without metadata (backward compatible)
 
     if scheduler is not None:
@@ -572,12 +587,11 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
     Extract atlas metadata from a checkpoint without loading the full model.
     
     This function reads only the metadata from a checkpoint to determine:
-    - Which atlas the model was trained on
-    - The dense-to-sparse label mapping
+    - Which atlas the model was trained on (or if it's a binary task)
+    - The dense-to-sparse label mapping (for multi-class)
     - Number of classes and plane
     
-    Supports both new checkpoints (with atlas_metadata) and legacy checkpoints
-    (extracts from config YAML).
+    Requires checkpoint to have atlas_metadata (no fallbacks).
     
     Parameters
     ----------
@@ -588,68 +602,70 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
     -------
     dict, None
         Dictionary with keys:
-        - atlas_name: str (e.g., "ARM2", "ARM3")
+        - is_binary_task: bool (True for binary brain mask, False for multi-class)
+        - atlas_name: str (e.g., "ARM2", "ARM3") or None for binary
         - num_classes: int
         - plane: str
-        - dense_to_sparse_mapping: np.ndarray or None
-        - source: str ("atlas_metadata" or "config_fallback")
-        Returns None if extraction fails.
+        - dense_to_sparse_mapping: np.ndarray or None (None for binary)
+        Returns None if checkpoint has no atlas_metadata.
     
     Examples
     --------
     >>> metadata = extract_atlas_metadata("checkpoint.pkl")
-    >>> print(f"Atlas: {metadata['atlas_name']}, Classes: {metadata['num_classes']}")
-    Atlas: ARM2, Classes: 71
+    >>> if metadata:
+    ...     if metadata['is_binary_task']:
+    ...         print(f"Binary task: {metadata['num_classes']} classes")
+    ...     else:
+    ...         print(f"Atlas: {metadata['atlas_name']}, Classes: {metadata['num_classes']}")
     """
     try:
         # Load checkpoint without loading model weights
         checkpoint = read_checkpoint_file(checkpoint_path)
         
-        # Try new format first (Phase 2: with atlas_metadata)
-        if "atlas_metadata" in checkpoint:
-            metadata = checkpoint["atlas_metadata"]
-            import numpy as np
-            return {
-                "atlas_name": metadata["atlas_name"],
-                "num_classes": metadata["num_classes"],
-                "plane": metadata["plane"],
-                "dense_to_sparse_mapping": np.array(metadata["dense_to_sparse_mapping"], dtype=np.int32),
-                "source": "atlas_metadata",
-            }
+        # Require atlas_metadata (no fallbacks)
+        if "atlas_metadata" not in checkpoint:
+            LOGGER.warning(
+                f"Checkpoint {checkpoint_path} does not contain atlas_metadata. "
+                "This checkpoint may be from an older version. "
+                "Please retrain or use a checkpoint with metadata."
+            )
+            return None
         
-        # Fallback: extract from config (legacy checkpoints)
-        if "config" in checkpoint:
-            config_str = checkpoint["config"]
-            config_dict = yaml.safe_load(config_str)
-            
-            atlas_name = None
-            if "DATA" in config_dict and "CLASS_OPTIONS" in config_dict["DATA"]:
-                class_options = config_dict["DATA"]["CLASS_OPTIONS"]
-                if class_options:
-                    atlas_name = class_options[0].upper()
-            
-            num_classes = config_dict.get("MODEL", {}).get("NUM_CLASSES")
-            plane = config_dict.get("DATA", {}).get("PLANE")
-            
-            if atlas_name:
-                # Try to reconstruct dense_to_sparse mapping from AtlasManager
-                try:
-                    from FastSurferCNN.atlas.atlas_manager import AtlasManager
-                    atlas_manager = AtlasManager(atlas_name)
-                    dense_to_sparse = atlas_manager.get_dense_to_sparse_mapping()
-                except Exception:
-                    dense_to_sparse = None
-                
-                return {
-                    "atlas_name": atlas_name,
-                    "num_classes": num_classes,
-                    "plane": plane,
-                    "dense_to_sparse_mapping": dense_to_sparse,
-                    "source": "config_fallback",
-                }
+        metadata = checkpoint["atlas_metadata"]
+        import numpy as np
         
-        LOGGER.warning(f"Could not extract atlas metadata from checkpoint {checkpoint_path}")
-        return None
+        # Handle binary vs multi-class
+        is_binary = metadata.get("is_binary_task", False)
+        
+        result = {
+            "is_binary_task": is_binary,
+            "num_classes": metadata["num_classes"],
+            "plane": metadata["plane"],
+        }
+        
+        if is_binary:
+            # Binary task - no atlas needed
+            result["atlas_name"] = None
+            result["dense_to_sparse_mapping"] = None
+        else:
+            # Multi-class task - require atlas and mapping
+            result["atlas_name"] = metadata.get("atlas_name")
+            if result["atlas_name"] is None:
+                LOGGER.warning(
+                    f"Multi-class checkpoint missing atlas_name in metadata: {checkpoint_path}"
+                )
+            
+            if "dense_to_sparse_mapping" in metadata:
+                result["dense_to_sparse_mapping"] = np.array(
+                    metadata["dense_to_sparse_mapping"], dtype=np.int32
+                )
+            else:
+                LOGGER.warning(
+                    f"Multi-class checkpoint missing dense_to_sparse_mapping: {checkpoint_path}"
+                )
+                result["dense_to_sparse_mapping"] = None
+        
+        return result
         
     except Exception as e:
         LOGGER.error(f"Failed to extract atlas metadata from {checkpoint_path}: {e}")

@@ -94,29 +94,36 @@ class Trainer:
         self.model = build_model(cfg)
         self.loss_func = get_loss_func(cfg)
 
-        # set up class names using AtlasManager
-        # Determine atlas name: if CLASS_OPTIONS[0] is an atlas name (ARM2, ARM3), use it
-        # Otherwise default to ARM2 for backward compatibility
-        potential_atlas = cfg.DATA.CLASS_OPTIONS[0] if cfg.DATA.CLASS_OPTIONS else 'ARM2'
-        atlas_name = potential_atlas if potential_atlas.upper() in ['ARM2', 'ARM3', 'FREESURFER'] else 'ARM2'
-        
-        # Get class names from AtlasManager
-        atlas_manager = get_atlas_manager(atlas_name)
-        class_dict = atlas_manager.get_class_dict()
-        
-        # Extract class names based on plane and options
-        plane_key = "sagittal" if cfg.DATA.PLANE == "sagittal" else "not_sagittal"
-        self.class_names = []
-        for opt in cfg.DATA.CLASS_OPTIONS:
-            if opt.upper() in ['ARM2', 'ARM3', 'FREESURFER']:
-                # If option is an atlas name, use the combined view
-                self.class_names.extend(class_dict[plane_key].get(opt, []))
-            else:
-                # Otherwise it's a class type (aseg, aparc)
-                self.class_names.extend(class_dict[plane_key].get(opt, []))
-
         # Set up logger format
         self.num_classes = cfg.MODEL.NUM_CLASSES
+        
+        # Binary brain mask mode - no atlas needed
+        if self.num_classes == 2:
+            logger.info("Binary segmentation mode (NUM_CLASSES=2) - brain mask task")
+            self.class_names = ["background", "brain"]
+            atlas_manager = None  # No atlas needed
+        else:
+            # Multi-class mode - set up class names using AtlasManager
+            # Determine atlas name: if CLASS_OPTIONS[0] is an atlas name (ARM2, ARM3), use it
+            # Otherwise default to ARM2 for backward compatibility
+            potential_atlas = cfg.DATA.CLASS_OPTIONS[0] if cfg.DATA.CLASS_OPTIONS else 'ARM2'
+            atlas_name = potential_atlas if potential_atlas.upper() in ['ARM2', 'ARM3', 'FREESURFER'] else 'ARM2'
+            
+            # Get class names from AtlasManager
+            atlas_manager = get_atlas_manager(atlas_name)
+            class_dict = atlas_manager.get_class_dict()
+            
+            # Extract class names based on plane and options
+            plane_key = "sagittal" if cfg.DATA.PLANE == "sagittal" else "not_sagittal"
+            self.class_names = []
+            for opt in cfg.DATA.CLASS_OPTIONS:
+                if opt.upper() in ['ARM2', 'ARM3', 'FREESURFER']:
+                    # If option is an atlas name, use the combined view
+                    self.class_names.extend(class_dict[plane_key].get(opt, []))
+                else:
+                    # Otherwise it's a class type (aseg, aparc)
+                    self.class_names.extend(class_dict[plane_key].get(opt, []))
+        
         # Create format string with same number of placeholders as class names
         self.a = "{}\t" * (len(self.class_names) - 1) + "{}"
         self.plot_dir = os.path.join(cfg.LOG_DIR, "plots")

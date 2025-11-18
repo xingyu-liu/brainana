@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Generate HDF5 training dataset for Monkey MRI with Flexible Atlas Support
+Generate HDF5 training dataset for MRI segmentation
 Enhanced version with proper resizing (inspired by macacaMRINN)
 
 Key improvements:
@@ -9,7 +9,8 @@ Key improvements:
 - Padding to exact target dimensions
 - Ensures all images have consistent dimensions (e.g., 256×256)
 - Uses config_utils for path resolution (single source of truth from YAML)
-- Supports any atlas via command line or environment variable
+- Supports both binary and multi-class segmentation tasks
+- Simple directory structure: images/ and labels/ subdirectories
 
 Memory optimizations:
 - Memory-mapped file loading (mmap=True) to reduce memory footprint
@@ -190,7 +191,7 @@ def load_and_conform_image(image_path, preprocess_params):
     return data, zoom
 
 
-def load_and_map_labels(label_path, plane="coronal", atlas_manager=None, preprocess_params=None):
+def load_and_map_labels(label_path, plane="coronal", atlas_manager=None, preprocess_params=None, num_classes=None):
     """
     Load and preprocess labels using conform() - EXACT same method as inference!
     
@@ -203,11 +204,13 @@ def load_and_map_labels(label_path, plane="coronal", atlas_manager=None, preproc
     label_path : Path
         Path to segmentation file
     plane : str
-        Anatomical plane - sagittal uses hemisphere merging
-    atlas_manager : AtlasManager
-        Atlas manager instance for label mapping
+        Anatomical plane - sagittal uses hemisphere merging (multi-class only)
+    atlas_manager : AtlasManager, optional
+        Atlas manager instance for label mapping (None for binary mode)
     preprocess_params : dict
         Preprocessing parameters from YAML config['DATA']['PREPROCESSING']
+    num_classes : int, optional
+        Number of classes (2 for binary mode, >2 for multi-class)
         
     Returns
     -------
@@ -238,7 +241,23 @@ def load_and_map_labels(label_path, plane="coronal", atlas_manager=None, preproc
     # Free nibabel objects immediately
     del img, conformed_img
     
-    # Use atlas manager for label mapping
+    # Binary brain mask mode - no atlas mapping needed
+    if num_classes == 2:
+        # Validate labels are binary (0 and 1 only)
+        unique_labels = np.unique(sparse_labels)
+        if not np.all(np.isin(unique_labels, [0, 1])):
+            raise ValueError(
+                f"Binary mode (NUM_CLASSES=2) requires labels to be 0 (background) and 1 (brain).\n"
+                f"Found labels: {unique_labels}\n"
+                f"File: {label_path}"
+            )
+        # Direct use - no transformation needed
+        return sparse_labels
+    
+    # Multi-class mode - use atlas manager for label mapping
+    if atlas_manager is None:
+        raise ValueError("atlas_manager required for multi-class segmentation (NUM_CLASSES > 2)")
+    
     # Sagittal uses special hemisphere merging (bilateral -> single)
     if plane == "sagittal":
         dense_labels = atlas_manager.map_labels_to_sagittal_dense(sparse_labels)
@@ -249,26 +268,28 @@ def load_and_map_labels(label_path, plane="coronal", atlas_manager=None, preproc
     return dense_labels
 
 
-def process_subject(image_path, label_path, plane, slice_thickness=3, target_size=256, atlas_manager=None, preprocess_params=None, verbose=True):
+def process_subject(image_path, label_path, plane, slice_thickness=3, target_size=256, atlas_manager=None, preprocess_params=None, num_classes=None, verbose=True):
     """
     Process a single subject's MRI and segmentation using conform() preprocessing.
     
     Parameters
     ----------
     image_path : Path
-        Path to T1w image
+        Path to image file
     label_path : Path
-        Path to segmentation
+        Path to label/segmentation file
     plane : str
         Anatomical plane (axial, coronal, sagittal)
     slice_thickness : int
         Number of slices before/after middle slice
     target_size : int
         Target size for resizing (e.g., 256 for 256×256)
-    atlas_manager : AtlasManager
-        Atlas manager instance
+    atlas_manager : AtlasManager, optional
+        Atlas manager instance (None for binary mode)
     preprocess_params : dict
         Preprocessing parameters from YAML config['DATA']['PREPROCESSING']
+    num_classes : int, optional
+        Number of classes (2 for binary, >2 for multi-class)
     verbose : bool
         Whether to print detailed info
         
@@ -277,21 +298,96 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
     dict
         Dictionary with processed data
     """
+    # Load raw images first to check affine match
+    raw_image = nib.load(image_path)
+    raw_label = nib.load(label_path)
+    
+    # Check if affines match (critical for EPI data!)
+    affine_match = np.allclose(raw_image.affine, raw_label.affine, atol=1e-3)
+    if not affine_match:
+        print(f"  ⚠️  WARNING: Image and label affines don't match for {image_path.name}!")
+        print(f"      Image affine:\n{raw_image.affine}")
+        print(f"      Label affine:\n{raw_label.affine}")
+        print(f"      This will cause misalignment after conform()!")
+    
+    # Debug: Check what conform parameters are being used
+    if verbose:
+        print(f"  Preprocessing params:")
+        print(f"      ORIENTATION: {preprocess_params['ORIENTATION']}")
+        print(f"      IMG_SIZE: {preprocess_params['IMG_SIZE']}")
+        print(f"      VOX_SIZE: {preprocess_params['VOX_SIZE']}")
+        print(f"      Raw image shape: {raw_image.shape}")
+        print(f"      Raw label shape: {raw_label.shape}")
+    
+    del raw_image, raw_label
+    
     # Load image using conform() - EXACT same as inference!
-    image_data, zoom = load_and_conform_image(image_path, preprocess_params)
+    # But save the conformed image object for debugging
+    raw_img_nib = nib.load(image_path)
+    conformed_img_nib = conform(
+        raw_img_nib,
+        order=preprocess_params['ORDER_IMAGE'],
+        orientation=preprocess_params['ORIENTATION'].lower(),
+        img_size=preprocess_params['IMG_SIZE'],
+        vox_size=preprocess_params['VOX_SIZE'],
+        threshold_1mm=preprocess_params['THRESHOLD_1MM'],
+        dtype=np.dtype(preprocess_params['DTYPE_IMAGE']),
+        rescale=preprocess_params['RESCALE'],
+    )
+    image_data = np.asarray(conformed_img_nib.dataobj)
+    zoom = conformed_img_nib.header.get_zooms()[:3]
     
     # Check if loading failed due to invalid zoom values
-    if image_data is None:
+    if image_data is None or not np.all((np.array(zoom) > 0.001) & (np.array(zoom) < 10)):
         gc.collect()
         return None
     
     # Load labels ONCE and process for both statistics and training
     # This eliminates duplicate loading and saves memory
     # Use memory mapping to reduce memory footprint
+    if verbose:
+        print(f"  Loading label file: {label_path}")
+        if not label_path.exists():
+            print(f"  ⚠️  ERROR: Label file does not exist!")
+            return None
+    
     img = nib.load(label_path, mmap=True)
     
+    # Check raw label values BEFORE conforming (for debugging)
+    raw_labels = np.asarray(img.dataobj).astype(np.int32)
+    raw_unique = np.unique(raw_labels)
+    raw_nonzero = np.sum(raw_labels > 0)
+    raw_total = raw_labels.size
+    raw_min = int(np.min(raw_labels))
+    raw_max = int(np.max(raw_labels))
+    
+    # Get brain bounding box in raw image (for debugging)
+    brain_coords = np.where(raw_labels > 0)
+    if len(brain_coords[0]) > 0:
+        brain_bbox = {
+            'x': (int(np.min(brain_coords[0])), int(np.max(brain_coords[0]))),
+            'y': (int(np.min(brain_coords[1])), int(np.max(brain_coords[1]))),
+            'z': (int(np.min(brain_coords[2])), int(np.max(brain_coords[2]))),
+        }
+        brain_center = (
+            int(np.mean(brain_coords[0])),
+            int(np.mean(brain_coords[1])),
+            int(np.mean(brain_coords[2]))
+        )
+    else:
+        brain_bbox = None
+        brain_center = None
+    
+    if verbose:
+        print(f"  Raw image shape: {img.shape}")
+        print(f"  Raw image affine:\n{img.affine}")
+        print(f"  Raw voxel size: {img.header.get_zooms()[:3]}")
+        if brain_bbox:
+            print(f"  Brain bounding box: x={brain_bbox['x']}, y={brain_bbox['y']}, z={brain_bbox['z']}")
+            print(f"  Brain center: {brain_center}")
+    
     # Use conform() for labels - EXACT same function as inference!
-    conformed_img = conform(
+    conformed_label_nib = conform(
         img,
         order=preprocess_params['ORDER_LABEL'],
         orientation=preprocess_params['ORIENTATION'].lower(),
@@ -301,31 +397,117 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
         dtype=np.dtype(preprocess_params['DTYPE_LABEL']),
         rescale=None,
     )
+    conformed_img = conformed_label_nib  # Keep old variable name for compatibility
+    
+    if verbose:
+        print(f"  Conformed image shape: {conformed_img.shape}")
+        print(f"  Conformed affine:\n{conformed_img.affine}")
+        print(f"  Conformed voxel size: {conformed_img.header.get_zooms()[:3]}")
+    
+    # DEBUG: Save first conformed image and label for inspection
+    debug_dir = Path("/tmp/fastsurfer_debug")
+    debug_dir.mkdir(exist_ok=True)
+    if not (debug_dir / "debug_saved.flag").exists():
+        print(f"  🔍 DEBUG: Saving conformed image and label to {debug_dir}")
+        nib.save(conformed_img_nib, debug_dir / "conformed_image.nii.gz")
+        nib.save(conformed_label_nib, debug_dir / "conformed_label.nii.gz")
+        nib.save(raw_img_nib, debug_dir / "raw_image.nii.gz")
+        nib.save(img, debug_dir / "raw_label.nii.gz")
+        (debug_dir / "debug_saved.flag").touch()
+        print(f"  ✅ Saved to {debug_dir}/:")
+        print(f"      - raw_image.nii.gz")
+        print(f"      - raw_label.nii.gz")
+        print(f"      - conformed_image.nii.gz")
+        print(f"      - conformed_label.nii.gz")
     
     # Extract sparse labels for statistics
     sparse_labels = np.asarray(conformed_img.dataobj).astype(np.int32)
+    
+    # Check conformed label values
+    conf_unique = np.unique(sparse_labels)
+    conf_nonzero = np.sum(sparse_labels > 0)
+    conf_total = sparse_labels.size
+    conf_min = int(np.min(sparse_labels))
+    conf_max = int(np.max(sparse_labels))
+    
+    # Always print label statistics if all labels are zero (critical error)
+    if conf_nonzero == 0:
+        print(f"  ⚠️  CRITICAL: All labels are zero after conforming!")
+        print(f"  Raw label file statistics (before conform):")
+        print(f"      File: {label_path}")
+        print(f"      Shape: {img.shape}")
+        print(f"      Voxel size: {img.header.get_zooms()[:3]}")
+        print(f"      Unique values: {raw_unique}")
+        print(f"      Non-zero voxels: {raw_nonzero}/{raw_total} ({100*raw_nonzero/raw_total:.2f}%)")
+        print(f"      Min: {raw_min}, Max: {raw_max}")
+        if brain_bbox:
+            print(f"      Brain bounding box: x={brain_bbox['x']}, y={brain_bbox['y']}, z={brain_bbox['z']}")
+            print(f"      Brain center: {brain_center}")
+        print(f"      Affine matrix:")
+        print(f"{img.affine}")
+        print(f"  Conformed label statistics (after conform):")
+        print(f"      Shape: {conformed_img.shape}")
+        print(f"      Voxel size: {conformed_img.header.get_zooms()[:3]}")
+        print(f"      Unique values: {conf_unique}")
+        print(f"      Non-zero voxels: {conf_nonzero}/{conf_total} ({100*conf_nonzero/conf_total:.2f}%)")
+        print(f"      Min: {conf_min}, Max: {conf_max}")
+        print(f"      Affine matrix:")
+        print(f"{conformed_img.affine}")
+        if raw_nonzero > 0:
+            print(f"  ⚠️  WARNING: Raw file had {raw_nonzero} non-zero voxels, but conform() resulted in all zeros!")
+            print(f"      This suggests the brain region is being mapped outside the output volume bounds.")
+            print(f"      The affine transformation may not be preserving the brain location.")
+        else:
+            print(f"  ⚠️  WARNING: Raw file is also all zeros - label file may be empty or incorrect.")
+    elif verbose:
+        print(f"  Raw label file statistics (before conform):")
+        print(f"      Unique values: {raw_unique}")
+        print(f"      Non-zero voxels: {raw_nonzero}/{raw_total} ({100*raw_nonzero/raw_total:.2f}%)")
+        print(f"      Min: {raw_min}, Max: {raw_max}")
+        print(f"  Conformed label statistics (after conform):")
+        print(f"      Unique values: {conf_unique}")
+        print(f"      Non-zero voxels: {conf_nonzero}/{conf_total} ({100*conf_nonzero/conf_total:.2f}%)")
+        print(f"      Min: {conf_min}, Max: {conf_max}")
     
     # Free the nibabel image objects immediately
     del img, conformed_img
     
     # Map sparse labels to dense for training
-    if plane == "sagittal":
-        label_data = atlas_manager.map_labels_to_sagittal_dense(sparse_labels)
+    # Binary mode: no mapping needed (labels already 0/1)
+    if num_classes == 2:
+        # Validate labels are binary
+        unique_labels = np.unique(sparse_labels)
+        if not np.all(np.isin(unique_labels, [0, 1])):
+            raise ValueError(
+                f"Binary mode requires labels to be 0/1, got: {unique_labels}"
+            )
+        label_data = sparse_labels
+        cortex_labels = None  # No cortex-specific weighting for binary
+        atlas_config = None  # Not needed for binary mode
     else:
-        label_data = atlas_manager.map_labels_to_dense(sparse_labels)
-    
-    # Get atlas-specific configuration
-    atlas_config = atlas_manager.get_atlas_config(plane)
+        # Multi-class mode: use atlas mapping
+        if atlas_manager is None:
+            raise ValueError("atlas_manager required for multi-class mode")
+        
+        if plane == "sagittal":
+            label_data = atlas_manager.map_labels_to_sagittal_dense(sparse_labels)
+        else:
+            label_data = atlas_manager.map_labels_to_dense(sparse_labels)
+        
+        # Get atlas-specific configuration
+        atlas_config = atlas_manager.get_atlas_config(plane)
+        cortex_labels = atlas_config.cortex_labels
     
     # Create weight mask BEFORE transforming (needs full 3D volume)
-    # Uses metadata-based cortex detection from atlas roiinfo.txt
+    # Binary mode: uses simple edge detection (cortex_labels=None)
+    # Multi-class mode: uses atlas-specific cortex labels
     weights = create_weight_mask(
         label_data,
         max_weight=5,
         max_edge_weight=5,
         max_hires_weight=5,
         gradient=False,
-        cortex_labels=atlas_config.cortex_labels,
+        cortex_labels=cortex_labels,
         verbose=verbose
     )
     
@@ -333,29 +515,44 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
     if verbose:
         total_voxels = sparse_labels.size
         
-        # Count voxels by region type using sparse labels (before mapping)
-        background_voxels = np.sum(sparse_labels == 0)
-        cortex_labels_no_bg = [l for l in atlas_config.cortex_labels if l != 0]
-        cortex_voxels = np.sum(np.isin(sparse_labels, cortex_labels_no_bg))
-        subcortex_voxels = np.sum(np.isin(sparse_labels, list(atlas_config.subcortex_labels)))
-        cerebral_wm_voxels = np.sum(np.isin(sparse_labels, list(atlas_config.cerebral_wm_labels)))
-        cerebellar_wm_voxels = np.sum(np.isin(sparse_labels, list(atlas_config.cerebellar_wm_labels)))
-        
-        # Calculate other (unknown labels not in any category)
-        tissue_voxels = cortex_voxels + subcortex_voxels + cerebral_wm_voxels + cerebellar_wm_voxels
-        other_voxels = total_voxels - background_voxels - tissue_voxels
+        if num_classes == 2:
+            # Binary mode - simple statistics
+            background_voxels = np.sum(sparse_labels == 0)
+            brain_voxels = np.sum(sparse_labels == 1)
+            print(f"    Label distribution:")
+            print(f"    - Background: {background_voxels:8d} ({100*background_voxels/total_voxels:5.1f}%)")
+            print(f"    - Brain:      {brain_voxels:8d} ({100*brain_voxels/total_voxels:5.1f}%)")
+        else:
+            # Multi-class mode - detailed atlas-based statistics
+            # Count voxels by region type using sparse labels (before mapping)
+            background_voxels = np.sum(sparse_labels == 0)
+            cortex_labels_no_bg = [l for l in atlas_config.cortex_labels if l != 0]
+            cortex_voxels = np.sum(np.isin(sparse_labels, cortex_labels_no_bg))
+            subcortex_voxels = np.sum(np.isin(sparse_labels, list(atlas_config.subcortex_labels)))
+            cerebral_wm_voxels = np.sum(np.isin(sparse_labels, list(atlas_config.cerebral_wm_labels)))
+            cerebellar_wm_voxels = np.sum(np.isin(sparse_labels, list(atlas_config.cerebellar_wm_labels)))
+            
+            # Calculate other (unknown labels not in any category)
+            tissue_voxels = cortex_voxels + subcortex_voxels + cerebral_wm_voxels + cerebellar_wm_voxels
+            other_voxels = total_voxels - background_voxels - tissue_voxels
         
         print(f"  Weight mask statistics:")
         print(f"    - Weight range: {weights.min():.2f} to {weights.max():.2f}")
         print(f"    - Mean weight: {weights.mean():.2f}")
-        print(f"  Label distribution (from sparse labels):")
-        print(f"    - Background:     {background_voxels:8d} ({100*background_voxels/total_voxels:5.1f}%)")
-        print(f"    - Cortex:         {cortex_voxels:8d} ({100*cortex_voxels/total_voxels:5.1f}%)")
-        print(f"    - Subcortex:      {subcortex_voxels:8d} ({100*subcortex_voxels/total_voxels:5.1f}%)")
-        print(f"    - Cerebral WM:    {cerebral_wm_voxels:8d} ({100*cerebral_wm_voxels/total_voxels:5.1f}%)")
-        print(f"    - Cerebellar WM:  {cerebellar_wm_voxels:8d} ({100*cerebellar_wm_voxels/total_voxels:5.1f}%)")
-        if other_voxels > 0:
-            print(f"    - Other/Unknown:  {other_voxels:8d} ({100*other_voxels/total_voxels:5.1f}%)")
+        
+        if num_classes == 2:
+            # Binary mode statistics already printed above
+            pass
+        else:
+            # Multi-class mode - print detailed statistics
+            print(f"  Label distribution (from sparse labels):")
+            print(f"    - Background:     {background_voxels:8d} ({100*background_voxels/total_voxels:5.1f}%)")
+            print(f"    - Cortex:         {cortex_voxels:8d} ({100*cortex_voxels/total_voxels:5.1f}%)")
+            print(f"    - Subcortex:      {subcortex_voxels:8d} ({100*subcortex_voxels/total_voxels:5.1f}%)")
+            print(f"    - Cerebral WM:    {cerebral_wm_voxels:8d} ({100*cerebral_wm_voxels/total_voxels:5.1f}%)")
+            print(f"    - Cerebellar WM:  {cerebellar_wm_voxels:8d} ({100*cerebellar_wm_voxels/total_voxels:5.1f}%)")
+            if other_voxels > 0:
+                print(f"    - Other/Unknown:  {other_voxels:8d} ({100*other_voxels/total_voxels:5.1f}%)")
     
     # Transform to requested plane FIRST
     if plane == "sagittal":
@@ -384,6 +581,7 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
     
     # ⚠️ VALIDATION: Check if final zoom values are valid - SKIP if invalid
     if np.any(np.abs(zoom_2d_scaled) < 1e-6):
+        # Always print this critical skip reason
         print(f"  ⚠️  SKIPPING: Invalid scaled zoom values detected!")
         print(f"      zoom_2d: {zoom_2d}")
         print(f"      scale_factor: {scale_factor}")
@@ -405,14 +603,48 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
     del image_data_resized
     
     # Filter out blank slices
+    # For binary brain masks, use lower threshold (brain masks may be smaller/sparser)
+    # For multi-class, use higher threshold (more tissue expected)
+    blank_threshold = 10
+    total_slices_before = image_thick.shape[2]  # Save before filtering
+    
+    # Always calculate label statistics BEFORE filtering (needed for diagnostics)
+    label_sum_per_slice = np.sum(label_data_resized, axis=(0, 1))
+    max_pixels = int(np.max(label_sum_per_slice))
+    mean_pixels = float(np.mean(label_sum_per_slice))
+    slices_with_brain = int(np.sum(label_sum_per_slice > 0))
+    slices_above_threshold = int(np.sum(label_sum_per_slice > blank_threshold))
+    
+    if verbose:
+        print(f"  Label statistics before filtering:")
+        print(f"      Max brain pixels per slice: {max_pixels}")
+        print(f"      Mean brain pixels per slice: {mean_pixels:.1f}")
+        print(f"      Slices with any brain (>0 pixels): {slices_with_brain}/{total_slices_before}")
+        print(f"      Slices above threshold (>{blank_threshold} pixels): {slices_above_threshold}/{total_slices_before}")
+    
     image_slices, label_slices, weights_final = filter_blank_slices_thick(
-        image_thick, label_data_resized, weights_resized, threshold=50
+        image_thick, label_data_resized, weights_resized, threshold=blank_threshold
     )
     
     # Free intermediate arrays
     del image_thick, label_data_resized, weights_resized
     
     if image_slices.shape[2] == 0:
+        # No valid slices after filtering - always print diagnostics
+        print(f"  ⚠️  SKIPPING: No valid slices after filtering blank slices")
+        print(f"      All slices were filtered out (threshold={blank_threshold} pixels)")
+        print(f"      Total slices before filtering: {total_slices_before}")
+        print(f"      Label statistics:")
+        print(f"        - Max brain pixels per slice: {max_pixels}")
+        print(f"        - Mean brain pixels per slice: {mean_pixels:.1f}")
+        print(f"        - Slices with any brain (>0 pixels): {slices_with_brain}/{total_slices_before}")
+        print(f"        - Slices above threshold (>{blank_threshold} pixels): {slices_above_threshold}/{total_slices_before}")
+        if max_pixels == 0:
+            print(f"      ⚠️  WARNING: All labels are zero! Check if label file is correct.")
+        elif max_pixels < blank_threshold:
+            suggested_threshold = max(1, max_pixels)
+            print(f"      ⚠️  WARNING: Even the slice with most brain pixels ({max_pixels}) is below threshold ({blank_threshold})")
+            print(f"      Consider lowering threshold to {suggested_threshold} or even 0")
         # Trigger garbage collection before returning None
         gc.collect()
         return None
@@ -542,15 +774,13 @@ def create_hdf5_dataset(
     data_dir,
     output_hdf5,
     plane="coronal",
-    image_suffix="_T1w.nii.gz",
-    label_suffix=None,
     target_size=256,
     slice_thickness=3,
     atlas_manager=None,
     preprocess_params=None,
+    num_classes=None,
     subject_filter=None,
     num_workers=1,
-    problematic_zooms=None  # List to collect subjects with zoom issues
 ):
     """
     Create HDF5 dataset using conform() preprocessing - EXACT same as inference!
@@ -564,36 +794,48 @@ def create_hdf5_dataset(
         Target dimension for all images (e.g., 256 for 256×256)
     preprocess_params : dict
         Preprocessing parameters from YAML config['DATA']['PREPROCESSING']
+    num_classes : int, optional
+        Number of classes (2 for binary, >2 for multi-class)
     """
-    image_dir = Path(data_dir) / "T1w_images"
-    # Get atlas name from the atlas manager's directory name to preserve case
-    atlas_name = atlas_manager.atlas_dir.name.replace('atlas-', '')
-    label_dir = Path(data_dir) / f"T1w_atlas-{atlas_name}"
+    image_dir = Path(data_dir) / "images"
+    label_dir = Path(data_dir) / "labels"
     
-    # Generate label suffix dynamically based on atlas
-    if label_suffix is None:
-        label_suffix = f"_T1w_atlas-{atlas_name}.nii.gz"
+    # Find all image files first
+    all_image_files = sorted(image_dir.glob("*.nii.gz"))
     
-    # Find all label files first (use label_dir as the total pool)
-    all_label_files = sorted(label_dir.glob(f"*{label_suffix}"))
-    
-    # Find corresponding image files for each label file
-    all_image_files = []
-    for label_file in all_label_files:
-        # Extract subject name from label file
-        subject_name = label_file.name.replace(label_suffix, "")
-        # Find corresponding image file
-        image_file = image_dir / f"{subject_name}{image_suffix}"
-        if image_file.exists():
-            all_image_files.append(image_file)
+    # Find corresponding label files for each image file
+    # Label files have suffix: image "abcde.nii.gz" -> label "abcde_xxx.nii.gz"
+    matched_pairs = []
+    for image_file in all_image_files:
+        # Get base name without extension (e.g., "abcde" from "abcde.nii.gz")
+        base_name = image_file.name.replace('.nii.gz', '')
+        
+        # Look for label file that starts with base_name followed by underscore
+        # Pattern: base_name_*.nii.gz
+        label_pattern = f"{base_name}_*.nii.gz"
+        label_matches = sorted(label_dir.glob(label_pattern))
+        
+        if len(label_matches) == 0:
+            print(f"Warning: No label file found for image {image_file.name} (looking for {label_pattern})")
+        elif len(label_matches) == 1:
+            matched_pairs.append((image_file, label_matches[0]))
         else:
-            print(f"Warning: No image file found for label {label_file.name}")
+            # Multiple matches found - print warning and skip
+            print(f"Warning: Multiple label files found for image {image_file.name}:")
+            for match in label_matches:
+                print(f"  - {match.name}")
+            print(f"  Skipping image {image_file.name} (expected exactly one match)")
+    
+    # Separate into lists for compatibility with existing code
+    all_image_files = [pair[0] for pair in matched_pairs]
+    all_label_files = [pair[1] for pair in matched_pairs]
     
     # Filter by subject_filter if provided
     if subject_filter is not None:
         image_files = []
         for img_file in all_image_files:
-            subject_name = img_file.name.replace(image_suffix, "")
+            # Subject name is filename without .nii.gz extension
+            subject_name = img_file.name.replace('.nii.gz', '')
             if subject_name in subject_filter:
                 image_files.append(img_file)
         print(f"Filtered {len(image_files)}/{len(all_image_files)} subjects based on data split")
@@ -670,8 +912,10 @@ def create_hdf5_dataset(
     # Filter out already processed subjects
     if already_processed_subjects:
         original_count = len(image_files)
-        image_files = [img for img in image_files 
-                      if img.name.replace(image_suffix, "") not in already_processed_subjects]
+        image_files = [
+            img for img in image_files 
+            if img.name.replace('.nii.gz', '') not in already_processed_subjects
+        ]
         print(f"  Filtered: {original_count} → {len(image_files)} subjects remaining to process")
         
         if len(image_files) == 0:
@@ -735,8 +979,8 @@ def create_hdf5_dataset(
 
         # Prepare arguments for parallel processing
         process_args = [
-            (idx, image_file, image_suffix, label_suffix, label_dir, plane, 
-             slice_thickness, target_size, atlas_manager, preprocess_params, total_subjects)
+            (idx, image_file, label_dir, plane, 
+             slice_thickness, target_size, atlas_manager, preprocess_params, num_classes, total_subjects)
             for idx, image_file in enumerate(image_files, 1)
         ]
         
@@ -909,21 +1153,35 @@ def _process_single_subject_wrapper(args):
     Wrapper function for parallel processing.
     Must be at module level to be picklable by multiprocessing.
     """
-    idx, image_file, image_suffix, label_suffix, label_dir, plane, slice_thickness, target_size, atlas_manager, preprocess_params, total_subjects = args
+    idx, image_file, label_dir, plane, slice_thickness, target_size, atlas_manager, preprocess_params, num_classes, total_subjects = args
     
-    subject_name = image_file.name.replace(image_suffix, "")
-    label_file = label_dir / f"{subject_name}{label_suffix}"
+    # Find label file: image "abcde.nii.gz" -> label "abcde_xxx.nii.gz"
+    base_name = image_file.name.replace('.nii.gz', '')
+    label_pattern = f"{base_name}_*.nii.gz"
+    label_matches = sorted(label_dir.glob(label_pattern))
     
-    if not label_file.exists():
-        return None, f"Warning: No label file for {subject_name}, skipping"
+    # Get subject name (base name without .nii.gz)
+    subject_name = image_file.name.replace('.nii.gz', '')
+    
+    if len(label_matches) == 0:
+        return None, f"Warning: No label file found for {subject_name} (looking for {label_pattern}), skipping"
+    elif len(label_matches) > 1:
+        # Multiple matches - print warning and skip
+        matches_str = ", ".join([m.name for m in label_matches])
+        return None, f"Warning: Multiple label files found for {subject_name}: {matches_str}. Skipping (expected exactly one match)"
+    
+    label_file = label_matches[0]  # Exactly one match
     
     try:
-        # Only show verbose output for every 10th subject to avoid clutter
+        # Show verbose output for every 50th subject, OR for skipped subjects (to see why they're skipped)
         show_details = (idx % 50 == 0)
-        result = process_subject(image_file, label_file, plane, slice_thickness, target_size, atlas_manager, preprocess_params, verbose=show_details)
+        result = process_subject(image_file, label_file, plane, slice_thickness, target_size, atlas_manager, preprocess_params, num_classes, verbose=show_details)
         
         if result is None:
-            # Could be skipped due to invalid zoom or no valid slices
+            # If skipped and not already verbose, run again with verbose to see why
+            if not show_details:
+                print(f"\n⚠️  Subject skipped: {subject_name}")
+                process_subject(image_file, label_file, plane, slice_thickness, target_size, atlas_manager, preprocess_params, num_classes, verbose=True)
             return None, f"Processing ({idx}/{total_subjects}): {subject_name} → Skipped"
         
         status_msg = f"Processing ({idx}/{total_subjects}): {subject_name} → {result['num_slices']} slices (scale={result['scale_factor']:.3f})"
@@ -957,12 +1215,43 @@ def main():
     cfg = load_yaml_config(args.config)
     paths = get_paths_from_config(cfg)
     
-    # Determine atlas name from YAML config (CLASS_OPTIONS) or command line
-    atlas_name = args.atlas or cfg['DATA']['CLASS_OPTIONS'][0] or os.environ.get('ATLAS_NAME', 'ARM2')
-    print(f"Using atlas: {atlas_name}")
+    # Get NUM_CLASSES to determine mode (binary vs multi-class)
+    num_classes = cfg['MODEL']['NUM_CLASSES']
+    is_binary = (num_classes == 2)
     
-    # Initialize atlas manager
-    atlas_manager = get_atlas_manager(atlas_name)
+    # Binary brain mask mode - no atlas needed
+    if is_binary:
+        print(f"Binary segmentation mode detected (NUM_CLASSES={num_classes})")
+        print("No atlas required for brain mask task")
+        atlas_manager = None
+        atlas_name = "binary"
+    else:
+        # Multi-class mode - require atlas
+        # Determine atlas name from YAML config (CLASS_OPTIONS) or command line
+        if cfg['DATA']['CLASS_OPTIONS'] is None or not cfg['DATA']['CLASS_OPTIONS']:
+            raise ValueError(
+                f"Multi-class mode (NUM_CLASSES={num_classes}) requires CLASS_OPTIONS in config.\n"
+                "For binary brain mask (NUM_CLASSES=2), set CLASS_OPTIONS: null"
+            )
+        
+        # Require CLASS_OPTIONS from config (no env var fallback)
+        if args.atlas:
+            atlas_name = args.atlas
+            print(f"Using atlas from command line: {atlas_name}")
+        elif cfg['DATA']['CLASS_OPTIONS'] and cfg['DATA']['CLASS_OPTIONS'][0]:
+            atlas_name = cfg['DATA']['CLASS_OPTIONS'][0]
+            print(f"Using atlas from config: {atlas_name}")
+        else:
+            raise ValueError(
+                f"Multi-class mode (NUM_CLASSES={num_classes}) requires atlas name.\n"
+                "Please specify CLASS_OPTIONS in config or use --atlas argument."
+            )
+        
+        print(f"Multi-class segmentation mode (NUM_CLASSES={num_classes})")
+        print(f"Using atlas: {atlas_name}")
+        
+        # Initialize atlas manager
+        atlas_manager = get_atlas_manager(atlas_name)
     
     # Extract parameters from YAML
     data_dir = paths['data_dir']
@@ -1017,6 +1306,7 @@ def main():
         slice_thickness=thickness,
         atlas_manager=atlas_manager,
         preprocess_params=preprocess_params,  # Pass preprocessing params from YAML
+        num_classes=num_classes,  # Pass NUM_CLASSES for binary/multi-class detection
         subject_filter=subject_filter,
         num_workers=num_workers
     )

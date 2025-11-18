@@ -640,7 +640,7 @@ def rescale(
 def conform(
         img: nib.analyze.SpatialImage,
         order: int = 1,
-        vox_size: VoxSizeOption | None = 1.0,
+        vox_size: VoxSizeOption | None = "min",
         img_size: ImageSizeOption | None = 256,
         dtype: type | None = np.uint8,
         orientation: OrientationType | None = "lia",
@@ -907,7 +907,7 @@ def does_vox2vox_rot_require_interpolation(
 
 def is_conform(
         img: nib.analyze.SpatialImage,
-        vox_size: VoxSizeOption | None = 1.0,
+        vox_size: VoxSizeOption | None = "min",
         img_size: ImageSizeOption | None = 256,
         dtype: type | None = np.uint8,
         orientation: OrientationType | None = "lia",

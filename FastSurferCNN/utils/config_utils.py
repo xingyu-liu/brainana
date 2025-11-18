@@ -48,7 +48,7 @@ def get_paths_from_config(cfg):
     -------
     dict
         Dictionary with resolved paths:
-        - data_dir: Directory containing source data (T1w_images, T1w_atlas-{ATLAS})
+        - data_dir: Directory containing source data (images/, labels/)
         - train_hdf5: Path to training HDF5 file
         - val_hdf5: Path to validation HDF5 file
         - log_dir: Path to training output directory
@@ -176,7 +176,7 @@ def validate_paths(paths, check_existence=False):
         if not paths['data_dir'].exists():
             raise ValueError(
                 f"Data directory does not exist: {paths['data_dir']}\n"
-                f"Expected to find: T1w_images/ and T1w_atlas-ARM3/ subdirectories"
+                f"Expected to find: images/ and labels/ subdirectories"
             )
     
     return True
