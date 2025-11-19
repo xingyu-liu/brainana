@@ -158,11 +158,72 @@ def flip_wm_islands_auto(aseg_data: npt.NDArray[int], lut_path: Path) -> npt.NDA
     return flip_wm_islands(aseg_data, lh_wm_labels=lh_wm_labels, rh_wm_labels=rh_wm_labels)
 
 
+def extract_largest_component(mask: npt.NDArray[int]) -> npt.NDArray[int]:
+    """
+    Extract the largest connected component from a binary mask.
+    
+    Parameters
+    ----------
+    mask : np.ndarray
+        Binary mask array (0 or 1)
+        
+    Returns
+    -------
+    np.ndarray
+        Binary mask containing only the largest connected component
+    """
+    if not np.any(mask):
+        return mask  # Return empty mask if no positive voxels
+    
+    # Label connected components
+    labels, num_labels = label(mask, return_num=True, connectivity=3)
+    
+    if num_labels == 0:
+        return mask
+    
+    # Find largest component (excluding background label 0)
+    unique, counts = np.unique(labels, return_counts=True)
+    if len(counts) == 1:
+        # Only background, return original
+        return mask
+    
+    # Exclude background (0) and find largest
+    largest_component = unique[np.argmax(counts[1:]) + 1]
+    return (labels == largest_component).astype(mask.dtype)
+
+
+def fill_label_holes(mask: npt.NDArray[int]) -> npt.NDArray[int]:
+    """
+    Fill holes in a binary mask by extracting the largest background 
+    component and inverting.
+    
+    This approach identifies the main background region and considers
+    everything else as foreground, effectively filling holes.
+    
+    Parameters
+    ----------
+    mask : np.ndarray
+        Binary mask array (0 or 1)
+        
+    Returns
+    -------
+    np.ndarray
+        Binary mask with holes filled
+    """
+    # Find largest background component
+    background = (mask == 0)
+    largest_background = extract_largest_component(background)
+    
+    # Everything not in largest background is considered foreground
+    filled_mask = (largest_background == 0).astype(mask.dtype)
+    return filled_mask
+
+
 def create_mask(aseg_data: npt.NDArray[int], dnum: int, enum: int) -> npt.NDArray[int]:
     """
     Create brain mask from aseg.
     
-    Dilate, erode, and select largest component.
+    Extract largest component, fill holes, then apply dilation/erosion.
     
     Parameters
     ----------
@@ -180,31 +241,28 @@ def create_mask(aseg_data: npt.NDArray[int], dnum: int, enum: int) -> npt.NDArra
     """
     print(f"Creating mask (dilate {dnum}, erode {enum})...")
     
-    # Dilate
-    aseg_dilate = scipy.ndimage.binary_dilation(aseg_data, iterations=dnum)
+    # 1. Get initial mask (before dilation or erosion)
+    mask = (aseg_data > 0).astype(int)
+    print(f"  Initial mask: {np.sum(mask):,} voxels")
     
-    # Erode
-    aseg_erode = scipy.ndimage.binary_erosion(aseg_dilate, iterations=enum)
+    # 2. Extract largest component
+    mask = extract_largest_component(mask)
+    print(f"  After extracting largest component: {np.sum(mask):,} voxels")
     
-    # Connected components
-    labels, num_labels = label(aseg_erode, return_num=True, connectivity=3)
+    # 3. Fill holes
+    mask = fill_label_holes(mask)
+    print(f"  After filling holes: {np.sum(mask):,} voxels")
     
-    if num_labels == 0:
-        print("⚠️  Warning: No components found in mask")
-        return aseg_erode.astype(int)
+    # 4. Apply morphological operations (dilation then erosion)
+    if dnum > 0:
+        mask = scipy.ndimage.binary_dilation(mask, iterations=dnum)
+        print(f"  After dilation ({dnum} iterations): {np.sum(mask):,} voxels")
     
-    # Find largest component
-    unique, counts = np.unique(labels, return_counts=True)
-    if len(counts) == 1:
-        largest_component = 1
-    else:
-        # Exclude background (0)
-        largest_component = unique[np.argmax(counts[1:]) + 1]
+    if enum > 0:
+        mask = scipy.ndimage.binary_erosion(mask, iterations=enum)
+        print(f"  After erosion ({enum} iterations): {np.sum(mask):,} voxels")
     
-    mask = (labels == largest_component).astype(int)
-    print(f"  Kept largest component: {np.sum(mask):,} voxels")
-    
-    return mask
+    return mask.astype(int)
 
 
 def create_hemisphere_masks(mask_data: npt.NDArray[int], 

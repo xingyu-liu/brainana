@@ -25,78 +25,9 @@ from typing import Dict, Optional, Union, Any, Literal
 
 from FastSurferCNN.inference.api import run_segmentation
 from FastSurferCNN.inference.predictor_utils import setup_atlas_from_checkpoints
+from FastSurferCNN.utils.parser_defaults import FASTSURFER_ROOT
 
 logger = logging.getLogger(__name__)
-
-
-def _find_checkpoints(
-    base_dir: Path,
-    modality: str,
-    atlas: Optional[str] = None,
-    model_type: str = "seg"
-) -> Dict[str, Optional[Path]]:
-    """
-    Find checkpoint files for a given modality.
-    
-    Supports naming conventions:
-    - For segmentation models: {modality}_seg-{atlas}_{plane}.pkl (e.g., T1w_seg-ARM2_axial.pkl)
-    - For brain mask models: {modality}_brainmask_{plane}.pkl (e.g., T1w_brainmask_axial.pkl)
-    
-    If atlas is not provided, tries to find any matching checkpoints.
-    
-    Parameters
-    ----------
-    base_dir : Path
-        Base directory containing pretrained_model folder
-    modality : str
-        Modality name ('T1w' for anat, 'EPI' for func)
-    atlas : str, optional
-        Atlas name (e.g., 'ARM2', 'ARM3'). If None, tries to find any matching checkpoints.
-    model_type : str
-        Type of model: 'seg' for segmentation models, 'brainmask' for brain mask models (default: 'seg')
-        
-    Returns
-    -------
-    dict
-        Dictionary with keys 'axial', 'coronal', 'sagittal' and Path values (or None if not found)
-    """
-    pretrained_dir = base_dir / "pretrained_model"
-    
-    if not pretrained_dir.exists():
-        return {"axial": None, "coronal": None, "sagittal": None}
-    
-    checkpoints = {"axial": None, "coronal": None, "sagittal": None}
-    
-    if model_type == "seg":
-        # Segmentation model format: {modality}_seg-{atlas}_{plane}.pkl
-        if atlas:
-            for plane in ["axial", "coronal", "sagittal"]:
-                ckpt_name = f"{modality}_seg-{atlas}_{plane}.pkl"
-                ckpt_path = pretrained_dir / ckpt_name
-                if ckpt_path.exists():
-                    checkpoints[plane] = ckpt_path
-                    logger.debug(f"Found checkpoint: {ckpt_name}")
-        
-        # If not all found with atlas, try without atlas (wildcard search)
-        if not all(checkpoints.values()):
-            for plane in ["axial", "coronal", "sagittal"]:
-                if checkpoints[plane] is None:
-                    pattern = f"{modality}_seg-*_{plane}.pkl"
-                    matches = list(pretrained_dir.glob(pattern))
-                    if matches:
-                        checkpoints[plane] = matches[0]  # Use first match
-                        logger.debug(f"Found checkpoint (auto-detected): {matches[0].name}")
-    
-    elif model_type == "brainmask":
-        # Brain mask model format: {modality}_brainmask_{plane}.pkl
-        for plane in ["axial", "coronal", "sagittal"]:
-            ckpt_name = f"{modality}_brainmask_{plane}.pkl"
-            ckpt_path = pretrained_dir / ckpt_name
-            if ckpt_path.exists():
-                checkpoints[plane] = ckpt_path
-                logger.debug(f"Found checkpoint: {ckpt_name}")
-    
-    return checkpoints
 
 
 def _extract_atlas_from_checkpoint(ckpt_path: Path) -> Optional[str]:
@@ -132,6 +63,9 @@ def skullstripping(
     config: Optional[Dict[str, Any]] = None,
     output_data_format: Literal["mgz", "nifti"] = "nifti",
     enable_crop_2round: bool = False,
+    plane_weight_coronal: Optional[float] = None,
+    plane_weight_axial: Optional[float] = None,
+    plane_weight_sagittal: Optional[float] = None,
 ) -> Dict[str, str]:
     """
     Perform skullstripping using FastSurferCNN segmentation model.
@@ -155,7 +89,6 @@ def skullstripping(
         device_id: GPU device to use ('auto', -1 for CPU, or specific GPU index)
         logger: Logger instance (optional)
         config: Model configuration (optional)
-            - 'atlas': Atlas name (e.g., 'ARM2', 'ARM3'). If not provided, auto-detected from checkpoints
             - 'batch_size': Batch size for inference (default: 1)
             - 'threads': Number of threads for CPU operations (default: 1)
             - 'base_dir': Base directory for pretrained_model (default: FastSurferCNN root)
@@ -166,6 +99,15 @@ def skullstripping(
             and image dimension > model height, crop image to brain region and run second pass.
             First-pass outputs are moved to output_dir/pass_1/, and cropped input is saved as
             output_dir/input_cropped.{ext}. Final outputs are in cropped image's native space.
+        plane_weight_coronal: float, optional
+            Weight for coronal plane in multi-view prediction. If None, uses default from config.
+            Can also be specified in config dict as 'plane_weight_coronal'.
+        plane_weight_axial: float, optional
+            Weight for axial plane in multi-view prediction. If None, uses default from config.
+            Can also be specified in config dict as 'plane_weight_axial'.
+        plane_weight_sagittal: float, optional
+            Weight for sagittal plane in multi-view prediction. If None, uses default from config.
+            Can also be specified in config dict as 'plane_weight_sagittal'.
             
         Note: Preprocessing parameters (vox_size, orientation, image_size)
         are automatically read from checkpoint metadata (required), ensuring consistency
@@ -209,70 +151,49 @@ def skullstripping(
     if modal not in ['anat', 'func']:
         logger.error(f"Invalid modality: {modal}. Must be 'anat' or 'func'")
         raise ValueError(f"Invalid modality: {modal}. Must be 'anat' or 'func'")
-
-    # Map modality to checkpoint naming
-    modality_map = {
-        'anat': 'T1w',
-        'func': 'EPI'
-    }
-    modality_name = modality_map[modal]
     
     # Get configuration
     if config is None:
         config = {}
     
+    # Get plane weights from direct parameters or config (direct parameters take precedence)
+    plane_weight_coronal = plane_weight_coronal if plane_weight_coronal is not None else config.get('plane_weight_coronal')
+    plane_weight_axial = plane_weight_axial if plane_weight_axial is not None else config.get('plane_weight_axial')
+    plane_weight_sagittal = plane_weight_sagittal if plane_weight_sagittal is not None else config.get('plane_weight_sagittal')
+        
+    # Get checkpoint template for this modality
+    # Hardcoded checkpoint mapping: {modality}_seg-{atlas}_planexxx.pkl
+    # Replace 'planexxx' with actual plane name (axial, coronal, sagittal)
+    checkpoint_map = {
+        'anat': 'T1w_seg-ARM2_planexxx.pkl',
+        'func': 'EPI_seg-brainmask_planexxx.pkl'
+    }
+    ckpt_template = checkpoint_map[modal]
+
     # Determine base directory for checkpoints
-    from FastSurferCNN.utils.parser_defaults import FASTSURFER_ROOT
-    base_dir = config.get('base_dir', FASTSURFER_ROOT)
+    base_dir = config.get('base_dir', FASTSURFER_ROOT / "FastSurferCNN")
     base_dir = Path(base_dir)
-    
-    # Get atlas name from config or try to auto-detect
-    atlas_name = config.get('atlas')
-    
-    # Find checkpoints (using segmentation models for skullstripping)
-    logger.info(f"Looking for checkpoints in {base_dir / 'pretrained_model'}")
-    checkpoints = _find_checkpoints(base_dir, modality_name, atlas_name, model_type="seg")
-    
-    # If no checkpoints found with atlas, try to find any and extract atlas
-    if not any(checkpoints.values()):
-        # Try without atlas constraint
-        checkpoints = _find_checkpoints(base_dir, modality_name, None, model_type="seg")
-        
-        # Try to extract atlas from found checkpoints
-        # Check all found checkpoints to ensure they're from the same atlas
-        extracted_atlases = set()
-        for ckpt_path in checkpoints.values():
-            if ckpt_path is not None:
-                extracted_atlas = _extract_atlas_from_checkpoint(ckpt_path)
-                if extracted_atlas:
-                    extracted_atlases.add(extracted_atlas)
-        
-        if extracted_atlases:
-            if len(extracted_atlases) > 1:
-                logger.warning(
-                    f"Found checkpoints from multiple atlases: {extracted_atlases}. "
-                    f"Using first atlas: {sorted(extracted_atlases)[0]}"
-                )
-            atlas_name = sorted(extracted_atlases)[0]
-            logger.info(f"Auto-detected atlas: {atlas_name}")
-            # Re-find checkpoints with known atlas
-            checkpoints = _find_checkpoints(
-                base_dir, modality_name, atlas_name, model_type="seg"
-            )
+    pretrained_dir = base_dir / "pretrained_model"
+
+    # Resolve checkpoint paths by replacing 'planexxx' with actual plane names
+    checkpoints = {}
+    for plane in ["axial", "coronal", "sagittal"]:
+        ckpt_name = ckpt_template.replace('planexxx', plane)
+        ckpt_path = pretrained_dir / ckpt_name
+        if ckpt_path.exists():
+            checkpoints[plane] = ckpt_path
+            logger.debug(f"Found checkpoint: {ckpt_name}")
         else:
-            # If we can't extract atlas but found checkpoints, proceed with what we have
-            logger.warning(
-                "Could not extract atlas from checkpoints. "
-                "Proceeding with found checkpoints (atlas may be inconsistent)."
-            )
+            checkpoints[plane] = None
+            logger.warning(f"Checkpoint not found: {ckpt_path}")
     
     # Validate that at least one checkpoint is found
     found_planes = [plane for plane, ckpt in checkpoints.items() if ckpt is not None]
     if not found_planes:
         raise ValueError(
-            f"No checkpoints found for {modality_name} modality. "
-            f"Expected files like: {modality_name}_seg-*_{{axial,coronal,sagittal}}.pkl "
-            f"in {base_dir / 'pretrained_model'}"
+            f"No checkpoints found for {modal} modality. "
+            f"Expected files like: {ckpt_template.replace('planexxx', '{plane}')} "
+            f"in {pretrained_dir}"
         )
     
     logger.info(f"Found checkpoints for planes: {', '.join(found_planes)}")
@@ -287,11 +208,28 @@ def skullstripping(
         logger.info(f"Using atlas: {atlas_name}")
     except Exception as e:
         logger.warning(f"Could not extract atlas metadata: {e}")
-        # Fallback: use first checkpoint to get atlas
+        # Fallback: determine binary from checkpoint
         first_ckpt = next(ckpt for ckpt in checkpoints.values() if ckpt is not None)
-        atlas_name = _extract_atlas_from_checkpoint(first_ckpt) or "ARM2"
-        atlas_metadata = None
-        logger.warning(f"Using fallback atlas: {atlas_name}")
+        
+        from FastSurferCNN.utils.checkpoint import is_binary_checkpoint
+        is_binary, num_classes = is_binary_checkpoint(first_ckpt)
+        
+        if is_binary is True:
+            # Binary model - doesn't need an atlas
+            num_classes = num_classes or 2
+            atlas_name = None
+            atlas_metadata = {
+                "is_binary_task": True,
+                "atlas_name": None,  # Binary models don't need atlas
+                "num_classes": num_classes,
+                "plane": "",  # Not specific to a single plane (multi-plane model)
+            }
+            logger.info(f"Detected binary model from checkpoint (NUM_CLASSES={num_classes}, no atlas required)")
+        else:
+            # Multi-class model or cannot determine - try to extract or use default
+            atlas_name = _extract_atlas_from_checkpoint(first_ckpt)
+            atlas_metadata = None
+            logger.warning(f"Using fallback atlas: {atlas_name} (metadata will be auto-detected)")
     
     # Convert device_id to device string
     if device_id == 'auto':
@@ -317,7 +255,9 @@ def skullstripping(
             viewagg_device=device_str,
             threads=config.get('threads', 1),
             batch_size=config.get('batch_size', 1),
-            fix_wm_islands=False,  # Not needed for skullstripping
+            plane_weight_coronal=plane_weight_coronal,
+            plane_weight_axial=plane_weight_axial,
+            plane_weight_sagittal=plane_weight_sagittal,
             output_data_format=output_data_format,
             enable_crop_2round=enable_crop_2round,
         )

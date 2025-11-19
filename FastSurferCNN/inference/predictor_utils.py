@@ -138,10 +138,23 @@ def setup_atlas_from_checkpoints(
     is_binary = list(is_binary_flags)[0]
     
     if is_binary:
-        # Binary task - no atlas needed
-        atlas_name = None
+        # Binary task - atlas_name is optional but can be provided (e.g., "brainmask")
+        # Check if any checkpoint has atlas_name saved (from CLASS_OPTIONS[0] during training)
+        atlas_names = {meta.get("atlas_name") for meta in atlas_metadatas.values() if meta.get("atlas_name") is not None}
+        if atlas_names:
+            # Use the atlas_name if provided (all should be the same)
+            if len(atlas_names) > 1:
+                LOGGER.warning(
+                    f"Binary checkpoints have different atlas names: {atlas_names}. "
+                    f"Using first: {sorted(atlas_names)[0]}"
+                )
+            atlas_name = sorted(atlas_names)[0]
+            LOGGER.info(f"✓ Validated: Binary brain mask task (atlas: {atlas_name})")
+        else:
+            # No atlas_name provided - this is OK for binary models
+            atlas_name = None
+            LOGGER.info("✓ Validated: Binary brain mask task (no atlas)")
         atlas_metadata = list(atlas_metadatas.values())[0]
-        LOGGER.info("✓ Validated: Binary brain mask task")
     else:
         # Multi-class task - validate that all checkpoints use the same atlas
         atlas_names = {meta.get("atlas_name") for meta in atlas_metadatas.values()}

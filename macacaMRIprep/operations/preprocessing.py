@@ -617,6 +617,7 @@ def run_skullstripping(
         
         try:
             # Use the streamlined skull stripping API
+            # Note: This calls macacaMRINN.inference.prediction.skullstripping, not FastSurferCNN version
             skullstripping(
                 input_image=image_path,
                 modal=modal,

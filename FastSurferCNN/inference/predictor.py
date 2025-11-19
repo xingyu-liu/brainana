@@ -222,6 +222,7 @@ class RunModelOnData:
             )
         self.num_classes = max(cfg.MODEL.NUM_CLASSES for cfg in valid_configs)
         self.is_binary = (self.num_classes == 2)
+        self.atlas_name = atlas_name  # Store for later use (e.g., FreeSurfer detection)
         
         # Initialize atlas and LUT based on mode
         if self.is_binary:
@@ -573,20 +574,15 @@ class RunModelOnData:
         # Reorder from LIA to native
         pred_classes = back_to_native(pred_classes)
 
-        # Map to FreeSurfer label space
-        pred_classes = data_utils.map_label2aparc_aseg(
-            pred_classes, self.labels
-        )
+        # Map to FreeSurfer label space (skip for binary models - output is already 0/1)
+        if not self.is_binary and self.labels is not None:
+            pred_classes = data_utils.map_label2aparc_aseg(
+                pred_classes, self.labels
+            )
 
         # Return numpy array
         pred_classes = pred_classes.cpu().numpy()
 
-        # Apply FreeSurfer-specific post-processing only for FreeSurfer atlases
-        if data_utils.is_freesurfer_lut(self.lut["ID"].values):
-            LOGGER.info("Applying FreeSurfer-specific cortex label splitting")
-            pred_classes = data_utils.split_cortex_labels(pred_classes)
-        else:
-            LOGGER.info("Skipping cortex label splitting (custom atlas)")
 
         # Apply WM island fixing (generic post-processing, enabled by default)
         if self.fix_wm_islands:

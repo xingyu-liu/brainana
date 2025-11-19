@@ -22,10 +22,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Test parameters
-input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_2pass_seg.nii.gz"
-output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping"
-modal = "anat"
+# # anat 
+# input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_anat_2pass_seg.nii.gz"
+# output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_anat"
+# modal = "anat"
+# data_format = "nifti"
+
+# func
+input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_func.nii.gz"
+output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_func"
+modal = "func"
+data_format = "nifti"
+weight_coronal, weight_axial, weight_sagittal = 0, 0.7, 0.3
 
 def main():
     logger.info("=" * 80)
@@ -42,23 +50,19 @@ def main():
         return
     
     try:
-        # Run skullstripping with config specifying base_dir
-        # Use _file_dir.parent to get FastSurferCNN directory (where pretrained_model is located)
-        fastsurfercnn_dir = _file_dir.parent
-        config = {
-            'base_dir': str(fastsurfercnn_dir)
-        }
-        
+
         result = skullstripping(
             input_image=input_image,
             modal=modal,
             output_dir=output_dir,
             device_id='auto',
             logger=logger,
-            config=config,
-            output_data_format="mgz",
+            config=None,
+            output_data_format=data_format,
             enable_crop_2round=True,
-
+            plane_weight_coronal=weight_coronal,
+            plane_weight_axial=weight_axial,
+            plane_weight_sagittal=weight_sagittal,
         )
         
         logger.info("=" * 80)

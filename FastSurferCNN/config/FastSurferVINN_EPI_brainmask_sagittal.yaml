@@ -57,7 +57,7 @@ TEST:
 # Example: {training_data_dir}/sagittal_train.hdf5
 DATA:
   PLANE: "sagittal"        # Training plane: coronal, axial, or sagittal
-  CLASS_OPTIONS: null      # No atlas needed for binary brain mask task
+  CLASS_OPTIONS: ["brainmask"]      # atlas name
   SIZES: [256]             # Image dimensions (first value used as target_size)
   PADDED_SIZE: 256         # ✅ CHANGED: No extra padding! (saves memory & computation)
   AUG: [

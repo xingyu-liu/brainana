@@ -95,12 +95,6 @@ def load_paths_yaml(filename: Path | str = YAML_DEFAULT) -> CheckpointConfigDict
     return data
 
 
-# Backward compatibility alias
-def load_checkpoint_config(filename: Path | str = YAML_DEFAULT) -> CheckpointConfigDict:
-    """Deprecated: Use load_paths_yaml() instead."""
-    return load_paths_yaml(filename)
-
-
 @overload
 def get_paths_from_yaml(
         filetype: Literal["checkpoint", "config"],
@@ -146,15 +140,6 @@ def get_paths_from_yaml(
         raise ValueError("Type must be 'url', 'checkpoint' or 'config'")
 
     return load_paths_yaml(filename)[configtype]
-
-
-# Backward compatibility alias
-def load_checkpoint_config_defaults(
-        configtype: CheckpointConfigFields,
-        filename: str | Path = YAML_DEFAULT,
-) -> dict[Plane, Path] | list[str]:
-    """Deprecated: Use get_paths_from_yaml() instead."""
-    return get_paths_from_yaml(configtype, filename)
 
 
 def create_checkpoint_dir(expr_dir: os.PathLike, expr_num: int):
@@ -285,21 +270,6 @@ def restore_model_state_from_checkpoint(
     return checkpoint["epoch"] + 1, checkpoint.get("best_metric", None)
 
 
-# Backward compatibility alias
-def load_from_checkpoint(
-        checkpoint_path: str | Path,
-        model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer | None = None,
-        scheduler: Scheduler | None = None,
-        fine_tune: bool = False,
-        drop_classifier: bool = False,
-):
-    """Deprecated: Use restore_model_state_from_checkpoint() instead."""
-    return restore_model_state_from_checkpoint(
-        checkpoint_path, model, optimizer, scheduler, fine_tune, drop_classifier
-    )
-
-
 def save_checkpoint(
         checkpoint_dir: str | Path,
         epoch: int,
@@ -351,15 +321,25 @@ def save_checkpoint(
         num_classes = cfg.MODEL.NUM_CLASSES
         is_binary = (num_classes == 2)
         
-        # Binary brain mask mode - no atlas needed
+        # Binary brain mask mode - atlas_name is optional but can be provided (e.g., "brainmask")
         if is_binary:
+            # Extract atlas name from config if available (e.g., CLASS_OPTIONS: ["brainmask"])
+            atlas_name = None
+            if hasattr(cfg.DATA, 'CLASS_OPTIONS') and cfg.DATA.CLASS_OPTIONS:
+                atlas_name = cfg.DATA.CLASS_OPTIONS[0]
+            
             checkpoint["atlas_metadata"] = {
                 "is_binary_task": True,
                 "num_classes": num_classes,
                 "plane": cfg.DATA.PLANE,
                 "task_type": "binary_brainmask",
             }
-            LOGGER.info(f"Saving checkpoint with binary task metadata ({num_classes} classes)")
+            # Save atlas_name if provided (for unified naming: {modality}_seg-{atlas}_{plane}.pkl)
+            if atlas_name:
+                checkpoint["atlas_metadata"]["atlas_name"] = atlas_name
+                LOGGER.info(f"Saving checkpoint with binary task metadata ({num_classes} classes, atlas: {atlas_name})")
+            else:
+                LOGGER.info(f"Saving checkpoint with binary task metadata ({num_classes} classes, no atlas)")
         else:
             # Multi-class mode - save atlas metadata
             from FastSurferCNN.atlas.atlas_manager import AtlasManager
@@ -520,16 +500,6 @@ def read_checkpoint_file(
     return torch.load(checkpoint_path, map_location=map_location, weights_only=False)
 
 
-# Backward compatibility alias
-def load_checkpoint_data(checkpoint_path: Path | str) -> dict[str, Any]:
-    """
-    Deprecated: Use read_checkpoint_file() instead.
-    
-    Load checkpoint data from file (shared helper).
-    """
-    return read_checkpoint_file(checkpoint_path, map_location="cpu")
-
-
 def _filter_config_to_defaults(config_dict: dict, defaults_cfg: yacs.config.CfgNode) -> dict:
     """
     Recursively filter config_dict to only include keys that exist in defaults_cfg.
@@ -625,12 +595,6 @@ def extract_training_config(checkpoint_path: Path | str, batch_size: int = 1) ->
     return cfg
 
 
-# Backward compatibility alias
-def load_config_from_checkpoint(checkpoint_path: Path | str, batch_size: int = 1) -> yacs.config.CfgNode:
-    """Deprecated: Use extract_training_config() instead."""
-    return extract_training_config(checkpoint_path, batch_size)
-
-
 def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
     """
     Extract atlas metadata from a checkpoint without loading the full model.
@@ -652,7 +616,9 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
     dict, None
         Dictionary with keys:
         - is_binary_task: bool (True for binary brain mask, False for multi-class)
-        - atlas_name: str (e.g., "ARM2", "ARM3") or None for binary
+        - atlas_name: str (e.g., "ARM2", "ARM3", "brainmask") or None
+          For binary models, atlas_name is optional (can be None or provided like "brainmask")
+          For multi-class models, atlas_name is required
         - num_classes: int
         - plane: str
         - dense_to_sparse_mapping: np.ndarray or None (None for binary)
@@ -693,8 +659,8 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
         }
         
         if is_binary:
-            # Binary task - no atlas needed
-            result["atlas_name"] = None
+            # Binary task - atlas_name is optional but can be provided (e.g., "brainmask")
+            result["atlas_name"] = metadata.get("atlas_name")  # Can be None or a string like "brainmask"
             result["dense_to_sparse_mapping"] = None
         else:
             # Multi-class task - require atlas and mapping
@@ -719,6 +685,45 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
     except Exception as e:
         LOGGER.error(f"Failed to extract atlas metadata from {checkpoint_path}: {e}")
         return None
+
+
+def is_binary_checkpoint(checkpoint_path: str | Path) -> tuple[bool | None, int | None]:
+    """
+    Determine if a checkpoint is binary (NUM_CLASSES=2) or multi-class.
+    
+    Tries metadata first, then falls back to config extraction.
+    
+    Parameters
+    ----------
+    checkpoint_path : str, Path
+        Path to the checkpoint file.
+    
+    Returns
+    -------
+    tuple[bool | None, int | None]
+        (is_binary, num_classes):
+        - is_binary: True if binary, False if multi-class, None if cannot determine
+        - num_classes: Number of classes if found, None otherwise
+    """
+    # Try metadata first (most reliable)
+    metadata = extract_atlas_metadata(checkpoint_path)
+    if metadata:
+        return metadata.get("is_binary_task", False), metadata.get("num_classes")
+    
+    # Fallback: check NUM_CLASSES from config
+    try:
+        checkpoint = read_checkpoint_file(checkpoint_path)
+        if 'config' in checkpoint:
+            import yaml
+            config_str = checkpoint['config']
+            config_dict = yaml.safe_load(config_str)
+            num_classes = config_dict.get("MODEL", {}).get("NUM_CLASSES")
+            if num_classes is not None:
+                return num_classes == 2, num_classes
+    except Exception as e:
+        LOGGER.debug(f"Could not extract NUM_CLASSES from checkpoint {checkpoint_path}: {e}")
+    
+    return None, None
 
 
 def remove_ckpt(ckpt: str | Path):

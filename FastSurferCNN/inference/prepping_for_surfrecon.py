@@ -385,15 +385,48 @@ def prepare_freesurfer_subject(
             skullstripping_config['orientation'] = orientation
         if image_size is not True:
             skullstripping_config['image_size'] = image_size
+        # Add plane weights to config if provided
+        if plane_weight_coronal is not None:
+            skullstripping_config['plane_weight_coronal'] = plane_weight_coronal
+        if plane_weight_axial is not None:
+            skullstripping_config['plane_weight_axial'] = plane_weight_axial
+        if plane_weight_sagittal is not None:
+            skullstripping_config['plane_weight_sagittal'] = plane_weight_sagittal
         
-        skullstripping(
-            input_image=str(orig_mgz),
-            modal="anat",  # Always anat for T1w
-            output_path=str(mask_path),
-            device_id=device_id,
-            logger=LOGGER,
-            config=skullstripping_config
-        )
+        # Create temporary directory for skullstripping outputs
+        import tempfile
+        temp_skull_dir = Path(tempfile.mkdtemp(prefix="fastsurfer_skull_"))
+        try:
+            skullstripping(
+                input_image=str(orig_mgz),
+                modal="anat",  # Always anat for T1w
+                output_dir=temp_skull_dir,
+                device_id=device_id,
+                logger=LOGGER,
+                config=skullstripping_config,
+                plane_weight_coronal=plane_weight_coronal,
+                plane_weight_axial=plane_weight_axial,
+                plane_weight_sagittal=plane_weight_sagittal,
+            )
+            # Copy mask from temp directory to final location
+            temp_mask = temp_skull_dir / "mask.mgz"
+            if temp_mask.exists():
+                shutil.copy2(temp_mask, mask_path)
+            else:
+                # Try .nii.gz format
+                temp_mask = temp_skull_dir / "mask.nii.gz"
+                if temp_mask.exists():
+                    # Convert to .mgz if needed
+                    img = nib.load(temp_mask)
+                    nib.save(img, mask_path)
+                else:
+                    raise FileNotFoundError(f"Mask not found in {temp_skull_dir}")
+        finally:
+            # Clean up temporary directory
+            try:
+                shutil.rmtree(temp_skull_dir)
+            except Exception as e:
+                LOGGER.warning(f"Could not clean up temporary skullstripping directory {temp_skull_dir}: {e}")
         LOGGER.info(f"Brain mask saved: {mask_path}")
 
         # Step 3: Run segmentation on conformed image

@@ -32,6 +32,7 @@ from FastSurferCNN.data_loader import data_utils
 from FastSurferCNN.inference.predictor import RunModelOnData
 from FastSurferCNN.inference.predictor_utils import (
     crop_image_to_brain_mask,
+    setup_atlas_from_checkpoints,
     should_apply_refinement,
     validate_checkpoints,
     TWO_PASS_BRAIN_RATIO_THRESHOLD,
@@ -46,15 +47,15 @@ from FastSurferCNN.utils import logging
 LOGGER = logging.getLogger(__name__)
 
 # Brain mask creation parameters
-MASK_DILATION_SIZE = 5  # Dilation kernel size for mask creation
-MASK_EROSION_SIZE = 4   # Erosion kernel size for mask creation
+MASK_DILATION_SIZE = 3  # Dilation kernel size for mask creation
+MASK_EROSION_SIZE = 2   # Erosion kernel size for mask creation
 
 
 def _apply_two_pass_refinement(
     input_image: Path,
     output_dir: Path,
     file_ext: str,
-    atlas_name: str,
+    atlas_name: str | None,
     atlas_metadata: dict | None,
     ckpt_ax: Path | None,
     ckpt_sag: Path | None,
@@ -85,8 +86,8 @@ def _apply_two_pass_refinement(
         Output directory
     file_ext : str
         File extension for output files
-    atlas_name : str
-        Name of the atlas
+    atlas_name : str, None
+        Name of the atlas (None for binary brain mask models)
     atlas_metadata : dict, optional
         Atlas metadata from checkpoint
     ckpt_ax, ckpt_cor, ckpt_sag : Path, optional
@@ -206,7 +207,7 @@ def _apply_two_pass_refinement(
 def run_segmentation(
     input_image: str | Path,
     output_dir: str | Path,
-    atlas_name: str,
+    atlas_name: str | None = None,
     atlas_metadata: dict | None = None,
     ckpt_ax: Path | None = None,
     ckpt_sag: Path | None = None,
@@ -225,15 +226,22 @@ def run_segmentation(
     """
     Run segmentation and save outputs (segmentation, mask, hemimask) to output directory.
     
+    Supports both multi-class atlas segmentation and binary brain mask models.
     This is a high-level convenience function that implements the automatic 
     "input space → model space → input space" workflow:
     1. Runs FastSurferCNN segmentation on the input image (in model space)
     2. Resamples segmentation back to native input space (in-memory, pure Python)
-    3. Creates brain mask and hemisphere mask from the resampled segmentation
-    4. Saves all outputs to the specified output directory (all in native space)
+    3. Creates brain mask from the resampled segmentation (with topological refinement)
+    4. Creates hemisphere mask (multi-class only, requires LUT)
+    5. Saves all outputs to the specified output directory (all in native space)
     
     All outputs are automatically in the same space as the input image.
     Uses pure Python resampling (no external tool dependencies).
+    
+    Both binary and multi-class models go through the same pipeline:
+    - Prediction output is saved as "segmentation" (binary 0/1 or multi-class label IDs)
+    - Brain mask is created via create_mask() which applies dilation, erosion, and 
+      largest component selection for topological refinement
     
     Parameters
     ----------
@@ -241,12 +249,13 @@ def run_segmentation(
         Path to input image
     output_dir : str, Path
         Output directory where segmentation, mask, and hemimask will be saved
-    atlas_name : str
-        Name of the atlas (e.g., "ARM2", "ARM3")
+    atlas_name : str, optional
+        Name of the atlas (e.g., "ARM2", "ARM3"). If None, will be auto-detected from checkpoints.
+        For binary brain mask models (NUM_CLASSES=2), this should be None.
     atlas_metadata : dict, optional
-        Atlas metadata extracted from checkpoint
+        Atlas metadata extracted from checkpoint. If None, will be auto-detected from checkpoints.
     ckpt_ax, ckpt_cor, ckpt_sag : Path, optional
-        Checkpoint paths for each plane
+        Checkpoint paths for each plane. At least one must be provided.
     device : str, default="auto"
         Device to run inference on
     viewagg_device : str, default="auto"
@@ -258,7 +267,7 @@ def run_segmentation(
     plane_weight_coronal, plane_weight_axial, plane_weight_sagittal : float, optional
         Weights for multi-view prediction
     fix_wm_islands : bool, default=True
-        Whether to apply WM island correction
+        Whether to apply WM island correction (multi-class only, ignored for binary models)
     output_data_format : {"mgz", "nifti"}, default="nifti"
         Output file format. "mgz" saves as .mgz (MGH format), "nifti" saves as .nii.gz (NIfTI format).
         Resampling uses pure Python (in-memory), no external tools needed.
@@ -279,9 +288,9 @@ def run_segmentation(
     -------
     dict[str, Path]
         Dictionary with keys:
-        - 'segmentation': Path to saved segmentation file
-        - 'mask': Path to saved brain mask file
-        - 'hemimask': Path to saved hemisphere mask file (if created)
+        - 'segmentation': Path to saved segmentation file (binary 0/1 or multi-class label IDs)
+        - 'mask': Path to saved brain mask file (refined via create_mask)
+        - 'hemimask': Path to saved hemisphere mask file (multi-class only, if created)
         - 'input_cropped': Path to cropped input (if two-pass refinement was applied)
     """
     input_image = Path(input_image)
@@ -290,6 +299,33 @@ def run_segmentation(
 
     # Validate checkpoints
     validate_checkpoints(ckpt_ax, ckpt_cor, ckpt_sag)
+
+    # Auto-detect atlas_name and atlas_metadata from checkpoints if not provided
+    # Note: atlas_name can be None for binary models, so only check atlas_metadata
+    if atlas_metadata is None:
+        LOGGER.info("Auto-detecting atlas information from checkpoints...")
+        detected_atlas_name, detected_atlas_metadata = setup_atlas_from_checkpoints(
+            ckpt_ax=ckpt_ax,
+            ckpt_cor=ckpt_cor,
+            ckpt_sag=ckpt_sag,
+        )
+        atlas_name = atlas_name or detected_atlas_name
+        atlas_metadata = detected_atlas_metadata
+
+    # Determine binary vs multi-class mode and set all related flags
+    # Binary models (NUM_CLASSES=2) don't have LUT, so certain features are disabled
+    is_binary = atlas_metadata.get("is_binary_task", False)
+    
+    if is_binary:
+        LOGGER.info("Binary brain mask model detected")
+        # Binary models: disable WM island correction (requires LUT with hemisphere info)
+        if fix_wm_islands:
+            LOGGER.info("  (fix_wm_islands=True was provided but disabled for binary models)")
+        fix_wm_islands = False
+        create_hemi_mask = False  # Binary models don't have hemisphere labels
+    else:
+        # Multi-class models: enable all features
+        create_hemi_mask = True
 
     # Initialize predictor
     # Preprocessing parameters (vox_size, orientation, image_size)
@@ -318,7 +354,6 @@ def run_segmentation(
     format_to_ext = {"mgz": ".mgz", "nifti": ".nii.gz"}
     file_ext = format_to_ext[output_data_format]
     seg_path = output_dir / f"segmentation{file_ext}"
-    seg_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Always resample to native space
     if predictor._should_resample():
@@ -348,7 +383,9 @@ def run_segmentation(
         pred_data_final = pred_data
 
     # Create masks from the final segmentation
-    LOGGER.info("Creating brain mask...")
+    # Both binary and multi-class models go through the same create_mask() pipeline
+    # for topological refinement (dilation, erosion, largest component selection)
+    LOGGER.info("Creating brain mask from segmentation (with topological refinement)...")
     brain_mask = create_mask(
         copy.deepcopy(pred_data_final),
         MASK_DILATION_SIZE,
@@ -356,24 +393,15 @@ def run_segmentation(
     )
     brain_mask = brain_mask.astype(np.uint8)
 
-    LOGGER.info("Creating hemisphere mask...")
-    try:
-        hemi_mask = create_hemisphere_masks(
-            brain_mask, pred_data_final, lut_path=predictor.lut_path
-        )
-    except Exception as e:
-        LOGGER.warning(f"Could not create hemisphere mask: {e}")
-        hemi_mask = None
-
-    # Save mask and hemimask
     # Get reference image for header/affine (always use native if available)
-    if predictor._should_resample():
-        reference_img = predictor._input_native_img
-    else:
-        reference_img = predictor._conformed_img
+    reference_img = (
+        predictor._input_native_img
+        if predictor._should_resample()
+        else predictor._conformed_img
+    )
 
+    # Save mask
     mask_path = output_dir / f"mask{file_ext}"
-    mask_path.parent.mkdir(parents=True, exist_ok=True)
     LOGGER.info(f"Saving brain mask to {mask_path}")
     data_utils.save_image(
         reference_img.header,
@@ -383,19 +411,26 @@ def run_segmentation(
         dtype=np.uint8,
     )
 
-    if hemi_mask is not None:
-        hemi_mask_path = output_dir / f"mask_hemi{file_ext}"
-        hemi_mask_path.parent.mkdir(parents=True, exist_ok=True)
-        LOGGER.info(f"Saving hemisphere mask to {hemi_mask_path}")
-        data_utils.save_image(
-            reference_img.header,
-            reference_img.affine,
-            hemi_mask,
-            hemi_mask_path,
-            dtype=np.uint8,
-        )
-    else:
-        hemi_mask_path = None
+    # Hemisphere mask creation and saving (multi-class only, requires LUT)
+    hemi_mask_path = None
+    if create_hemi_mask:
+        LOGGER.info("Creating hemisphere mask...")
+        try:
+            hemi_mask = create_hemisphere_masks(
+                brain_mask, pred_data_final, lut_path=predictor.lut_path
+            )
+            # Save hemisphere mask immediately after creation
+            hemi_mask_path = output_dir / f"mask_hemi{file_ext}"
+            LOGGER.info(f"Saving hemisphere mask to {hemi_mask_path}")
+            data_utils.save_image(
+                reference_img.header,
+                reference_img.affine,
+                hemi_mask,
+                hemi_mask_path,
+                dtype=np.uint8,
+            )
+        except Exception as e:
+            LOGGER.warning(f"Could not create hemisphere mask: {e}")
 
     # Build result dictionary
     result = {
