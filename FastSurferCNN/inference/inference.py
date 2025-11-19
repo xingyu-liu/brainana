@@ -433,7 +433,6 @@ class Inference:
                         pred = map_prediction_sagittal2full(
                             pred, 
                             num_classes=self.get_num_classes(), 
-                            lut=self.lut,
                             atlas_name=atlas_name
                         )
 

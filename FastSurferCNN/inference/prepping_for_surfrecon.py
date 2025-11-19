@@ -66,7 +66,6 @@ def _conform_and_save_orig_mgz(
     vox_size: VoxSizeOption = "min",
     orientation: OrientationType = "lia",
     image_size: bool = True,
-    conform_to_1mm_threshold: float = 0.95,
 ) -> Path:
     """
     Conform input image to FreeSurfer standard space and save as orig.mgz.
@@ -83,8 +82,6 @@ def _conform_and_save_orig_mgz(
         Target orientation
     image_size : bool
         Whether to enforce standard image size
-    conform_to_1mm_threshold : float
-        Threshold for conforming to 1mm resolution
     
     Returns
     -------
@@ -103,7 +100,6 @@ def _conform_and_save_orig_mgz(
     
     # Check if conforming is needed
     conform_kwargs = {
-        "threshold_1mm": conform_to_1mm_threshold,
         "vox_size": _vox_size(vox_size) if isinstance(vox_size, str) else vox_size,
         "orientation": orientation,
         "img_size": image_size,
@@ -272,7 +268,6 @@ def prepare_freesurfer_subject(
         image_size: bool = True,
         async_io: bool = True,
         threads: int = -1,
-        conform_to_1mm_threshold: float = 0.95,
         plane_weight_coronal: float | None = None,
         plane_weight_axial: float | None = None,
         plane_weight_sagittal: float | None = None,
@@ -360,7 +355,6 @@ def prepare_freesurfer_subject(
             vox_size=vox_size,
             orientation=orientation,
             image_size=image_size,
-            conform_to_1mm_threshold=conform_to_1mm_threshold,
         )
 
         # Step 2: Run skullstripping on conformed image
@@ -391,8 +385,6 @@ def prepare_freesurfer_subject(
             skullstripping_config['orientation'] = orientation
         if image_size is not True:
             skullstripping_config['image_size'] = image_size
-        if conform_to_1mm_threshold != 0.95:
-            skullstripping_config['conform_to_1mm_threshold'] = conform_to_1mm_threshold
         
         skullstripping(
             input_image=str(orig_mgz),
@@ -537,7 +529,7 @@ def make_parser():
     # Technical parameters
     parser = parser_defaults.add_arguments(
         parser,
-        ["vox_size", "conform_to_1mm_threshold", "orientation", "image_size",
+        ["vox_size", "orientation", "image_size",
          "device", "viewagg_device", "batch_size", "async_io", "threads"]
     )
     

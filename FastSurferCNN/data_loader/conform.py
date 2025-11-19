@@ -37,7 +37,6 @@ else:
 
 from FastSurferCNN.utils import logging
 from FastSurferCNN.utils.arg_types import ImageSizeOption, OrientationType, StrictOrientationType, VoxSizeOption
-from FastSurferCNN.utils.arg_types import float_gt_zero_and_le_one as __conform_to_one_mm
 from FastSurferCNN.utils.arg_types import img_size as __img_size
 from FastSurferCNN.utils.arg_types import orientation as __orientation
 from FastSurferCNN.utils.arg_types import target_dtype as __target_dtype
@@ -189,13 +188,6 @@ def make_parser() -> argparse.ArgumentParser:
              "stay the same and values outside of the data type are clamped to the data type range).",
     )
     advanced = parser.add_argument_group("Advanced options")
-    advanced.add_argument(
-        "--conform_to_1mm_threshold",
-        type=__conform_to_one_mm,
-        metavar="<float>",
-        help="Advanced option to change the threshold beyond which images are conformed to 1 (default: infinity, "
-             "all images are conformed to their minimum voxel size).",
-    )
     advanced.add_argument(
         "--dtype",
         dest="dtype",
@@ -643,9 +635,8 @@ def conform(
         vox_size: VoxSizeOption | None = "min",
         img_size: ImageSizeOption | None = 256,
         dtype: type | None = np.uint8,
-        orientation: OrientationType | None = "lia",
-        threshold_1mm: float | None = None,
-        rescale: int | float | Literal["none"] = 255,
+    orientation: OrientationType | None = "lia",
+    rescale: int | float | Literal["none"] = 255,
         vox_eps: float = 1e-4,
         rot_eps: float = 1e-6,
         **kwargs,
@@ -674,8 +665,6 @@ def conform(
     orientation : "soft-<orientationcode>", "<orientationcode>", "native", None, default="lia"
         Which orientation of the data/affine to force, <orientationcode> is [rlapsi]{3}, ie.e. any of lia, ras, etc.,
         None disables this criterion.
-    threshold_1mm : float, optional
-        The threshold above which the image is conformed to 1mm. Ignore, if `None` (default).
     rescale : int, float, None, default=255
         Whether intensity values should be rescaled, it will either be the upper limit or None to ignore rescaling.
     vox_eps : float, default=1e-4
@@ -692,22 +681,17 @@ def conform(
     ----------------
     conform_vox_size : float, optional
         Legacy parameter for vox_size, overwrites vox_size.
-    conform_to_1mm_threshold : float, optional
-        Legacy parameter for threshold_1mm, overwrites threshold_1mm.
 
     Notes
     -----
     Unlike mri_convert -c, we first interpolate (float image), and then rescale to uchar. mri_convert is doing it the
     other way around. However, we compute the scale factor from the input to increase similarity.
     """
-    if "conform_to_1mm_threshold" in kwargs:
-        LOGGER.warning("conform_to_1mm_threshold is deprecated, replaced by threshold_1mm and will be removed.")
-        threshold_1mm = kwargs["conform_to_1mm_threshold"]
     if "conform_vox_size" in kwargs:
         LOGGER.warning("conform_vox_size is deprecated, replaced by vox_size and will be removed.")
         vox_size = kwargs["conform_vox_size"]
 
-    vox_img = conformed_vox_img_size(img, vox_size, img_size, threshold_1mm=threshold_1mm, vox_eps=vox_eps)
+    vox_img = conformed_vox_img_size(img, vox_size, img_size, vox_eps=vox_eps)
     _orientation: OrientationType = "native" if orientation is None else orientation
     h1 = prepare_mgh_header(img, *vox_img, _orientation, vox_eps=vox_eps, rot_eps=rot_eps)
 
@@ -913,9 +897,8 @@ def is_conform(
         orientation: OrientationType | None = "lia",
         verbose: bool = True,
         vox_eps: float = 1e-4,
-        eps: float = 1e-6,
-        threshold_1mm: float = 0.0,
-        **kwargs,
+    eps: float = 1e-6,
+    **kwargs,
 ) -> bool:
     """
     Check if an image is already conformed or not.
@@ -945,8 +928,6 @@ def is_conform(
         Allowed deviation from zero for the orientation check. Small inaccuracies can occur through the inversion
         operation. Already conformed images are thus sometimes not correctly recognized. The epsilon accounts for
         these small shifts.
-    threshold_1mm : float, optional
-        Above this threshold the image is conformed to 1mm (default: None = ignore).
 
     Returns
     -------
@@ -957,9 +938,6 @@ def is_conform(
     -----
     This function only needs the header (not the data).
     """
-    if "conform_to_1mm_threshold" in kwargs:
-        LOGGER.warning("conform_to_1mm_threshold is deprecated, replaced by threshold_1mm and will be removed.")
-        threshold_1mm = kwargs["conform_to_1mm_threshold"]
     if "conform_vox_size" in kwargs:
         LOGGER.warning("conform_vox_size is deprecated, replaced by vox_size and will be removed.")
         vox_size = kwargs["conform_vox_size"]
@@ -968,7 +946,7 @@ def is_conform(
         if kwargs["check_dtype"] is False:
             dtype = None
 
-    _vox_size, _img_size = conformed_vox_img_size(img, vox_size, img_size, threshold_1mm=threshold_1mm, vox_eps=vox_eps)
+    _vox_size, _img_size = conformed_vox_img_size(img, vox_size, img_size, vox_eps=vox_eps)
 
     # check 3d
     if len(img.shape) > 3 and img.shape[3] != 1:
@@ -1106,7 +1084,6 @@ def conformed_vox_img_size(
         img: nib.analyze.SpatialImage,
         vox_size: VoxSizeOption | None,
         img_size: ImageSizeOption | None,
-        threshold_1mm: float | None = None,
         vox_eps: float = 1e-4,
         **kwargs,
 ) -> tuple[npt.NDArray[float] | None, npt.NDArray[int] | None]:
@@ -1126,9 +1103,6 @@ def conformed_vox_img_size(
         The image size parameter: either an image size as int, the string "fov" to automatically derive a suitable
         image size (field of view), or "auto" like "fov" but largest size in every direction.
         `None` disregards the criterion, if vox_size is also `None`, else like "auto".
-    threshold_1mm : float, optional
-        The threshold for which image voxel size should be conformed to 1mm instead of conformed to the smallest voxel
-        size (default or None: do not apply the threshold).
     vox_eps : float, default=1e-4
         The threshold to compare vox_sizes (differences below this are ignored).
 
@@ -1139,9 +1113,6 @@ def conformed_vox_img_size(
     numpy.typing.NDArray[int], None
         The size of the image adjusted to the conformed voxel size (still in native orientation), shape: 3.
     """
-    if "conform_to_1mm_threshold" in kwargs:
-        LOGGER.warning("conform_to_1mm_threshold is deprecated, replaced by threshold_1mm and will be removed.")
-        threshold_1mm = kwargs["conform_to_1mm_threshold"]
     if "conform_vox_size" in kwargs:
         LOGGER.warning("conform_vox_size is deprecated, replaced by vox_size and will be removed.")
         vox_size = kwargs["conform_vox_size"]
@@ -1152,11 +1123,8 @@ def conformed_vox_img_size(
     if isinstance(vox_size, str) and (vox_size := vox_size.lower()) in ["min", "auto"]:
         # find minimal voxel side length
         min_vox_size = np.round(np.min(img.header.get_zooms()[:3]), decimals=int(np.ceil(-np.log10(vox_eps))))
-        # set to 1 mm if larger than that
-        _conformed_vox_size = min(min_vox_size, MAX_VOX_SIZE)
-        if threshold_1mm and _conformed_vox_size > threshold_1mm:
-            _conformed_vox_size = MAX_VOX_SIZE
-        target_vox_size = np.full((3,), _conformed_vox_size)
+        # use the minimal voxel size directly (no capping at 1mm)
+        target_vox_size = np.full((3,), min_vox_size)
     # this is similar to mri_convert --conform_size <float>
     elif isinstance(vox_size, float | int) and 0.0 < vox_size <= MAX_VOX_SIZE:
         target_vox_size = np.full((3,), vox_size)
@@ -1173,18 +1141,16 @@ def conformed_vox_img_size(
     elif isinstance(img_size, int) and img_size > 0:
         target_img_size = np.full((3,), img_size)
     elif isinstance(img_size, str) and (img_size := img_size.lower()) in ["fov", "auto"]:
-        thres = abs(1.0 - (threshold_1mm or 1.0))
-        if target_vox_size is not None and np.allclose(target_vox_size, 1.0, atol=thres) and img_size == "auto":
-            target_img_size = np.full((3,), MAX_DIMENSION)
-        # (other voxel sizes may use different sizes)
-        else:
-            target_img_size = np.array(img.shape[:3])
-            if target_vox_size is not None:
-                # correct sizes for changing voxel size (if voxel size is changing)
-                # compute field of view dimensions in mm (in native orientation)
-                fov = np.array(img.header.get_zooms()[:3]) * target_img_size
-                # compute number of voxels needed to cover field of view
-                target_img_size = np.ceil((fov / target_vox_size * 10000).astype(int).astype(float) / 10000).astype(int)
+        # REMOVED: Special case that forced 256³ for 1mm isotropic data
+        # This was problematic for small FOV images (e.g., EPI) where 256³ is too large
+        # Now all data uses FOV-based sizing consistently
+        target_img_size = np.array(img.shape[:3])
+        if target_vox_size is not None:
+            # correct sizes for changing voxel size (if voxel size is changing)
+            # compute field of view dimensions in mm (in native orientation)
+            fov = np.array(img.header.get_zooms()[:3]) * target_img_size
+            # compute number of voxels needed to cover field of view
+            target_img_size = np.ceil((fov / target_vox_size * 10000).astype(int).astype(float) / 10000).astype(int)
         # use cube (same size in all directions) with MAX_DIMENSION in each direction as minimum
         if img_size == "auto":
             target_img_size = np.full_like(np.maximum(MAX_DIMENSION, target_img_size), np.amax(target_img_size))
@@ -1277,7 +1243,6 @@ def print_options(options: dict):
         "- check only: {check_only}",
         "- dtype: {dtype}",
         "- voxel size: {vox_size}",
-        "- round voxel size to 1mm if > threshold: {conform_to_1mm_threshold}",
         "- image size: {img_size}",
         "- affine orientation: {orientation}",
         "- log: stdout " + ("and '{logfile}'" if options["logfile"] else "only"),
@@ -1509,9 +1474,6 @@ if __name__ == "__main__":
         "orientation": options.orientation,
         "verbose": options.verbose,
     }
-
-    if hasattr(options, "conform_to_1mm_threshold"):
-        opt_kwargs["threshold_1mm"] = options.conform_to_1mm_threshold
 
     try:
         image_is_conformed = is_conform(image, **opt_kwargs)

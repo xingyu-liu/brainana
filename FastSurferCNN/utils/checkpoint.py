@@ -530,12 +530,54 @@ def load_checkpoint_data(checkpoint_path: Path | str) -> dict[str, Any]:
     return read_checkpoint_file(checkpoint_path, map_location="cpu")
 
 
+def _filter_config_to_defaults(config_dict: dict, defaults_cfg: yacs.config.CfgNode) -> dict:
+    """
+    Recursively filter config_dict to only include keys that exist in defaults_cfg.
+    
+    This ensures that only valid config keys are kept, automatically filtering out
+    any training-specific or deprecated keys that don't exist in the defaults.
+    
+    Parameters
+    ----------
+    config_dict : dict
+        Configuration dictionary from checkpoint
+    defaults_cfg : yacs.config.CfgNode
+        Default configuration with all valid keys
+        
+    Returns
+    -------
+    dict
+        Filtered configuration dictionary with only valid keys
+    """
+    filtered = {}
+    
+    for key, value in config_dict.items():
+        # Check if key exists in defaults
+        if hasattr(defaults_cfg, key):
+            default_value = getattr(defaults_cfg, key)
+            
+            # If both are dicts/CfgNodes, recursively filter
+            if isinstance(value, dict) and isinstance(default_value, yacs.config.CfgNode):
+                # Recursively filter nested config
+                filtered[key] = _filter_config_to_defaults(value, default_value)
+            else:
+                # Leaf value - keep it if key exists in defaults
+                filtered[key] = value
+        # If key doesn't exist in defaults, skip it (training-only or deprecated)
+    
+    return filtered
+
+
 def extract_training_config(checkpoint_path: Path | str, batch_size: int = 1) -> yacs.config.CfgNode:
     """
     Extract training configuration from checkpoint file.
     
     Reads the checkpoint and extracts the training configuration (hyperparameters,
     data settings, etc.) that was used during training.
+    
+    For inference, only model architecture, data preprocessing, and inference-relevant
+    settings are needed. Training-specific paths (BASE_DIR, LOG_DIR, etc.) are automatically
+    filtered out by only keeping keys that exist in the defaults config.
     
     Parameters
     ----------
@@ -563,9 +605,16 @@ def extract_training_config(checkpoint_path: Path | str, batch_size: int = 1) ->
     config_str = checkpoint['config']
     config_dict = yaml.safe_load(config_str)
     
-    # Convert back to CfgNode
+    # Get defaults config to know which keys are valid
+    cfg_defaults = get_cfg_defaults()
+    
+    # Filter config_dict to only include keys that exist in defaults
+    # This automatically removes training-only keys like BASE_DIR, etc.
+    filtered_config_dict = _filter_config_to_defaults(config_dict, cfg_defaults)
+    
+    # Convert back to CfgNode and merge
     cfg = get_cfg_defaults()
-    cfg.merge_from_other_cfg(yacs.config.CfgNode(config_dict))
+    cfg.merge_from_other_cfg(yacs.config.CfgNode(filtered_config_dict))
     
     # Set up for inference
     cfg.OUT_LOG_NAME = "fastsurfer"

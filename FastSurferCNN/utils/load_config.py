@@ -87,19 +87,19 @@ def _resolve_paths(cfg: yacs.config.CfgNode, cfg_file: str) -> yacs.config.CfgNo
         return cfg
     
     # Check if using direct path format
-    if not (hasattr(cfg, 'training_data_dir') and hasattr(cfg, 'output_dir')):
+    if not (hasattr(cfg, 'TRAINING_DATA_DIR') and hasattr(cfg, 'OUTPUT_DIR')):
         # No path resolution needed - using explicit paths
         return cfg
     
-    if cfg.training_data_dir == "" or cfg.output_dir == "":
+    if cfg.TRAINING_DATA_DIR == "" or cfg.OUTPUT_DIR == "":
         # Paths not specified, skip resolution
         return cfg
     
     try:
         # Convert YACS config to dict for path resolution
         cfg_dict = {
-            'training_data_dir': cfg.training_data_dir,
-            'output_dir': cfg.output_dir,
+            'TRAINING_DATA_DIR': cfg.TRAINING_DATA_DIR,
+            'OUTPUT_DIR': cfg.OUTPUT_DIR,
             'DATA': {
                 'PLANE': cfg.DATA.PLANE,
                 'PATH_HDF5_TRAIN': cfg.DATA.PATH_HDF5_TRAIN if cfg.DATA.PATH_HDF5_TRAIN else "",

@@ -172,7 +172,6 @@ def load_and_conform_image(image_path, preprocess_params):
         orientation=preprocess_params['ORIENTATION'].lower(),
         img_size=preprocess_params['IMG_SIZE'],
         vox_size=preprocess_params['VOX_SIZE'],
-        threshold_1mm=preprocess_params['THRESHOLD_1MM'],
         dtype=np.dtype(preprocess_params['DTYPE_IMAGE']),  # Use DTYPE_IMAGE for images
         rescale=preprocess_params['RESCALE'],
     )
@@ -230,7 +229,6 @@ def load_and_map_labels(label_path, plane="coronal", atlas_manager=None, preproc
         orientation=preprocess_params['ORIENTATION'].lower(),
         img_size=preprocess_params['IMG_SIZE'],
         vox_size=preprocess_params['VOX_SIZE'],
-        threshold_1mm=preprocess_params['THRESHOLD_1MM'],
         dtype=np.dtype(preprocess_params['DTYPE_LABEL']),  # Use DTYPE_LABEL (int16/int32) for labels
         rescale=None,  # NO rescaling for labels! Preserve exact values including negatives
     )
@@ -306,23 +304,14 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
     affine_match = np.allclose(raw_image.affine, raw_label.affine, atol=1e-3)
     if not affine_match:
         print(f"  ⚠️  WARNING: Image and label affines don't match for {image_path.name}!")
-        print(f"      Image affine:\n{raw_image.affine}")
-        print(f"      Label affine:\n{raw_label.affine}")
+        if verbose:
+            print(f"      Image affine:\n{raw_image.affine}")
+            print(f"      Label affine:\n{raw_label.affine}")
         print(f"      This will cause misalignment after conform()!")
-    
-    # Debug: Check what conform parameters are being used
-    if verbose:
-        print(f"  Preprocessing params:")
-        print(f"      ORIENTATION: {preprocess_params['ORIENTATION']}")
-        print(f"      IMG_SIZE: {preprocess_params['IMG_SIZE']}")
-        print(f"      VOX_SIZE: {preprocess_params['VOX_SIZE']}")
-        print(f"      Raw image shape: {raw_image.shape}")
-        print(f"      Raw label shape: {raw_label.shape}")
     
     del raw_image, raw_label
     
     # Load image using conform() - EXACT same as inference!
-    # But save the conformed image object for debugging
     raw_img_nib = nib.load(image_path)
     conformed_img_nib = conform(
         raw_img_nib,
@@ -330,7 +319,6 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
         orientation=preprocess_params['ORIENTATION'].lower(),
         img_size=preprocess_params['IMG_SIZE'],
         vox_size=preprocess_params['VOX_SIZE'],
-        threshold_1mm=preprocess_params['THRESHOLD_1MM'],
         dtype=np.dtype(preprocess_params['DTYPE_IMAGE']),
         rescale=preprocess_params['RESCALE'],
     )
@@ -345,46 +333,17 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
     # Load labels ONCE and process for both statistics and training
     # This eliminates duplicate loading and saves memory
     # Use memory mapping to reduce memory footprint
-    if verbose:
-        print(f"  Loading label file: {label_path}")
-        if not label_path.exists():
-            print(f"  ⚠️  ERROR: Label file does not exist!")
-            return None
+    if not label_path.exists():
+        print(f"  ⚠️  ERROR: Label file does not exist: {label_path}")
+        return None
     
     img = nib.load(label_path, mmap=True)
     
-    # Check raw label values BEFORE conforming (for debugging)
+    # Check raw label values BEFORE conforming (for QC)
     raw_labels = np.asarray(img.dataobj).astype(np.int32)
     raw_unique = np.unique(raw_labels)
     raw_nonzero = np.sum(raw_labels > 0)
     raw_total = raw_labels.size
-    raw_min = int(np.min(raw_labels))
-    raw_max = int(np.max(raw_labels))
-    
-    # Get brain bounding box in raw image (for debugging)
-    brain_coords = np.where(raw_labels > 0)
-    if len(brain_coords[0]) > 0:
-        brain_bbox = {
-            'x': (int(np.min(brain_coords[0])), int(np.max(brain_coords[0]))),
-            'y': (int(np.min(brain_coords[1])), int(np.max(brain_coords[1]))),
-            'z': (int(np.min(brain_coords[2])), int(np.max(brain_coords[2]))),
-        }
-        brain_center = (
-            int(np.mean(brain_coords[0])),
-            int(np.mean(brain_coords[1])),
-            int(np.mean(brain_coords[2]))
-        )
-    else:
-        brain_bbox = None
-        brain_center = None
-    
-    if verbose:
-        print(f"  Raw image shape: {img.shape}")
-        print(f"  Raw image affine:\n{img.affine}")
-        print(f"  Raw voxel size: {img.header.get_zooms()[:3]}")
-        if brain_bbox:
-            print(f"  Brain bounding box: x={brain_bbox['x']}, y={brain_bbox['y']}, z={brain_bbox['z']}")
-            print(f"  Brain center: {brain_center}")
     
     # Use conform() for labels - EXACT same function as inference!
     conformed_label_nib = conform(
@@ -393,32 +352,10 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
         orientation=preprocess_params['ORIENTATION'].lower(),
         img_size=preprocess_params['IMG_SIZE'],
         vox_size=preprocess_params['VOX_SIZE'],
-        threshold_1mm=preprocess_params['THRESHOLD_1MM'],
         dtype=np.dtype(preprocess_params['DTYPE_LABEL']),
         rescale=None,
     )
     conformed_img = conformed_label_nib  # Keep old variable name for compatibility
-    
-    if verbose:
-        print(f"  Conformed image shape: {conformed_img.shape}")
-        print(f"  Conformed affine:\n{conformed_img.affine}")
-        print(f"  Conformed voxel size: {conformed_img.header.get_zooms()[:3]}")
-    
-    # DEBUG: Save first conformed image and label for inspection
-    debug_dir = Path("/tmp/fastsurfer_debug")
-    debug_dir.mkdir(exist_ok=True)
-    if not (debug_dir / "debug_saved.flag").exists():
-        print(f"  🔍 DEBUG: Saving conformed image and label to {debug_dir}")
-        nib.save(conformed_img_nib, debug_dir / "conformed_image.nii.gz")
-        nib.save(conformed_label_nib, debug_dir / "conformed_label.nii.gz")
-        nib.save(raw_img_nib, debug_dir / "raw_image.nii.gz")
-        nib.save(img, debug_dir / "raw_label.nii.gz")
-        (debug_dir / "debug_saved.flag").touch()
-        print(f"  ✅ Saved to {debug_dir}/:")
-        print(f"      - raw_image.nii.gz")
-        print(f"      - raw_label.nii.gz")
-        print(f"      - conformed_image.nii.gz")
-        print(f"      - conformed_label.nii.gz")
     
     # Extract sparse labels for statistics
     sparse_labels = np.asarray(conformed_img.dataobj).astype(np.int32)
@@ -427,47 +364,22 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
     conf_unique = np.unique(sparse_labels)
     conf_nonzero = np.sum(sparse_labels > 0)
     conf_total = sparse_labels.size
-    conf_min = int(np.min(sparse_labels))
-    conf_max = int(np.max(sparse_labels))
     
     # Always print label statistics if all labels are zero (critical error)
     if conf_nonzero == 0:
         print(f"  ⚠️  CRITICAL: All labels are zero after conforming!")
-        print(f"  Raw label file statistics (before conform):")
-        print(f"      File: {label_path}")
-        print(f"      Shape: {img.shape}")
-        print(f"      Voxel size: {img.header.get_zooms()[:3]}")
-        print(f"      Unique values: {raw_unique}")
-        print(f"      Non-zero voxels: {raw_nonzero}/{raw_total} ({100*raw_nonzero/raw_total:.2f}%)")
-        print(f"      Min: {raw_min}, Max: {raw_max}")
-        if brain_bbox:
-            print(f"      Brain bounding box: x={brain_bbox['x']}, y={brain_bbox['y']}, z={brain_bbox['z']}")
-            print(f"      Brain center: {brain_center}")
-        print(f"      Affine matrix:")
-        print(f"{img.affine}")
-        print(f"  Conformed label statistics (after conform):")
-        print(f"      Shape: {conformed_img.shape}")
-        print(f"      Voxel size: {conformed_img.header.get_zooms()[:3]}")
-        print(f"      Unique values: {conf_unique}")
-        print(f"      Non-zero voxels: {conf_nonzero}/{conf_total} ({100*conf_nonzero/conf_total:.2f}%)")
-        print(f"      Min: {conf_min}, Max: {conf_max}")
-        print(f"      Affine matrix:")
-        print(f"{conformed_img.affine}")
+        print(f"      File: {label_path.name}")
+        print(f"      Raw: {raw_nonzero}/{raw_total} non-zero voxels ({100*raw_nonzero/raw_total:.2f}%)")
+        print(f"      Conformed: {conf_nonzero}/{conf_total} non-zero voxels")
         if raw_nonzero > 0:
-            print(f"  ⚠️  WARNING: Raw file had {raw_nonzero} non-zero voxels, but conform() resulted in all zeros!")
-            print(f"      This suggests the brain region is being mapped outside the output volume bounds.")
-            print(f"      The affine transformation may not be preserving the brain location.")
-        else:
-            print(f"  ⚠️  WARNING: Raw file is also all zeros - label file may be empty or incorrect.")
+            print(f"      ⚠️  Raw file had {raw_nonzero} non-zero voxels, but conform() resulted in all zeros!")
+            print(f"      This suggests misalignment - check affines match.")
+        if verbose:
+            print(f"      Raw shape: {img.shape}, Conformed shape: {conformed_img.shape}")
+            print(f"      Raw unique: {raw_unique}, Conformed unique: {conf_unique}")
     elif verbose:
-        print(f"  Raw label file statistics (before conform):")
-        print(f"      Unique values: {raw_unique}")
-        print(f"      Non-zero voxels: {raw_nonzero}/{raw_total} ({100*raw_nonzero/raw_total:.2f}%)")
-        print(f"      Min: {raw_min}, Max: {raw_max}")
-        print(f"  Conformed label statistics (after conform):")
-        print(f"      Unique values: {conf_unique}")
-        print(f"      Non-zero voxels: {conf_nonzero}/{conf_total} ({100*conf_nonzero/conf_total:.2f}%)")
-        print(f"      Min: {conf_min}, Max: {conf_max}")
+        print(f"  Label QC: {conf_nonzero}/{conf_total} non-zero voxels ({100*conf_nonzero/conf_total:.2f}%)")
+        print(f"      Unique labels: {conf_unique}")
     
     # Free the nibabel image objects immediately
     del img, conformed_img
@@ -511,48 +423,22 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
         verbose=verbose
     )
     
-    # Print weight mask statistics for verification (use sparse labels for accurate counting)
+    # Print weight mask statistics for verification (only when verbose)
     if verbose:
         total_voxels = sparse_labels.size
+        print(f"  Weight mask: range [{weights.min():.2f}, {weights.max():.2f}], mean {weights.mean():.2f}")
         
         if num_classes == 2:
-            # Binary mode - simple statistics
-            background_voxels = np.sum(sparse_labels == 0)
             brain_voxels = np.sum(sparse_labels == 1)
-            print(f"    Label distribution:")
-            print(f"    - Background: {background_voxels:8d} ({100*background_voxels/total_voxels:5.1f}%)")
-            print(f"    - Brain:      {brain_voxels:8d} ({100*brain_voxels/total_voxels:5.1f}%)")
+            print(f"  Label distribution: {brain_voxels}/{total_voxels} brain voxels ({100*brain_voxels/total_voxels:.1f}%)")
         else:
-            # Multi-class mode - detailed atlas-based statistics
-            # Count voxels by region type using sparse labels (before mapping)
+            # Multi-class mode - key statistics only
             background_voxels = np.sum(sparse_labels == 0)
             cortex_labels_no_bg = [l for l in atlas_config.cortex_labels if l != 0]
             cortex_voxels = np.sum(np.isin(sparse_labels, cortex_labels_no_bg))
-            subcortex_voxels = np.sum(np.isin(sparse_labels, list(atlas_config.subcortex_labels)))
-            cerebral_wm_voxels = np.sum(np.isin(sparse_labels, list(atlas_config.cerebral_wm_labels)))
-            cerebellar_wm_voxels = np.sum(np.isin(sparse_labels, list(atlas_config.cerebellar_wm_labels)))
-            
-            # Calculate other (unknown labels not in any category)
-            tissue_voxels = cortex_voxels + subcortex_voxels + cerebral_wm_voxels + cerebellar_wm_voxels
-            other_voxels = total_voxels - background_voxels - tissue_voxels
-        
-        print(f"  Weight mask statistics:")
-        print(f"    - Weight range: {weights.min():.2f} to {weights.max():.2f}")
-        print(f"    - Mean weight: {weights.mean():.2f}")
-        
-        if num_classes == 2:
-            # Binary mode statistics already printed above
-            pass
-        else:
-            # Multi-class mode - print detailed statistics
-            print(f"  Label distribution (from sparse labels):")
-            print(f"    - Background:     {background_voxels:8d} ({100*background_voxels/total_voxels:5.1f}%)")
-            print(f"    - Cortex:         {cortex_voxels:8d} ({100*cortex_voxels/total_voxels:5.1f}%)")
-            print(f"    - Subcortex:      {subcortex_voxels:8d} ({100*subcortex_voxels/total_voxels:5.1f}%)")
-            print(f"    - Cerebral WM:    {cerebral_wm_voxels:8d} ({100*cerebral_wm_voxels/total_voxels:5.1f}%)")
-            print(f"    - Cerebellar WM:  {cerebellar_wm_voxels:8d} ({100*cerebellar_wm_voxels/total_voxels:5.1f}%)")
-            if other_voxels > 0:
-                print(f"    - Other/Unknown:  {other_voxels:8d} ({100*other_voxels/total_voxels:5.1f}%)")
+            tissue_voxels = total_voxels - background_voxels
+            print(f"  Label distribution: {tissue_voxels}/{total_voxels} tissue voxels ({100*tissue_voxels/total_voxels:.1f}%)")
+            print(f"    - Cortex: {cortex_voxels} ({100*cortex_voxels/total_voxels:.1f}%)")
     
     # Transform to requested plane FIRST
     if plane == "sagittal":
@@ -593,8 +479,7 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
         return None
     
     if verbose:
-        print(f"  Original shape: {image_data_resized.shape[:2]}, Scale: {scale_factor:.3f}")
-        print(f"  Zoom values: original={zoom_2d}, scaled={zoom_2d_scaled}")
+        print(f"  Resized: {image_data_resized.shape[:2]}, scale={scale_factor:.3f}, zoom={zoom_2d_scaled}")
     
     # Create thick slices
     image_thick = get_thick_slices(image_data_resized, slice_thickness)
@@ -616,11 +501,8 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
     slices_above_threshold = int(np.sum(label_sum_per_slice > blank_threshold))
     
     if verbose:
-        print(f"  Label statistics before filtering:")
-        print(f"      Max brain pixels per slice: {max_pixels}")
-        print(f"      Mean brain pixels per slice: {mean_pixels:.1f}")
-        print(f"      Slices with any brain (>0 pixels): {slices_with_brain}/{total_slices_before}")
-        print(f"      Slices above threshold (>{blank_threshold} pixels): {slices_above_threshold}/{total_slices_before}")
+        print(f"  Pre-filter: {slices_with_brain}/{total_slices_before} slices with brain, "
+              f"{slices_above_threshold} above threshold (>{blank_threshold}px)")
     
     image_slices, label_slices, weights_final = filter_blank_slices_thick(
         image_thick, label_data_resized, weights_resized, threshold=blank_threshold
@@ -630,22 +512,14 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
     del image_thick, label_data_resized, weights_resized
     
     if image_slices.shape[2] == 0:
-        # No valid slices after filtering - always print diagnostics
-        print(f"  ⚠️  SKIPPING: No valid slices after filtering blank slices")
-        print(f"      All slices were filtered out (threshold={blank_threshold} pixels)")
-        print(f"      Total slices before filtering: {total_slices_before}")
-        print(f"      Label statistics:")
-        print(f"        - Max brain pixels per slice: {max_pixels}")
-        print(f"        - Mean brain pixels per slice: {mean_pixels:.1f}")
-        print(f"        - Slices with any brain (>0 pixels): {slices_with_brain}/{total_slices_before}")
-        print(f"        - Slices above threshold (>{blank_threshold} pixels): {slices_above_threshold}/{total_slices_before}")
+        # No valid slices after filtering - always print key diagnostics
+        print(f"  ⚠️  SKIPPING: No valid slices after filtering (threshold={blank_threshold}px)")
+        print(f"      Slices: {slices_with_brain}/{total_slices_before} with brain, "
+              f"{slices_above_threshold} above threshold")
         if max_pixels == 0:
-            print(f"      ⚠️  WARNING: All labels are zero! Check if label file is correct.")
+            print(f"      ⚠️  All labels are zero! Check label file.")
         elif max_pixels < blank_threshold:
-            suggested_threshold = max(1, max_pixels)
-            print(f"      ⚠️  WARNING: Even the slice with most brain pixels ({max_pixels}) is below threshold ({blank_threshold})")
-            print(f"      Consider lowering threshold to {suggested_threshold} or even 0")
-        # Trigger garbage collection before returning None
+            print(f"      ⚠️  Max brain pixels/slice ({max_pixels}) < threshold ({blank_threshold})")
         gc.collect()
         return None
     
@@ -1269,7 +1143,6 @@ def main():
     print(f"  Orientation:      {preprocess_params['ORIENTATION']}")
     print(f"  Image size:       {preprocess_params['IMG_SIZE']}")
     print(f"  Voxel size:       {preprocess_params['VOX_SIZE']}")
-    print(f"  Threshold 1mm:    {preprocess_params['THRESHOLD_1MM']}")
     print(f"  Dtype (images):   {preprocess_params['DTYPE_IMAGE']}")
     print(f"  Dtype (labels):   {preprocess_params['DTYPE_LABEL']} (supports negative IDs!)")
     print(f"  Rescale (images): {preprocess_params['RESCALE']}")

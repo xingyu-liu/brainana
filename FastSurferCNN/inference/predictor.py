@@ -76,8 +76,6 @@ class RunModelOnData:
         View-specific operations and configurations.
     orientation : OrientationType
         Target orientation for conforming.
-    conform_to_1mm_threshold : float, optional
-        Threshold until which the image will be conformed to 1mm resolution.
     fix_wm_islands : bool
         Whether to apply white matter island correction.
 
@@ -101,7 +99,6 @@ class RunModelOnData:
     current_plane: Plane
     models: dict[Plane, Inference]
     view_ops: dict[Plane, dict[str, Any]]
-    conform_to_1mm_threshold: float | None
     device: torch.device
     viewagg_device: torch.device
     orientation: OrientationType
@@ -323,9 +320,6 @@ class RunModelOnData:
         self.vox_size = preprocess_from_ckpt.get("VOX_SIZE")
         self.image_size = preprocess_from_ckpt.get("IMG_SIZE")
         self.orientation = preprocess_from_ckpt.get("ORIENTATION")
-        self.conform_to_1mm_threshold = preprocess_from_ckpt.get(
-            "THRESHOLD_1MM"
-        )
 
         # Validate that all required parameters are present
         missing_params = []
@@ -335,8 +329,6 @@ class RunModelOnData:
             missing_params.append("IMG_SIZE")
         if self.orientation is None:
             missing_params.append("ORIENTATION")
-        if self.conform_to_1mm_threshold is None:
-            missing_params.append("THRESHOLD_1MM")
 
         if missing_params:
             raise RuntimeError(
@@ -515,7 +507,6 @@ class RunModelOnData:
 
         # Store the native image and set up context for resampling
         conform_kwargs = {
-            "threshold_1mm": self.conform_to_1mm_threshold,
             "vox_size": self.vox_size,
             "orientation": self.orientation,
             "img_size": self.image_size,

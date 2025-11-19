@@ -167,7 +167,7 @@ def skullstripping(
             First-pass outputs are moved to output_dir/pass_1/, and cropped input is saved as
             output_dir/input_cropped.{ext}. Final outputs are in cropped image's native space.
             
-        Note: Preprocessing parameters (vox_size, orientation, image_size, conform_to_1mm_threshold)
+        Note: Preprocessing parameters (vox_size, orientation, image_size)
         are automatically read from checkpoint metadata (required), ensuring consistency
         with the training configuration.
         

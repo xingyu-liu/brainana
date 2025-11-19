@@ -63,11 +63,11 @@ def get_paths_from_config(cfg):
     Note: HDF5 files are named as {PLANE}_{train|val}.hdf5
     """
     
-    if 'training_data_dir' not in cfg or 'output_dir' not in cfg:
+    if 'TRAINING_DATA_DIR' not in cfg or 'OUTPUT_DIR' not in cfg:
         raise ValueError(
             "Invalid configuration format. Config must have:\n"
-            "    training_data_dir: \"/path/to/training_data\"\n"
-            "    output_dir: \"/path/to/output\"\n"
+            "    TRAINING_DATA_DIR: \"/path/to/training_data\"\n"
+            "    OUTPUT_DIR: \"/path/to/output\"\n"
             "    DATA:\n"
             "      PLANE: \"coronal\""
         )
@@ -75,8 +75,8 @@ def get_paths_from_config(cfg):
     plane = cfg['DATA']['PLANE']
     
     # Direct paths format
-    data_dir = Path(cfg['training_data_dir'])
-    log_dir = Path(cfg['output_dir'])
+    data_dir = Path(cfg['TRAINING_DATA_DIR'])
+    log_dir = Path(cfg['OUTPUT_DIR'])
     
     # HDF5 files follow naming convention: {split}_{plane}.hdf5
     train_hdf5 = data_dir / f"train_{plane}.hdf5"

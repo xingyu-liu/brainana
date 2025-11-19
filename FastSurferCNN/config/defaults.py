@@ -6,10 +6,10 @@ _C = CN()
 # Path Management
 # ---------------------------------------------------------------------------- #
 # Direct path to training data directory (contains HDF5 files)
-_C.training_data_dir = ""
+_C.TRAINING_DATA_DIR = ""
 
 # Direct path to output directory (for training logs, checkpoints, etc.)
-_C.output_dir = ""
+_C.OUTPUT_DIR = ""
 
 # ---------------------------------------------------------------------------- #
 # Model options
@@ -20,13 +20,17 @@ _C.MODEL = CN()
 _C.MODEL.MODEL_NAME = "FastSurferVINN"
 
 # Number of classes to predict, including background
-_C.MODEL.NUM_CLASSES = 79
+# This value is atlas-agnostic and must be set via config file or checkpoint
+# Different atlases have different numbers of classes (e.g., ARM2=71, ARM3 may differ)
+_C.MODEL.NUM_CLASSES = 0  # Placeholder: must be overridden by config or checkpoint
 
 # Loss function, combined = dice loss + cross entropy, combined2 = dice loss + boundary loss
 _C.MODEL.LOSS_FUNC = "combined"
 
 # Filter dimensions for DenseNet (all layers same)
-_C.MODEL.NUM_FILTERS = 71
+# This value is atlas-agnostic and must be set via config file or checkpoint
+# Often matches NUM_CLASSES but can vary (e.g., ARM2=71, binary=2)
+_C.MODEL.NUM_FILTERS = 0  # Placeholder: must be overridden by config or checkpoint
 
 # Filter dimensions for Input Interpolation block (currently all the same)
 _C.MODEL.NUM_FILTERS_INTERPOL = 32
@@ -174,9 +178,6 @@ _C.DATA.PREPROCESSING.IMG_SIZE = "auto"
 
 # Voxel size: float (e.g. 1.0) or "min" (adaptive)
 _C.DATA.PREPROCESSING.VOX_SIZE = "min"
-
-# Threshold above which to conform to 1mm (when VOX_SIZE="min")
-_C.DATA.PREPROCESSING.THRESHOLD_1MM = 0.95
 
 # Output data type for images: "uint8", "float32", etc.
 _C.DATA.PREPROCESSING.DTYPE_IMAGE = "uint8"

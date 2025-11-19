@@ -271,7 +271,7 @@ def run_segmentation(
         
     Note
     ----
-    Preprocessing parameters (vox_size, orientation, image_size, conform_to_1mm_threshold)
+    Preprocessing parameters (vox_size, orientation, image_size)
     are automatically read from checkpoint metadata (required), ensuring consistency
     with the training configuration.
     
@@ -292,9 +292,8 @@ def run_segmentation(
     validate_checkpoints(ckpt_ax, ckpt_cor, ckpt_sag)
 
     # Initialize predictor
-    # Preprocessing parameters (vox_size, orientation, image_size,
-    # conform_to_1mm_threshold) are automatically read from checkpoint
-    # metadata if available
+    # Preprocessing parameters (vox_size, orientation, image_size)
+    # are automatically read from checkpoint metadata if available
     predictor = RunModelOnData(
         atlas_name=atlas_name,
         atlas_metadata=atlas_metadata,

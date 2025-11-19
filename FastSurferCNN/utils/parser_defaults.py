@@ -315,15 +315,6 @@ ALL_FLAGS = {
              "dimensions, so the field of view stays consistent, 'auto' yields a cube of dimensions fully containing "
              "the field of view (default).",
     ),
-    "conform_to_1mm_threshold": __arg(
-        "--conform_to_1mm_threshold",
-        type=__conform_to_one,
-        default=0.95,
-        dest="conform_to_1mm_threshold",
-        help="The voxelsize threshold, above which images will be conformed to 1mm isotropic, if the --vox_size "
-             "argument is also 'min' (the --vox_size default setting). Contrary to conform.py, the default behavior of "
-             "%(prog)s is to resample all images above 0.95mm to 1mm.",
-    ),
     "lut": __arg(
         "--lut",
         type=Path,
