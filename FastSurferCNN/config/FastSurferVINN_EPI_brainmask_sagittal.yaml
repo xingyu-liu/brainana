@@ -14,7 +14,7 @@ MODEL:
   MODEL_NAME: "FastSurferVINN"
   NUM_CLASSES: 2   # Binary segmentation: 0=background, 1=brain
   LOSS_FUNC: "combined"
-  NUM_FILTERS: 2   # Match NUM_CLASSES for efficient binary task
+  NUM_FILTERS: 71  # Standard FastSurferVINN width for feature learning (output still binary via NUM_CLASSES: 2)
   NUM_FILTERS_INTERPOL: 32
   NUM_CHANNELS: 7
   KERNEL_H: 3

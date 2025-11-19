@@ -18,8 +18,8 @@
 
 # YAML config file (SINGLE SOURCE OF TRUTH - like macacaMRINN!)
 export PYTHONPATH="/home/star/github/banana:$PYTHONPATH"
-# YAML_CONFIG=/home/star/github/banana/FastSurferCNN/config/FastSurferVINN_T1w_ARM2_coronal.yaml
-YAML_CONFIG=/home/star/github/banana/FastSurferCNN/config/FastSurferVINN_EPI_brainmask_axial.yaml
+YAML_CONFIG=/home/star/github/banana/FastSurferCNN/config/FastSurferVINN_T1w_ARM2_coronal.yaml
+# YAML_CONFIG=/home/star/github/banana/FastSurferCNN/config/FastSurferVINN_EPI_brainmask_axial.yaml
 
 # ============================================================================
 # STEP 1: Split Data into Train/Val
