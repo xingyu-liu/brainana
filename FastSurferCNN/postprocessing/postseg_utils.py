@@ -194,11 +194,10 @@ def extract_largest_component(mask: npt.NDArray[int]) -> npt.NDArray[int]:
 
 def fill_label_holes(mask: npt.NDArray[int]) -> npt.NDArray[int]:
     """
-    Fill holes in a binary mask by extracting the largest background 
-    component and inverting.
+    Fill holes in a binary mask using scipy's binary_fill_holes.
     
-    This approach identifies the main background region and considers
-    everything else as foreground, effectively filling holes.
+    This properly fills all holes in the mask, including those that may
+    be connected to the main background through narrow connections.
     
     Parameters
     ----------
@@ -210,13 +209,14 @@ def fill_label_holes(mask: npt.NDArray[int]) -> npt.NDArray[int]:
     np.ndarray
         Binary mask with holes filled
     """
-    # Find largest background component
-    background = (mask == 0)
-    largest_background = extract_largest_component(background)
+    # Convert to boolean for binary_fill_holes
+    mask_bool = mask.astype(bool)
     
-    # Everything not in largest background is considered foreground
-    filled_mask = (largest_background == 0).astype(mask.dtype)
-    return filled_mask
+    # Fill holes using scipy's binary_fill_holes
+    # This fills all holes that are completely surrounded by foreground
+    filled_mask = scipy.ndimage.binary_fill_holes(mask_bool)
+    
+    return filled_mask.astype(mask.dtype)
 
 
 def create_mask(aseg_data: npt.NDArray[int], dnum: int, enum: int) -> npt.NDArray[int]:
@@ -242,7 +242,7 @@ def create_mask(aseg_data: npt.NDArray[int], dnum: int, enum: int) -> npt.NDArra
     print(f"Creating mask (dilate {dnum}, erode {enum})...")
     
     # 1. Get initial mask (before dilation or erosion)
-    mask = (aseg_data > 0).astype(int)
+    mask = (aseg_data != 0).astype(int)
     print(f"  Initial mask: {np.sum(mask):,} voxels")
     
     # 2. Extract largest component
@@ -254,13 +254,31 @@ def create_mask(aseg_data: npt.NDArray[int], dnum: int, enum: int) -> npt.NDArra
     print(f"  After filling holes: {np.sum(mask):,} voxels")
     
     # 4. Apply morphological operations (dilation then erosion)
-    if dnum > 0:
-        mask = scipy.ndimage.binary_dilation(mask, iterations=dnum)
-        print(f"  After dilation ({dnum} iterations): {np.sum(mask):,} voxels")
-    
-    if enum > 0:
-        mask = scipy.ndimage.binary_erosion(mask, iterations=enum)
-        print(f"  After erosion ({enum} iterations): {np.sum(mask):,} voxels")
+    # Use padding to avoid boundary effects where dilation is constrained
+    # but erosion still applies fully, causing over-erosion
+    if dnum > 0 or enum > 0:
+        # Pad by the maximum of dilation/erosion iterations to ensure enough space
+        pad_size = max(dnum, enum)
+        
+        # Pad the mask (3D: pad all three dimensions)
+        padded_mask = np.pad(mask, pad_size, mode='constant', constant_values=0)
+        
+        # Apply dilation on padded mask
+        if dnum > 0:
+            padded_mask = scipy.ndimage.binary_dilation(padded_mask, iterations=dnum)
+            print(f"  After dilation ({dnum} iterations): {np.sum(padded_mask):,} voxels (padded)")
+        
+        # Apply erosion on padded mask
+        if enum > 0:
+            padded_mask = scipy.ndimage.binary_erosion(padded_mask, iterations=enum)
+            print(f"  After erosion ({enum} iterations): {np.sum(padded_mask):,} voxels (padded)")
+        
+        # Crop back to original size
+        # For 3D: [pad_size:-pad_size, pad_size:-pad_size, pad_size:-pad_size]
+        if mask.ndim == 3:
+            mask = padded_mask[pad_size:-pad_size, pad_size:-pad_size, pad_size:-pad_size]
+        elif mask.ndim == 2:
+            mask = padded_mask[pad_size:-pad_size, pad_size:-pad_size]
     
     return mask.astype(int)
 

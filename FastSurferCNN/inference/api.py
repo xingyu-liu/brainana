@@ -47,8 +47,8 @@ from FastSurferCNN.utils import logging
 LOGGER = logging.getLogger(__name__)
 
 # Brain mask creation parameters
-MASK_DILATION_SIZE = 3  # Dilation kernel size for mask creation
-MASK_EROSION_SIZE = 2   # Erosion kernel size for mask creation
+MASK_DILATION_SIZE = 7  # Dilation kernel size for mask creation
+MASK_EROSION_SIZE = 6   # Erosion kernel size for mask creation
 
 
 def _apply_two_pass_refinement(
@@ -350,87 +350,78 @@ def run_segmentation(
     LOGGER.info(f"Running segmentation on {input_image}")
     pred_data = predictor.get_prediction(str(input_image))
 
-    # Map output format to file extension
-    format_to_ext = {"mgz": ".mgz", "nifti": ".nii.gz"}
-    file_ext = format_to_ext[output_data_format]
-    seg_path = output_dir / f"segmentation{file_ext}"
-
-    # Always resample to native space
-    if predictor._should_resample():
-        LOGGER.info("Resampling segmentation to native space...")
-        pred_data_final = predictor._resample_to_native(
-            pred_data, interpolation="nearest"
-        )
-        LOGGER.info(f"Successfully resampled segmentation (shape: {pred_data_final.shape})")
-        
-        data_utils.save_image(
-            predictor._input_native_img.header,
-            predictor._input_native_img.affine,
-            pred_data_final,
-            seg_path,
-            dtype=np.int16,
-        )
-    else:
-        # Input was already conformed - save directly (still in native space)
-        LOGGER.info("No resampling needed - input was already conformed")
-        data_utils.save_image(
-            predictor._conformed_img.header,
-            predictor._conformed_img.affine,
-            pred_data,
-            seg_path,
-            dtype=np.int16,
-        )
-        pred_data_final = pred_data
-
     # Create masks from the final segmentation
     # Both binary and multi-class models go through the same create_mask() pipeline
     # for topological refinement (dilation, erosion, largest component selection)
     LOGGER.info("Creating brain mask from segmentation (with topological refinement)...")
     brain_mask = create_mask(
-        copy.deepcopy(pred_data_final),
+        copy.deepcopy(pred_data),
         MASK_DILATION_SIZE,
         MASK_EROSION_SIZE,
     )
     brain_mask = brain_mask.astype(np.uint8)
 
-    # Get reference image for header/affine (always use native if available)
-    reference_img = (
-        predictor._input_native_img
-        if predictor._should_resample()
-        else predictor._conformed_img
-    )
-
-    # Save mask
-    mask_path = output_dir / f"mask{file_ext}"
-    LOGGER.info(f"Saving brain mask to {mask_path}")
-    data_utils.save_image(
-        reference_img.header,
-        reference_img.affine,
-        brain_mask,
-        mask_path,
-        dtype=np.uint8,
-    )
-
     # Hemisphere mask creation and saving (multi-class only, requires LUT)
-    hemi_mask_path = None
+    hemi_mask = None
     if create_hemi_mask:
         LOGGER.info("Creating hemisphere mask...")
         try:
             hemi_mask = create_hemisphere_masks(
-                brain_mask, pred_data_final, lut_path=predictor.lut_path
+                brain_mask, pred_data, lut_path=predictor.lut_path
             )
-            # Save hemisphere mask immediately after creation
-            hemi_mask_path = output_dir / f"mask_hemi{file_ext}"
-            LOGGER.info(f"Saving hemisphere mask to {hemi_mask_path}")
-            data_utils.save_image(
-                reference_img.header,
-                reference_img.affine,
-                hemi_mask,
-                hemi_mask_path,
-                dtype=np.uint8,
-            )
+
         except Exception as e:
             LOGGER.warning(f"Could not create hemisphere mask: {e}")
+
+    # Map output format to file extension
+    format_to_ext = {"mgz": ".mgz", "nifti": ".nii.gz"}
+    file_ext = format_to_ext[output_data_format]
+    seg_path = output_dir / f"segmentation{file_ext}"
+    mask_path = output_dir / f"mask{file_ext}"
+    hemi_mask_path = None
+    if hemi_mask is not None:
+        hemi_mask_path = output_dir / f"mask_hemi{file_ext}"
+
+    # Always resample to native space
+    # Loop for pred_data, brain_mask, and hemi_mask to save
+    data_to_save = [
+        ("segmentation", pred_data, seg_path, np.int16),
+        ("mask", brain_mask, mask_path, np.uint8),
+    ]
+    if hemi_mask is not None:
+        data_to_save.append(("hemimask", hemi_mask, hemi_mask_path, np.uint8))
+    
+    if predictor._should_resample():
+        LOGGER.info("Resampling to native space...")
+        
+        for name, data, path, dtype in data_to_save:
+            LOGGER.info(f"Resampling {name}...")
+            resampled = predictor._resample_to_native(
+                data, interpolation="nearest"
+            )
+            LOGGER.info(f"Successfully resampled {name} (shape: {resampled.shape})")
+            
+            data_utils.save_image(
+                predictor._input_native_img.header,
+                predictor._input_native_img.affine,
+                resampled,
+                path,
+                dtype=dtype,
+            )
+        
+    else:
+        # Input was already conformed - save directly (still in native space)
+        LOGGER.info("No resampling needed - input was already conformed")
+        
+        for name, data, path, dtype in data_to_save:
+            LOGGER.info(f"Saving {name}...")
+            data_utils.save_image(
+                predictor._conformed_img.header,
+                predictor._conformed_img.affine,
+                data,
+                path,
+                dtype=dtype,
+            )
 
     # Build result dictionary
     result = {
@@ -444,7 +435,10 @@ def run_segmentation(
     if enable_crop_2round:
         # Get model height from checkpoint config
         model_height = predictor.cfg_fin.MODEL.HEIGHT
-        
+
+        # Get reference image for header/affine (use original input image)
+        reference_img = predictor._input_native_img
+
         # Check if refinement should be applied
         should_refine, brain_ratio, max_orig_dim = should_apply_refinement(
             brain_mask, reference_img, model_height

@@ -32,8 +32,6 @@ from FastSurferCNN.data_loader.conform import (
     conform,
     is_conform,
     map_image,
-    orientation_to_ornts,
-    to_target_orientation,
 )
 from FastSurferCNN.inference.inference import Inference
 from FastSurferCNN.inference.predictor_utils import load_multiplane_configs
@@ -528,10 +526,9 @@ class RunModelOnData:
         # Store conformed image for use as reference in save_img
         self._conformed_img = img
 
-        # Extract data, zoom, and affine from image
+        # Extract data and zoom from conformed image
         orig_data = np.asanyarray(img.dataobj)
         zoom = img.header.get_zooms()
-        affine = img.affine
 
         kwargs = {
             "device": self.viewagg_device,
@@ -547,15 +544,9 @@ class RunModelOnData:
             )
             LOGGER.warning(f"{msg}: {np.round(_zoom, decimals=4).tolist()}!")
 
-        orig_in_lia, back_to_native = to_target_orientation(
-            orig_data, affine, target_orientation="LIA"
-        )
-        shape = orig_in_lia.shape + (self.get_num_classes(),)
-        _ornt_transform, _ = orientation_to_ornts(
-            affine, target_orientation="LIA"
-        )
-        _zoom = _zoom[_ornt_transform[:, 0]]
-
+        # Use conformed data directly - conforming already ensures correct orientation
+        # (matching training configuration from checkpoint)
+        shape = orig_data.shape + (self.get_num_classes(),)
         pred_prob = torch.zeros(shape, **kwargs)
 
         # Inference and view aggregation
@@ -564,15 +555,12 @@ class RunModelOnData:
             self.set_model(plane)
             # pred_prob is updated inplace to conserve memory
             pred_prob = model.run(
-                pred_prob, image_f, orig_in_lia, _zoom, out=pred_prob
+                pred_prob, image_f, orig_data, _zoom, out=pred_prob
             )
 
         # Get hard predictions
         pred_classes = torch.argmax(pred_prob, 3)
         del pred_prob
-
-        # Reorder from LIA to native
-        pred_classes = back_to_native(pred_classes)
 
         # Map to FreeSurfer label space (skip for binary models - output is already 0/1)
         if not self.is_binary and self.labels is not None:
