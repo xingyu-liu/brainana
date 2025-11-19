@@ -1,24 +1,8 @@
 #!/usr/bin/env python3
 
 """
-Generate HDF5 training dataset for MRI segmentation
-Enhanced version with proper resizing (inspired by macacaMRINN)
-
-Key improvements:
-- Proportional resizing using scipy.ndimage.zoom (maintains aspect ratio)
-- Padding to exact target dimensions
-- Ensures all images have consistent dimensions (e.g., 256×256)
-- Uses config_utils for path resolution (single source of truth from YAML)
-- Supports both binary and multi-class segmentation tasks
-- Simple directory structure: images/ and labels/ subdirectories
-
-Memory optimizations:
-- Memory-mapped file loading (mmap=True) to reduce memory footprint
-- Explicit cleanup with del and gc.collect() after processing each volume
-- Eliminates duplicate label loading (previously loaded twice)
-- Improved HDF5 compression (level 4) and auto-chunking
-- Periodic memory monitoring and warnings during processing
-- Immediate freeing of intermediate arrays after use
+Generate HDF5 training dataset for MRI segmentation with conform() preprocessing.
+Uses proportional resizing to maintain aspect ratio, then pads to exact dimensions.
 """
 
 import argparse
@@ -28,23 +12,16 @@ import numpy as np
 import os
 import sys
 from pathlib import Path
-from collections import defaultdict
 from multiprocessing import Pool
 from scipy import ndimage
 import json
 import gc
-import psutil  # For memory monitoring
+import psutil
 
-# Add parent directory to path for FastSurferCNN imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Import config utilities for path resolution
-from FastSurferCNN.utils.config_utils import load_yaml_config, get_paths_from_config, print_paths_summary
-
-# Import atlas management system
+from FastSurferCNN.utils.config_utils import load_yaml_config, get_paths_from_config
 from FastSurferCNN.atlas.atlas_manager import get_atlas_manager
-
-# Import FastSurferCNN utilities
 from FastSurferCNN.data_loader.data_utils import (
     create_weight_mask,
     filter_blank_slices_thick,
@@ -56,265 +33,36 @@ from FastSurferCNN.data_loader.conform import conform
 
 
 def resize_volume_proportional(volume, target_size=256, order=1):
-    """
-    Resize volume proportionally to fit within target_size, then pad to exact dimensions.
-    
-    This mimics macacaMRINN's approach:
-    1. Find max dimension
-    2. Calculate scale factor to fit within target
-    3. Resize proportionally
-    4. Pad to exact target dimensions
-    
-    Parameters
-    ----------
-    volume : np.ndarray
-        3D volume with shape (height, width, depth) or (height, width, depth, channels)
-    target_size : int
-        Target size for height and width
-    order : int
-        Interpolation order (0=nearest, 1=linear, 3=cubic)
-        Use order=0 for labels, order=1 for images/weights
-    
-    Returns
-    -------
-    np.ndarray
-        Resized and padded volume with shape (target_size, target_size, depth) or 
-        (target_size, target_size, depth, channels)
-    float
-        Scale factor applied
-    """
-    original_shape = volume.shape
-    has_channels = len(original_shape) == 4
-    
-    if has_channels:
-        h, w, d, c = original_shape
-    else:
-        h, w, d = original_shape
-    
-    # Find maximum spatial dimension (height, width)
+    """Resize volume proportionally to fit within target_size, then pad to exact dimensions."""
+    h, w = volume.shape[:2]
     max_dim = max(h, w)
-    
-    # Calculate scale factor to fit within target_size
     scale_factor = target_size / max_dim
+    new_h, new_w = int(h * scale_factor), int(w * scale_factor)
     
-    # Calculate new dimensions after proportional scaling
-    new_h = int(h * scale_factor)
-    new_w = int(w * scale_factor)
-    
-    # Resize proportionally
     if scale_factor != 1.0:
-        if has_channels:
-            # Resize each channel separately to preserve label values
-            zoom_factors = (new_h/h, new_w/w, 1, 1)  # Don't scale depth or channels
-        else:
-            zoom_factors = (new_h/h, new_w/w, 1)  # Don't scale depth
-        
+        zoom_factors = (new_h/h, new_w/w) + (1,) * (len(volume.shape) - 2)
         resized = ndimage.zoom(volume, zoom_factors, order=order)
     else:
         resized = volume.copy()
     
-    # Now pad to exact target dimensions
-    if has_channels:
-        padded = np.zeros((target_size, target_size, d, c), dtype=volume.dtype)
-        padded[:new_h, :new_w, :, :] = resized
-    else:
-        padded = np.zeros((target_size, target_size, d), dtype=volume.dtype)
-        padded[:new_h, :new_w, :] = resized
+    pad_shape = (target_size, target_size) + volume.shape[2:]
+    padded = np.zeros(pad_shape, dtype=volume.dtype)
+    padded[:new_h, :new_w] = resized
     
     return padded, scale_factor
 
 
 def load_and_conform_image(image_path, preprocess_params):
-    """
-    Load and preprocess image using conform() - EXACT same method as inference!
-    
-    CRITICAL: Uses conform() with parameters from YAML config to ensure
-    identical preprocessing during HDF5 creation, training, and inference.
-    
-    Parameters
-    ----------
-    image_path : Path
-        Path to image file
-    preprocess_params : dict
-        Preprocessing parameters from YAML config['DATA']['PREPROCESSING']
-        
-    Returns
-    -------
-    np.ndarray
-        Preprocessed image data (already in correct orientation, size, dtype)
-        Returns None if zoom values are invalid
-    np.ndarray
-        Voxel sizes from original image header
-        Returns None if zoom values are invalid
-    """
-    # Load with memory mapping to reduce memory footprint
+    """Load and preprocess image using conform(). Returns (data, zoom) or (None, None) if invalid."""
     img = nib.load(image_path, mmap=True)
-    
-    # Get original voxel sizes before conform (header access is cheap)
     zoom = img.header.get_zooms()[:3]
     
-    # ⚠️ VALIDATION: Check for zero or invalid zoom values - SKIP if invalid
-    zoom_array = np.asarray(zoom)
-    invalid_mask = np.abs(zoom_array) < 1e-6
-    if np.any(invalid_mask):
-        print(f"  ⚠️  SKIPPING: Invalid zoom values detected in {image_path.name}")
-        print(f"      Zoom values: {zoom_array}")
-        print(f"      Invalid dimensions: {np.where(invalid_mask)[0]}")
-        print(f"      This subject will be excluded from the dataset.")
-        del img
+    if np.any(np.abs(zoom) < 1e-6):
+        print(f"  ⚠️  SKIPPING: Invalid zoom values in {image_path.name}")
         return None, None
     
-    # Use conform() - EXACT same function as inference!
-    # This handles orientation + resizing + voxel size + dtype conversion
     conformed_img = conform(
         img,
-        order=preprocess_params['ORDER_IMAGE'],
-        orientation=preprocess_params['ORIENTATION'].lower(),
-        img_size=preprocess_params['IMG_SIZE'],
-        vox_size=preprocess_params['VOX_SIZE'],
-        dtype=np.dtype(preprocess_params['DTYPE_IMAGE']),  # Use DTYPE_IMAGE for images
-        rescale=preprocess_params['RESCALE'],
-    )
-    
-    # Extract data
-    data = np.asarray(conformed_img.dataobj)
-    
-    # Free nibabel objects immediately
-    del img, conformed_img
-    
-    # Normalize to [0, 1] for training
-    data = data.astype(np.float32)
-    if data.max() > 0:
-        data = data / data.max()
-    
-    return data, zoom
-
-
-def load_and_map_labels(label_path, plane="coronal", atlas_manager=None, preprocess_params=None, num_classes=None):
-    """
-    Load and preprocess labels using conform() - EXACT same method as inference!
-    
-    CRITICAL: Uses conform() with parameters from YAML config to ensure
-    identical preprocessing during HDF5 creation, training, and inference.
-    Uses nearest-neighbor interpolation (order=0) to preserve discrete label values.
-    
-    Parameters
-    ----------
-    label_path : Path
-        Path to segmentation file
-    plane : str
-        Anatomical plane - sagittal uses hemisphere merging (multi-class only)
-    atlas_manager : AtlasManager, optional
-        Atlas manager instance for label mapping (None for binary mode)
-    preprocess_params : dict
-        Preprocessing parameters from YAML config['DATA']['PREPROCESSING']
-    num_classes : int, optional
-        Number of classes (2 for binary mode, >2 for multi-class)
-        
-    Returns
-    -------
-    np.ndarray
-        Dense label array (already in correct orientation, size)
-    """
-    # Load with memory mapping to reduce memory footprint
-    img = nib.load(label_path, mmap=True)
-    
-    # Use conform() for labels - EXACT same function as inference!
-    # Uses ORDER_LABEL (nearest neighbor) to preserve discrete values
-    # CRITICAL: Use int16/int32 dtype to support NEGATIVE label IDs (e.g., -1 for WM)
-    # CRITICAL: NO rescaling for labels (rescale=None) - preserve exact label values!
-    conformed_img = conform(
-        img,
-        order=preprocess_params['ORDER_LABEL'],  # MUST be 0 (nearest neighbor)
-        orientation=preprocess_params['ORIENTATION'].lower(),
-        img_size=preprocess_params['IMG_SIZE'],
-        vox_size=preprocess_params['VOX_SIZE'],
-        dtype=np.dtype(preprocess_params['DTYPE_LABEL']),  # Use DTYPE_LABEL (int16/int32) for labels
-        rescale=None,  # NO rescaling for labels! Preserve exact values including negatives
-    )
-    
-    # Extract sparse labels
-    sparse_labels = np.asarray(conformed_img.dataobj).astype(np.int32)
-    
-    # Free nibabel objects immediately
-    del img, conformed_img
-    
-    # Binary brain mask mode - no atlas mapping needed
-    if num_classes == 2:
-        # Validate labels are binary (0 and 1 only)
-        unique_labels = np.unique(sparse_labels)
-        if not np.all(np.isin(unique_labels, [0, 1])):
-            raise ValueError(
-                f"Binary mode (NUM_CLASSES=2) requires labels to be 0 (background) and 1 (brain).\n"
-                f"Found labels: {unique_labels}\n"
-                f"File: {label_path}"
-            )
-        # Direct use - no transformation needed
-        return sparse_labels
-    
-    # Multi-class mode - use atlas manager for label mapping
-    if atlas_manager is None:
-        raise ValueError("atlas_manager required for multi-class segmentation (NUM_CLASSES > 2)")
-    
-    # Sagittal uses special hemisphere merging (bilateral -> single)
-    if plane == "sagittal":
-        dense_labels = atlas_manager.map_labels_to_sagittal_dense(sparse_labels)
-    else:
-        # Coronal and axial use full bilateral labels
-        dense_labels = atlas_manager.map_labels_to_dense(sparse_labels)
-    
-    return dense_labels
-
-
-def process_subject(image_path, label_path, plane, slice_thickness=3, target_size=256, atlas_manager=None, preprocess_params=None, num_classes=None, verbose=True):
-    """
-    Process a single subject's MRI and segmentation using conform() preprocessing.
-    
-    Parameters
-    ----------
-    image_path : Path
-        Path to image file
-    label_path : Path
-        Path to label/segmentation file
-    plane : str
-        Anatomical plane (axial, coronal, sagittal)
-    slice_thickness : int
-        Number of slices before/after middle slice
-    target_size : int
-        Target size for resizing (e.g., 256 for 256×256)
-    atlas_manager : AtlasManager, optional
-        Atlas manager instance (None for binary mode)
-    preprocess_params : dict
-        Preprocessing parameters from YAML config['DATA']['PREPROCESSING']
-    num_classes : int, optional
-        Number of classes (2 for binary, >2 for multi-class)
-    verbose : bool
-        Whether to print detailed info
-        
-    Returns
-    -------
-    dict
-        Dictionary with processed data
-    """
-    # Load raw images first to check affine match
-    raw_image = nib.load(image_path)
-    raw_label = nib.load(label_path)
-    
-    # Check if affines match (critical for EPI data!)
-    affine_match = np.allclose(raw_image.affine, raw_label.affine, atol=1e-3)
-    if not affine_match:
-        print(f"  ⚠️  WARNING: Image and label affines don't match for {image_path.name}!")
-        if verbose:
-            print(f"      Image affine:\n{raw_image.affine}")
-            print(f"      Label affine:\n{raw_label.affine}")
-        print(f"      This will cause misalignment after conform()!")
-    
-    del raw_image, raw_label
-    
-    # Load image using conform() - EXACT same as inference!
-    raw_img_nib = nib.load(image_path)
-    conformed_img_nib = conform(
-        raw_img_nib,
         order=preprocess_params['ORDER_IMAGE'],
         orientation=preprocess_params['ORIENTATION'].lower(),
         img_size=preprocess_params['IMG_SIZE'],
@@ -322,31 +70,20 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
         dtype=np.dtype(preprocess_params['DTYPE_IMAGE']),
         rescale=preprocess_params['RESCALE'],
     )
-    image_data = np.asarray(conformed_img_nib.dataobj)
-    zoom = conformed_img_nib.header.get_zooms()[:3]
     
-    # Check if loading failed due to invalid zoom values
-    if image_data is None or not np.all((np.array(zoom) > 0.001) & (np.array(zoom) < 10)):
-        gc.collect()
-        return None
+    # conform() already rescales to [0, RESCALE] range - keep that range in HDF5
+    # Dataset loader will normalize to [0, 1] by dividing by RESCALE
+    data = np.asarray(conformed_img.dataobj).astype(np.float32)
     
-    # Load labels ONCE and process for both statistics and training
-    # This eliminates duplicate loading and saves memory
-    # Use memory mapping to reduce memory footprint
-    if not label_path.exists():
-        print(f"  ⚠️  ERROR: Label file does not exist: {label_path}")
-        return None
-    
+    del img, conformed_img
+    return data, zoom
+
+
+def load_and_map_labels(label_path, plane="coronal", atlas_manager=None, preprocess_params=None, num_classes=None):
+    """Load and preprocess labels using conform(). Returns dense label array."""
     img = nib.load(label_path, mmap=True)
     
-    # Check raw label values BEFORE conforming (for QC)
-    raw_labels = np.asarray(img.dataobj).astype(np.int32)
-    raw_unique = np.unique(raw_labels)
-    raw_nonzero = np.sum(raw_labels > 0)
-    raw_total = raw_labels.size
-    
-    # Use conform() for labels - EXACT same function as inference!
-    conformed_label_nib = conform(
+    conformed_img = conform(
         img,
         order=preprocess_params['ORDER_LABEL'],
         orientation=preprocess_params['ORIENTATION'].lower(),
@@ -355,64 +92,106 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
         dtype=np.dtype(preprocess_params['DTYPE_LABEL']),
         rescale=None,
     )
-    conformed_img = conformed_label_nib  # Keep old variable name for compatibility
     
-    # Extract sparse labels for statistics
     sparse_labels = np.asarray(conformed_img.dataobj).astype(np.int32)
-    
-    # Check conformed label values
-    conf_unique = np.unique(sparse_labels)
-    conf_nonzero = np.sum(sparse_labels > 0)
-    conf_total = sparse_labels.size
-    
-    # Always print label statistics if all labels are zero (critical error)
-    if conf_nonzero == 0:
-        print(f"  ⚠️  CRITICAL: All labels are zero after conforming!")
-        print(f"      File: {label_path.name}")
-        print(f"      Raw: {raw_nonzero}/{raw_total} non-zero voxels ({100*raw_nonzero/raw_total:.2f}%)")
-        print(f"      Conformed: {conf_nonzero}/{conf_total} non-zero voxels")
-        if raw_nonzero > 0:
-            print(f"      ⚠️  Raw file had {raw_nonzero} non-zero voxels, but conform() resulted in all zeros!")
-            print(f"      This suggests misalignment - check affines match.")
-        if verbose:
-            print(f"      Raw shape: {img.shape}, Conformed shape: {conformed_img.shape}")
-            print(f"      Raw unique: {raw_unique}, Conformed unique: {conf_unique}")
-    elif verbose:
-        print(f"  Label QC: {conf_nonzero}/{conf_total} non-zero voxels ({100*conf_nonzero/conf_total:.2f}%)")
-        print(f"      Unique labels: {conf_unique}")
-    
-    # Free the nibabel image objects immediately
     del img, conformed_img
     
-    # Map sparse labels to dense for training
-    # Binary mode: no mapping needed (labels already 0/1)
     if num_classes == 2:
-        # Validate labels are binary
         unique_labels = np.unique(sparse_labels)
         if not np.all(np.isin(unique_labels, [0, 1])):
             raise ValueError(
-                f"Binary mode requires labels to be 0/1, got: {unique_labels}"
+                f"Binary mode (NUM_CLASSES=2) requires labels to be 0 (background) and 1 (brain).\n"
+                f"Found labels: {unique_labels}\n"
+                f"File: {label_path}"
             )
-        label_data = sparse_labels
-        cortex_labels = None  # No cortex-specific weighting for binary
-        atlas_config = None  # Not needed for binary mode
+        return sparse_labels
+    
+    if atlas_manager is None:
+        raise ValueError("atlas_manager required for multi-class segmentation (NUM_CLASSES > 2)")
+    
+    if plane == "sagittal":
+        return atlas_manager.map_labels_to_sagittal_dense(sparse_labels)
     else:
-        # Multi-class mode: use atlas mapping
-        if atlas_manager is None:
-            raise ValueError("atlas_manager required for multi-class mode")
-        
-        if plane == "sagittal":
-            label_data = atlas_manager.map_labels_to_sagittal_dense(sparse_labels)
-        else:
-            label_data = atlas_manager.map_labels_to_dense(sparse_labels)
-        
-        # Get atlas-specific configuration
+        return atlas_manager.map_labels_to_dense(sparse_labels)
+
+
+def _get_plane_transform(plane):
+    """Get transform function and zoom extraction for given plane."""
+    if plane == "sagittal":
+        return transform_sagittal, lambda z: np.asarray(z)[::-1][:2]
+    elif plane == "axial":
+        return transform_axial, lambda z: np.asarray(z)[[2, 0]]
+    else:  # coronal
+        return lambda x: x, lambda z: np.asarray(z)[:2]
+
+
+def _append_to_datasets(datasets, result, subject_name):
+    """Append processed subject data to HDF5 datasets."""
+    images_ds, labels_ds, weights_ds, zooms_ds, subjects_ds = datasets
+    num_slices = result['num_slices']
+    current_len = images_ds.shape[0]
+    
+    images_ds.resize(current_len + num_slices, axis=0)
+    images_ds[current_len:current_len + num_slices] = result['images']
+    
+    labels_ds.resize(current_len + num_slices, axis=0)
+    labels_ds[current_len:current_len + num_slices] = result['labels']
+    
+    weights_ds.resize(current_len + num_slices, axis=0)
+    weights_ds[current_len:current_len + num_slices] = result['weights']
+    
+    zooms_ds.resize(current_len + num_slices, axis=0)
+    zooms_ds[current_len:current_len + num_slices] = result['zooms']
+    
+    subjects_ds.resize(current_len + num_slices, axis=0)
+    subjects_ds[current_len:current_len + num_slices] = [subject_name] * num_slices
+    
+    return num_slices
+
+
+def process_subject(image_path, label_path, plane, slice_thickness=3, target_size=256, 
+                   atlas_manager=None, preprocess_params=None, num_classes=None, verbose=False):
+    """Process a single subject's MRI and segmentation."""
+    # Validate affine match
+    raw_image = nib.load(image_path)
+    raw_label = nib.load(label_path)
+    if not np.allclose(raw_image.affine, raw_label.affine, atol=1e-3):
+        print(f"  ⚠️  WARNING: Image and label affines don't match for {image_path.name}!")
+    del raw_image, raw_label
+    
+    # Load and conform image
+    image_data, zoom = load_and_conform_image(image_path, preprocess_params)
+    if image_data is None or zoom is None:
+        return None
+    
+    # Validate zoom values
+    if not np.all((np.array(zoom) > 0.001) & (np.array(zoom) < 10)):
+        return None
+    
+    # Load and map labels
+    if not label_path.exists():
+        print(f"  ⚠️  ERROR: Label file does not exist: {label_path}")
+        return None
+    
+    try:
+        label_data = load_and_map_labels(label_path, plane, atlas_manager, preprocess_params, num_classes)
+    except Exception as e:
+        print(f"  ⚠️  ERROR loading labels for {label_path.name}: {e}")
+        return None
+    
+    # Check for all-zero labels (critical error)
+    if np.sum(label_data > 0) == 0:
+        print(f"  ⚠️  CRITICAL: All labels are zero after conforming! File: {label_path.name}")
+        return None
+    
+    # Get cortex labels for weight mask
+    if num_classes == 2:
+        cortex_labels = None
+    else:
         atlas_config = atlas_manager.get_atlas_config(plane)
         cortex_labels = atlas_config.cortex_labels
     
-    # Create weight mask BEFORE transforming (needs full 3D volume)
-    # Binary mode: uses simple edge detection (cortex_labels=None)
-    # Multi-class mode: uses atlas-specific cortex labels
+    # Create weight mask
     weights = create_weight_mask(
         label_data,
         max_weight=5,
@@ -420,122 +199,62 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
         max_hires_weight=5,
         gradient=False,
         cortex_labels=cortex_labels,
-        verbose=verbose
+        verbose=False
     )
     
-    # Print weight mask statistics for verification (only when verbose)
-    if verbose:
-        total_voxels = sparse_labels.size
-        print(f"  Weight mask: range [{weights.min():.2f}, {weights.max():.2f}], mean {weights.mean():.2f}")
-        
-        if num_classes == 2:
-            brain_voxels = np.sum(sparse_labels == 1)
-            print(f"  Label distribution: {brain_voxels}/{total_voxels} brain voxels ({100*brain_voxels/total_voxels:.1f}%)")
-        else:
-            # Multi-class mode - key statistics only
-            background_voxels = np.sum(sparse_labels == 0)
-            cortex_labels_no_bg = [l for l in atlas_config.cortex_labels if l != 0]
-            cortex_voxels = np.sum(np.isin(sparse_labels, cortex_labels_no_bg))
-            tissue_voxels = total_voxels - background_voxels
-            print(f"  Label distribution: {tissue_voxels}/{total_voxels} tissue voxels ({100*tissue_voxels/total_voxels:.1f}%)")
-            print(f"    - Cortex: {cortex_voxels} ({100*cortex_voxels/total_voxels:.1f}%)")
+    # Transform to requested plane
+    transform_func, zoom_extract = _get_plane_transform(plane)
+    image_data = transform_func(image_data)
+    label_data = transform_func(label_data)
+    weights = transform_func(weights)
+    zoom_2d = zoom_extract(zoom)
     
-    # Transform to requested plane FIRST
-    if plane == "sagittal":
-        image_data = transform_sagittal(image_data)
-        label_data = transform_sagittal(label_data)
-        weights = transform_sagittal(weights)
-        zoom_2d = np.asarray(zoom)[::-1][:2]
-    elif plane == "axial":
-        image_data = transform_axial(image_data)
-        label_data = transform_axial(label_data)
-        weights = transform_axial(weights)
-        zoom_2d = np.asarray(zoom)[[2, 0]]
-    else:  # coronal (default - no transformation needed)
-        zoom_2d = np.asarray(zoom)[:2]
-    
-    # NOW resize to target_size proportionally, then pad
+    # Resize proportionally
     image_data_resized, scale_factor = resize_volume_proportional(image_data, target_size, order=1)
-    label_data_resized, _ = resize_volume_proportional(label_data, target_size, order=0)  # Nearest for labels
+    label_data_resized, _ = resize_volume_proportional(label_data, target_size, order=0)
     weights_resized, _ = resize_volume_proportional(weights, target_size, order=1)
     
-    # Free original volumes immediately after resizing
-    del image_data, label_data, weights, sparse_labels
+    del image_data, label_data, weights
     
-    # Update zoom to reflect the scaling
+    # Validate scaled zoom values
     zoom_2d_scaled = zoom_2d / scale_factor
-    
-    # ⚠️ VALIDATION: Check if final zoom values are valid - SKIP if invalid
     if np.any(np.abs(zoom_2d_scaled) < 1e-6):
-        # Always print this critical skip reason
-        print(f"  ⚠️  SKIPPING: Invalid scaled zoom values detected!")
-        print(f"      zoom_2d: {zoom_2d}")
-        print(f"      scale_factor: {scale_factor}")
-        print(f"      zoom_2d_scaled: {zoom_2d_scaled}")
-        print(f"      This subject will be excluded from the dataset.")
-        # Free all data and return None (sparse_labels already deleted above)
+        print(f"  ⚠️  SKIPPING: Invalid scaled zoom values for {image_path.name}")
         del image_data_resized, label_data_resized, weights_resized
         gc.collect()
         return None
     
-    if verbose:
-        print(f"  Resized: {image_data_resized.shape[:2]}, scale={scale_factor:.3f}, zoom={zoom_2d_scaled}")
-    
     # Create thick slices
     image_thick = get_thick_slices(image_data_resized, slice_thickness)
-    
-    # Free resized image data after creating thick slices
     del image_data_resized
     
-    # Filter out blank slices
-    # For binary brain masks, use lower threshold (brain masks may be smaller/sparser)
-    # For multi-class, use higher threshold (more tissue expected)
+    # Filter blank slices
     blank_threshold = 10
-    total_slices_before = image_thick.shape[2]  # Save before filtering
-    
-    # Always calculate label statistics BEFORE filtering (needed for diagnostics)
     label_sum_per_slice = np.sum(label_data_resized, axis=(0, 1))
     max_pixels = int(np.max(label_sum_per_slice))
-    mean_pixels = float(np.mean(label_sum_per_slice))
-    slices_with_brain = int(np.sum(label_sum_per_slice > 0))
     slices_above_threshold = int(np.sum(label_sum_per_slice > blank_threshold))
-    
-    if verbose:
-        print(f"  Pre-filter: {slices_with_brain}/{total_slices_before} slices with brain, "
-              f"{slices_above_threshold} above threshold (>{blank_threshold}px)")
     
     image_slices, label_slices, weights_final = filter_blank_slices_thick(
         image_thick, label_data_resized, weights_resized, threshold=blank_threshold
     )
-    
-    # Free intermediate arrays
     del image_thick, label_data_resized, weights_resized
     
     if image_slices.shape[2] == 0:
-        # No valid slices after filtering - always print key diagnostics
-        print(f"  ⚠️  SKIPPING: No valid slices after filtering (threshold={blank_threshold}px)")
-        print(f"      Slices: {slices_with_brain}/{total_slices_before} with brain, "
-              f"{slices_above_threshold} above threshold")
         if max_pixels == 0:
-            print(f"      ⚠️  All labels are zero! Check label file.")
+            print(f"  ⚠️  SKIPPING: All labels are zero for {image_path.name}")
         elif max_pixels < blank_threshold:
-            print(f"      ⚠️  Max brain pixels/slice ({max_pixels}) < threshold ({blank_threshold})")
+            print(f"  ⚠️  SKIPPING: Max pixels/slice ({max_pixels}) < threshold ({blank_threshold}) for {image_path.name}")
         gc.collect()
         return None
     
-    # Transpose back to (slices, height, width, channels) for images
+    # Transpose to (slices, height, width, channels) for images
     image_slices = np.transpose(image_slices, (2, 0, 1, 3))
-    # Transpose to (slices, height, width) for labels and weights
     label_slices = np.transpose(label_slices, (2, 0, 1))
     weights_final = np.transpose(weights_final, (2, 0, 1))
     
-    # Verify shapes are consistent
-    assert image_slices.shape[1] == target_size and image_slices.shape[2] == target_size, \
-        f"Image shape mismatch: {image_slices.shape}"
-    assert label_slices.shape[1] == target_size and label_slices.shape[2] == target_size, \
-        f"Label shape mismatch: {label_slices.shape}"
+    assert image_slices.shape[1] == target_size and image_slices.shape[2] == target_size
+    assert label_slices.shape[1] == target_size and label_slices.shape[2] == target_size
     
-    # Prepare output
     result = {
         'images': image_slices,
         'labels': label_slices,
@@ -545,103 +264,94 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
         'scale_factor': scale_factor
     }
     
-    # Force garbage collection to free memory immediately
     gc.collect()
-    
     return result
 
+
 def get_memory_usage():
-    """
-    Get current memory usage information.
-    
-    Returns
-    -------
-    dict
-        Dictionary with memory statistics (in GB)
-    """
+    """Get current memory usage information."""
     try:
         process = psutil.Process(os.getpid())
         mem_info = process.memory_info()
         virtual_mem = psutil.virtual_memory()
-        
         return {
-            'process_rss_gb': mem_info.rss / (1024**3),  # Resident Set Size
-            'process_vms_gb': mem_info.vms / (1024**3),  # Virtual Memory Size
+            'process_rss_gb': mem_info.rss / (1024**3),
             'system_available_gb': virtual_mem.available / (1024**3),
             'system_percent': virtual_mem.percent,
-            'system_total_gb': virtual_mem.total / (1024**3)
         }
-    except Exception as e:
-        # If psutil fails, return None
+    except Exception:
         return None
 
 
-def check_memory_and_warn(threshold_percent=80, verbose=True):
-    """
-    Check system memory usage and warn if it's getting high.
-    
-    Parameters
-    ----------
-    threshold_percent : float
-        Warn if system memory usage exceeds this percentage
-    verbose : bool
-        Whether to print warnings
-    
-    Returns
-    -------
-    bool
-        True if memory usage is below threshold, False otherwise
-    """
+def check_memory_and_warn(threshold_percent=85):
+    """Check system memory usage and warn if high."""
     mem = get_memory_usage()
-    if mem is None:
-        return True  # Cannot check, assume OK
-    
-    if mem['system_percent'] > threshold_percent and verbose:
-        print(f"\n⚠️  WARNING: High memory usage!")
-        print(f"   System: {mem['system_percent']:.1f}% used ({mem['system_available_gb']:.1f} GB available)")
-        print(f"   This process: {mem['process_rss_gb']:.2f} GB")
-        print(f"   Consider reducing num_workers or processing in smaller batches\n")
+    if mem and mem['system_percent'] > threshold_percent:
+        print(f"\n⚠️  WARNING: High memory usage ({mem['system_percent']:.1f}%, {mem['system_available_gb']:.1f} GB available)")
+        print(f"   Process: {mem['process_rss_gb']:.2f} GB. Consider reducing num_workers.\n")
         return False
-    
     return True
 
 
 def _create_resizable_dataset(hf_group, name, dtype, shape, compression='gzip', compression_opts=4, chunks=True):
-    """
-    Helper to create a resizable HDF5 dataset with optimized compression and chunking.
-    
-    Parameters
-    ----------
-    hf_group : h5py.Group
-        HDF5 group to create dataset in
-    name : str
-        Dataset name
-    dtype : np.dtype
-        Data type
-    shape : tuple
-        Initial shape (first dimension should be 0 for empty dataset)
-    compression : str
-        Compression algorithm ('gzip', 'lzf', or None)
-    compression_opts : int
-        Compression level (1-9 for gzip, higher = more compression but slower)
-        Default 4 balances compression ratio and speed
-    chunks : bool or tuple
-        Enable automatic chunking (True) or specify chunk shape
-        Chunking improves memory efficiency for large datasets
-    
-    Returns
-    -------
-    h5py.Dataset
-        Created dataset
-    """
+    """Create a resizable HDF5 dataset with compression."""
     return hf_group.create_dataset(
         name, 
         data=np.empty(shape, dtype=dtype), 
         maxshape=(None,) + shape[1:],
         compression=compression, 
         compression_opts=compression_opts,
-        chunks=chunks  # Auto-chunking for memory efficiency
+        chunks=chunks
     )
+
+
+def _find_image_label_pairs(image_dir, label_dir):
+    """Find matching image-label pairs."""
+    all_image_files = sorted(image_dir.glob("*.nii.gz"))
+    matched_pairs = []
+    
+    for image_file in all_image_files:
+        base_name = image_file.name.replace('.nii.gz', '')
+        label_pattern = f"{base_name}_*.nii.gz"
+        label_matches = sorted(label_dir.glob(label_pattern))
+        
+        if len(label_matches) == 0:
+            print(f"Warning: No label file found for {image_file.name}")
+        elif len(label_matches) == 1:
+            matched_pairs.append((image_file, label_matches[0]))
+        else:
+            print(f"Warning: Multiple label files found for {image_file.name}, skipping")
+    
+    return [pair[0] for pair in matched_pairs], [pair[1] for pair in matched_pairs]
+
+
+def _check_resume_capability(output_hdf5, target_size, preprocess_params):
+    """Check if HDF5 file exists and can be resumed."""
+    already_processed = set()
+    file_mode = 'w'
+    
+    if output_hdf5.exists():
+        try:
+            with h5py.File(output_hdf5, 'r') as hf_check:
+                if str(target_size) in hf_check and 'subject' in hf_check[str(target_size)]:
+                    subjects_in_hdf5 = hf_check[str(target_size)]['subject'][:]
+                    already_processed = set(
+                        str(s.decode('utf-8') if isinstance(s, bytes) else s).strip()
+                        for s in subjects_in_hdf5
+                    )
+                    print(f"✓ Found {len(already_processed)} subjects already processed")
+                    
+                    if 'preprocessing_metadata' in hf_check:
+                        meta = hf_check['preprocessing_metadata']
+                        for key, expected_value in preprocess_params.items():
+                            if key in meta.attrs and meta.attrs[key] != expected_value:
+                                print(f"  ⚠️  Warning: Preprocessing parameter '{key}' differs!")
+                    
+                    file_mode = 'a'
+        except Exception as e:
+            print(f"  ⚠️  Could not read existing file ({e}), will overwrite")
+    
+    return already_processed, file_mode
 
 
 def create_hdf5_dataset(
@@ -656,412 +366,181 @@ def create_hdf5_dataset(
     subject_filter=None,
     num_workers=1,
 ):
-    """
-    Create HDF5 dataset using conform() preprocessing - EXACT same as inference!
-    
-    All images will be preprocessed using conform() with parameters from YAML config,
-    ensuring identical preprocessing during HDF5 creation, training, and inference.
-    
-    Parameters
-    ----------
-    target_size : int
-        Target dimension for all images (e.g., 256 for 256×256)
-    preprocess_params : dict
-        Preprocessing parameters from YAML config['DATA']['PREPROCESSING']
-    num_classes : int, optional
-        Number of classes (2 for binary, >2 for multi-class)
-    """
+    """Create HDF5 dataset using conform() preprocessing."""
     image_dir = Path(data_dir) / "images"
     label_dir = Path(data_dir) / "labels"
     
-    # Find all image files first
-    all_image_files = sorted(image_dir.glob("*.nii.gz"))
+    all_image_files, all_label_files = _find_image_label_pairs(image_dir, label_dir)
     
-    # Find corresponding label files for each image file
-    # Label files have suffix: image "abcde.nii.gz" -> label "abcde_xxx.nii.gz"
-    matched_pairs = []
-    for image_file in all_image_files:
-        # Get base name without extension (e.g., "abcde" from "abcde.nii.gz")
-        base_name = image_file.name.replace('.nii.gz', '')
-        
-        # Look for label file that starts with base_name followed by underscore
-        # Pattern: base_name_*.nii.gz
-        label_pattern = f"{base_name}_*.nii.gz"
-        label_matches = sorted(label_dir.glob(label_pattern))
-        
-        if len(label_matches) == 0:
-            print(f"Warning: No label file found for image {image_file.name} (looking for {label_pattern})")
-        elif len(label_matches) == 1:
-            matched_pairs.append((image_file, label_matches[0]))
-        else:
-            # Multiple matches found - print warning and skip
-            print(f"Warning: Multiple label files found for image {image_file.name}:")
-            for match in label_matches:
-                print(f"  - {match.name}")
-            print(f"  Skipping image {image_file.name} (expected exactly one match)")
-    
-    # Separate into lists for compatibility with existing code
-    all_image_files = [pair[0] for pair in matched_pairs]
-    all_label_files = [pair[1] for pair in matched_pairs]
-    
-    # Filter by subject_filter if provided
     if subject_filter is not None:
-        image_files = []
-        for img_file in all_image_files:
-            # Subject name is filename without .nii.gz extension (normalized)
-            subject_name = img_file.name.replace('.nii.gz', '').strip()
-            if subject_name in subject_filter:
-                image_files.append(img_file)
+        image_files = [
+            img for img in all_image_files
+            if img.name.replace('.nii.gz', '').strip() in subject_filter
+        ]
         print(f"Filtered {len(image_files)}/{len(all_image_files)} subjects based on data split")
     else:
         image_files = all_image_files
-        print(f"Found {len(image_files)} subjects (based on {len(all_label_files)} label files)")
+        print(f"Found {len(image_files)} subjects")
     
-    print(f"Processing plane: {plane}")
-    print(f"Target size: {target_size}×{target_size} (with proportional resizing + padding)")
-    print(f"Output: {output_hdf5}")
+    print(f"Processing plane: {plane}, target size: {target_size}×{target_size}, output: {output_hdf5}")
     if num_workers > 1:
         print(f"Using {num_workers} parallel workers")
     
-    # Display initial memory status
     mem = get_memory_usage()
     if mem:
-        print(f"\n📊 Initial memory status:")
-        print(f"   System: {mem['system_total_gb']:.1f} GB total, "
-              f"{mem['system_available_gb']:.1f} GB available ({100-mem['system_percent']:.1f}% free)")
-        print(f"   This process: {mem['process_rss_gb']:.2f} GB")
-        
-        # Warn if starting with high memory usage
+        print(f"Memory: {mem['system_available_gb']:.1f} GB available ({100-mem['system_percent']:.1f}% free)")
         if mem['system_percent'] > 70:
-            print(f"   ⚠️  Warning: System already using {mem['system_percent']:.1f}% of memory")
-            print(f"   Consider closing other applications or reducing num_workers")
+            print(f"  ⚠️  Warning: System using {mem['system_percent']:.1f}% of memory")
     
-    # Collect all data (single size bin since everything will be target_size × target_size)
-    # Removed all_data dictionary for incremental HDF5 writing
-
-    # Process subjects
-    total_subjects = len(image_files)
-
-    print(f"\nWriting HDF5 file: {output_hdf5}")
     output_hdf5.parent.mkdir(parents=True, exist_ok=True)
-
-    # Check if HDF5 file already exists (resume capability)
-    already_processed_subjects = set()
-    file_mode = 'w'  # Default: create new file
     
-    if output_hdf5.exists():
-        print(f"✓ Found existing HDF5 file, checking for resume...")
-        try:
-            with h5py.File(output_hdf5, 'r') as hf_check:
-                if str(target_size) in hf_check and 'subject' in hf_check[str(target_size)]:
-                    # Read list of already processed subjects
-                    subjects_in_hdf5 = hf_check[str(target_size)]['subject'][:]
-                    # Convert bytes to strings if needed (HDF5 may store as bytes)
-                    # Normalize: strip whitespace and ensure string type
-                    already_processed_subjects = set(
-                        str(s.decode('utf-8') if isinstance(s, bytes) else s).strip()
-                        for s in subjects_in_hdf5
-                    )
-                    num_existing_slices = len(subjects_in_hdf5)
-                    
-                    print(f"  Found {len(already_processed_subjects)} subjects already processed ({num_existing_slices} slices)")
-                    
-                    # Verify preprocessing metadata matches
-                    if 'preprocessing_metadata' in hf_check:
-                        meta = hf_check['preprocessing_metadata']
-                        for key, expected_value in preprocess_params.items():
-                            if key in meta.attrs:
-                                existing_value = meta.attrs[key]
-                                if existing_value != expected_value:
-                                    print(f"  ⚠️  Warning: Preprocessing parameter '{key}' differs!")
-                                    print(f"      Existing: {existing_value}, Current: {expected_value}")
-                                    print(f"      Recommend starting fresh or using same config.")
-                    
-                    file_mode = 'a'  # Append mode for resume
-                    print(f"  ✓ Resume mode enabled - will skip already processed subjects")
-                else:
-                    print(f"  No valid data found in existing file, will overwrite")
-        except Exception as e:
-            print(f"  ⚠️  Could not read existing file ({e}), will overwrite")
+    already_processed, file_mode = _check_resume_capability(output_hdf5, target_size, preprocess_params)
     
-    # Filter out already processed subjects
-    if already_processed_subjects:
+    if already_processed:
         original_count = len(image_files)
-        
-        # Normalize subject names from image files for comparison (strip whitespace)
         image_files = [
             img for img in image_files 
-            if img.name.replace('.nii.gz', '').strip() not in already_processed_subjects
+            if img.name.replace('.nii.gz', '').strip() not in already_processed
         ]
-        print(f"  Filtered: {original_count} → {len(image_files)} subjects remaining to process")
-        
+        print(f"Filtered: {original_count} → {len(image_files)} subjects remaining")
         if len(image_files) == 0:
-            print(f"\n✅ All subjects already processed! Nothing to do.")
+            print("✅ All subjects already processed!")
             return
     
-    # Update total_subjects to reflect actual number to process (after filtering)
     total_subjects = len(image_files)
-
-    num_samples_written = 0 # Initialize counter for samples written
-
+    num_samples_written = 0
+    
     with h5py.File(output_hdf5, file_mode) as hf:
-        # Handle preprocessing metadata (create or verify existing)
         if 'preprocessing_metadata' not in hf:
-            # Save preprocessing metadata for validation during training!
-            # This ensures training can verify HDF5 was created with correct parameters
             preprocess_metadata = hf.create_group('preprocessing_metadata')
             for key, value in preprocess_params.items():
                 preprocess_metadata.attrs[key] = value
             preprocess_metadata.attrs['created_with_conform'] = True
             preprocess_metadata.attrs['version'] = '1.0'
-            
-            print(f"✓ Saved preprocessing metadata to HDF5 (for validation during training)")
-        else:
-            print(f"✓ Using existing preprocessing metadata")
+            print("✓ Saved preprocessing metadata")
         
-        # Get or create group for the target size
         if str(target_size) not in hf:
             grp = hf.create_group(str(target_size))
-            
-            # --- Initialize resizable datasets ---
-            # Dummy shapes for initial creation. They will be resized dynamically.
-            # Images: (slices, height, width, channels)
-            # Labels/Weights: (slices, height, width)
-            # Zooms: (slices, 2)
-
-            # The 'slice_thickness * 2 + 1' determines the number of channels for images (thick slices)
             initial_img_shape = (0, target_size, target_size, slice_thickness * 2 + 1)
             initial_label_weight_shape = (0, target_size, target_size)
             initial_zoom_shape = (0, 2)
-
+            
             images_ds = _create_resizable_dataset(grp, 'orig_dataset', np.float32, initial_img_shape)
             labels_ds = _create_resizable_dataset(grp, 'aseg_dataset', np.int32, initial_label_weight_shape)
             weights_ds = _create_resizable_dataset(grp, 'weight_dataset', np.float32, initial_label_weight_shape)
             zooms_ds = _create_resizable_dataset(grp, 'zoom_dataset', np.float32, initial_zoom_shape)
-            
-            # Subject dataset (variable length string) needs special handling
             subjects_ds = grp.create_dataset('subject', (0,), maxshape=(None,), dtype=h5py.string_dtype(encoding='utf-8'))
-            
             print(f"✓ Created new datasets for size {target_size}")
         else:
-            # Append mode - get existing datasets
             grp = hf[str(target_size)]
             images_ds = grp['orig_dataset']
             labels_ds = grp['aseg_dataset']
             weights_ds = grp['weight_dataset']
             zooms_ds = grp['zoom_dataset']
             subjects_ds = grp['subject']
-            
             print(f"✓ Appending to existing datasets (current size: {images_ds.shape[0]} slices)")
-
-        # Prepare arguments for parallel processing
+        
+        datasets = (images_ds, labels_ds, weights_ds, zooms_ds, subjects_ds)
+        
         process_args = [
-            (idx, image_file, label_dir, plane, 
-             slice_thickness, target_size, atlas_manager, preprocess_params, num_classes, total_subjects)
+            (idx, image_file, label_dir, plane, slice_thickness, target_size, 
+             atlas_manager, preprocess_params, num_classes, total_subjects)
             for idx, image_file in enumerate(image_files, 1)
         ]
         
+        subjects_processed = 0
+        
         if num_workers > 1:
-            # Parallel processing
-            subjects_processed = 0
             with Pool(processes=num_workers) as pool:
                 for result_data, msg in pool.imap_unordered(_process_single_subject_wrapper, process_args):
                     print(msg)
                     if result_data is not None:
                         result, subject_name = result_data
-                        num_slices = result['num_slices']
-                        
-                        # Resize datasets and append
-                        current_len = images_ds.shape[0]
-                        images_ds.resize(current_len + num_slices, axis=0)
-                        images_ds[current_len:current_len + num_slices] = result['images']
-
-                        labels_ds.resize(current_len + num_slices, axis=0)
-                        labels_ds[current_len:current_len + num_slices] = result['labels']
-
-                        weights_ds.resize(current_len + num_slices, axis=0)
-                        weights_ds[current_len:current_len + num_slices] = result['weights']
-
-                        zooms_ds.resize(current_len + num_slices, axis=0)
-                        zooms_ds[current_len:current_len + num_slices] = result['zooms']
-
-                        subjects_ds.resize(current_len + num_slices, axis=0)
-                        subjects_ds[current_len:current_len + num_slices] = [subject_name] * num_slices
-
-                        num_samples_written += num_slices
+                        num_samples_written += _append_to_datasets(datasets, result, subject_name)
                         subjects_processed += 1
-                        
-                        # Check memory every 10 subjects
                         if subjects_processed % 10 == 0:
-                            check_memory_and_warn(threshold_percent=85, verbose=True)
+                            check_memory_and_warn()
         else:
-            # Serial processing
-            subjects_processed = 0
             for args in process_args:
                 result_data, msg = _process_single_subject_wrapper(args)
                 print(msg)
                 if result_data is not None:
                     result, subject_name = result_data
-                    num_slices = result['num_slices']
-                    
-                    # Resize datasets and append
-                    current_len = images_ds.shape[0]
-                    images_ds.resize(current_len + num_slices, axis=0)
-                    images_ds[current_len:current_len + num_slices] = result['images']
-
-                    labels_ds.resize(current_len + num_slices, axis=0)
-                    labels_ds[current_len:current_len + num_slices] = result['labels']
-
-                    weights_ds.resize(current_len + num_slices, axis=0)
-                    weights_ds[current_len:current_len + num_slices] = result['weights']
-
-                    zooms_ds.resize(current_len + num_slices, axis=0)
-                    zooms_ds[current_len:current_len + num_slices] = result['zooms']
-
-                    subjects_ds.resize(current_len + num_slices, axis=0)
-                    subjects_ds[current_len:current_len + num_slices] = [subject_name] * num_slices
-                    
-                    num_samples_written += num_slices
+                    num_samples_written += _append_to_datasets(datasets, result, subject_name)
                     subjects_processed += 1
-                    
-                    # Check memory every 10 subjects
                     if subjects_processed % 10 == 0:
-                        check_memory_and_warn(threshold_percent=85, verbose=True)
-
-    # After the loop, the HDF5 file is closed.
-    # Re-open in read mode to get final shapes and subject list for printing.
+                        check_memory_and_warn()
+    
+    # Final summary
     with h5py.File(output_hdf5, 'r') as hf:
         grp = hf[str(target_size)]
-        
-        # Get the actual number of unique subjects from the HDF5 dataset
-        # This will load all subjects into memory, but only for reporting, not processing.
         unique_subjects = len(set(grp['subject'][:]))
         total_slices_in_file = grp['orig_dataset'].shape[0]
-
         skipped_count = len(image_files) - subjects_processed
         
         if file_mode == 'a' and num_samples_written > 0:
             print(f"Newly added: {num_samples_written} slices from {subjects_processed} subjects")
-            if skipped_count > 0:
-                print(f"Skipped: {skipped_count} subjects (invalid zoom values or no valid slices)")
-            print(f"Total in file: {total_slices_in_file} slices from {unique_subjects} subjects")
-        elif file_mode == 'a' and num_samples_written == 0:
-            # Resume mode but no new data (either all failed or all were already done)
-            if len(image_files) > 0:
-                print("⚠️  Warning: No new data added! All subjects in this run failed processing.")
-            print(f"Total in file: {total_slices_in_file} slices from {unique_subjects} subjects")
+        elif file_mode == 'a' and num_samples_written == 0 and len(image_files) > 0:
+            print("⚠️  Warning: No new data added! All subjects failed processing.")
         else:
             print(f"Successfully processed: {subjects_processed} subjects → {num_samples_written} slices")
-            if skipped_count > 0:
-                print(f"Skipped: {skipped_count} subjects (invalid zoom values or no valid slices)")
-            print(f"Total: {num_samples_written} slices from {unique_subjects} subjects")
+        
+        if skipped_count > 0:
+            print(f"Skipped: {skipped_count} subjects (invalid zoom values or no valid slices)")
+        
+        print(f"Total in file: {total_slices_in_file} slices from {unique_subjects} subjects")
         print(f"All images are exactly {target_size}×{target_size}")
         
         if total_slices_in_file == 0:
-            print("⚠️  Warning: HDF5 file is empty! No valid data was processed.")
+            print("⚠️  Warning: HDF5 file is empty!")
             return
         
-        print(f"Final array shapes:")
-        print(f"  Images: {grp['orig_dataset'].shape}")
-        print(f"  Labels: {grp['aseg_dataset'].shape}")
-        print(f"  Weights: {grp['weight_dataset'].shape}")
+        print(f"Final shapes: Images {grp['orig_dataset'].shape}, Labels {grp['aseg_dataset'].shape}")
         
-        # Verify all dimensions are correct
-        assert grp['orig_dataset'].shape[1] == target_size and grp['orig_dataset'].shape[2] == target_size
-        assert grp['aseg_dataset'].shape[1] == target_size and grp['aseg_dataset'].shape[2] == target_size
-        
-        # ⚠️ VALIDATION: Check for problematic zoom values in the final HDF5 file
-        print(f"\n{'='*80}")
-        print(f"ZOOM VALUE VALIDATION")
-        print(f"{'='*80}")
+        # Validate zoom values
         zooms_array = grp['zoom_dataset'][:]
-        subjects_array = grp['subject'][:]
-        
-        # Find slices with zero or near-zero zoom values
         invalid_mask = np.any(np.abs(zooms_array) < 1e-6, axis=1)
         num_invalid = np.sum(invalid_mask)
         
         if num_invalid > 0:
-            print(f"⚠️  WARNING: Found {num_invalid} slices with invalid zoom values!")
-            print(f"   Total slices: {len(zooms_array)}")
-            print(f"   Invalid percentage: {100*num_invalid/len(zooms_array):.2f}%")
-            
-            # Get unique subjects with problematic zoom values
+            print(f"\n⚠️  WARNING: Found {num_invalid} slices with invalid zoom values ({100*num_invalid/len(zooms_array):.2f}%)")
+            subjects_array = grp['subject'][:]
             invalid_subjects = np.unique(subjects_array[invalid_mask])
-            print(f"\n   Affected subjects ({len(invalid_subjects)}):")
-            for subj in invalid_subjects[:20]:  # Show first 20
-                if isinstance(subj, bytes):
-                    subj_str = subj.decode('utf-8')
-                else:
-                    subj_str = str(subj)
-                
-                # Get a sample zoom value from this subject
-                subj_mask = subjects_array == subj
-                sample_zoom = zooms_array[subj_mask & invalid_mask][0]
-                print(f"     - {subj_str}: zoom = {sample_zoom}")
-            
-            if len(invalid_subjects) > 20:
-                print(f"     ... and {len(invalid_subjects) - 20} more")
-            
-            print(f"\n   These invalid zoom values will be handled during training,")
-            print(f"   but you should investigate the source NIfTI files.")
+            print(f"   Affected subjects ({len(invalid_subjects)}): {list(invalid_subjects[:10])}")
+            if len(invalid_subjects) > 10:
+                print(f"   ... and {len(invalid_subjects) - 10} more")
         else:
-            print(f"✓ All zoom values are valid!")
-            print(f"  Total slices checked: {len(zooms_array)}")
-            # Show zoom value statistics
-            print(f"  Zoom range: [{np.min(zooms_array):.4f}, {np.max(zooms_array):.4f}]")
-            print(f"  Zoom mean: {np.mean(zooms_array):.4f}")
-        print(f"{'='*80}\n")
-        
-    print(f"✅ Done! HDF5 file created: {output_hdf5}")
-    print(f"   All slices are exactly {target_size}×{target_size} (no dimension mismatches!)")
+            print(f"\n✓ All zoom values valid (range: [{np.min(zooms_array):.4f}, {np.max(zooms_array):.4f}])")
     
-    # Display final memory status
-    mem = get_memory_usage()
-    if mem:
-        print(f"\n📊 Final memory status:")
-        print(f"   System: {mem['system_available_gb']:.1f} GB available ({100-mem['system_percent']:.1f}% free)")
-        print(f"   This process: {mem['process_rss_gb']:.2f} GB")
+    print(f"✅ Done! HDF5 file: {output_hdf5}")
 
 
-# Module-level function for multiprocessing (must be picklable)
 def _process_single_subject_wrapper(args):
-    """
-    Wrapper function for parallel processing.
-    Must be at module level to be picklable by multiprocessing.
-    """
+    """Wrapper function for parallel processing."""
     idx, image_file, label_dir, plane, slice_thickness, target_size, atlas_manager, preprocess_params, num_classes, total_subjects = args
     
-    # Find label file: image "abcde.nii.gz" -> label "abcde_xxx.nii.gz"
     base_name = image_file.name.replace('.nii.gz', '')
     label_pattern = f"{base_name}_*.nii.gz"
     label_matches = sorted(label_dir.glob(label_pattern))
-    
-    # Get subject name (base name without .nii.gz, normalized)
     subject_name = image_file.name.replace('.nii.gz', '').strip()
     
     if len(label_matches) == 0:
-        return None, f"Warning: No label file found for {subject_name} (looking for {label_pattern}), skipping"
+        return None, f"Warning: No label file found for {subject_name}, skipping"
     elif len(label_matches) > 1:
-        # Multiple matches - print warning and skip
-        matches_str = ", ".join([m.name for m in label_matches])
-        return None, f"Warning: Multiple label files found for {subject_name}: {matches_str}. Skipping (expected exactly one match)"
+        return None, f"Warning: Multiple label files found for {subject_name}, skipping"
     
-    label_file = label_matches[0]  # Exactly one match
+    label_file = label_matches[0]
     
     try:
-        # Show verbose output for every 50th subject, OR for skipped subjects (to see why they're skipped)
-        show_details = (idx % 50 == 0)
-        result = process_subject(image_file, label_file, plane, slice_thickness, target_size, atlas_manager, preprocess_params, num_classes, verbose=show_details)
+        result = process_subject(
+            image_file, label_file, plane, slice_thickness, target_size,
+            atlas_manager, preprocess_params, num_classes, verbose=False
+        )
         
         if result is None:
-            # If skipped and not already verbose, run again with verbose to see why
-            if not show_details:
-                print(f"\n⚠️  Subject skipped: {subject_name}")
-                process_subject(image_file, label_file, plane, slice_thickness, target_size, atlas_manager, preprocess_params, num_classes, verbose=True)
             return None, f"Processing ({idx}/{total_subjects}): {subject_name} → Skipped"
         
-        status_msg = f"Processing ({idx}/{total_subjects}): {subject_name} → {result['num_slices']} slices (scale={result['scale_factor']:.3f})"
+        status_msg = f"Processing ({idx}/{total_subjects}): {subject_name} → {result['num_slices']} slices"
         return (result, subject_name), status_msg
         
     except Exception as e:
@@ -1069,94 +548,51 @@ def _process_single_subject_wrapper(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Generate HDF5 dataset with proportional resizing (macacaMRINN-style)"
-    )
-    
-    parser.add_argument(
-        "--config", type=str, required=True,
-        help="Path to YAML config file (SINGLE SOURCE OF TRUTH)"
-    )
-    parser.add_argument(
-        "--split_type", type=str, required=True, choices=["train", "val"],
-        help="Which split to generate: train or val"
-    )
-    parser.add_argument(
-        "--atlas", type=str, default=None,
-        help="Atlas name (e.g., ARM2, ARM3). If not provided, uses ATLAS_NAME env var or defaults to ARM2"
-    )
+    parser = argparse.ArgumentParser(description="Generate HDF5 dataset with proportional resizing")
+    parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
+    parser.add_argument("--split_type", type=str, required=True, choices=["train", "val"], help="train or val")
+    parser.add_argument("--atlas", type=str, default=None, help="Atlas name (e.g., ARM2, ARM3)")
     
     args = parser.parse_args()
     
-    # Load ALL parameters from YAML using unified config utilities
     cfg = load_yaml_config(args.config)
     paths = get_paths_from_config(cfg)
-    
-    # Get NUM_CLASSES to determine mode (binary vs multi-class)
     num_classes = cfg['MODEL']['NUM_CLASSES']
     is_binary = (num_classes == 2)
     
-    # Binary brain mask mode - no atlas needed
     if is_binary:
-        print(f"Binary segmentation mode detected (NUM_CLASSES={num_classes})")
-        print("No atlas required for brain mask task")
+        print(f"Binary segmentation mode (NUM_CLASSES={num_classes})")
         atlas_manager = None
-        atlas_name = "binary"
     else:
-        # Multi-class mode - require atlas
-        # Determine atlas name from YAML config (CLASS_OPTIONS) or command line
         if cfg['DATA']['CLASS_OPTIONS'] is None or not cfg['DATA']['CLASS_OPTIONS']:
             raise ValueError(
-                f"Multi-class mode (NUM_CLASSES={num_classes}) requires CLASS_OPTIONS in config.\n"
-                "For binary brain mask (NUM_CLASSES=2), set CLASS_OPTIONS: null"
+                f"Multi-class mode (NUM_CLASSES={num_classes}) requires CLASS_OPTIONS in config."
             )
         
-        # Require CLASS_OPTIONS from config (no env var fallback)
         if args.atlas:
             atlas_name = args.atlas
-            print(f"Using atlas from command line: {atlas_name}")
         elif cfg['DATA']['CLASS_OPTIONS'] and cfg['DATA']['CLASS_OPTIONS'][0]:
             atlas_name = cfg['DATA']['CLASS_OPTIONS'][0]
-            print(f"Using atlas from config: {atlas_name}")
         else:
-            raise ValueError(
-                f"Multi-class mode (NUM_CLASSES={num_classes}) requires atlas name.\n"
-                "Please specify CLASS_OPTIONS in config or use --atlas argument."
-            )
+            raise ValueError("Multi-class mode requires atlas name in CLASS_OPTIONS or --atlas argument.")
         
-        print(f"Multi-class segmentation mode (NUM_CLASSES={num_classes})")
-        print(f"Using atlas: {atlas_name}")
-        
-        # Initialize atlas manager
+        print(f"Multi-class segmentation mode (NUM_CLASSES={num_classes}), atlas: {atlas_name}")
         atlas_manager = get_atlas_manager(atlas_name)
     
-    # Extract parameters from YAML
     data_dir = paths['data_dir']
     plane = cfg['DATA']['PLANE']
-    target_size = cfg['DATA']['SIZES'][0]  # First size from list
-    thickness = (cfg['MODEL']['NUM_CHANNELS'] - 1) // 2  # Derive from num channels
+    target_size = cfg['DATA']['SIZES'][0]
+    thickness = (cfg['MODEL']['NUM_CHANNELS'] - 1) // 2
     num_workers = cfg['TRAIN'].get('NUM_WORKERS', 4)
-    
-    # Extract preprocessing parameters - SINGLE SOURCE OF TRUTH!
-    # These EXACT same parameters will be saved in checkpoint and used in inference
     preprocess_params = cfg['DATA']['PREPROCESSING']
-    print(f"\n{'='*80}")
-    print(f"PREPROCESSING PARAMETERS (Single Source of Truth)")
-    print(f"{'='*80}")
-    print(f"  Orientation:      {preprocess_params['ORIENTATION']}")
-    print(f"  Image size:       {preprocess_params['IMG_SIZE']}")
-    print(f"  Voxel size:       {preprocess_params['VOX_SIZE']}")
-    print(f"  Dtype (images):   {preprocess_params['DTYPE_IMAGE']}")
-    print(f"  Dtype (labels):   {preprocess_params['DTYPE_LABEL']} (supports negative IDs!)")
-    print(f"  Rescale (images): {preprocess_params['RESCALE']}")
-    print(f"  Order (image):    {preprocess_params['ORDER_IMAGE']}")
-    print(f"  Order (label):    {preprocess_params['ORDER_LABEL']}")
-    print(f"{'='*80}\n")
     
-    # Select appropriate HDF5 output path based on split type
+    print(f"\nPreprocessing parameters:")
+    print(f"  Orientation: {preprocess_params['ORIENTATION']}")
+    print(f"  Image size: {preprocess_params['IMG_SIZE']}, Voxel size: {preprocess_params['VOX_SIZE']}")
+    print(f"  Dtype (image/label): {preprocess_params['DTYPE_IMAGE']}/{preprocess_params['DTYPE_LABEL']}")
+    
     output_hdf5 = paths['train_hdf5'] if args.split_type == 'train' else paths['val_hdf5']
     
-    # Load split JSON
     split_json = data_dir / "data_split.json"
     subject_filter = None
     if split_json.exists():
@@ -1164,15 +600,10 @@ def main():
             split = json.load(f)
             subject_filter = set(split[args.split_type])
     
-    print(f"Configuration from YAML: {args.config}")
-    print(f"  Data dir:      {data_dir}")
-    print(f"  Plane:         {plane}")
-    print(f"  Target size:   {target_size}×{target_size}")
-    print(f"  Thickness:     {thickness}")
-    print(f"  Workers:       {num_workers}")
-    print(f"  Split:         {args.split_type}")
-    print(f"  Output HDF5:   {output_hdf5}")
-    print()
+    print(f"\nConfiguration:")
+    print(f"  Data dir: {data_dir}, Plane: {plane}, Target size: {target_size}×{target_size}")
+    print(f"  Thickness: {thickness}, Workers: {num_workers}, Split: {args.split_type}")
+    print(f"  Output HDF5: {output_hdf5}\n")
     
     create_hdf5_dataset(
         data_dir=data_dir,
@@ -1181,8 +612,8 @@ def main():
         target_size=target_size,
         slice_thickness=thickness,
         atlas_manager=atlas_manager,
-        preprocess_params=preprocess_params,  # Pass preprocessing params from YAML
-        num_classes=num_classes,  # Pass NUM_CLASSES for binary/multi-class detection
+        preprocess_params=preprocess_params,
+        num_classes=num_classes,
         subject_filter=subject_filter,
         num_workers=num_workers
     )
@@ -1190,4 +621,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

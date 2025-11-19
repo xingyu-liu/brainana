@@ -37,7 +37,7 @@ TRAIN:
   NUM_EPOCHS: 100
   NUM_STEPS: 10
   FINE_TUNE: true
-  PRETRAINED_MODEL: "/home/star/github/banana/FastSurferCNN/pretrained_model/T1w_seg-ARM2_coronal.pkl"
+  PRETRAINED_MODEL: ""
   CHECKPOINT_PERIOD: 5
   NUM_WORKERS: 4
   EARLY_STOPPING: true
