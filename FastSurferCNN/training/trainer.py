@@ -287,12 +287,18 @@ class Trainer:
         logger.info(f"Evaluating model at epoch {epoch}")
         self.model.eval()
 
-        # Track overall metrics (not per scale factor)
-        ints_ = np.zeros(self.num_classes - 1)
-        unis_ = np.zeros(self.num_classes - 1)
-        per_cls_counts_gt = np.zeros(self.num_classes - 1)
-        per_cls_counts_pred = np.zeros(self.num_classes - 1)
-        accs = np.zeros(self.num_classes - 1)  # -1 to exclude background (still included in val loss)
+        val_loss_total = defaultdict(float)
+        val_loss_dice = defaultdict(float)
+        val_loss_ce = defaultdict(float)
+
+        ints_ = defaultdict(lambda: np.zeros(self.num_classes - 1))
+        unis_ = defaultdict(lambda: np.zeros(self.num_classes - 1))
+        miou = np.zeros(self.num_classes - 1)
+        per_cls_counts_gt = defaultdict(lambda: np.zeros(self.num_classes - 1))
+        per_cls_counts_pred = defaultdict(lambda: np.zeros(self.num_classes - 1))
+        accs = defaultdict(
+            lambda: np.zeros(self.num_classes - 1)
+        )  # -1 to exclude background (still included in val loss)
 
         val_start = time.time()
         # Start background dice tracking for validation
@@ -316,17 +322,24 @@ class Trainer:
             # Get predictions for metrics and plotting
             _, batch_output = torch.max(pred, dim=1)
 
-            # Calculate iou_scores, accuracy and dice confusion matrix + sum over previous batches
-            int_, uni_ = iou_score(batch_output, labels, self.num_classes)
-            ints_ += int_
-            unis_ += uni_
+            sf = torch.unique(scale_factors)
+            if len(sf) == 1:
+                sf = sf.item()
+                val_loss_total[sf] += loss_total.item()
+                val_loss_dice[sf] += loss_dice.item()
+                val_loss_ce[sf] += loss_ce.item()
 
-            tpos, pcc_gt, pcc_pred = precision_recall(
-                batch_output, labels, self.num_classes
-            )
-            accs += tpos
-            per_cls_counts_gt += pcc_gt
-            per_cls_counts_pred += pcc_pred
+                # Calculate iou_scores, accuracy and dice confusion matrix + sum over previous batches
+                int_, uni_ = iou_score(batch_output, labels, self.num_classes)
+                ints_[sf] += int_
+                unis_[sf] += uni_
+
+                tpos, pcc_gt, pcc_pred = precision_recall(
+                    batch_output, labels, self.num_classes
+                )
+                accs[sf] += tpos
+                per_cls_counts_gt[sf] += pcc_gt
+                per_cls_counts_pred[sf] += pcc_pred
 
             # Plot sample predictions
             if curr_iter == (len(val_loader) // 2):
@@ -357,7 +370,7 @@ class Trainer:
         
         # Get validation metrics for CSV logging
         val_loss = np.array(val_meter.batch_losses).mean()
-        val_dice, _ = val_meter.dice_score.compute()
+        val_dice, dice_matrix = val_meter.dice_score.compute()
         val_dice = val_dice.item() if hasattr(val_dice, 'item') else val_dice
         self._current_val_loss = val_loss
         self._current_val_dice = val_dice
@@ -366,30 +379,28 @@ class Trainer:
             f"Validation epoch {epoch} finished in {time.time() - val_start:.04f} seconds"
         )
 
-        # Calculate overall metrics
-        # Safe division for IoU (avoid division by zero)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            ious = np.divide(ints_, unis_, out=np.zeros_like(ints_), where=unis_!=0)
-        miou = np.mean(ious)
+        # Get final measures and log them
+        for key in accs.keys():
+            ious = ints_[key] / unis_[key]
+            miou += ious
+            val_loss_total[key] /= curr_iter + 1
+            val_loss_dice[key] /= curr_iter + 1
+            val_loss_ce[key] /= curr_iter + 1
 
-        # Safe division for precision and recall (avoid division by zero)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            recall = np.divide(accs, per_cls_counts_gt, out=np.zeros_like(accs), where=per_cls_counts_gt!=0)
-            precision = np.divide(accs, per_cls_counts_pred, out=np.zeros_like(accs), where=per_cls_counts_pred!=0)
-        
-        mean_recall = np.mean(recall) if np.any(per_cls_counts_gt > 0) else 0.0
-        mean_precision = np.mean(precision) if np.any(per_cls_counts_pred > 0) else 0.0
+            # Log metrics
+            logger.info(
+                f"[Epoch {epoch} stats]: SF: {key}, MIoU: {np.mean(ious):.4f}; "
+                f"Mean Recall: {np.mean(accs[key] / per_cls_counts_gt[key]):.4f}; "
+                f"Mean Precision: {np.mean(accs[key] / per_cls_counts_pred[key]):.4f}; "
+                f"Avg loss total: {val_loss_total[key]:.4f}; "
+                f"Avg loss dice: {val_loss_dice[key]:.4f}; "
+                f"Avg loss ce: {val_loss_ce[key]:.4f}"
+            )
 
-        # Log overall metrics
-        logger.info(
-            f"[Epoch {epoch} stats]: MIoU: {miou:.4f}; "
-            f"Mean Recall: {mean_recall:.4f}; "
-            f"Mean Precision: {mean_precision:.4f}; "
-            f"Val Loss: {val_loss:.4f}; "
-            f"Val Dice: {val_dice:.4f}"
-        )
+            # logger.info(self.a.format(*self.class_names))
+            # logger.info(self.a.format(*ious))
 
-        return miou
+        return np.mean(np.mean(miou))
 
     def run(self):
         """

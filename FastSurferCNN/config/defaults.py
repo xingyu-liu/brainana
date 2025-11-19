@@ -65,9 +65,6 @@ _C.MODEL.HEIGHT = 256
 # The width of segmentation model
 _C.MODEL.WIDTH = 256
 
-# The base resolution of the segmentation model (after interpolation layer)
-_C.MODEL.BASE_RES = 1.0
-
 # Interpolation mode for up/downsampling in Flex networks
 _C.MODEL.INTERPOLATION_MODE = "bilinear"
 

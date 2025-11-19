@@ -5,7 +5,7 @@
 TRAINING_DATA_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_data/T1w_seg-ARM2"
 
 # Direct path to output directory (for training logs, checkpoints, etc.)
-OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/test"
+OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/T1w_seg-ARM2_coronal_v4"
 
 # ==============================================================================
 # MODEL ARCHITECTURE
@@ -25,7 +25,6 @@ MODEL:
   POOL: 2
   HEIGHT: 256              # Internal processing = 256
   WIDTH: 256
-  BASE_RES: 1.0
   INTERPOLATION_MODE: "bilinear"
   CROP_POSITION: "top_left"
   # OUT_TENSOR_WIDTH/HEIGHT removed: defaults to PADDED_SIZE (256) via fallback mechanism

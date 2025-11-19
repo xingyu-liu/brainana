@@ -708,8 +708,8 @@ def create_hdf5_dataset(
     if subject_filter is not None:
         image_files = []
         for img_file in all_image_files:
-            # Subject name is filename without .nii.gz extension
-            subject_name = img_file.name.replace('.nii.gz', '')
+            # Subject name is filename without .nii.gz extension (normalized)
+            subject_name = img_file.name.replace('.nii.gz', '').strip()
             if subject_name in subject_filter:
                 image_files.append(img_file)
         print(f"Filtered {len(image_files)}/{len(all_image_files)} subjects based on data split")
@@ -757,8 +757,9 @@ def create_hdf5_dataset(
                     # Read list of already processed subjects
                     subjects_in_hdf5 = hf_check[str(target_size)]['subject'][:]
                     # Convert bytes to strings if needed (HDF5 may store as bytes)
+                    # Normalize: strip whitespace and ensure string type
                     already_processed_subjects = set(
-                        s.decode('utf-8') if isinstance(s, bytes) else s 
+                        str(s.decode('utf-8') if isinstance(s, bytes) else s).strip()
                         for s in subjects_in_hdf5
                     )
                     num_existing_slices = len(subjects_in_hdf5)
@@ -786,9 +787,11 @@ def create_hdf5_dataset(
     # Filter out already processed subjects
     if already_processed_subjects:
         original_count = len(image_files)
+        
+        # Normalize subject names from image files for comparison (strip whitespace)
         image_files = [
             img for img in image_files 
-            if img.name.replace('.nii.gz', '') not in already_processed_subjects
+            if img.name.replace('.nii.gz', '').strip() not in already_processed_subjects
         ]
         print(f"  Filtered: {original_count} → {len(image_files)} subjects remaining to process")
         
@@ -1034,8 +1037,8 @@ def _process_single_subject_wrapper(args):
     label_pattern = f"{base_name}_*.nii.gz"
     label_matches = sorted(label_dir.glob(label_pattern))
     
-    # Get subject name (base name without .nii.gz)
-    subject_name = image_file.name.replace('.nii.gz', '')
+    # Get subject name (base name without .nii.gz, normalized)
+    subject_name = image_file.name.replace('.nii.gz', '').strip()
     
     if len(label_matches) == 0:
         return None, f"Warning: No label file found for {subject_name} (looking for {label_pattern}), skipping"

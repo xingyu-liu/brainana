@@ -25,7 +25,6 @@ MODEL:
   POOL: 2
   HEIGHT: 256              # Internal processing = 256
   WIDTH: 256
-  BASE_RES: 1.0
   INTERPOLATION_MODE: "bilinear"
   CROP_POSITION: "top_left"
   # OUT_TENSOR_WIDTH/HEIGHT removed: defaults to PADDED_SIZE (256) via fallback mechanism
@@ -38,7 +37,7 @@ TRAIN:
   NUM_EPOCHS: 100
   NUM_STEPS: 10
   FINE_TUNE: true
-  PRETRAINED_MODEL: ""
+  PRETRAINED_MODEL: "/home/star/github/banana/FastSurferCNN/pretrained_model/T1w_seg-ARM2_axial.pkl"
   CHECKPOINT_PERIOD: 5
   NUM_WORKERS: 4
   EARLY_STOPPING: true

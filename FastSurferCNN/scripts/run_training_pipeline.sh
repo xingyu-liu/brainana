@@ -18,22 +18,22 @@
 
 # YAML config file (SINGLE SOURCE OF TRUTH - like macacaMRINN!)
 export PYTHONPATH="/home/star/github/banana:$PYTHONPATH"
-YAML_CONFIG=/home/star/github/banana/FastSurferCNN/config/FastSurferVINN_T1w_ARM2_coronal.yaml
-# YAML_CONFIG=/home/star/github/banana/FastSurferCNN/config/FastSurferVINN_EPI_brainmask_axial.yaml
+# YAML_CONFIG=/home/star/github/banana/FastSurferCNN/config/FastSurferVINN_T1w_ARM2_coronal.yaml
+YAML_CONFIG=/home/star/github/banana/FastSurferCNN/config/FastSurferVINN_EPI_brainmask_axial.yaml
 
-# ============================================================================
-# STEP 1: Split Data into Train/Val
-# ============================================================================
+# # ============================================================================
+# # STEP 1: Split Data into Train/Val
+# # ============================================================================
 
-# Note: Split script will read data path and seed from YAML
-python3 FastSurferCNN/training/step1_split_data.py \
-    --config "$YAML_CONFIG"
+# # Note: Split script will read data path and seed from YAML
+# python3 FastSurferCNN/training/step1_split_data.py \
+#     --config "$YAML_CONFIG"
 
-if [ $? -eq 0 ]; then
-    echo "Data split completed successfully"
-else
-    echo "Data split had errors, but continuing..."
-fi
+# if [ $? -eq 0 ]; then
+#     echo "Data split completed successfully"
+# else
+#     echo "Data split had errors, but continuing..."
+# fi
 
 # ============================================================================
 # STEP 2: Generate HDF5 Datasets

@@ -493,11 +493,12 @@ class Inference:
             Prediction probability tensor.
         """
         # Set up DataLoader
+        rescale = self.cfg.DATA.PREPROCESSING.RESCALE
         test_dataset = MultiScaleOrigDataThickSlices(
             orig_data,
             orig_zoom,
             self.cfg,
-            transforms=transforms.Compose([ToTensorTest()]),
+            transforms=transforms.Compose([ToTensorTest(rescale=rescale)]),
         )
 
         test_data_loader = DataLoader(

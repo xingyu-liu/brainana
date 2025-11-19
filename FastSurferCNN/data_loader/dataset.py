@@ -63,7 +63,7 @@ class MultiScaleOrigDataThickSlices(Dataset):
         assert orig_max > 0.8, f"Multi Dataset - orig fail, max removed {orig_max}"
         self.plane = cfg.DATA.PLANE
         self.slice_thickness = cfg.MODEL.NUM_CHANNELS // 2
-        self.base_res = cfg.MODEL.BASE_RES
+        self.base_res = 1.0
 
         if self.plane == "sagittal":
             orig_data = data_ultils.transform_sagittal(orig_data)
@@ -167,7 +167,8 @@ class MultiScaleDataset(Dataset):
             Transformer to apply to the image (Default value = None).
         """
         self.max_size = cfg.DATA.PADDED_SIZE
-        self.base_res = cfg.MODEL.BASE_RES
+        self.base_res = 1.0
+        self.rescale = cfg.DATA.PREPROCESSING.RESCALE
         self.gn_noise = gn_noise
         self.dataset_path = dataset_path
         self.transforms = transforms
@@ -397,8 +398,9 @@ class MultiScaleDataset(Dataset):
                     rep_tf[0]._get_reproducing_arguments()["scales"]
                 )[:-1]
 
-            # Normalize image and clamp between 0 and 1
-            img = torch.clamp(img / img.max(), min=0.0, max=1.0)
+            # Normalize HDF5 data from [0, rescale] to [0, 1] range
+            # Uses RESCALE value from config (typically 255.0)
+            img = torch.clamp(img / self.rescale, min=0.0, max=1.0)
 
         scale_factor = self._get_scale_factor(
             torch.from_numpy(zoom), scale_aug=zoom_aug
@@ -426,7 +428,7 @@ class MultiScaleDatasetVal(Dataset):
     def __init__(self, dataset_path, cfg, transforms=None):
 
         self.max_size = cfg.DATA.PADDED_SIZE
-        self.base_res = cfg.MODEL.BASE_RES
+        self.base_res = 1.0
         self.dataset_path = dataset_path
         self.transforms = transforms
 

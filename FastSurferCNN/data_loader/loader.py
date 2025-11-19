@@ -46,7 +46,8 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
     if mode == "train":
 
         if "None" in cfg.DATA.AUG:
-            tfs = [ZeroPad2D((padding_size, padding_size)), ToTensor()]
+            rescale = cfg.DATA.PREPROCESSING.RESCALE
+            tfs = [ZeroPad2D((padding_size, padding_size)), ToTensor(rescale=rescale)]
             # old transform
             if "Gaussian" in cfg.DATA.AUG:
                 tfs.append(AddGaussianNoise(mean=0, std=0.1))
@@ -155,10 +156,11 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
     elif mode == "val":
         data_path = cfg.DATA.PATH_HDF5_VAL
         shuffle = False
+        rescale = cfg.DATA.PREPROCESSING.RESCALE
         transform = transforms.Compose(
             [
                 ZeroPad2D((padding_size, padding_size)),
-                ToTensor(),
+                ToTensor(rescale=rescale),
             ]
         )
 

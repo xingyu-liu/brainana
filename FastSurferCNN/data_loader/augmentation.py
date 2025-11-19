@@ -34,6 +34,17 @@ class ToTensorTest:
     __call__
         Converts image.
     """
+    
+    def __init__(self, rescale: float = 255.0):
+        """
+        Initialize ToTensorTest.
+        
+        Parameters
+        ----------
+        rescale : float
+            Maximum value to normalize by (default: 255.0)
+        """
+        self.rescale = rescale
 
     def __call__(self, img: npt.NDArray) -> np.ndarray:
         """
@@ -51,8 +62,9 @@ class ToTensorTest:
         """
         img = img.astype(np.float32)
 
-        # Normalize and clamp between 0 and 1
-        img = np.clip(img / 255.0, a_min=0.0, a_max=1.0)
+        # Normalize HDF5 data from [0, rescale] to [0, 1] range
+        # Uses RESCALE value from config (typically 255.0)
+        img = np.clip(img / self.rescale, a_min=0.0, a_max=1.0)
 
         # swap color axis because
         # numpy image: H x W x C
@@ -157,6 +169,17 @@ class ToTensor:
     __call__
         Convert image.
     """
+    
+    def __init__(self, rescale: float = 255.0):
+        """
+        Initialize ToTensor.
+        
+        Parameters
+        ----------
+        rescale : float
+            Maximum value to normalize by (default: 255.0)
+        """
+        self.rescale = rescale
 
     def __call__(self, sample: npt.NDArray) -> dict[str, Any]:
         """
@@ -181,9 +204,9 @@ class ToTensor:
         
         img = img.astype(np.float32)
 
-        # NOTE: HDF5 data is already normalized to [0, 1] range
-        # Don't divide by 255 again!
-        img = np.clip(img, a_min=0.0, a_max=1.0)
+        # Normalize HDF5 data from [0, rescale] to [0, 1] range
+        # Uses RESCALE value from config (typically 255.0)
+        img = np.clip(img / self.rescale, a_min=0.0, a_max=1.0)
 
         # swap color axis because
         # numpy image: H x W x C
