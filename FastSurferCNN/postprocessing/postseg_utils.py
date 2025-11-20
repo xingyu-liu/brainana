@@ -60,6 +60,19 @@ def flip_wm_islands(
         (lh_wm_labels, rh_wm_labels, 'LH'),
         (rh_wm_labels, lh_wm_labels, 'RH')
     ]:
+        # Pre-compute other hemisphere WM mask once per hemisphere (not per label/island)
+        other_wm_mask = np.zeros_like(aseg_data, dtype=bool)
+        if other_wm_labels:
+            for other_label in other_wm_labels:
+                other_wm_mask |= (aseg_data == other_label)
+        
+        # Pre-compute other hemisphere center of mass once per hemisphere
+        other_com = None
+        if np.any(other_wm_mask):
+            other_com = scipy.ndimage.center_of_mass(other_wm_mask)
+            if other_com is not None:
+                other_com = np.array(other_com)
+        
         for wm_label in wm_labels:
             wm_mask = (aseg_data == wm_label)
             
@@ -78,6 +91,13 @@ def flip_wm_islands(
             unique, counts = np.unique(labeled_wm[labeled_wm > 0], return_counts=True)
             largest = unique[np.argmax(counts)]
             
+            # Pre-compute main body center of mass once per WM label (not per island)
+            main_body_mask = (labeled_wm == largest)
+            main_com = scipy.ndimage.center_of_mass(main_body_mask)
+            if main_com is None:
+                continue
+            main_com = np.array(main_com)
+            
             # Check each island
             for component_id in unique:
                 if component_id == largest:
@@ -87,27 +107,25 @@ def flip_wm_islands(
                 island_mask = (labeled_wm == component_id)
                 island_size = np.sum(island_mask)
                 
-                # Find center of mass of island and main body
-                island_com = np.array(np.where(island_mask)).mean(axis=1)
-                main_com = np.array(np.where(labeled_wm == largest)).mean(axis=1)
+                # Find center of mass of island using efficient scipy function
+                island_com = scipy.ndimage.center_of_mass(island_mask)
+                if island_com is None:
+                    continue
+                island_com = np.array(island_com)
                 
-                # Find center of mass of other hemisphere WM (any label)
-                other_wm_mask = np.zeros_like(aseg_data, dtype=bool)
-                for other_label in other_wm_labels:
-                    other_wm_mask |= (aseg_data == other_label)
+                # Skip if other hemisphere mask is empty
+                if other_com is None:
+                    continue
                 
-                if np.any(other_wm_mask):
-                    other_com = np.array(np.where(other_wm_mask)).mean(axis=1)
-                    
-                    # If island is closer to other hemisphere, flip it to the most common other WM label
-                    dist_to_main = np.linalg.norm(island_com - main_com)
-                    dist_to_other = np.linalg.norm(island_com - other_com)
-                    
-                    if dist_to_other < dist_to_main:
-                        # Use the first other WM label as target
-                        target_label = other_wm_labels[0]
-                        print(f"    Flipping island (size={island_size}) to label {target_label}")
-                        aseg_data[island_mask] = target_label
+                # If island is closer to other hemisphere, flip it to the most common other WM label
+                dist_to_main = np.linalg.norm(island_com - main_com)
+                dist_to_other = np.linalg.norm(island_com - other_com)
+                
+                if dist_to_other < dist_to_main:
+                    # Use the first other WM label as target
+                    target_label = other_wm_labels[0]
+                    print(f"    Flipping island (size={island_size}) to label {target_label}")
+                    aseg_data[island_mask] = target_label
     
     return aseg_data
 
@@ -367,32 +385,73 @@ def create_hemisphere_masks(mask_data: npt.NDArray[int],
         combined = hemi_mask_definitive[hemi] | hemi_mask_from_dilation[hemi]
         hemi_mask[combined == 1] = hemi_dict[hemi]
 
-    # Step 3: Assign unassigned voxels to nearest hemisphere using distance transform
+    # Step 3: Assign unassigned voxels to nearest hemisphere using iterative flood-fill
+    # This is much faster than distance transform - we iteratively expand from assigned regions
     voxels_unassigned = (mask_data == 1) & (hemi_mask == 0)
     num_unassigned = np.sum(voxels_unassigned)
     
     if num_unassigned > 0:
-        print(f"  Assigning {num_unassigned} unassigned voxels to nearest hemisphere...")
+        print(f"  Assigning {num_unassigned} unassigned voxels to nearest hemisphere (flood-fill)...")
         
-        # Calculate distance transform from each hemisphere
-        distances = {}
+        # Create working masks for each hemisphere (only assigned regions)
+        hemi_working = {}
         for hemi in hemi_list:
-            hemi_binary = (hemi_mask == hemi_dict[hemi])
-            if np.any(hemi_binary):
-                # Distance transform gives distance to nearest True voxel
-                distances[hemi] = scipy.ndimage.distance_transform_edt(~hemi_binary)
+            hemi_working[hemi] = (hemi_mask == hemi_dict[hemi]).astype(bool)
         
-        # Assign to closer hemisphere
-        if 'rh' in distances and 'lh' in distances:
-            assign_to_rh = voxels_unassigned & (distances['rh'] < distances['lh'])
-            assign_to_lh = voxels_unassigned & (distances['lh'] <= distances['rh'])
-            hemi_mask[assign_to_rh] = hemi_dict['rh']
-            hemi_mask[assign_to_lh] = hemi_dict['lh']
-            print(f"    Assigned {np.sum(assign_to_rh)} to RH, {np.sum(assign_to_lh)} to LH")
-        elif 'rh' in distances:
+        # Check if both hemispheres exist
+        has_rh = np.any(hemi_working['rh'])
+        has_lh = np.any(hemi_working['lh'])
+        
+        if has_rh and has_lh:
+            # Iterative flood-fill: expand from each hemisphere until all unassigned voxels are covered
+            max_iterations = 200  # Safety limit to prevent infinite loops
+            iteration = 0
+            num_assigned_rh = 0
+            num_assigned_lh = 0
+            
+            while num_unassigned > 0 and iteration < max_iterations:
+                iteration += 1
+                
+                # Dilate each hemisphere by 1 voxel
+                new_rh = scipy.ndimage.binary_dilation(hemi_working['rh'], iterations=1)
+                new_lh = scipy.ndimage.binary_dilation(hemi_working['lh'], iterations=1)
+                
+                # Find newly reached unassigned voxels (not already assigned to either hemisphere)
+                new_rh_unassigned = new_rh & voxels_unassigned & ~new_lh
+                new_lh_unassigned = new_lh & voxels_unassigned & ~new_rh
+                
+                # Handle conflicts: if both reach a voxel simultaneously, assign to RH (arbitrary but consistent)
+                # This is rare and the flood-fill naturally assigns to nearest hemisphere
+                conflicts = new_rh & new_lh & voxels_unassigned
+                if np.any(conflicts):
+                    new_rh_unassigned = new_rh_unassigned | conflicts
+                
+                # Update working masks and hemi_mask
+                hemi_working['rh'] = hemi_working['rh'] | new_rh_unassigned
+                hemi_working['lh'] = hemi_working['lh'] | new_lh_unassigned
+                hemi_mask[new_rh_unassigned] = hemi_dict['rh']
+                hemi_mask[new_lh_unassigned] = hemi_dict['lh']
+                
+                # Update unassigned mask
+                voxels_unassigned = (mask_data == 1) & (hemi_mask == 0)
+                num_unassigned = np.sum(voxels_unassigned)
+                
+                num_assigned_rh += np.sum(new_rh_unassigned)
+                num_assigned_lh += np.sum(new_lh_unassigned)
+                
+                # Early exit if no progress
+                if np.sum(new_rh_unassigned) == 0 and np.sum(new_lh_unassigned) == 0:
+                    break
+            
+            print(f"    Assigned {num_assigned_rh} to RH, {num_assigned_lh} to LH (after {iteration} iterations)")
+            if num_unassigned > 0:
+                print(f"    Warning: {num_unassigned} voxels remain unassigned")
+        elif has_rh:
+            # Only RH exists, assign all unassigned to RH
             hemi_mask[voxels_unassigned] = hemi_dict['rh']
             print(f"    Assigned all {num_unassigned} to RH (LH empty)")
-        elif 'lh' in distances:
+        elif has_lh:
+            # Only LH exists, assign all unassigned to LH
             hemi_mask[voxels_unassigned] = hemi_dict['lh']
             print(f"    Assigned all {num_unassigned} to LH (RH empty)")
     

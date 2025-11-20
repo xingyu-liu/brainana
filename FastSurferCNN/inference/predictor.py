@@ -523,7 +523,7 @@ class RunModelOnData:
         else:
             LOGGER.info("Image is already conformed")
 
-        # Store conformed image for use as reference in save_img
+        # Store conformed image
         self._conformed_img = img
 
         # Extract data and zoom from conformed image

@@ -47,8 +47,7 @@ from FastSurferCNN.utils import logging
 LOGGER = logging.getLogger(__name__)
 
 # Brain mask creation parameters
-MASK_DILATION_SIZE = 7  # Dilation kernel size for mask creation
-MASK_EROSION_SIZE = 6   # Erosion kernel size for mask creation
+MASK_DILATION_SIZE_MM = 2.0  # Dilation size in millimeters for mask creation
 
 
 def _apply_two_pass_refinement(
@@ -354,10 +353,19 @@ def run_segmentation(
     # Both binary and multi-class models go through the same create_mask() pipeline
     # for topological refinement (dilation, erosion, largest component selection)
     LOGGER.info("Creating brain mask from segmentation (with topological refinement)...")
+    
+    # Calculate mask dilation and erosion sizes based on image resolution
+    # Get voxel size from conformed image (in model space where mask is created)
+    zoom = predictor._conformed_img.header.get_zooms()[:3]
+    resolution = np.mean(zoom)  # Average voxel size in mm
+    mask_dilation_voxels = int(MASK_DILATION_SIZE_MM / resolution)
+    mask_erosion_voxels = max(0, mask_dilation_voxels - 1)  # Ensure non-negative
+    LOGGER.info(f"Mask parameters: dilation={mask_dilation_voxels} voxels, erosion={mask_erosion_voxels} voxels (resolution={resolution:.3f} mm)")
+    
     brain_mask = create_mask(
         copy.deepcopy(pred_data),
-        MASK_DILATION_SIZE,
-        MASK_EROSION_SIZE,
+        mask_dilation_voxels,
+        mask_erosion_voxels,
     )
     brain_mask = brain_mask.astype(np.uint8)
 
