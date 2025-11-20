@@ -25,7 +25,8 @@ from typing import Dict, Optional, Union, Any, Literal
 
 from FastSurferCNN.inference.api import run_segmentation
 from FastSurferCNN.inference.predictor_utils import setup_atlas_from_checkpoints
-from FastSurferCNN.utils.parser_defaults import FASTSURFER_ROOT
+from FastSurferCNN.utils.checkpoint import extract_atlas_metadata, is_binary_checkpoint
+from FastSurferCNN.utils.constants import FASTSURFER_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,6 @@ def _extract_atlas_from_checkpoint(ckpt_path: Path) -> Optional[str]:
         Atlas name if found, None otherwise
     """
     try:
-        from FastSurferCNN.utils.checkpoint import extract_atlas_metadata
         metadata = extract_atlas_metadata(ckpt_path)
         if metadata:
             return metadata.get("atlas_name")
@@ -137,19 +137,19 @@ def skullstripping(
             logger.addHandler(handler)
             logger.setLevel(logging.INFO)
     
-    logger.info(f"Starting skullstripping for {modal} modality using FastSurferCNN")
+    logger.info(f"Skullstripping: starting for {modal} modality")
     
     # Validate inputs
     input_image = Path(input_image)
     if not input_image.exists():
-        logger.error(f"Input image not found: {input_image}")
+        logger.error(f"Skullstripping: input image not found: {input_image}")
         raise FileNotFoundError(f"Input image not found: {input_image}")
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if modal not in ['anat', 'func']:
-        logger.error(f"Invalid modality: {modal}. Must be 'anat' or 'func'")
+        logger.error(f"Skullstripping: invalid modality={modal}, must be 'anat' or 'func'")
         raise ValueError(f"Invalid modality: {modal}. Must be 'anat' or 'func'")
     
     # Get configuration
@@ -182,10 +182,10 @@ def skullstripping(
         ckpt_path = pretrained_dir / ckpt_name
         if ckpt_path.exists():
             checkpoints[plane] = ckpt_path
-            logger.debug(f"Found checkpoint: {ckpt_name}")
+            logger.debug(f"Checkpoint: found {ckpt_name}")
         else:
             checkpoints[plane] = None
-            logger.warning(f"Checkpoint not found: {ckpt_path}")
+            logger.warning(f"Checkpoint: not found {ckpt_path}")
     
     # Validate that at least one checkpoint is found
     found_planes = [plane for plane, ckpt in checkpoints.items() if ckpt is not None]
@@ -196,7 +196,7 @@ def skullstripping(
             f"in {pretrained_dir}"
         )
     
-    logger.info(f"Found checkpoints for planes: {', '.join(found_planes)}")
+    logger.info(f"Checkpoint: found for planes={', '.join(found_planes)}")
     
     # Extract atlas metadata from checkpoints
     try:
@@ -205,13 +205,12 @@ def skullstripping(
             ckpt_cor=checkpoints.get('coronal'),
             ckpt_sag=checkpoints.get('sagittal')
         )
-        logger.info(f"Using atlas: {atlas_name}")
+        logger.info(f"Atlas: using {atlas_name}")
     except Exception as e:
-        logger.warning(f"Could not extract atlas metadata: {e}")
+        logger.warning(f"Atlas: could not extract metadata: {e}")
         # Fallback: determine binary from checkpoint
         first_ckpt = next(ckpt for ckpt in checkpoints.values() if ckpt is not None)
         
-        from FastSurferCNN.utils.checkpoint import is_binary_checkpoint
         is_binary, num_classes = is_binary_checkpoint(first_ckpt)
         
         if is_binary is True:
@@ -224,12 +223,12 @@ def skullstripping(
                 "num_classes": num_classes,
                 "plane": "",  # Not specific to a single plane (multi-plane model)
             }
-            logger.info(f"Detected binary model from checkpoint (NUM_CLASSES={num_classes}, no atlas required)")
+            logger.info(f"Model: detected binary model (num_classes={num_classes}, no atlas required)")
         else:
             # Multi-class model or cannot determine - try to extract or use default
             atlas_name = _extract_atlas_from_checkpoint(first_ckpt)
             atlas_metadata = None
-            logger.warning(f"Using fallback atlas: {atlas_name} (metadata will be auto-detected)")
+            logger.warning(f"Atlas: using fallback {atlas_name} (metadata will be auto-detected)")
     
     # Convert device_id to device string
     if device_id == 'auto':
@@ -242,7 +241,7 @@ def skullstripping(
     try:
         # Run segmentation using the high-level API
         # This will create segmentation, mask, and hemimask
-        logger.info(f"Running segmentation on {input_image}")
+        logger.info(f"Segmentation: running on {input_image}")
         seg_results = run_segmentation(
             input_image=input_image,
             output_dir=output_dir,
@@ -262,12 +261,12 @@ def skullstripping(
             enable_crop_2round=enable_crop_2round,
         )
         
-        logger.info("Skullstripping completed successfully")
-        logger.info(f"Output files saved to: {output_dir}")
-        logger.info(f"  - Segmentation: {seg_results.get('segmentation')}")
-        logger.info(f"  - Brain mask: {seg_results.get('mask')}")
+        logger.info("Skullstripping: completed successfully")
+        logger.info(f"Output: files saved to {output_dir}")
+        logger.info(f"Output: segmentation={seg_results.get('segmentation')}")
+        logger.info(f"Output: brain_mask={seg_results.get('mask')}")
         if 'hemimask' in seg_results:
-            logger.info(f"  - Hemisphere mask: {seg_results.get('hemimask')}")
+            logger.info(f"Output: hemisphere_mask={seg_results.get('hemimask')}")
         
         # Return all output file paths
         result = {
@@ -282,6 +281,6 @@ def skullstripping(
         return result
         
     except Exception as e:
-        logger.error(f"Skullstripping failed: {str(e)}")
+        logger.error(f"Skullstripping: failed: {str(e)}")
         raise RuntimeError(f"Skullstripping failed: {str(e)}") from e
 

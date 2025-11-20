@@ -16,7 +16,7 @@ from pathlib import Path
 import nibabel as nib
 
 from .validation import validate_input_file, ensure_working_directory, validate_output_file
-from ..utils import run_command, calculate_func_tmean, reorient_image_to_target, check_image_shape, check_dependency
+from ..utils import run_command, calculate_func_tmean, reorient_image_to_target, check_image_shape
 from ..config import validate_slice_timing_config
 # Import skullstripping from macacaMRINN package
 import sys
@@ -27,7 +27,7 @@ project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from macacaMRINN.inference.prediction import skullstripping
+from FastSurferCNN.inference.skullstripping import skullstripping
 
 # %%
 def precheck(

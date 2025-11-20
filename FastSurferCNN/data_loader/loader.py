@@ -13,6 +13,7 @@
 
 # IMPORTS
 import yacs.config
+import torchio as tio
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
@@ -56,13 +57,11 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
             shuffle = True
 
             logger.info(
-                f"Loading {mode.capitalize()} data ... from {data_path}. Using standard Aug"
+                f"DataLoader: loading {mode} data from {data_path} (using standard augmentation)"
             )
 
             dataset = dset.MultiScaleDatasetVal(data_path, cfg, transforms.Compose(tfs))
         else:
-
-            import torchio as tio
             # Elastic
             elastic = tio.RandomElasticDeformation(
                 num_control_points=7,
@@ -148,7 +147,7 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
             shuffle = True
 
             logger.info(
-                f"Loading {mode.capitalize()} data ... from {data_path}. Using torchio Aug"
+                f"DataLoader: loading {mode} data from {data_path} (using torchio augmentation)"
             )
 
             dataset = dset.MultiScaleDataset(data_path, cfg, gaussian_noise, transform)
@@ -164,18 +163,18 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
             ]
         )
 
-        logger.info(f"Loading {mode.capitalize()} data ... from {data_path}")
+        logger.info(f"DataLoader: loading {mode} data from {data_path}")
 
         dataset = dset.MultiScaleDatasetVal(data_path, cfg, transform)
 
     # Validate that dataset is not empty
     if len(dataset) == 0:
         error_msg = (
-            f"ERROR: Dataset is empty (0 samples found)!\n"
-            f"  Mode: {mode}\n"
-            f"  HDF5 path: {data_path}\n"
-            f"  Plane: {cfg.DATA.PLANE}\n"
-            f"  Expected sizes: {cfg.DATA.SIZES}\n\n"
+            f"DataLoader: dataset is empty (0 samples found)\n"
+            f"  mode={mode}\n"
+            f"  hdf5_path={data_path}\n"
+            f"  plane={cfg.DATA.PLANE}\n"
+            f"  expected_sizes={cfg.DATA.SIZES}\n\n"
             f"Possible causes:\n"
             f"  1. HDF5 file was created but no subjects were processed\n"
             f"  2. All subjects were filtered out during HDF5 creation\n"

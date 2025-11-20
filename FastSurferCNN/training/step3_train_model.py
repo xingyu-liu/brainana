@@ -21,8 +21,8 @@ from os.path import join
 
 from FastSurferCNN.training.trainer import Trainer
 from FastSurferCNN.utils import misc
+from FastSurferCNN.utils.constants import FASTSURFER_ROOT
 from FastSurferCNN.utils.load_config import get_config
-from FastSurferCNN.utils.parser_defaults import FASTSURFER_ROOT
 
 
 def make_parser() -> argparse.ArgumentParser:

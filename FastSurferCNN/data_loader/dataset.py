@@ -13,6 +13,7 @@
 # limitations under the License.
 
 # IMPORTS
+import os
 import time
 from collections.abc import Callable, Sequence
 from typing import Optional
@@ -21,6 +22,7 @@ import h5py
 import numpy as np
 import numpy.typing as npt
 import torch
+import torchio as tio
 import yacs.config
 from torch.utils.data import Dataset
 
@@ -68,16 +70,16 @@ class MultiScaleOrigDataThickSlices(Dataset):
         if self.plane == "sagittal":
             orig_data = data_ultils.transform_sagittal(orig_data)
             self.zoom = np.asarray(orig_zoom)[[2, 1]]
-            logger.info(f"Loading Sagittal with input voxelsize {self.zoom}")
+            logger.info(f"Dataset: loading sagittal plane with voxelsize {self.zoom}")
 
         elif self.plane == "axial":
             orig_data = data_ultils.transform_axial(orig_data)
             self.zoom = np.asarray(orig_zoom)[[2, 0]]
-            logger.info(f"Loading Axial with input voxelsize {self.zoom}")
+            logger.info(f"Dataset: loading axial plane with voxelsize {self.zoom}")
 
         else:
             self.zoom = np.asarray(orig_zoom)[[0, 1]]
-            logger.info(f"Loading Coronal with input voxelsize {self.zoom}")
+            logger.info(f"Dataset: loading coronal plane with voxelsize {self.zoom}")
 
         # Create thick slices
         orig_thick = data_ultils.get_thick_slices(orig_data, self.slice_thickness)
@@ -182,10 +184,10 @@ class MultiScaleDataset(Dataset):
         with h5py.File(dataset_path, "r") as hf:
             for size in cfg.DATA.SIZES:
                 try:
-                    logger.info(f"Scanning size {size}...")
+                    logger.info(f"Dataset: scanning size {size}...")
                     # Only get the length, don't load data
                     num_samples = len(hf[f"{size}"]["orig_dataset"])
-                    logger.info(f"Found {num_samples} slices for size {size}")
+                    logger.info(f"Dataset: found {num_samples} slices for size {size}")
                     
                     # Store indices for lazy loading
                     for idx in range(num_samples):
@@ -195,7 +197,7 @@ class MultiScaleDataset(Dataset):
 
                 except KeyError:
                     logger.warning(
-                        f"KeyError: Unable to open object (object {size} does not exist)"
+                        f"Dataset: key error, size {size} does not exist in HDF5 file"
                     )
                     continue
 
@@ -210,11 +212,6 @@ class MultiScaleDataset(Dataset):
                     f"    2. Subjects were processed during HDF5 creation\n"
                     f"    3. HDF5 file structure matches expected sizes\n"
                     f"    4. Data split file includes subjects for this split"
-                )
-            else:
-                logger.info(
-                    f"Successfully indexed {self.count} samples from {dataset_path} with plane {cfg.DATA.PLANE} " \
-                    f"in {time.time() - start:.3f} seconds (using lazy loading)"
                 )
 
     def _open_hdf5_file(self):
@@ -283,7 +280,8 @@ class MultiScaleDataset(Dataset):
             image: npt.NDArray
     ) ->  np.ndarray:
         """
-        Pad the image with zeros.
+        Pad the image with edge values (replicates edge pixels) instead of zeros.
+        This helps the model perform better at boundaries by avoiding artificial zero-padded edges.
 
         Parameters
         ----------
@@ -297,16 +295,38 @@ class MultiScaleDataset(Dataset):
         """
         if len(image.shape) == 2:
             h, w = image.shape
-            padded_img = np.zeros((self.max_size, self.max_size), dtype=image.dtype)
+            if self.max_size < h:
+                # Crop if image is larger than max_size
+                sub = h - self.max_size
+                return image[0 : h - sub, 0 : w - sub]
+            
+            # Calculate padding needed
+            pad_h = self.max_size - h
+            pad_w = self.max_size - w
+            
+            # Use edge padding (replicates edge values) instead of zero padding
+            padded_img = np.pad(
+                image,
+                ((0, pad_h), (0, pad_w)),
+                mode='edge'
+            ).astype(image.dtype)
         else:
             h, w, c = image.shape
-            padded_img = np.zeros((self.max_size, self.max_size, c), dtype=image.dtype)
-
-        if self.max_size < h:
-            sub = h - self.max_size
-            padded_img = image[0 : h - sub, 0 : w - sub]
-        else:
-            padded_img[0:h, 0:w] = image
+            if self.max_size < h:
+                # Crop if image is larger than max_size
+                sub = h - self.max_size
+                return image[0 : h - sub, 0 : w - sub, :]  
+            
+            # Calculate padding needed
+            pad_h = self.max_size - h
+            pad_w = self.max_size - w
+            
+            # Use edge padding (replicates edge values) instead of zero padding
+            padded_img = np.pad(
+                image,
+                ((0, pad_h), (0, pad_w), (0, 0)),
+                mode='edge'
+            ).astype(image.dtype)
 
         return padded_img
 
@@ -373,7 +393,6 @@ class MultiScaleDataset(Dataset):
         label = padded_label[np.newaxis, :, :, np.newaxis]
         weight = padded_weight[np.newaxis, :, :, np.newaxis]
 
-        import torchio as tio
         subject = tio.Subject(
             {
                 "img": tio.ScalarImage(tensor=img),
@@ -441,10 +460,10 @@ class MultiScaleDatasetVal(Dataset):
         with h5py.File(dataset_path, "r") as hf:
             for size in cfg.DATA.SIZES:
                 try:
-                    logger.info(f"Scanning size {size}...")
+                    logger.info(f"Dataset: scanning size {size}...")
                     # Only get the length, don't load data
                     num_samples = len(hf[f"{size}"]["orig_dataset"])
-                    logger.info(f"Found {num_samples} slices for size {size}")
+                    logger.info(f"Dataset: found {num_samples} slices for size {size}")
                     
                     # Store indices for lazy loading
                     for idx in range(num_samples):
@@ -454,26 +473,21 @@ class MultiScaleDatasetVal(Dataset):
 
                 except KeyError:
                     logger.warning(
-                        f"KeyError: Unable to open object (object {size} does not exist)"
+                        f"Dataset: key error, size {size} does not exist in HDF5 file"
                     )
                     continue
 
         if self.count == 0:
             logger.error(
-                f"WARNING: No samples found in HDF5 file!\n"
-                f"  File: {dataset_path}\n"
-                f"  Plane: {cfg.DATA.PLANE}\n"
-                f"  Expected sizes: {cfg.DATA.SIZES}\n"
+                f"Dataset: no samples found in HDF5 file\n"
+                f"  file={dataset_path}\n"
+                f"  plane={cfg.DATA.PLANE}\n"
+                f"  expected_sizes={cfg.DATA.SIZES}\n"
                 f"  This will cause training to fail. Please check:\n"
                 f"    1. HDF5 file was created successfully\n"
                 f"    2. Subjects were processed during HDF5 creation\n"
                 f"    3. HDF5 file structure matches expected sizes\n"
                 f"    4. Data split file includes subjects for this split"
-            )
-        else:
-            logger.info(
-                f"Successfully indexed {self.count} samples from {dataset_path} with plane {cfg.DATA.PLANE} " \
-                f"in {time.time() - start:.3f} seconds (using lazy loading)"
             )
 
     def _open_hdf5_file(self):

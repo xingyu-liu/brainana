@@ -16,7 +16,6 @@ import os
 
 # IMPORTS
 import csv
-import pprint
 import time
 
 import numpy as np
@@ -33,6 +32,7 @@ from FastSurferCNN.models.networks import build_model
 from FastSurferCNN.models.optimizer import get_optimizer
 from FastSurferCNN.utils import checkpoint as cp
 from FastSurferCNN.utils import logging
+from FastSurferCNN.utils.checkpoint import read_checkpoint_file
 from FastSurferCNN.utils.lr_scheduler import get_lr_scheduler
 from FastSurferCNN.utils.meters import Meter
 from FastSurferCNN.utils.metrics import iou_score, precision_recall
@@ -84,21 +84,19 @@ class Trainer:
         self.metrics_csv_path = os.path.join(cfg.LOG_DIR, "training_metrics.csv")
         self.metrics_file = None
         self.csv_writer = None
-        logger.info("Training with config:")
-        logger.info(pprint.pformat(cfg))
-        
         # Automatic GPU selection (finds least busy GPU)
         self.device = get_device()
-        logger.info(f"Using device: {self.device}")
         self.model = build_model(cfg)
         self.loss_func = get_loss_func(cfg)
+        
+        # Print training configuration summary
+        self._print_config_summary(cfg)
 
         # Set up logger format
         self.num_classes = cfg.MODEL.NUM_CLASSES
         
         # Binary brain mask mode - no atlas needed
         if self.num_classes == 2:
-            logger.info("Binary segmentation mode (NUM_CLASSES=2) - brain mask task")
             self.class_names = ["background", "brain"]
             atlas_manager = None  # No atlas needed
         else:
@@ -130,13 +128,54 @@ class Trainer:
 
         self.subepoch = False if self.cfg.TRAIN.BATCH_SIZE == 16 else True
     
+    def _print_config_summary(self, cfg):
+        """Print a formatted summary of key training configuration parameters."""
+        logger.info("")
+        logger.info("=" * 80)
+        
+        # Model info
+        num_classes = cfg.MODEL.NUM_CLASSES
+        model_type = "Binary (Brain Mask)" if num_classes == 2 else f"Multi-class ({num_classes} classes)"
+        logger.info(f"Model Type:         {model_type}")
+        logger.info(f"Model Name:         {cfg.MODEL.MODEL_NAME}")
+        logger.info(f"Device:             {self.device}")
+        
+        # Data info
+        logger.info(f"Plane:              {cfg.DATA.PLANE}")
+        image_size = cfg.DATA.SIZES[0] if cfg.DATA.SIZES else cfg.MODEL.HEIGHT
+        logger.info(f"Image Size:         {image_size}×{image_size}")
+        logger.info(f"Padded Size:        {cfg.DATA.PADDED_SIZE}")
+        
+        # Preprocessing info
+        logger.info(f"Orientation:        {cfg.DATA.PREPROCESSING.ORIENTATION}")
+        logger.info(f"Voxel Size:         {cfg.DATA.PREPROCESSING.VOX_SIZE}")
+        
+        # Training info
+        logger.info(f"Batch Size:         {cfg.TRAIN.BATCH_SIZE}")
+        logger.info(f"Epochs:             {cfg.TRAIN.NUM_EPOCHS}")
+        logger.info(f"Learning Rate:      {cfg.OPTIMIZER.BASE_LR}")
+        logger.info(f"Optimizer:          {cfg.OPTIMIZER.OPTIMIZING_METHOD}")
+        logger.info(f"LR Scheduler:       {cfg.OPTIMIZER.LR_SCHEDULER}")
+        
+        # Pretrained model
+        if cfg.TRAIN.PRETRAINED_MODEL and cfg.TRAIN.FINE_TUNE:
+            pretrained_name = os.path.basename(cfg.TRAIN.PRETRAINED_MODEL)
+            logger.info(f"Pretrained Model:   {pretrained_name}")
+        else:
+            logger.info(f"Pretrained Model:   None (training from scratch)")
+        
+        # Output directory
+        logger.info(f"Output Dir:         {cfg.LOG_DIR}")
+        
+        logger.info("=" * 80)
+        logger.info("")
+    
     def _init_csv_logging(self):
         """Initialize CSV file for logging training metrics."""
         self.metrics_file = open(self.metrics_csv_path, 'w', newline='')
         self.csv_writer = csv.writer(self.metrics_file)
         self.csv_writer.writerow(['loss', 'dice', 'val_loss', 'val_dice'])
         self.metrics_file.flush()
-        logger.info(f"CSV metrics will be logged to: {self.metrics_csv_path}")
     
     def _log_metrics_to_csv(self, train_loss, train_dice, val_loss, val_dice):
         """Log metrics to CSV file."""
@@ -175,7 +214,6 @@ class Trainer:
 
         """
         self.model.train()
-        logger.info("Training started ")
         epoch_start = time.time()
         loss_batch = np.zeros(1)
 
@@ -251,12 +289,10 @@ class Trainer:
         
         # Get training metrics for CSV logging
         train_loss = np.array(train_meter.batch_losses).mean()
-        train_dice, _ = train_meter.dice_score.compute()
+        # Use get_dice_without_background() to match progress bar display (excludes background class 0)
+        train_dice = train_meter.get_dice_without_background()
         train_dice = train_dice.item() if hasattr(train_dice, 'item') else train_dice
         
-        logger.info(
-            f"Training epoch {epoch} finished in {time.time() - epoch_start:.04f} seconds"
-        )
         
         # Store training metrics for CSV (will be logged after validation)
         self._current_train_loss = train_loss
@@ -283,7 +319,6 @@ class Trainer:
         int, float, ndarray
             median miou [value].
         """
-        logger.info(f"Evaluating model at epoch {epoch}")
         self.model.eval()
 
         # Aggregate statistics across all batches (not per scale factor)
@@ -356,15 +391,12 @@ class Trainer:
         
         # Get validation metrics for CSV logging
         val_loss = np.array(val_meter.batch_losses).mean()
-        val_dice, dice_matrix = val_meter.dice_score.compute()
+        # Use get_dice_without_background() to match progress bar display (excludes background class 0)
+        val_dice = val_meter.get_dice_without_background()
         val_dice = val_dice.item() if hasattr(val_dice, 'item') else val_dice
         self._current_val_loss = val_loss
         self._current_val_dice = val_dice
         
-        logger.info(
-            f"Validation epoch {epoch} finished in {time.time() - val_start:.04f} seconds"
-        )
-
         # Compute overall metrics
         ious = ints_ / (unis_ + 1e-8)  # Add small epsilon to avoid division by zero
         miou = np.mean(ious)
@@ -373,11 +405,7 @@ class Trainer:
 
         # Log overall statistics
         logger.info(
-            f"[Epoch {epoch} stats]: Dice: {val_dice:.4f}; "
-            f"MIoU: {miou:.4f}; "
-            f"Mean Recall: {mean_recall:.4f}; "
-            f"Mean Precision: {mean_precision:.4f}; "
-            f"Avg loss total: {val_loss:.4f}"
+            f"Validation: epoch={epoch}, dice={val_dice:.4f}, loss={val_loss:.4f}"
         )
 
         return miou
@@ -390,7 +418,7 @@ class Trainer:
             assert (
                 self.cfg.NUM_GPUS <= torch.cuda.device_count()
             ), "Cannot use more GPU devices than available"
-            print("Using ", self.cfg.NUM_GPUS, "GPUs!")
+            logger.info(f"System: using {self.cfg.NUM_GPUS} GPUs")
             self.model = torch.nn.DataParallel(self.model)
 
         val_loader = loader.get_dataloader(self.cfg, "val")
@@ -407,10 +435,7 @@ class Trainer:
         # Load pretrained model for transfer learning if specified
         if self.cfg.TRAIN.PRETRAINED_MODEL and self.cfg.TRAIN.FINE_TUNE:
             try:
-                logger.info(f"Loading pretrained model from {self.cfg.TRAIN.PRETRAINED_MODEL}")
-                
                 # Check actual number of classes in the pretrained checkpoint
-                from FastSurferCNN.utils.checkpoint import read_checkpoint_file
                 checkpoint = read_checkpoint_file(self.cfg.TRAIN.PRETRAINED_MODEL, map_location="cpu")
                 
                 # Find classifier weight to determine number of classes in checkpoint
@@ -423,15 +448,7 @@ class Trainer:
                 if classifier_key:
                     pretrained_num_classes = checkpoint["model_state"][classifier_key].shape[0]
                     drop_classifier = (self.cfg.MODEL.NUM_CLASSES != pretrained_num_classes)
-                    
-                    if drop_classifier:
-                        logger.info(f"Pretrained model has {pretrained_num_classes} classes, target has {self.cfg.MODEL.NUM_CLASSES}")
-                        logger.info("Classifier layer will be reinitialized (transfer learning)")
-                    else:
-                        logger.info(f"Pretrained model has {pretrained_num_classes} classes, matching target {self.cfg.MODEL.NUM_CLASSES}")
-                        logger.info("Keeping classifier layer from pretrained model")
                 else:
-                    logger.warning("Could not determine number of classes in pretrained model, dropping classifier")
                     drop_classifier = True
                 
                 # Now load the checkpoint (re-loads it, but ensures correct drop_classifier logic)
@@ -443,13 +460,11 @@ class Trainer:
                     fine_tune=True,
                     drop_classifier=drop_classifier,
                 )
-                logger.info("Successfully loaded pretrained model for transfer learning")
                 start_epoch = 0
                 best_dice = 0
                 best_val_loss = float('inf')
             except Exception as e:
-                logger.warning(f"Failed to load pretrained model: {e}")
-                logger.info("Training from scratch instead")
+                logger.warning(f"Transfer Learning: failed to load pretrained model: {e}")
                 start_epoch = 0
                 best_dice = 0
                 best_val_loss = float('inf')
@@ -471,28 +486,19 @@ class Trainer:
                     start_epoch = checkpoint_epoch
                     best_dice = best_metric
                     best_val_loss = float('inf')  # Reset when resuming
-                    logger.info(f"Resume training from epoch {start_epoch}")
                 except Exception as e:
-                    print(
-                        f"No model to restore. Resuming training from Epoch 0. {e}"
-                    )
+                    logger.warning(f"Checkpoint: no model to restore, resuming from epoch 0: {e}")
                     start_epoch = 0
                     best_dice = 0
                     best_val_loss = float('inf')
             else:
-                logger.info("No checkpoint found. Training from scratch")
                 start_epoch = 0
                 best_dice = 0
                 best_val_loss = float('inf')
         else:
-            logger.info("Training from scratch")
             start_epoch = 0
             best_dice = 0
             best_val_loss = float('inf')
-
-        logger.info(
-            f"{sum(x.numel() for x in self.model.parameters())} parameters in total"
-        )
 
         # Create tensorboard summary writer
 
@@ -518,15 +524,19 @@ class Trainer:
             writer=writer,
         )
 
-        logger.info(f"Summary path {self.cfg.SUMMARY_PATH}")
-        
         # Initialize CSV logging
         self._init_csv_logging()
         
         # Perform the training loop.
-        logger.info(f"Start epoch: {start_epoch + 1}")
+        logger.info("=" * 80)
+        logger.info("Training: starting training loop")
+        logger.info("=" * 80)
+        logger.info("")
 
         for epoch in range(start_epoch + 1, self.cfg.TRAIN.NUM_EPOCHS + 1):
+            logger.info("-" * 80)
+            logger.info(f"Epoch {epoch}/{self.cfg.TRAIN.NUM_EPOCHS}")
+            logger.info("-" * 80)
             self.train(train_loader, optimizer, scheduler, train_meter, epoch=epoch)
 
             if epoch % 10 == 0:
@@ -546,7 +556,6 @@ class Trainer:
             )
 
             if (epoch + 1) % self.cfg.TRAIN.CHECKPOINT_PERIOD == 0:
-                logger.info(f"Saving checkpoint at epoch {epoch+1}")
                 cp.save_checkpoint(
                     self.checkpoint_dir,
                     epoch + 1,
@@ -572,16 +581,11 @@ class Trainer:
                 best_dice = current_dice
                 best_val_loss = current_val_loss
                 save_best = True
-                logger.info(
-                    f"New best checkpoint reached at epoch {epoch+1} with dice of {best_dice:.4f}\nSaving new best model."
-                )
+                logger.info(f"Checkpoint: best model at epoch={epoch+1}, dice={best_dice:.4f}")
             elif current_dice == 0 and best_dice == 0 and current_val_loss < best_val_loss:
                 # Dice is not yet useful (still NaN), use validation loss instead
                 best_val_loss = current_val_loss
                 save_best = True
-                logger.info(
-                    f"New best checkpoint reached at epoch {epoch+1} with validation loss of {best_val_loss:.4f} (Dice still NaN)\nSaving new best model."
-                )
             
             if save_best:
                 # Save only the best model file (overwrites previous best)
@@ -598,4 +602,7 @@ class Trainer:
         
         # Close CSV logging when training completes
         self._close_csv_logging()
-        logger.info("Training completed. CSV metrics saved to: {}".format(self.metrics_csv_path))
+        logger.info("")
+        logger.info("=" * 80)
+        logger.info("Training: completed")
+        logger.info("=" * 80)

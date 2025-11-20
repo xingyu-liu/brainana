@@ -18,6 +18,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
+import os
+
 import nibabel as nib
 import numpy as np
 import pandas as pd
@@ -25,6 +27,7 @@ import scipy.ndimage.morphology as morphology
 import torch
 from nibabel.filebasedimages import FileBasedHeader as _Header
 from numpy import typing as npt
+from numpy.lib.stride_tricks import sliding_window_view
 from scipy.ndimage import (
     binary_closing,
     binary_erosion,
@@ -34,6 +37,7 @@ from scipy.ndimage import (
 )
 from skimage.measure import label
 
+from FastSurferCNN.atlas.atlas_manager import get_atlas_manager
 from FastSurferCNN.data_loader.conform import check_affine_in_nifti, conform, is_conform
 from FastSurferCNN.utils import logging
 
@@ -46,7 +50,6 @@ LOGGER = logging.getLogger(__name__)
 ##
 # Helper Functions
 ##
-
 
 # Conform an MRI brain image to UCHAR, RAS orientation, and 1mm or minimal isotropic
 # voxels
@@ -92,7 +95,7 @@ def load_and_conform_image(
     # is_conform and conform accept numeric values and the string 'min' instead of the bool value
     if not is_conform(orig, **conform_kwargs):
 
-        logger.info("Conforming image to UCHAR, RAS orientation, and minimum isotropic voxels")
+        logger.info("Preprocessing: conforming image to UCHAR, RAS orientation, and minimum isotropic voxels")
 
         if len(orig.shape) > 3 and orig.shape[3] != 1:
             raise RuntimeError(f"Multiple input frames ({orig.shape[3]}) not supported!")
@@ -379,7 +382,6 @@ def get_thick_slices(
     img_data_pad = np.pad(
         img_data, ((0, 0), (0, 0), (slice_thickness, slice_thickness)), mode="edge"
     )
-    from numpy.lib.stride_tricks import sliding_window_view
 
     # sliding_window_view will automatically create thick slices through a sliding window, but as this in only a view,
     # less memory copies are required
@@ -908,9 +910,6 @@ def map_prediction_sagittal2full(
         return prediction_sag  # Already correct - brain is brain regardless of hemisphere
     
     # Multi-class mode - use atlas-specific expansion mapping
-    from atlas.atlas_manager import get_atlas_manager
-    import os
-    
     # Determine atlas name
     if atlas_name is None:
         atlas_name = os.environ.get('ATLAS_NAME', 'ARM3')

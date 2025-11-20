@@ -22,6 +22,7 @@ from scipy.ndimage import (
     distance_transform_edt,
     generate_binary_structure,
 )
+from scipy.spatial.distance import dice
 
 from FastSurferCNN.utils import logging
 
@@ -324,7 +325,6 @@ def dice_score(pred, gt, validate=True):
         Dice Similarity between pred and gt.
     """
     if validate:
-        from scipy.spatial.distance import dice
         return dice(pred.flat, gt.flat)
 
     else:

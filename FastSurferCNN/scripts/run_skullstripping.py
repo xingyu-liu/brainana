@@ -21,33 +21,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# anat 
-input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_anat_2pass_seg.nii.gz"
-output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_anat"
-modal = "anat"
-data_format = "nifti"
-weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
-
-# # func
-# input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_func.nii.gz"
-# output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_func"
-# modal = "func"
+# # anat 
+# input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_anat_2pass_seg.nii.gz"
+# output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_anat"
+# modal = "anat"
 # data_format = "nifti"
-# weight_coronal, weight_axial, weight_sagittal = 0, 0.7, 0.3
+# weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
+
+# func
+input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_func.nii.gz"
+output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_func"
+modal = "func"
+data_format = "nifti"
+weight_coronal, weight_axial, weight_sagittal = 0, 0.7, 0.3
 
 # %%
 def main():
     logger.info("=" * 80)
-    logger.info("Testing skullstripping function")
+    logger.info("Test: testing skullstripping function")
     logger.info("=" * 80)
-    logger.info(f"Input image: {input_image}")
-    logger.info(f"Modal: {modal}")
-    logger.info(f"Output directory: {output_dir}")
+    logger.info(f"Test: input_image={input_image}")
+    logger.info(f"Test: modal={modal}")
+    logger.info(f"Test: output_dir={output_dir}")
     logger.info("=" * 80)
     
     # Check if input file exists
     if not Path(input_image).exists():
-        logger.error(f"Input image not found: {input_image}")
+        logger.error(f"Test: input image not found: {input_image}")
         return
     
     try:
@@ -67,20 +67,19 @@ def main():
         )
         
         logger.info("=" * 80)
-        logger.info("Skullstripping completed successfully!")
-        logger.info(f"Result: {result}")
+        logger.info("Test: skullstripping completed successfully")
+        logger.info(f"Test: result={result}")
         logger.info("=" * 80)
         
         # Verify output file exists
         output_file = Path(result['brain_mask'])
         if output_file.exists():
-            logger.info(f"Output file created: {result['brain_mask']}")
-            logger.info(f"File size: {output_file.stat().st_size} bytes")
+            logger.info(f"Test: output file created={result['brain_mask']}, size={output_file.stat().st_size} bytes")
         else:
-            logger.error(f"Output file not found: {result['brain_mask']}")
+            logger.error(f"Test: output file not found: {result['brain_mask']}")
             
     except Exception as e:
-        logger.error(f"Test failed with error: {e}", exc_info=True)
+        logger.error(f"Test: failed with error: {e}", exc_info=True)
         raise
 
 if __name__ == "__main__":

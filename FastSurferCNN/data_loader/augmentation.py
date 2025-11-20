@@ -157,6 +157,105 @@ class ZeroPad2DTest:
         return img
 
 
+class EdgePad2DTest:
+    """
+    Pad the input with edge values (replicates edge pixels) to get output size.
+    This matches the training pipeline which uses edge padding for better boundary performance.
+
+    Attributes
+    ----------
+    output_size : Union[Number, Tuple[Number, Number]]
+        Size of the output image either as Number or tuple of two Number.
+    pos : str
+        Position to put the input (currently only 'top_left' supported).
+
+    Methods
+    -------
+    __call__
+        Pad image with edge values.
+    """
+    def __init__(
+            self,
+            output_size: Number | tuple[Number, Number],
+            pos: str = 'top_left'
+    ):
+        """
+        Construct object.
+
+        Parameters
+        ----------
+        output_size : Union[Number, Tuple[Number, Number]]
+            Size of the output image either as Number or tuple of two Number.
+        pos : str
+            Position to put the input. Defaults to 'top_left'.
+        """
+        if isinstance(output_size, Number):
+            output_size = (int(output_size),) * 2
+        self.output_size = output_size
+        self.pos = pos
+
+    def __call__(self, img: npt.NDArray) -> np.ndarray:
+        """
+        Pad image with edge values (replicates edge pixels).
+
+        Parameters
+        ----------
+        img : npt.NDArray
+            The image to pad.
+
+        Returns
+        -------
+        img : np.ndarray
+            Original image with edge padding.
+        """
+        if len(img.shape) == 2:
+            h, w = img.shape
+            pad_h = self.output_size[0] - h
+            pad_w = self.output_size[1] - w
+            
+            if pad_h < 0 or pad_w < 0:
+                # Crop if image is larger than output_size
+                if pad_h < 0:
+                    h = self.output_size[0]
+                if pad_w < 0:
+                    w = self.output_size[1]
+                img = img[:h, :w]
+                pad_h = max(0, self.output_size[0] - h)
+                pad_w = max(0, self.output_size[1] - w)
+            
+            if pad_h > 0 or pad_w > 0:
+                # Use edge padding (replicates edge values)
+                img = np.pad(
+                    img,
+                    ((0, pad_h), (0, pad_w)),
+                    mode='edge',
+                ).astype(img.dtype)
+        else:
+            h, w, c = img.shape
+            pad_h = self.output_size[0] - h
+            pad_w = self.output_size[1] - w
+            
+            if pad_h < 0 or pad_w < 0:
+                # Crop if image is larger than output_size
+                if pad_h < 0:
+                    h = self.output_size[0]
+                if pad_w < 0:
+                    w = self.output_size[1]
+                img = img[:h, :w, :]
+                pad_h = max(0, self.output_size[0] - h)
+                pad_w = max(0, self.output_size[1] - w)
+            
+            if pad_h > 0 or pad_w > 0:
+                # Use edge padding (replicates edge values)
+                img = np.pad(
+                    img,
+                    ((0, pad_h), (0, pad_w), (0, 0)),
+                    mode='edge'
+                ).astype(img.dtype)
+
+        return img
+
+
 ##
 # Transformations for training
 ##

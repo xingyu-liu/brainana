@@ -26,11 +26,14 @@ from pandas import DataFrame
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from FastSurferCNN.data_loader.augmentation import ToTensorTest
+from FastSurferCNN.data_loader.augmentation import ToTensorTest, EdgePad2DTest
 from FastSurferCNN.data_loader.data_utils import map_prediction_sagittal2full
 from FastSurferCNN.data_loader.dataset import MultiScaleOrigDataThickSlices
 from FastSurferCNN.models.networks import build_model
 from FastSurferCNN.utils import logging
+from FastSurferCNN.utils.checkpoint import extract_atlas_metadata, read_checkpoint_file
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +209,7 @@ class Inference:
         dict, None
             Atlas metadata extracted from checkpoint, or None if not available.
         """
-        logger.info(f"Loading checkpoint {ckpt}")
+        logger.info(f"Checkpoint: loading {ckpt}")
 
         self.model = self._model_not_init
         # If device is None, the model has never been loaded (still in random initial configuration)
@@ -221,7 +224,6 @@ class Inference:
         self.model.to(load_device)
 
         # Load checkpoint using centralized function
-        from FastSurferCNN.utils.checkpoint import read_checkpoint_file, extract_atlas_metadata
         checkpoint = read_checkpoint_file(ckpt, map_location=load_device)
         self.model.load_state_dict(checkpoint["model_state"])
 
@@ -232,17 +234,17 @@ class Inference:
             atlas_metadata = extract_atlas_metadata(ckpt)
             
             if atlas_metadata:
-                logger.info(f"Loaded checkpoint with atlas: {atlas_metadata['atlas_name']} "
-                           f"({atlas_metadata['num_classes']} classes, {atlas_metadata['plane']} plane)")
-                logger.info(f"Atlas metadata source: {atlas_metadata['source']}")
+                logger.info(f"Checkpoint: loaded with atlas={atlas_metadata['atlas_name']}, "
+                           f"classes={atlas_metadata['num_classes']}, plane={atlas_metadata['plane']}")
+                logger.info(f"Checkpoint: atlas metadata source={atlas_metadata['source']}")
                 
                 # Store atlas metadata for later use
                 self.atlas_metadata = atlas_metadata
             else:
-                logger.warning("Could not extract atlas metadata from checkpoint - will need manual specification")
+                logger.warning("Checkpoint: could not extract atlas metadata, will need manual specification")
                 self.atlas_metadata = None
         except Exception as e:
-            logger.warning(f"Failed to extract atlas metadata: {e}")
+            logger.warning(f"Checkpoint: failed to extract atlas metadata: {e}")
             self.atlas_metadata = None
 
         # workaround for mps (move the model back to mps)
@@ -393,22 +395,34 @@ class Inference:
         # we should check here, whether the DataLoader is a Random or a SequentialSampler, but we cannot easily.
         if not isinstance(val_loader.sampler, torch.utils.data.SequentialSampler):
             logger.warning(
-                "The Validation loader seems to not use the SequentialSampler. This might interfere with "
-                "the assumed sorting of batches."
+                "Inference: validation loader does not use SequentialSampler, may interfere with batch sorting"
             )
 
-        start_index = 0
+        # ========================================================================
+        # Setup: Prepare for automatic cropping of padded predictions
+        # ========================================================================
+        # init_pred has shape matching the conformed image (e.g., 256×256×Z×num_classes)
+        # This represents the target output size (conformed image dimensions, NOT padded)
+        conformed_image_shape = init_pred.shape  # e.g., (256, 256, Z, num_classes)
+        
+        # Extract spatial dimensions (first 3 dims: height, width, depth)
+        # We'll crop predictions to match these dimensions
+        conformed_spatial_dims = conformed_image_shape[:3]  # e.g., (256, 256, Z)
+        
+        # Create slice indices to crop predictions from padded size back to conformed size
+        # Example: if model outputs 272×272 but conformed is 256×256, this crops to 256×256
+        # pred_crop_slices will be: (slice(256), slice(256), slice(Z))
+        pred_crop_slices = tuple(slice(dim_size) for dim_size in conformed_spatial_dims)
+        
+        # Setup for aggregating predictions into output tensor
         plane = self.cfg.DATA.PLANE
         index_of_current_plane = self.permute_order[plane].index(0)
-        target_shape = init_pred.shape
-        ii = [slice(None) for _ in range(4)]
-        pred_ii = tuple(slice(i) for i in target_shape[:3])
-
-        from tqdm import tqdm
-        from tqdm.contrib.logging import logging_redirect_tqdm
+        output_slice_indices = [slice(None) for _ in range(4)]  # Will be filled per batch
 
         if out is None:
             out = init_pred.detach().clone()
+        
+        start_index = 0
         log_batch_idx = None
         with logging_redirect_tqdm():
             try:
@@ -418,6 +432,7 @@ class Inference:
                     images, scale_factors = batch["image"].to(self.device), batch["scale_factor"].to(self.device)
 
                     # predict the current batch, outputs logits
+                    # Model outputs predictions at PADDED_SIZE (e.g., 272×272)
                     pred = self.model(images, scale_factors, out_scale)
                     batch_size = pred.shape[0]
                     end_index = start_index + batch_size
@@ -439,19 +454,28 @@ class Inference:
                     # permute the prediction into the out slice order
                     pred = pred.permute(*self.permute_order[plane]).to(out.device)  # the to-operation is implicit
 
-                    # cut prediction to the image size
-                    pred = pred[pred_ii]
+                    # ========================================================================
+                    # Automatic Cropping: Remove padding to match conformed image size
+                    # ========================================================================
+                    # Model outputs predictions at PADDED_SIZE (e.g., 272×272×Z)
+                    # But we need predictions at conformed image size (e.g., 256×256×Z)
+                    # Crop the padded predictions back to conformed dimensions
+                    # This ensures predictions match the conformed image shape for resampling
+                    pred = pred[pred_crop_slices]
+                    # After cropping: pred shape is now (256, 256, Z, num_classes) matching conformed image
 
                     # add prediction logits into the output (same as multiplying probabilities)
-                    ii[index_of_current_plane] = slice(start_index, end_index)
-                    out[tuple(ii)].add_(pred, alpha=self.alpha[plane])
+                    output_slice_indices[index_of_current_plane] = slice(start_index, end_index)
+                    out[tuple(output_slice_indices)].add_(pred, alpha=self.alpha[plane])
                     start_index = end_index
 
             except:
-                logger.exception(f"Exception in batch {log_batch_idx + 1} of {plane} inference.")
+                batch_num = log_batch_idx + 1 if log_batch_idx is not None else "unknown"
+                logger.exception(f"Exception in batch {batch_num} of {plane} inference.")
                 raise
             else:
-                logger.info(f"Inference on {log_batch_idx + 1} batches for {plane} successful")
+                batch_num = log_batch_idx + 1 if log_batch_idx is not None else 0
+                logger.info(f"Inference: completed {batch_num} batches for {plane} plane")
 
         return out
 
@@ -494,11 +518,15 @@ class Inference:
         """
         # Set up DataLoader
         rescale = self.cfg.DATA.PREPROCESSING.RESCALE
+        padding_size = self.cfg.DATA.PADDED_SIZE
         test_dataset = MultiScaleOrigDataThickSlices(
             orig_data,
             orig_zoom,
             self.cfg,
-            transforms=transforms.Compose([ToTensorTest(rescale=rescale)]),
+            transforms=transforms.Compose([
+                EdgePad2DTest((padding_size, padding_size)),
+                ToTensorTest(rescale=rescale)
+            ]),
         )
 
         test_data_loader = DataLoader(
@@ -512,7 +540,7 @@ class Inference:
         out = self.eval(init_pred, test_data_loader, out=out, out_scale=out_res)
         time_delta = time.time() - start
         logger.info(
-            f"{self.cfg.DATA.PLANE.capitalize()} inference on {img_filename} finished in {time_delta:0.4f} seconds"
+            f"Inference: {self.cfg.DATA.PLANE} plane on {img_filename} completed in {time_delta:.4f}s"
         )
 
         return out

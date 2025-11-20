@@ -39,10 +39,11 @@ from FastSurferCNN.utils.arg_types import float_gt_zero_and_le_one as __conform_
 from FastSurferCNN.utils.arg_types import img_size as __image_size
 from FastSurferCNN.utils.arg_types import orientation as __orientation
 from FastSurferCNN.utils.arg_types import vox_size as __vox_size
+from FastSurferCNN.utils.checkpoint import get_paths_from_yaml
+from FastSurferCNN.utils.constants import FASTSURFER_ROOT
 from FastSurferCNN.utils.dataclasses import field, get_field
 from FastSurferCNN.utils.threads import get_num_threads
 
-FASTSURFER_ROOT = Path(__file__).parents[2]
 PLANE_SHORT = {"checkpoint": "ckpt", "config": "cfg"}
 PLANE_HELP = {
     "checkpoint": "{} checkpoint to load (optional; 'none' or omit to skip this plane).",
@@ -420,7 +421,6 @@ def add_plane_flags(
             return None
         return Path(__value)
 
-    from FastSurferCNN.utils.checkpoint import get_paths_from_yaml
     defaults = get_paths_from_yaml(configtype, defaults_path)
 
     for plane, filepath in files.items():

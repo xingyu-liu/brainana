@@ -31,7 +31,7 @@ def setup_logging(log_file_path: _Path | str):
         Path to the logfile.
     """
     # Set up logging format.
-    _FORMAT = "[%(levelname)s: %(filename)s: %(lineno)4d]: %(message)s"
+    _FORMAT = "[%(levelname)s]: %(message)s"
     handlers = [StreamHandler(_stdout)]
 
     if log_file_path:

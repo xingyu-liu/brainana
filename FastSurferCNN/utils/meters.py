@@ -76,8 +76,7 @@ class AsyncDiceTracker:
                         self.last_compute_time = current_time
                 
                 time.sleep(0.1)  # Small sleep to prevent busy waiting
-            except Exception as e:
-                logger.warning(f"Error in background dice computation: {e}")
+            except Exception:
                 time.sleep(0.5)
     
     def get_latest_dice(self):
@@ -243,9 +242,9 @@ class Meter:
         """
         if (cur_iter + 1) % self._cfg.TRAIN.LOG_INTERVAL == 0:
             logger.info(
-                f"{self.mode} Epoch [{cur_epoch}/{self.total_epochs}]" \
-                f" Iter [{cur_iter + 1}/{self.total_iter_num}]" \
-                f" with loss {np.array(self.batch_losses).mean():.4f}"
+                f"Training: {self.mode.lower()} epoch={cur_epoch}/{self.total_epochs}, "
+                f"iter={cur_iter + 1}/{self.total_iter_num}, "
+                f"loss={np.array(self.batch_losses).mean():.4f}"
             )
 
     def log_epoch(self, cur_epoch: int):

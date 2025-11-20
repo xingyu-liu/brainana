@@ -19,14 +19,16 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast, overload
 
+import numpy as np
 import requests
 import torch
 import yacs.config
 import yaml
 
+from FastSurferCNN.atlas.atlas_manager import AtlasManager
 from FastSurferCNN.config.defaults import get_cfg_defaults
 from FastSurferCNN.utils import Plane, logging
-from FastSurferCNN.utils.parser_defaults import FASTSURFER_ROOT
+from FastSurferCNN.utils.constants import FASTSURFER_ROOT
 
 if TYPE_CHECKING:
     from torch.optim import lr_scheduler as Scheduler
@@ -342,8 +344,6 @@ def save_checkpoint(
                 LOGGER.info(f"Saving checkpoint with binary task metadata ({num_classes} classes, no atlas)")
         else:
             # Multi-class mode - save atlas metadata
-            from FastSurferCNN.atlas.atlas_manager import AtlasManager
-            
             # Extract atlas name from config
             atlas_name = None
             if hasattr(cfg.DATA, 'CLASS_OPTIONS') and cfg.DATA.CLASS_OPTIONS:
@@ -426,8 +426,6 @@ def save_best_checkpoint(
     # Phase 2: Add atlas metadata to checkpoint for robust inference
     # This ensures the checkpoint is self-contained and doesn't rely on external LUT files
     try:
-        from FastSurferCNN.atlas.atlas_manager import AtlasManager
-        
         # Extract atlas name from config
         atlas_name = None
         if hasattr(cfg.DATA, 'CLASS_OPTIONS') and cfg.DATA.CLASS_OPTIONS:
@@ -647,7 +645,6 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
             return None
         
         metadata = checkpoint["atlas_metadata"]
-        import numpy as np
         
         # Handle binary vs multi-class
         is_binary = metadata.get("is_binary_task", False)
@@ -714,7 +711,6 @@ def is_binary_checkpoint(checkpoint_path: str | Path) -> tuple[bool | None, int 
     try:
         checkpoint = read_checkpoint_file(checkpoint_path)
         if 'config' in checkpoint:
-            import yaml
             config_str = checkpoint['config']
             config_dict = yaml.safe_load(config_str)
             num_classes = config_dict.get("MODEL", {}).get("NUM_CLASSES")

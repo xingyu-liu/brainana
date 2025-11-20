@@ -49,11 +49,28 @@ def calculate_func_tmean(
     return {"output": outputf} 
 
 
+# def validate_image_orientation(
+#     imagef: str,
+#     targetf: str,
+#     logger: Optional[logging.Logger] = None,
+# ) -> Dict[str, str]:
+#     """Validate image orientation.
+    
+#     Args:
+#         imagef: Input image file
+#         targetf: Target image file that has the correct orientation
+#         logger: Logger instance
+        
+#     Returns:
+#         Dictionary with output file path
+#     """
+
+
 def reorient_image_to_target(
     imagef: str,
     targetf: str,
     outputf: str,
-    logger: logging.Logger,
+    logger: Optional[logging.Logger] = None,
 ) -> Dict[str, str]:
     """Reorient image to target.
     
@@ -65,6 +82,10 @@ def reorient_image_to_target(
     Returns:
         Dictionary with output file path
     """
+
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
     # use 3dinfo to get the orientation of the target file
     command_3dinfo = [
         '3dinfo',
@@ -153,4 +174,3 @@ def check_image_resolution(
         logger.error(f"Step: image resolution retrieval failed - return code {returncode}")
         logger.error(f"System: stderr - {stderr}")
         raise RuntimeError(f"Image resolution retrieval failed: {stderr}")
-

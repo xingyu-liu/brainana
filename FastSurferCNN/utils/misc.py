@@ -16,12 +16,15 @@
 import os
 from itertools import product
 
+import os
+
 import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import torch
 import yacs.config
+from FastSurferCNN.atlas.atlas_manager import AtlasManager
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from skimage import color
 from torchvision import utils
@@ -62,8 +65,6 @@ def plot_predictions(
 
     # Build dense-to-sparse mapping on-the-fly from current atlas
     # Use atlas_manager to get the exact same label list used during HDF5 creation
-    from FastSurferCNN.atlas.atlas_manager import AtlasManager
-    import os
     atlas_name = os.environ.get('ATLAS_NAME', 'ARM2')
     atlas_manager = AtlasManager(atlas_name)
     dense_to_sparse = np.array(atlas_manager.get_labels(), dtype=np.int32)

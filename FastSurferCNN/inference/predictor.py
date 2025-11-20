@@ -25,6 +25,7 @@ from typing import Any, Literal
 import nibabel as nib
 import numpy as np
 import torch
+import yaml
 
 from FastSurferCNN.atlas.atlas_manager import AtlasManager
 from FastSurferCNN.data_loader import data_utils
@@ -372,8 +373,6 @@ class RunModelOnData:
             return None
 
         try:
-            import yaml
-
             # Load checkpoint using shared helper
             checkpoint = read_checkpoint_file(checkpoint_path)
 

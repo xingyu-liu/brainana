@@ -315,12 +315,12 @@ def _find_image_label_pairs(image_dir, label_dir):
         label_pattern = f"{base_name}_*.nii.gz"
         label_matches = sorted(label_dir.glob(label_pattern))
         
-        if len(label_matches) == 0:
-            print(f"Warning: No label file found for {image_file.name}")
-        elif len(label_matches) == 1:
+        if len(label_matches) == 1:
             matched_pairs.append((image_file, label_matches[0]))
-        else:
-            print(f"Warning: Multiple label files found for {image_file.name}, skipping")
+        # elif len(label_matches) == 0:
+        #     print(f"Warning: No label file found for {image_file.name}")
+        # else:
+        #     print(f"Warning: Multiple label files found for {image_file.name}, skipping")
     
     return [pair[0] for pair in matched_pairs], [pair[1] for pair in matched_pairs]
 

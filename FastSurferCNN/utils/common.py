@@ -89,7 +89,7 @@ def find_device(
     if str(device) == "mps" and not has_mps:
         msg = f"mps not available, try switching to cpu: --{flag_name} cpu"
     if msg is not None:
-        logger.info(msg)
+        logger.info(f"System: {msg}")
         raise ValueError(msg)
     # If auto detect:
     if str(device) == "auto" or not device:
@@ -101,7 +101,7 @@ def find_device(
     if device_str == "cuda" and has_cuda:
         best_gpu = get_least_busy_gpu()
         device = f"cuda:{best_gpu}"
-        logger.info(f"Auto-selected least busy GPU: {device}")
+        logger.info(f"System: auto-selected least busy GPU={device}")
 
     device = torch.device(device)
 
@@ -111,13 +111,13 @@ def find_device(
         if total_gpu_memory < min_memory:
             giga = 1024**3
             logger.warning(
-                f"Found {total_gpu_memory/giga:.1f} GB GPU memory on device {device}, but {min_memory/giga:.1f} GB was "
-                f"required. Falling back to {flag_name} cpu."
+                f"System: GPU memory insufficient (found={total_gpu_memory/giga:.1f}GB, required={min_memory/giga:.1f}GB), "
+                f"falling back to cpu"
             )
             device = torch.device("cpu")
 
     # Define device and transfer model
-    logger.info(f"Using {flag_name}: {device}")
+    logger.info(f"System: using device={device}")
     return device
 
 

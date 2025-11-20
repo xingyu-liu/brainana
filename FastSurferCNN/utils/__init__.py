@@ -18,6 +18,7 @@ __all__ = [
     "checkpoint",
     "common",
     "config_utils",
+    "constants",
     "dataclasses",
     "download_checkpoints",
     "gpu_utils",
@@ -38,9 +39,12 @@ __all__ = [
     "PlaneCoronal",
     "PlaneSagittal",
     "PLANES",
+    "FASTSURFER_ROOT",
 ]
 
 from typing import Literal, get_args
+
+from FastSurferCNN.utils.constants import FASTSURFER_ROOT
 
 PlaneAxial = Literal["axial"]
 PlaneCoronal = Literal["coronal"]

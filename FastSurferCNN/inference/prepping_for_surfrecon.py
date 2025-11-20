@@ -34,6 +34,8 @@ _file_dir = Path(__file__).resolve().parent
 if str(_file_dir.parent) not in sys.path:
     sys.path.insert(0, str(_file_dir.parent))
 
+import tempfile
+
 import nibabel as nib
 import numpy as np
 
@@ -48,13 +50,13 @@ from FastSurferCNN.inference.predictor_utils import (
 )
 from FastSurferCNN.inference.skullstripping import skullstripping
 from FastSurferCNN.seg_statistics.quick_qc import check_volume
+from FastSurferCNN.utils.arg_types import vox_size as _vox_size
 from FastSurferCNN.utils import PLANES, Plane, logging, parser_defaults
 from FastSurferCNN.utils.arg_types import OrientationType, VoxSizeOption
 from FastSurferCNN.utils.checkpoint import get_checkpoints, get_paths_from_yaml
 from FastSurferCNN.utils.common import find_device, handle_cuda_memory_exception
+from FastSurferCNN.utils.constants import FASTSURFER_ROOT
 from FastSurferCNN.utils.logging import setup_logging
-
-from FastSurferCNN.utils.parser_defaults import FASTSURFER_ROOT
 
 LOGGER = logging.getLogger(__name__)
 CHECKPOINT_PATHS_FILE = FASTSURFER_ROOT / "FastSurferCNN/config/checkpoint_paths.yaml"
@@ -88,8 +90,6 @@ def _conform_and_save_orig_mgz(
     Path
         Path to saved orig.mgz file
     """
-    from FastSurferCNN.utils.arg_types import vox_size as _vox_size
-    
     input_image = Path(input_image)
     mri_dir = output_dir / "mri"
     mri_dir.mkdir(parents=True, exist_ok=True)
@@ -394,7 +394,6 @@ def prepare_freesurfer_subject(
             skullstripping_config['plane_weight_sagittal'] = plane_weight_sagittal
         
         # Create temporary directory for skullstripping outputs
-        import tempfile
         temp_skull_dir = Path(tempfile.mkdtemp(prefix="fastsurfer_skull_"))
         try:
             skullstripping(
@@ -435,7 +434,6 @@ def prepare_freesurfer_subject(
         LOGGER.info("=" * 80)
         
         # Create temporary directory for segmentation outputs
-        import tempfile
         temp_seg_dir = Path(tempfile.mkdtemp(prefix="fastsurfer_seg_"))
         
         try:

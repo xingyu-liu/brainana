@@ -19,21 +19,40 @@ import argparse
 import re
 import sys
 from collections.abc import Callable, Iterable, Sequence
+from functools import partial
+from itertools import chain
 from typing import TYPE_CHECKING, Literal, TypeVar, cast
 
 import nibabel
 import nibabel as nib
 import numpy as np
 import numpy.typing as npt
+from nibabel.freesurfer import mghformat
 from nibabel.freesurfer.mghformat import MGHHeader
+from nibabel.orientations import (
+    OrientationError,
+    apply_orientation as _apply_orientation,
+    axcodes2ornt,
+    io_orientation,
+    ornt_transform,
+)
+from scipy.ndimage import affine_transform
 
 if TYPE_CHECKING:
     import torch
+    from torch import is_tensor as _is_tensor
+    from torch.nn.functional import pad as _pad
 else:
     # stub imports so TypeVar works
     class torch:
         class Tensor:
             pass
+    
+    def _is_tensor(obj):
+        return False
+    
+    def _pad(*args, **kwargs):
+        raise NotImplementedError("torch not available")
 
 from FastSurferCNN.utils import logging
 from FastSurferCNN.utils.arg_types import ImageSizeOption, OrientationType, StrictOrientationType, VoxSizeOption
@@ -309,8 +328,6 @@ def orientation_to_ornts(
     npt.NDArray[int]
         The `ornt` transform back from target_orientation to source_affine.
     """
-    from nibabel.orientations import axcodes2ornt, io_orientation, ornt_transform
-
     source_ornt = io_orientation(source_affine)
     target_ornt = axcodes2ornt(target_orientation.upper())
     reorient_ornt = ornt_transform(source_ornt, target_ornt)
@@ -342,10 +359,6 @@ def apply_orientation(arr: _TB | npt.ArrayLike, ornt: npt.NDArray[int]) -> _TB:
     nibabel.orientations.apply_orientation
         This function is an extension to `nibabel.orientations.apply_orientation`.
     """
-    from nibabel.orientations import OrientationError
-    from nibabel.orientations import apply_orientation as _apply_orientation
-    from torch import is_tensor as _is_tensor
-
     if _is_tensor(arr):
         ornt = np.asarray(ornt)
         n = ornt.shape[0]
@@ -452,8 +465,6 @@ def map_image(
             reordered = apply_orientation(image_data, ornt)
             # pad=0 => pad with zeros
             return crop_transform(reordered, offsets=offsets, target_shape=out_shape, pad=0)
-
-    from scipy.ndimage import affine_transform
 
     return affine_transform(image_data, inv_vox2vox, output_shape=out_shape, order=order)
 
@@ -699,8 +710,7 @@ def conform(
     target_affine = h1.get_affine()
     if LOGGER.getEffectiveLevel() <= logging.DEBUG:
         with np.printoptions(precision=2, suppress=True):
-            from re import sub
-            LOGGER.debug("affine: " + sub("\\s+", " ", str(target_affine[:3, :3])))
+            LOGGER.debug("affine: " + re.sub("\\s+", " ", str(target_affine[:3, :3])))
 
     # from_header does not compute Pxyz_c (and probably others) when importing from nii
     # Pxyz is the center of the image in world coords
@@ -747,7 +757,6 @@ def conform(
     new_img = nibabel.MGHImage(mapped_data.astype(target_dtype), target_affine, h1)
 
     # make sure we store uchar
-    from nibabel.freesurfer import mghformat
     try:
         new_img.set_data_dtype(target_dtype)
     except mghformat.MGHError as e:
@@ -1010,11 +1019,11 @@ def is_conform(
             else:
                 with np.printoptions(precision=2, suppress=True):
                     conform_str = str(_vox_size) + "-"
-        logger.info(f"A {conform_str}conformed image must satisfy the following criteria:")
+        logger.info(f"Preprocessing: {conform_str}conformed image criteria check:")
         for condition, (value, message) in checks.items():
             if isinstance(value, bool):
                 value = "GOOD" if value else "BUT"
-            logger.info(f" - {condition:<30}: {value} {message}")
+            logger.info(f"Preprocessing:   {condition:<30}: {value} {message}")
     return _is_conform
 
 
@@ -1329,15 +1338,9 @@ def _crop_transform_pad_fn(image, pad_tuples, pad):
     else:  # Tensor
         kwargs["value"] = pad
 
-    from functools import partial
-
     if isinstance(image, np.ndarray):
         return partial(np.pad, pad_width=[(0, 0)] * (image.ndim - len(pad_tuples)) + pad_tuples, **kwargs)
     else:  # Tensor
-        from itertools import chain
-
-        from torch.nn.functional import pad as _pad
-
         return partial(_pad, pad=list(chain.from_iterable(reversed(pad_tuples))), **kwargs)
 
 
