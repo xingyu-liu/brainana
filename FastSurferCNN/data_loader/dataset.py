@@ -67,6 +67,14 @@ class MultiScaleOrigDataThickSlices(Dataset):
         self.slice_thickness = cfg.MODEL.NUM_CHANNELS // 2
         self.base_res = 1.0
 
+        # Handle mixed plane mode - should not reach here with "mixed", but safety check
+        if self.plane == "mixed":
+            raise ValueError(
+                "MultiScaleOrigDataThickSlices received PLANE='mixed'. "
+                "For mixed-plane models, plane should be set to specific plane (axial/coronal/sagittal) "
+                "before creating dataset. This is handled automatically in Inference.run()."
+            )
+
         if self.plane == "sagittal":
             orig_data = data_ultils.transform_sagittal(orig_data)
             self.zoom = np.asarray(orig_zoom)[[2, 1]]
@@ -78,6 +86,7 @@ class MultiScaleOrigDataThickSlices(Dataset):
             logger.info(f"Dataset: loading axial plane with voxelsize {self.zoom}")
 
         else:
+            # Default to coronal if not sagittal or axial
             self.zoom = np.asarray(orig_zoom)[[0, 1]]
             logger.info(f"Dataset: loading coronal plane with voxelsize {self.zoom}")
 

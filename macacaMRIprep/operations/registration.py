@@ -74,7 +74,8 @@ def compose_ants_registration_cmd(
         '--winsorize-image-intensities', config.get('winsorize_image_intensities'),
         '--output', f"[{output_path_prefix}_,{output_path_prefix}_registered.nii.gz]",
         '--write-composite-transform', str(config.get('write_composite_transform')),
-        '--collapse-output-transforms', str(config.get('collapse_output_transforms'))
+        '--collapse-output-transforms', str(config.get('collapse_output_transforms')),
+        
     ]
 
     # Define the order of transformation stages
@@ -85,6 +86,12 @@ def compose_ants_registration_cmd(
         xfm_index = stages.index(xfm_type)
     except ValueError:
         raise ValueError(f"Invalid xfm_type value: {xfm_type}. Must be one of {stages}")
+    
+    # Enable initialize-transforms-per-stage when multiple linear stages are used
+    # This allows each linear stage to initialize from the previous stage's transform
+    # (e.g., Translation -> Rigid -> Affine)
+    if xfm_index >= 1:  # More than just translation (rigid, affine, or syn)
+        cmd.extend(['--initialize-transforms-per-stage', '1'])
     
     # Add transformation stages up to and including the xfm_type
     for i, stage_name in enumerate(stages):

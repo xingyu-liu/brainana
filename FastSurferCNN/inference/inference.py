@@ -296,9 +296,13 @@ class Inference:
         Returns
         -------
         str
-            The plane used in the model.
+            The plane used in the model. Returns "mixed" if model is plane-agnostic.
         """
-        return self.cfg.DATA.PLANE
+        plane = self.cfg.DATA.PLANE
+        if plane == "mixed":
+            # For mixed mode, model is plane-agnostic but we need to know it's mixed
+            return "mixed"
+        return plane
 
     def get_model_height(self) -> int:
         """
@@ -416,6 +420,11 @@ class Inference:
         
         # Setup for aggregating predictions into output tensor
         plane = self.cfg.DATA.PLANE
+        # For mixed mode, plane is temporarily set to current plane in run() method
+        if plane == "mixed":
+            # This shouldn't happen in eval() - plane should be set to specific plane by run()
+            raise ValueError("eval() called with PLANE='mixed'. This should be handled by run() method.")
+        
         index_of_current_plane = self.permute_order[plane].index(0)
         output_slice_indices = [slice(None) for _ in range(4)]  # Will be filled per batch
 
@@ -438,7 +447,9 @@ class Inference:
                     end_index = start_index + batch_size
 
                     # check if we need a special mapping (e.g. as for sagittal)
-                    if self.get_plane() == "sagittal":
+                    # Note: For mixed mode, plane is set temporarily in run(), so this works correctly
+                    current_plane = self.cfg.DATA.PLANE
+                    if current_plane == "sagittal":
                         # Determine atlas name from config or environment
                         atlas_name = None
                         if hasattr(self.cfg.DATA, 'CLASS_OPTIONS') and self.cfg.DATA.CLASS_OPTIONS:
@@ -494,6 +505,8 @@ class Inference:
         Run the loaded model on the data (T1) from orig_data and
         img_filename (for messages only) with scale factors orig_zoom.
 
+        For mixed-plane models (PLANE="mixed"), processes all 3 planes and aggregates predictions.
+
         Parameters
         ----------
         init_pred : torch.Tensor
@@ -516,6 +529,60 @@ class Inference:
         torch.Tensor
             Prediction probability tensor.
         """
+        plane = self.cfg.DATA.PLANE
+        
+        # Handle mixed-plane mode: process all 3 planes and aggregate
+        if plane == "mixed":
+            logger.info(f"Inference: Mixed-plane mode - processing all 3 planes (axial, coronal, sagittal)")
+            planes_to_process = ["axial", "coronal", "sagittal"]
+            
+            if out is None:
+                out = init_pred.detach().clone()
+            
+            start = time.time()
+            for current_plane in planes_to_process:
+                logger.info(f"Inference: Processing {current_plane} plane...")
+                
+                # Temporarily set plane in config for this iteration
+                original_plane = self.cfg.DATA.PLANE
+                self.cfg.DATA.PLANE = current_plane
+                
+                try:
+                    # Set up DataLoader for this plane
+                    rescale = self.cfg.DATA.PREPROCESSING.RESCALE
+                    padding_size = self.cfg.DATA.PADDED_SIZE
+                    test_dataset = MultiScaleOrigDataThickSlices(
+                        orig_data,
+                        orig_zoom,
+                        self.cfg,
+                        transforms=transforms.Compose([
+                            EdgePad2DTest((padding_size, padding_size)),
+                            ToTensorTest(rescale=rescale)
+                        ]),
+                    )
+
+                    test_data_loader = DataLoader(
+                        dataset=test_dataset,
+                        shuffle=False,
+                        batch_size=self.cfg.TEST.BATCH_SIZE if batch_size is None else batch_size,
+                    )
+
+                    # Run evaluation for this plane (aggregates into out)
+                    self.eval(init_pred, test_data_loader, out=out, out_scale=out_res)
+                    
+                finally:
+                    # Restore original plane setting
+                    self.cfg.DATA.PLANE = original_plane
+            
+            time_delta = time.time() - start
+            logger.info(
+                f"Inference: Mixed-plane mode on {img_filename} completed in {time_delta:.4f}s "
+                f"(processed all 3 planes)"
+            )
+            
+            return out
+        
+        # Single-plane mode (original behavior)
         # Set up DataLoader
         rescale = self.cfg.DATA.PREPROCESSING.RESCALE
         padding_size = self.cfg.DATA.PADDED_SIZE
@@ -540,7 +607,7 @@ class Inference:
         out = self.eval(init_pred, test_data_loader, out=out, out_scale=out_res)
         time_delta = time.time() - start
         logger.info(
-            f"Inference: {self.cfg.DATA.PLANE} plane on {img_filename} completed in {time_delta:.4f}s"
+            f"Inference: {plane} plane on {img_filename} completed in {time_delta:.4f}s"
         )
 
         return out

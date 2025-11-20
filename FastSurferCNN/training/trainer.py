@@ -111,7 +111,13 @@ class Trainer:
             class_dict = atlas_manager.get_class_dict()
             
             # Extract class names based on plane and options
-            plane_key = "sagittal" if cfg.DATA.PLANE == "sagittal" else "not_sagittal"
+            # For mixed plane mode, use "not_sagittal" (coronal/axial) as default
+            plane = cfg.DATA.PLANE
+            if plane == "mixed":
+                plane_key = "not_sagittal"  # Mixed mode uses combined view
+            else:
+                plane_key = "sagittal" if plane == "sagittal" else "not_sagittal"
+            
             self.class_names = []
             for opt in cfg.DATA.CLASS_OPTIONS:
                 if opt.upper() in ['ARM2', 'ARM3', 'FREESURFER']:
@@ -141,7 +147,11 @@ class Trainer:
         logger.info(f"Device:             {self.device}")
         
         # Data info
-        logger.info(f"Plane:              {cfg.DATA.PLANE}")
+        plane = cfg.DATA.PLANE
+        if plane == "mixed":
+            logger.info(f"Plane:              {plane} (plane-agnostic: axial, coronal, sagittal)")
+        else:
+            logger.info(f"Plane:              {plane}")
         image_size = cfg.DATA.SIZES[0] if cfg.DATA.SIZES else cfg.MODEL.HEIGHT
         logger.info(f"Image Size:         {image_size}×{image_size}")
         logger.info(f"Padded Size:        {cfg.DATA.PADDED_SIZE}")

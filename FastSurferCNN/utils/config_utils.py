@@ -79,6 +79,7 @@ def get_paths_from_config(cfg):
     log_dir = Path(cfg['OUTPUT_DIR'])
     
     # HDF5 files follow naming convention: {split}_{plane}.hdf5
+    # Example: train_axial.hdf5, val_coronal.hdf5, train_mixed.hdf5
     train_hdf5 = data_dir / f"train_{plane}.hdf5"
     val_hdf5 = data_dir / f"val_{plane}.hdf5"
     

@@ -366,7 +366,11 @@ def create_hdf5_dataset(
     subject_filter=None,
     num_workers=1,
 ):
-    """Create HDF5 dataset using conform() preprocessing."""
+    """Create HDF5 dataset using conform() preprocessing.
+    
+    When plane="mixed", processes each subject for all three planes (axial, coronal, sagittal)
+    and stores all slices in a single HDF5 file for plane-agnostic training.
+    """
     image_dir = Path(data_dir) / "images"
     label_dir = Path(data_dir) / "labels"
     
@@ -382,7 +386,16 @@ def create_hdf5_dataset(
         image_files = all_image_files
         print(f"Found {len(image_files)} subjects")
     
-    print(f"Processing plane: {plane}, target size: {target_size}×{target_size}, output: {output_hdf5}")
+    # Handle mixed plane mode
+    if plane == "mixed":
+        planes_to_process = ["axial", "coronal", "sagittal"]
+        print(f"Processing MIXED planes (axial, coronal, sagittal)")
+        print(f"  Each subject will be processed for all 3 planes")
+        print(f"  Target size: {target_size}×{target_size}, output: {output_hdf5}")
+    else:
+        planes_to_process = [plane]
+        print(f"Processing plane: {plane}, target size: {target_size}×{target_size}, output: {output_hdf5}")
+    
     if num_workers > 1:
         print(f"Using {num_workers} parallel workers")
     
@@ -396,7 +409,27 @@ def create_hdf5_dataset(
     
     already_processed, file_mode = _check_resume_capability(output_hdf5, target_size, preprocess_params)
     
-    if already_processed:
+    # For mixed mode, track which (subject, plane) combinations are already processed
+    if plane == "mixed" and already_processed:
+        # Load existing subject-plane pairs from HDF5
+        with h5py.File(output_hdf5, 'r') as hf_check:
+            if str(target_size) in hf_check and 'subject' in hf_check[str(target_size)]:
+                # For mixed mode, we can't easily track which planes are done per subject
+                # So we'll just check if subject exists (conservative approach)
+                existing_subjects = set(
+                    str(s.decode('utf-8') if isinstance(s, bytes) else s).strip()
+                    for s in hf_check[str(target_size)]['subject'][:]
+                )
+                original_count = len(image_files)
+                image_files = [
+                    img for img in image_files 
+                    if img.name.replace('.nii.gz', '').strip() not in existing_subjects
+                ]
+                print(f"Filtered: {original_count} → {len(image_files)} subjects remaining (mixed mode)")
+                if len(image_files) == 0:
+                    print("✅ All subjects already processed!")
+                    return
+    elif already_processed:
         original_count = len(image_files)
         image_files = [
             img for img in image_files 
@@ -417,6 +450,7 @@ def create_hdf5_dataset(
                 preprocess_metadata.attrs[key] = value
             preprocess_metadata.attrs['created_with_conform'] = True
             preprocess_metadata.attrs['version'] = '1.0'
+            preprocess_metadata.attrs['plane_mode'] = plane  # Store plane mode
             print("✓ Saved preprocessing metadata")
         
         if str(target_size) not in hf:
@@ -442,13 +476,17 @@ def create_hdf5_dataset(
         
         datasets = (images_ds, labels_ds, weights_ds, zooms_ds, subjects_ds)
         
-        process_args = [
-            (idx, image_file, label_dir, plane, slice_thickness, target_size, 
-             atlas_manager, preprocess_params, num_classes, total_subjects)
-            for idx, image_file in enumerate(image_files, 1)
-        ]
+        # Build process args: for mixed mode, process each subject for all planes
+        process_args = []
+        for idx, image_file in enumerate(image_files, 1):
+            for p in planes_to_process:
+                process_args.append((
+                    idx, image_file, label_dir, p, slice_thickness, target_size, 
+                    atlas_manager, preprocess_params, num_classes, total_subjects
+                ))
         
         subjects_processed = 0
+        subjects_processed_set = set()  # Track unique subjects processed
         
         if num_workers > 1:
             with Pool(processes=num_workers) as pool:
@@ -457,8 +495,8 @@ def create_hdf5_dataset(
                     if result_data is not None:
                         result, subject_name = result_data
                         num_samples_written += _append_to_datasets(datasets, result, subject_name)
-                        subjects_processed += 1
-                        if subjects_processed % 10 == 0:
+                        subjects_processed_set.add(subject_name)
+                        if len(subjects_processed_set) % 10 == 0:
                             check_memory_and_warn()
         else:
             for args in process_args:
@@ -467,9 +505,11 @@ def create_hdf5_dataset(
                 if result_data is not None:
                     result, subject_name = result_data
                     num_samples_written += _append_to_datasets(datasets, result, subject_name)
-                    subjects_processed += 1
-                    if subjects_processed % 10 == 0:
+                    subjects_processed_set.add(subject_name)
+                    if len(subjects_processed_set) % 10 == 0:
                         check_memory_and_warn()
+        
+        subjects_processed = len(subjects_processed_set)
     
     # Final summary
     with h5py.File(output_hdf5, 'r') as hf:
@@ -477,6 +517,13 @@ def create_hdf5_dataset(
         unique_subjects = len(set(grp['subject'][:]))
         total_slices_in_file = grp['orig_dataset'].shape[0]
         skipped_count = len(image_files) - subjects_processed
+        
+        if plane == "mixed":
+            expected_slices_per_subject = 3  # Each subject processed for 3 planes
+            print(f"\nMixed-plane mode summary:")
+            print(f"  Processed {subjects_processed} subjects × {len(planes_to_process)} planes = {subjects_processed * len(planes_to_process)} subject-plane combinations")
+        else:
+            expected_slices_per_subject = 1
         
         if file_mode == 'a' and num_samples_written > 0:
             print(f"Newly added: {num_samples_written} slices from {subjects_processed} subjects")
@@ -489,6 +536,8 @@ def create_hdf5_dataset(
             print(f"Skipped: {skipped_count} subjects (invalid zoom values or no valid slices)")
         
         print(f"Total in file: {total_slices_in_file} slices from {unique_subjects} subjects")
+        if plane == "mixed":
+            print(f"  (Mixed-plane mode: slices from axial, coronal, and sagittal planes)")
         print(f"All images are exactly {target_size}×{target_size}")
         
         if total_slices_in_file == 0:

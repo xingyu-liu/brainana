@@ -146,7 +146,8 @@ _C.DATA.PATH_HDF5_TRAIN = ""
 # path to validation hdf5-dataset
 _C.DATA.PATH_HDF5_VAL = ""
 
-# The plane to load ['axial', 'coronal', 'sagittal']
+# The plane to load ['axial', 'coronal', 'sagittal', 'mixed']
+# 'mixed' mode: processes all 3 planes per subject for plane-agnostic training
 _C.DATA.PLANE = "coronal"
 
 # Which classes to use
