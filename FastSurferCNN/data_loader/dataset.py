@@ -304,20 +304,7 @@ class MultiScaleDataset(Dataset):
         """
         from FastSurferCNN.data_loader.data_utils import pad_to_size
         
-        if len(image.shape) == 2:
-            h, w = image.shape
-            if self.max_size < h:
-                # Crop if image is larger than max_size
-                sub = h - self.max_size
-                image = image[0 : h - sub, 0 : w - sub]
-        else:
-            h, w, c = image.shape
-            if self.max_size < h:
-                # Crop if image is larger than max_size
-                sub = h - self.max_size
-                image = image[0 : h - sub, 0 : w - sub, :]
-        
-        # Use unified padding function with edge mode
+        # Use unified padding function with edge mode (handles cropping internally if needed)
         return pad_to_size(image, self.max_size, mode='edge', pos='top_left')
 
     def unify_imgs(

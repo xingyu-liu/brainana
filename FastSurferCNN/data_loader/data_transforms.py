@@ -74,116 +74,6 @@ class ToTensorTest:
         return img
 
 
-class Resize2DTest:
-    """
-    Resize 2D slice to target size (proportional resize + padding).
-    Uses the unified resize_to_target_size function for consistency with training.
-    
-    This ensures inference pipeline matches training:
-    - Training: slices resized to SIZES[0], then padded to PADDED_SIZE
-    - Inference: slices resized to SIZES[0], then padded to PADDED_SIZE
-    """
-    
-    def __init__(self, target_size: int, order: int = 1):
-        """
-        Initialize Resize2DTest.
-        
-        Parameters
-        ----------
-        target_size : int
-            Target size for both height and width (e.g., 256)
-        order : int, default=1
-            Interpolation order (0=nearest, 1=linear, 3=cubic)
-        """
-        self.target_size = target_size
-        self.order = order
-    
-    def __call__(self, img: npt.NDArray) -> np.ndarray:
-        """
-        Resize image proportionally to fit within target_size, then pad to exact dimensions.
-        
-        Parameters
-        ----------
-        img : npt.NDArray
-            Image to resize (H, W) or (H, W, C)
-            
-        Returns
-        -------
-        np.ndarray
-            Resized and padded image (target_size, target_size) or (target_size, target_size, C)
-        """
-        from FastSurferCNN.data_loader.data_utils import resize_to_target_size
-        resized, _ = resize_to_target_size(img, self.target_size, order=self.order)
-        return resized
-
-
-class Pad2DTest:
-    """
-    Pad the input to get output size. Supports both edge padding and zero padding.
-    
-    Edge padding replicates edge pixels (better for boundary performance).
-    Zero padding fills with zeros.
-
-    Attributes
-    ----------
-    output_size : Union[Number, Tuple[Number, Number]]
-        Size of the output image either as Number or tuple of two Number.
-    mode : str
-        Padding mode: 'edge' (replicates edge pixels) or 'zero' (fills with zeros).
-        Defaults to 'edge'.
-    pos : str
-        Position to put the input (currently only 'top_left' supported).
-
-    Methods
-    -------
-    __call__
-        Pad image with specified mode.
-    """
-    def __init__(
-            self,
-            output_size: Number | tuple[Number, Number],
-            mode: str = 'edge',
-            pos: str = 'top_left'
-    ):
-        """
-        Construct object.
-
-        Parameters
-        ----------
-        output_size : Union[Number, Tuple[Number, Number]]
-            Size of the output image either as Number or tuple of two Number.
-        mode : str, default='edge'
-            Padding mode: 'edge' (replicates edge pixels) or 'zero' (fills with zeros).
-        pos : str
-            Position to put the input. Defaults to 'top_left'.
-        """
-        from FastSurferCNN.data_loader.data_utils import pad_to_size
-        if isinstance(output_size, Number):
-            output_size = (int(output_size),) * 2
-        self.output_size = output_size
-        if mode not in ['edge', 'zero']:
-            raise ValueError(f"mode must be 'edge' or 'zero', got '{mode}'")
-        self.mode = mode
-        self.pos = pos
-        self._pad_to_size = pad_to_size
-
-    def __call__(self, img: npt.NDArray) -> np.ndarray:
-        """
-        Pad image with specified mode (edge or zero).
-
-        Parameters
-        ----------
-        img : npt.NDArray
-            The image to pad.
-
-        Returns
-        -------
-        img : np.ndarray
-            Original image with padding applied.
-        """
-        return self._pad_to_size(img, self.output_size, mode=self.mode, pos=self.pos)
-
-
 ##
 # Transformations for training
 ##
@@ -250,7 +140,11 @@ class ToTensor:
 
 class Pad2D:
     """
-    Pad the input to get output size. Supports both edge padding and zero padding.
+    Pad image(s) to target size. Supports both edge padding and zero padding.
+    
+    Unified padding transform that works for both:
+    - Single images (inference): takes npt.NDArray, returns np.ndarray
+    - Sample dicts (training): takes dict with "img", "label", "weight", returns dict
     
     Edge padding replicates edge pixels (better for boundary performance).
     Zero padding fills with zeros.
@@ -263,12 +157,12 @@ class Pad2D:
         Padding mode: 'edge' (replicates edge pixels) or 'zero' (fills with zeros).
         Defaults to 'edge'.
     pos : str, Optional
-        Position to put the input.
+        Position to put the input. Default = 'top_left'.
 
     Methods
     -------
     __call__
-        Pads image, label, and weight in sample.
+        Pads image(s) with specified mode.
     """
     def __init__(
             self,
@@ -277,13 +171,12 @@ class Pad2D:
             pos: None | str = 'top_left'
     ):
         """
-        Initialize position and output_size (as Tuple[float]).
+        Initialize padding transform.
 
         Parameters
         ----------
         output_size : Union[Number, Tuple[Number, Number]]
-            Size of the output image either as Number or
-            tuple of two Number.
+            Size of the output image either as Number or tuple of two Number.
         mode : str, default='edge'
             Padding mode: 'edge' (replicates edge pixels) or 'zero' (fills with zeros).
         pos : str, Optional
@@ -299,32 +192,40 @@ class Pad2D:
         self.pos = pos
         self._pad_to_size = pad_to_size
 
-    def __call__(self, sample: dict[str, Any]) -> dict[str, Any]:
+    def __call__(self, input_data: npt.NDArray | dict[str, Any]) -> np.ndarray | dict[str, Any]:
         """
-        Pad the image, label and weights.
+        Pad image(s) with specified mode.
 
         Parameters
         ----------
-        sample : Dict[str, Any]
-            Sample image.
+        input_data : npt.NDArray or dict[str, Any]
+            Either a single image array (inference) or a dict with "img", "label", "weight" keys (training).
 
         Returns
         -------
-        Dict[str, Any]
-            Dictionary including the padded image, label, weight and scale factor.
+        np.ndarray or dict[str, Any]
+            Padded image(s) with same type as input.
         """
-        img, label, weight, sf = (
-            sample["img"],
-            sample["label"],
-            sample["weight"],
-            sample["scale_factor"],
-        )
+        # Handle single image (inference case)
+        if isinstance(input_data, np.ndarray):
+            return self._pad_to_size(input_data, self.output_size, mode=self.mode, pos=self.pos)
         
-        img = self._pad_to_size(img, self.output_size, mode=self.mode, pos=self.pos)
-        label = self._pad_to_size(label, self.output_size, mode=self.mode, pos=self.pos)
-        weight = self._pad_to_size(weight, self.output_size, mode=self.mode, pos=self.pos)
+        # Handle sample dict (training case)
+        if isinstance(input_data, dict):
+            img, label, weight, sf = (
+                input_data["img"],
+                input_data["label"],
+                input_data["weight"],
+                input_data["scale_factor"],
+            )
+            
+            img = self._pad_to_size(img, self.output_size, mode=self.mode, pos=self.pos)
+            label = self._pad_to_size(label, self.output_size, mode=self.mode, pos=self.pos)
+            weight = self._pad_to_size(weight, self.output_size, mode=self.mode, pos=self.pos)
 
-        return {"img": img, "label": label, "weight": weight, "scale_factor": sf}
+            return {"img": img, "label": label, "weight": weight, "scale_factor": sf}
+        
+        raise TypeError(f"Pad2D expects np.ndarray or dict, got {type(input_data)}")
 
 
 class AddGaussianNoise:
@@ -384,26 +285,27 @@ class AddGaussianNoise:
 
 class AugmentationPadImage:
     """
-    Pad Image with either zero padding or reflection padding of img, label and weight.
+    Pad Image with symmetric padding on all sides for augmentation.
+    
+    This is different from Pad2D which pads to a target size. This class adds
+    symmetric padding (same amount on all sides) which is useful for augmentation
+    operations that need border space.
 
     Attributes
     ----------
-    pad_size_image : tuple
-        The padding size for the image.
-    pad_size_mask : tuple
-        The padding size for the mask.
+    pad_size : int or tuple
+        Padding size. If int, applies same padding to all sides.
     pad_type : str
-        The type of padding to be applied.
+        Padding mode ('edge', 'zero', etc.)
 
     Methods
     -------
-     __call
-        Add zeroes.
+    __call__
+        Adds symmetric padding to img, label, and weight.
     """
     def __init__(
             self,
-            pad_size: tuple[tuple[int, int],
-            tuple[int, int]] = ((16, 16), (16, 16)),
+            pad_size: int | tuple[tuple[int, int], tuple[int, int]] = 16,
             pad_type: str = "edge"
     ):
         """
@@ -411,32 +313,37 @@ class AugmentationPadImage:
 
         Parameters
         ----------
-        pad_size : tuple
-            The padding size.
-        pad_type : str
-            The type of padding to be applied.
+        pad_size : int or tuple
+            Padding size. If int, applies same padding to all sides.
+            If tuple, should be ((top, bottom), (left, right)) format.
+        pad_type : str, default="edge"
+            Padding mode ('edge', 'zero', etc.)
         """
-        assert isinstance(pad_size, int | tuple)
-
         if isinstance(pad_size, int):
-
+            # Symmetric padding: same amount on all sides
             # Do not pad along the channel dimension
             self.pad_size_image = ((pad_size, pad_size), (pad_size, pad_size), (0, 0))
             self.pad_size_mask = ((pad_size, pad_size), (pad_size, pad_size))
-
         else:
-            self.pad_size = pad_size
+            # Custom padding tuple
+            self.pad_size_image = pad_size + ((0, 0),)  # Add channel dimension
+            self.pad_size_mask = pad_size
 
         self.pad_type = pad_type
 
     def __call__(self, sample: dict[str, Number]):
         """
-        Pad zeroes of sample image, label and weight.
+        Add symmetric padding to sample image, label and weight.
 
-        Attributes
+        Parameters
         ----------
         sample : Dict[str, Number]
             Sample image and data.
+
+        Returns
+        -------
+        Dict[str, Number]
+            Sample with padded image, label, and weight.
         """
         img, label, weight, sf = (
             sample["img"],
@@ -445,6 +352,7 @@ class AugmentationPadImage:
             sample["scale_factor"],
         )
 
+        # Use np.pad directly for symmetric padding (different from pad_to_size which pads to target size)
         img = np.pad(img, self.pad_size_image, self.pad_type)
         label = np.pad(label, self.pad_size_mask, self.pad_type)
         weight = np.pad(weight, self.pad_size_mask, self.pad_type)

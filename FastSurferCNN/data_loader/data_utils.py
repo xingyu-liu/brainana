@@ -52,6 +52,10 @@ LOGGER = logging.getLogger(__name__)
 # Helper Functions
 ##
 
+##
+# Image Loading and Saving
+##
+
 # Conform an MRI brain image to UCHAR, RAS orientation, and 1mm or minimal isotropic
 # voxels
 def load_and_conform_image(
@@ -306,6 +310,10 @@ def save_image(
         nib.nifti1.save(mgh_img, str(output_f))
 
 
+##
+# Spatial Transformations
+##
+
 # Transformation for mapping
 def transform_axial(
         vol: npt.NDArray,
@@ -356,6 +364,10 @@ def transform_sagittal(
     else:
         return np.moveaxis(vol, [0, 1, 2], [2, 1, 0])
 
+
+##
+# Slice Processing
+##
 
 # Thick slice generator (for eval) and blank slices filter (for training)
 def get_thick_slices(
@@ -427,6 +439,66 @@ def filter_blank_slices_thick(
     weight_vol = weight_vol[:, :, select_slices]
 
     return img_vol, label_vol, weight_vol
+
+
+##
+# Size Management and Image Resizing
+##
+
+# Size calculation helpers
+def calculate_resize_scale(
+    input_h: int,
+    input_w: int,
+    target_size: int
+) -> tuple[float, int, int]:
+    """
+    Calculate scale factor and new dimensions for proportional resize.
+    
+    Parameters
+    ----------
+    input_h, input_w : int
+        Input image dimensions
+    target_size : int
+        Target size for the larger dimension
+        
+    Returns
+    -------
+    scale_factor : float
+        Scale factor to apply
+    new_h, new_w : int
+        New dimensions after scaling (rounded)
+    """
+    max_dim = max(input_h, input_w)
+    scale_factor = target_size / max_dim
+    new_h = round(input_h * scale_factor)
+    new_w = round(input_w * scale_factor)
+    return scale_factor, new_h, new_w
+
+
+def calculate_padding_amount(
+    input_h: int,
+    input_w: int,
+    target_h: int,
+    target_w: int
+) -> tuple[int, int]:
+    """
+    Calculate padding amounts needed to reach target size.
+    
+    Parameters
+    ----------
+    input_h, input_w : int
+        Current image dimensions
+    target_h, target_w : int
+        Target dimensions
+        
+    Returns
+    -------
+    pad_h, pad_w : int
+        Padding amounts (can be negative if cropping needed)
+    """
+    pad_h = target_h - input_h
+    pad_w = target_w - input_w
+    return pad_h, pad_w
 
 
 # Unified padding function (used everywhere)
@@ -575,9 +647,7 @@ def resize_to_target_size(
         Scale factor used for resizing
     """
     h, w = image.shape[:2]
-    max_dim = max(h, w)
-    scale_factor = target_size / max_dim
-    new_h, new_w = round(h * scale_factor), round(w * scale_factor)
+    scale_factor, new_h, new_w = calculate_resize_scale(h, w, target_size)
     
     if scale_factor != 1.0:
         # Calculate zoom factors for first 2 dimensions
@@ -757,6 +827,10 @@ def resize_from_target_size(
     
     return resized
 
+
+##
+# Weight Map Generation
+##
 
 # weight map generator
 def create_weight_mask(
@@ -967,6 +1041,10 @@ def deep_sulci_and_wm_strand_mask(
     
     return diff_image
 
+
+##
+# Label Mapping and LUT Processing
+##
 
 # Label mapping functions (to aparc (eval) and to label (train))
 def read_classes_from_lut(lut_file: str | Path):
@@ -1250,6 +1328,10 @@ def map_prediction_sagittal2full(
     idx_list = atlas_manager.get_sagittal_to_bilateral_expansion()
     return prediction_sag[:, idx_list, :, :]
 
+
+##
+# Utility Functions
+##
 
 # Clean up and class separation
 def bbox_3d(
