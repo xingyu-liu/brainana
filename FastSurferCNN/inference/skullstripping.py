@@ -66,6 +66,7 @@ def skullstripping(
     plane_weight_coronal: Optional[float] = None,
     plane_weight_axial: Optional[float] = None,
     plane_weight_sagittal: Optional[float] = None,
+    use_mixed_model: bool = False,
 ) -> Dict[str, str]:
     """
     Perform skullstripping using FastSurferCNN segmentation model.
@@ -108,6 +109,12 @@ def skullstripping(
         plane_weight_sagittal: float, optional
             Weight for sagittal plane in multi-view prediction. If None, uses default from config.
             Can also be specified in config dict as 'plane_weight_sagittal'.
+        use_mixed_model: bool, default=False
+            If True, use a single mixed-plane model checkpoint for all 3 planes instead of
+            separate plane-specific checkpoints. The mixed checkpoint should be named
+            {modal}_seg-{atlas}_mixed.pkl (e.g., EPI_seg-brainmask_mixed.pkl).
+            When using mixed model, the same checkpoint is used for all 3 planes, and
+            each plane is evaluated separately with the specified plane weights.
             
         Note: Preprocessing parameters (vox_size, orientation, image_size)
         are automatically read from checkpoint metadata (required), ensuring consistency
@@ -161,42 +168,62 @@ def skullstripping(
     plane_weight_axial = plane_weight_axial if plane_weight_axial is not None else config.get('plane_weight_axial')
     plane_weight_sagittal = plane_weight_sagittal if plane_weight_sagittal is not None else config.get('plane_weight_sagittal')
         
+    # Determine base directory for checkpoints
+    base_dir = config.get('base_dir', FASTSURFER_ROOT / "FastSurferCNN")
+    base_dir = Path(base_dir)
+    pretrained_dir = base_dir / "pretrained_model"
+
     # Get checkpoint template for this modality
     # Hardcoded checkpoint mapping: {modality}_seg-{atlas}_planexxx.pkl
-    # Replace 'planexxx' with actual plane name (axial, coronal, sagittal)
+    # Replace 'planexxx' with actual plane name (axial, coronal, sagittal) or 'mixed'
     checkpoint_map = {
         'anat': 'T1w_seg-ARM2_planexxx.pkl',
         'func': 'EPI_seg-brainmask_planexxx.pkl'
     }
     ckpt_template = checkpoint_map[modal]
 
-    # Determine base directory for checkpoints
-    base_dir = config.get('base_dir', FASTSURFER_ROOT / "FastSurferCNN")
-    base_dir = Path(base_dir)
-    pretrained_dir = base_dir / "pretrained_model"
-
-    # Resolve checkpoint paths by replacing 'planexxx' with actual plane names
-    checkpoints = {}
-    for plane in ["axial", "coronal", "sagittal"]:
-        ckpt_name = ckpt_template.replace('planexxx', plane)
-        ckpt_path = pretrained_dir / ckpt_name
-        if ckpt_path.exists():
-            checkpoints[plane] = ckpt_path
-            logger.debug(f"Checkpoint: found {ckpt_name}")
-        else:
-            checkpoints[plane] = None
-            logger.warning(f"Checkpoint: not found {ckpt_path}")
-    
-    # Validate that at least one checkpoint is found
-    found_planes = [plane for plane, ckpt in checkpoints.items() if ckpt is not None]
-    if not found_planes:
-        raise ValueError(
-            f"No checkpoints found for {modal} modality. "
-            f"Expected files like: {ckpt_template.replace('planexxx', '{plane}')} "
-            f"in {pretrained_dir}"
-        )
-    
-    logger.info(f"Checkpoint: found for planes={', '.join(found_planes)}")
+    if use_mixed_model:
+        # Mixed-plane model: look for single mixed checkpoint
+        ckpt_name = ckpt_template.replace('planexxx', 'mixed')
+        mixed_ckpt_path = pretrained_dir / ckpt_name
+        
+        if not mixed_ckpt_path.exists():
+            raise ValueError(
+                f"Mixed-plane checkpoint not found for {modal} modality. "
+                f"Expected file: {ckpt_name} in {pretrained_dir}"
+            )
+        
+        logger.info(f"Checkpoint: using mixed-plane model {ckpt_name}")
+        # Use the same mixed checkpoint for all 3 planes
+        checkpoints = {
+            'axial': mixed_ckpt_path,
+            'coronal': mixed_ckpt_path,
+            'sagittal': mixed_ckpt_path,
+        }
+    else:
+        # Separate plane models: look for individual plane checkpoints
+        # Resolve checkpoint paths by replacing 'planexxx' with actual plane names
+        checkpoints = {}
+        for plane in ["axial", "coronal", "sagittal"]:
+            ckpt_name = ckpt_template.replace('planexxx', plane)
+            ckpt_path = pretrained_dir / ckpt_name
+            if ckpt_path.exists():
+                checkpoints[plane] = ckpt_path
+                logger.debug(f"Checkpoint: found {ckpt_name}")
+            else:
+                checkpoints[plane] = None
+                logger.warning(f"Checkpoint: not found {ckpt_path}")
+        
+        # Validate that at least one checkpoint is found
+        found_planes = [plane for plane, ckpt in checkpoints.items() if ckpt is not None]
+        if not found_planes:
+            raise ValueError(
+                f"No checkpoints found for {modal} modality. "
+                f"Expected files like: {ckpt_template.replace('planexxx', '{plane}')} "
+                f"in {pretrained_dir}"
+            )
+        
+        logger.info(f"Checkpoint: found for planes={', '.join(found_planes)}")
     
     # Extract atlas metadata from checkpoints
     try:

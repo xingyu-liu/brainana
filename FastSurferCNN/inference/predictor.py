@@ -273,6 +273,14 @@ class RunModelOnData:
                 f"  Label mapping: from checkpoint ({len(self.labels)} classes)"
             )
 
+        # Detect if this is a mixed-plane model (all checkpoints are the same)
+        all_ckpts_same = (
+            ckpt_ax is not None
+            and ckpt_cor is not None
+            and ckpt_sag is not None
+            and ckpt_ax == ckpt_cor == ckpt_sag
+        )
+        
         self.models = {}
         for plane, view in self.view_ops.items():
             if all(view[key] is not None for key in ("cfg", "ckpt")):
@@ -286,6 +294,16 @@ class RunModelOnData:
 
                 # Update config with plane weights if provided
                 cfg = view["cfg"]
+                
+                # For mixed-plane models: override DATA.PLANE to the specific plane
+                # This ensures each Inference object processes only its assigned plane
+                # (instead of all 3 planes, which would happen if DATA.PLANE == "mixed")
+                if all_ckpts_same and cfg.DATA.PLANE == "mixed":
+                    LOGGER.info(
+                        f"Mixed-plane model detected: overriding {plane} config plane from 'mixed' to '{plane}'"
+                    )
+                    cfg.DATA.PLANE = plane
+                
                 # Use explicit None check to allow 0 as a valid weight
                 if self.plane_weights["coronal"] is not None:
                     cfg.MULTIVIEW.PLANE_WEIGHTS.CORONAL = (
