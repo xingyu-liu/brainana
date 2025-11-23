@@ -82,10 +82,10 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
                 include=["img", "label", "weight"],
             )
 
-            # Rotation
+            # Rotation - randomly samples from (-30, +30) degrees for each sample
             rot = tio.RandomAffine(
                 scales=(1.0, 1.0),
-                degrees=10,
+                degrees=30,  # Random rotation between -30 and +30 degrees
                 translation=(0, 0, 0),
                 isotropic=True,  # If True, scaling factor along all dimensions is the same
                 center="image",
@@ -114,9 +114,9 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
                 include=["img"],
             )
 
-            # Bias Field
+            # Bias Field - randomly samples coefficients from (0.3, 0.7) range for each sample
             bias_field = tio.transforms.RandomBiasField(
-                coefficients=0.5, order=3, include=["img"]
+                coefficients=(0.3, 0.7), order=3, include=["img"]
             )
 
             # Gamma
@@ -136,12 +136,59 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
                 "RGamma": random_gamma,
             }
 
-            all_tfs = {all_augs[aug]: 0.8 for aug in cfg.DATA.AUG if aug != "Gaussian"}
+            # Get individual probabilities from config, default to 0.8 if not specified
+            default_prob = 0.8
+            aug_probs = {}
+            if hasattr(cfg.DATA, 'AUG_PROBABILITIES'):
+                try:
+                    # Convert CfgNode to dict if needed
+                    aug_probs_dict = cfg.DATA.AUG_PROBABILITIES
+                    if hasattr(aug_probs_dict, '__dict__'):
+                        aug_probs = {k: getattr(aug_probs_dict, k) for k in dir(aug_probs_dict) if not k.startswith('_')}
+                    else:
+                        aug_probs = dict(aug_probs_dict) if aug_probs_dict else {}
+                except Exception:
+                    aug_probs = {}
+            
+            # Separate geometric and intensity transforms for better organization
+            geometric_augs = ["Rotation", "Scaling", "Translation"]
+            intensity_augs = ["BiasField"]
+            
+            geometric_tfs = {}
+            intensity_tfs = {}
+            
+            for aug in cfg.DATA.AUG:
+                if aug == "Gaussian":
+                    continue
+                if aug not in all_augs:
+                    logger.warning(f"Augmentation '{aug}' not found in available augmentations. Skipping.")
+                    continue
+                
+                prob = aug_probs.get(aug, default_prob)
+                if aug in geometric_augs:
+                    geometric_tfs[all_augs[aug]] = prob
+                elif aug in intensity_augs:
+                    intensity_tfs[all_augs[aug]] = prob
+                else:
+                    # For other augs (Elastic, RAnisotropy, RGamma), add to geometric by default
+                    geometric_tfs[all_augs[aug]] = prob
+            
             gaussian_noise = True if "Gaussian" in cfg.DATA.AUG else False
-
-            transform = tio.Compose(
-                [tio.Compose(all_tfs, p=0.8)], include=["img", "label", "weight"]
-            )
+            
+            # Compose transforms: geometric first, then intensity
+            # Each transform in the dict has its own probability, so we use p=1.0 for the Compose
+            # and let individual transforms handle their probabilities
+            transform_list = []
+            if geometric_tfs:
+                transform_list.append(tio.Compose(geometric_tfs, p=1.0))
+            if intensity_tfs:
+                transform_list.append(tio.Compose(intensity_tfs, p=1.0))
+            
+            if transform_list:
+                transform = tio.Compose(transform_list, include=["img", "label", "weight"])
+            else:
+                # If no transforms selected, create an identity transform
+                transform = tio.Compose([], include=["img", "label", "weight"])
 
             data_path = cfg.DATA.PATH_HDF5_TRAIN
             shuffle = True

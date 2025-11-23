@@ -163,6 +163,18 @@ _C.DATA.PADDED_SIZE = 320
 # Augmentations
 _C.DATA.AUG = ["Scaling", "Translation"]
 
+# Individual probabilities for each augmentation (0.0 to 1.0)
+# If not specified in config, defaults to 0.8 for each augmentation
+_C.DATA.AUG_PROBABILITIES = CN()
+_C.DATA.AUG_PROBABILITIES.Rotation = 0.8
+_C.DATA.AUG_PROBABILITIES.Scaling = 0.8
+_C.DATA.AUG_PROBABILITIES.Translation = 0.8
+_C.DATA.AUG_PROBABILITIES.BiasField = 0.8
+_C.DATA.AUG_PROBABILITIES.Gaussian = 0.8
+_C.DATA.AUG_PROBABILITIES.Elastic = 0.8
+_C.DATA.AUG_PROBABILITIES.RAnisotropy = 0.8
+_C.DATA.AUG_PROBABILITIES.RGamma = 0.8
+
 # ---------------------------------------------------------------------------- #
 # Preprocessing options - Single Source of Truth for HDF5, Training & Inference
 # ---------------------------------------------------------------------------- #
