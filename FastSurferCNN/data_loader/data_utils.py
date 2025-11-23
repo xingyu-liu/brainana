@@ -429,6 +429,120 @@ def filter_blank_slices_thick(
     return img_vol, label_vol, weight_vol
 
 
+# Unified padding function (used everywhere)
+def pad_to_size(
+    image: npt.NDArray,
+    output_size: int | tuple[int, int],
+    mode: str = 'edge',
+    pos: str = 'top_left'
+) -> np.ndarray:
+    """
+    Pad image to target size with specified padding mode.
+    
+    Unified padding function used throughout the codebase. Supports both edge padding
+    (replicates edge pixels) and zero padding (fills with zeros).
+    
+    Parameters
+    ----------
+    image : npt.NDArray
+        Image to pad. Can be 2D (H, W) or 3D (H, W, C) or higher dimensions.
+    output_size : int or tuple[int, int]
+        Target size for height and width. If int, uses same size for both dimensions.
+    mode : str, default='edge'
+        Padding mode: 'edge' (replicates edge pixels) or 'zero' (fills with zeros).
+    pos : str, default='top_left'
+        Position to place the input image. Currently only 'top_left' is supported.
+        
+    Returns
+    -------
+    np.ndarray
+        Padded image with shape (output_size[0], output_size[1], ...)
+    """
+    if isinstance(output_size, int):
+        output_size = (output_size, output_size)
+    
+    if mode not in ['edge', 'zero']:
+        raise ValueError(f"mode must be 'edge' or 'zero', got '{mode}'")
+    
+    if len(image.shape) == 2:
+        h, w = image.shape
+        pad_h = output_size[0] - h
+        pad_w = output_size[1] - w
+        
+        if pad_h < 0 or pad_w < 0:
+            # Crop if image is larger than output_size
+            if pad_h < 0:
+                h = output_size[0]
+            if pad_w < 0:
+                w = output_size[1]
+            image = image[:h, :w]
+            pad_h = max(0, output_size[0] - h)
+            pad_w = max(0, output_size[1] - w)
+        
+        if pad_h > 0 or pad_w > 0:
+            if mode == 'edge':
+                padded_img = np.pad(
+                    image,
+                    ((0, pad_h), (0, pad_w)),
+                    mode='edge',
+                ).astype(image.dtype)
+            else:  # mode == 'zero'
+                padded_img = np.zeros(output_size, dtype=image.dtype)
+                if pos == "top_left":
+                    padded_img[0:h, 0:w] = image
+        else:
+            padded_img = image
+    else:
+        h, w = image.shape[:2]
+        pad_h = output_size[0] - h
+        pad_w = output_size[1] - w
+        
+        if pad_h < 0 or pad_w < 0:
+            # Crop if image is larger than output_size
+            if pad_h < 0:
+                h = output_size[0]
+            if pad_w < 0:
+                w = output_size[1]
+            # Handle different dimensionalities when cropping
+            if len(image.shape) == 3:
+                image = image[:h, :w, :]
+            else:  # 4D or more
+                slices = [slice(0, h), slice(0, w)] + [slice(None)] * (len(image.shape) - 2)
+                image = image[tuple(slices)]
+            pad_h = max(0, output_size[0] - h)
+            pad_w = max(0, output_size[1] - w)
+        
+        if pad_h > 0 or pad_w > 0:
+            if mode == 'edge':
+                # Handle different dimensionalities
+                if len(image.shape) == 3:
+                    padded_img = np.pad(
+                        image,
+                        ((0, pad_h), (0, pad_w), (0, 0)),
+                        mode='edge'
+                    ).astype(image.dtype)
+                else:  # 4D or more
+                    pad_width = [(0, pad_h), (0, pad_w)] + [(0, 0)] * (len(image.shape) - 2)
+                    padded_img = np.pad(
+                        image,
+                        pad_width,
+                        mode='edge'
+                    ).astype(image.dtype)
+            else:  # mode == 'zero'
+                pad_shape = list(output_size) + list(image.shape[2:])
+                padded_img = np.zeros(pad_shape, dtype=image.dtype)
+                if pos == "top_left":
+                    if len(image.shape) == 3:
+                        padded_img[0:h, 0:w, :] = image
+                    else:  # 4D or more
+                        slices = [slice(0, h), slice(0, w)] + [slice(None)] * (len(image.shape) - 2)
+                        padded_img[tuple(slices)] = image
+        else:
+            padded_img = image
+    
+    return padded_img
+
+
 # Unified image processing utilities (used in both training and inference)
 def resize_to_target_size(
     image: npt.NDArray,
@@ -475,17 +589,8 @@ def resize_to_target_size(
     else:
         resized = image.copy()
     
-    # Pad to exact target_size for first 2 dimensions
-    pad_shape = (target_size, target_size) + image.shape[2:]
-    padded = np.zeros(pad_shape, dtype=image.dtype)
-    
-    # Place resized image in top-left corner
-    if len(image.shape) == 2:
-        padded[:new_h, :new_w] = resized
-    elif len(image.shape) == 3:
-        padded[:new_h, :new_w, :] = resized
-    else:  # 4D or more
-        padded[:new_h, :new_w, ...] = resized
+    # Pad to exact target_size using edge padding
+    padded = pad_to_size(resized, target_size, mode='edge', pos='top_left')
     
     return padded, scale_factor
 
@@ -628,19 +733,16 @@ def resize_from_target_size(
                 # Crop if larger
                 resized = resized[:output_h, :output_w]
             else:
-                # Pad if smaller
-                padded = np.zeros((output_h, output_w), dtype=resized.dtype)
-                padded[:resized.shape[0], :resized.shape[1]] = resized
-                resized = padded
+                # Pad if smaller using edge padding
+                resized = pad_to_size(resized, (output_h, output_w), mode='edge', pos='top_left')
     elif len(image.shape) == 3:
         # 3D: crop/pad to (output_h, output_w, C)
         if resized.shape[0] != output_h or resized.shape[1] != output_w:
             if resized.shape[0] > output_h or resized.shape[1] > output_w:
                 resized = resized[:output_h, :output_w, :]
             else:
-                padded = np.zeros((output_h, output_w, resized.shape[2]), dtype=resized.dtype)
-                padded[:resized.shape[0], :resized.shape[1], :] = resized
-                resized = padded
+                # Pad if smaller using edge padding
+                resized = pad_to_size(resized, (output_h, output_w), mode='edge', pos='top_left')
     else:  # 4D or more
         # Crop/pad first 2 dimensions
         if resized.shape[0] != output_h or resized.shape[1] != output_w:
@@ -650,15 +752,8 @@ def resize_from_target_size(
                 slices[1] = slice(0, output_w)
                 resized = resized[tuple(slices)]
             else:
-                pad_shape = list(resized.shape)
-                pad_shape[0] = output_h
-                pad_shape[1] = output_w
-                padded = np.zeros(pad_shape, dtype=resized.dtype)
-                slices = [slice(None)] * len(resized.shape)
-                slices[0] = slice(0, resized.shape[0])
-                slices[1] = slice(0, resized.shape[1])
-                padded[tuple(slices)] = resized
-                resized = padded
+                # Pad if smaller using edge padding
+                resized = pad_to_size(resized, (output_h, output_w), mode='edge', pos='top_left')
     
     return resized
 

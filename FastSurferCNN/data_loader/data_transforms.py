@@ -117,12 +117,12 @@ class Resize2DTest:
         return resized
 
 
-class EdgePad2DTest:
+class Pad2DTest:
     """
     Pad the input to get output size. Supports both edge padding and zero padding.
     
     Edge padding replicates edge pixels (better for boundary performance).
-    Zero padding fills with zeros (matches training validation pipeline).
+    Zero padding fills with zeros.
 
     Attributes
     ----------
@@ -157,6 +157,7 @@ class EdgePad2DTest:
         pos : str
             Position to put the input. Defaults to 'top_left'.
         """
+        from FastSurferCNN.data_loader.data_utils import pad_to_size
         if isinstance(output_size, Number):
             output_size = (int(output_size),) * 2
         self.output_size = output_size
@@ -164,6 +165,7 @@ class EdgePad2DTest:
             raise ValueError(f"mode must be 'edge' or 'zero', got '{mode}'")
         self.mode = mode
         self.pos = pos
+        self._pad_to_size = pad_to_size
 
     def __call__(self, img: npt.NDArray) -> np.ndarray:
         """
@@ -179,62 +181,7 @@ class EdgePad2DTest:
         img : np.ndarray
             Original image with padding applied.
         """
-        if len(img.shape) == 2:
-            h, w = img.shape
-            pad_h = self.output_size[0] - h
-            pad_w = self.output_size[1] - w
-            
-            if pad_h < 0 or pad_w < 0:
-                # Crop if image is larger than output_size
-                if pad_h < 0:
-                    h = self.output_size[0]
-                if pad_w < 0:
-                    w = self.output_size[1]
-                img = img[:h, :w]
-                pad_h = max(0, self.output_size[0] - h)
-                pad_w = max(0, self.output_size[1] - w)
-            
-            if pad_h > 0 or pad_w > 0:
-                # Use specified padding mode
-                if self.mode == 'edge':
-                    img = np.pad(
-                        img,
-                        ((0, pad_h), (0, pad_w)),
-                        mode='edge',
-                    ).astype(img.dtype)
-                else:  # mode == 'zero'
-                    padded = np.zeros(self.output_size, dtype=img.dtype)
-                    padded[:h, :w] = img
-                    img = padded
-        else:
-            h, w, c = img.shape
-            pad_h = self.output_size[0] - h
-            pad_w = self.output_size[1] - w
-            
-            if pad_h < 0 or pad_w < 0:
-                # Crop if image is larger than output_size
-                if pad_h < 0:
-                    h = self.output_size[0]
-                if pad_w < 0:
-                    w = self.output_size[1]
-                img = img[:h, :w, :]
-                pad_h = max(0, self.output_size[0] - h)
-                pad_w = max(0, self.output_size[1] - w)
-            
-            if pad_h > 0 or pad_w > 0:
-                # Use specified padding mode
-                if self.mode == 'edge':
-                    img = np.pad(
-                        img,
-                        ((0, pad_h), (0, pad_w), (0, 0)),
-                        mode='edge'
-                    ).astype(img.dtype)
-                else:  # mode == 'zero'
-                    padded = np.zeros(self.output_size + (c,), dtype=img.dtype)
-                    padded[:h, :w, :] = img
-                    img = padded
-
-        return img
+        return self._pad_to_size(img, self.output_size, mode=self.mode, pos=self.pos)
 
 
 ##
@@ -301,12 +248,12 @@ class ToTensor:
         }
 
 
-class ZeroPad2D:
+class Pad2D:
     """
     Pad the input to get output size. Supports both edge padding and zero padding.
     
     Edge padding replicates edge pixels (better for boundary performance).
-    Zero padding fills with zeros (original behavior).
+    Zero padding fills with zeros.
 
     Attributes
     ----------
@@ -320,10 +267,8 @@ class ZeroPad2D:
 
     Methods
     -------
-    _pad
-        Pads image with specified mode.
     __call__
-        Calls _pad for sample.
+        Pads image, label, and weight in sample.
     """
     def __init__(
             self,
@@ -344,6 +289,7 @@ class ZeroPad2D:
         pos : str, Optional
             Position to put the input. Default = 'top_left'.
         """
+        from FastSurferCNN.data_loader.data_utils import pad_to_size
         if isinstance(output_size, Number):
             output_size = (int(output_size),) * 2
         self.output_size = output_size
@@ -351,81 +297,7 @@ class ZeroPad2D:
             raise ValueError(f"mode must be 'edge' or 'zero', got '{mode}'")
         self.mode = mode
         self.pos = pos
-
-    def _pad(self, image: npt.NDArray) -> np.ndarray:
-        """
-        Pad the input image with specified mode.
-
-        Parameters
-        ----------
-        image : npt.NDArray
-            The image to pad.
-
-        Returns
-        -------
-        padded_img : np.ndarray
-            Original image with padding applied.
-        """
-        if len(image.shape) == 2:
-            h, w = image.shape
-            pad_h = self.output_size[0] - h
-            pad_w = self.output_size[1] - w
-            
-            if pad_h < 0 or pad_w < 0:
-                # Crop if image is larger than output_size
-                if pad_h < 0:
-                    h = self.output_size[0]
-                if pad_w < 0:
-                    w = self.output_size[1]
-                image = image[:h, :w]
-                pad_h = max(0, self.output_size[0] - h)
-                pad_w = max(0, self.output_size[1] - w)
-            
-            if pad_h > 0 or pad_w > 0:
-                if self.mode == 'edge':
-                    # Use edge padding (replicates edge values)
-                    padded_img = np.pad(
-                        image,
-                        ((0, pad_h), (0, pad_w)),
-                        mode='edge',
-                    ).astype(image.dtype)
-                else:  # mode == 'zero'
-                    padded_img = np.zeros(self.output_size, dtype=image.dtype)
-                    if self.pos == "top_left":
-                        padded_img[0:h, 0:w] = image
-            else:
-                padded_img = image
-        else:
-            h, w, c = image.shape
-            pad_h = self.output_size[0] - h
-            pad_w = self.output_size[1] - w
-            
-            if pad_h < 0 or pad_w < 0:
-                # Crop if image is larger than output_size
-                if pad_h < 0:
-                    h = self.output_size[0]
-                if pad_w < 0:
-                    w = self.output_size[1]
-                image = image[:h, :w, :]
-                pad_h = max(0, self.output_size[0] - h)
-                pad_w = max(0, self.output_size[1] - w)
-            
-            if pad_h > 0 or pad_w > 0:
-                if self.mode == 'edge':
-                    # Use edge padding (replicates edge values)
-                    padded_img = np.pad(
-                        image,
-                        ((0, pad_h), (0, pad_w), (0, 0)),
-                        mode='edge'
-                    ).astype(image.dtype)
-                else:  # mode == 'zero'
-                    padded_img = np.zeros(self.output_size + (c,), dtype=image.dtype)
-                    if self.pos == "top_left":
-                        padded_img[0:h, 0:w, :] = image
-            else:
-                padded_img = image
-
-        return padded_img
+        self._pad_to_size = pad_to_size
 
     def __call__(self, sample: dict[str, Any]) -> dict[str, Any]:
         """
@@ -448,9 +320,9 @@ class ZeroPad2D:
             sample["scale_factor"],
         )
         
-        img = self._pad(img)
-        label = self._pad(label)
-        weight = self._pad(weight)
+        img = self._pad_to_size(img, self.output_size, mode=self.mode, pos=self.pos)
+        label = self._pad_to_size(label, self.output_size, mode=self.mode, pos=self.pos)
+        weight = self._pad_to_size(weight, self.output_size, mode=self.mode, pos=self.pos)
 
         return {"img": img, "label": label, "weight": weight, "scale_factor": sf}
 
@@ -645,3 +517,4 @@ class AugmentationRandomCrop:
         weight = weight[top:bottom, left:right]
 
         return {"img": img, "label": label, "weight": weight, "scale_factor": sf}
+

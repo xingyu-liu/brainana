@@ -26,7 +26,7 @@ from pandas import DataFrame
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from FastSurferCNN.data_loader.augmentation import ToTensorTest
+from FastSurferCNN.data_loader.data_transforms import ToTensorTest
 from FastSurferCNN.data_loader.data_utils import map_prediction_sagittal2full
 from FastSurferCNN.data_loader.dataset import MultiScaleOrigDataThickSlices
 from FastSurferCNN.models.networks import build_model

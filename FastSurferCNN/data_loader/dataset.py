@@ -302,42 +302,23 @@ class MultiScaleDataset(Dataset):
         padded_image
             Padded image.
         """
+        from FastSurferCNN.data_loader.data_utils import pad_to_size
+        
         if len(image.shape) == 2:
             h, w = image.shape
             if self.max_size < h:
                 # Crop if image is larger than max_size
                 sub = h - self.max_size
-                return image[0 : h - sub, 0 : w - sub]
-            
-            # Calculate padding needed
-            pad_h = self.max_size - h
-            pad_w = self.max_size - w
-            
-            # Use edge padding (replicates edge values) instead of zero padding
-            padded_img = np.pad(
-                image,
-                ((0, pad_h), (0, pad_w)),
-                mode='edge'
-            ).astype(image.dtype)
+                image = image[0 : h - sub, 0 : w - sub]
         else:
             h, w, c = image.shape
             if self.max_size < h:
                 # Crop if image is larger than max_size
                 sub = h - self.max_size
-                return image[0 : h - sub, 0 : w - sub, :]  
-            
-            # Calculate padding needed
-            pad_h = self.max_size - h
-            pad_w = self.max_size - w
-            
-            # Use edge padding (replicates edge values) instead of zero padding
-            padded_img = np.pad(
-                image,
-                ((0, pad_h), (0, pad_w), (0, 0)),
-                mode='edge'
-            ).astype(image.dtype)
-
-        return padded_img
+                image = image[0 : h - sub, 0 : w - sub, :]
+        
+        # Use unified padding function with edge mode
+        return pad_to_size(image, self.max_size, mode='edge', pos='top_left')
 
     def unify_imgs(
             self,

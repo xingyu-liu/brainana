@@ -34,6 +34,8 @@ from FastSurferCNN.data_loader.conform import conform
 
 def resize_volume_proportional(volume, target_size=256, order=1):
     """Resize volume proportionally to fit within target_size, then pad to exact dimensions."""
+    from FastSurferCNN.data_loader.data_utils import pad_to_size
+    
     h, w = volume.shape[:2]
     max_dim = max(h, w)
     scale_factor = target_size / max_dim
@@ -45,9 +47,8 @@ def resize_volume_proportional(volume, target_size=256, order=1):
     else:
         resized = volume.copy()
     
-    pad_shape = (target_size, target_size) + volume.shape[2:]
-    padded = np.zeros(pad_shape, dtype=volume.dtype)
-    padded[:new_h, :new_w] = resized
+    # Use unified padding function with edge mode
+    padded = pad_to_size(resized, target_size, mode='edge', pos='top_left')
     
     return padded, scale_factor
 

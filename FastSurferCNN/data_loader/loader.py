@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from FastSurferCNN.data_loader import dataset as dset
-from FastSurferCNN.data_loader.augmentation import AddGaussianNoise, ToTensor, ZeroPad2D
+from FastSurferCNN.data_loader.data_transforms import AddGaussianNoise, ToTensor, Pad2D
 from FastSurferCNN.utils import logging
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
 
         if "None" in cfg.DATA.AUG:
             rescale = cfg.DATA.PREPROCESSING.RESCALE
-            tfs = [ZeroPad2D((padding_size, padding_size)), ToTensor(rescale=rescale)]
+            tfs = [Pad2D((padding_size, padding_size), mode='edge'), ToTensor(rescale=rescale)]
             # old transform
             if "Gaussian" in cfg.DATA.AUG:
                 tfs.append(AddGaussianNoise(mean=0, std=0.1))
@@ -158,7 +158,7 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
         rescale = cfg.DATA.PREPROCESSING.RESCALE
         transform = transforms.Compose(
             [
-                ZeroPad2D((padding_size, padding_size)),
+                Pad2D((padding_size, padding_size), mode='edge'),
                 ToTensor(rescale=rescale),
             ]
         )

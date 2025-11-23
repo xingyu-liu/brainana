@@ -58,7 +58,7 @@ DATA:
   PLANE: "mixed"           # Training plane: coronal, axial, sagittal, or mixed
   CLASS_OPTIONS: ["brainmask"]      # atlas name
   SIZES: [256]             # Image dimensions (first value used as target_size)
-  PADDED_SIZE: 288         # edge padding for better boundary performance
+  PADDED_SIZE: 260         # edge padding for better boundary performance
   AUG: [
     "Scaling",
     "Translation",

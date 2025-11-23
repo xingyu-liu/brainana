@@ -13,7 +13,7 @@
 # limitations under the License.
 
 __all__ = [
-    "augmentation",
+    "data_transforms",
     "conform",
     "data_utils",
     "dataset",

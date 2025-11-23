@@ -58,7 +58,7 @@ DATA:
   PLANE: "coronal"         # Training plane: coronal, axial, or sagittal
   CLASS_OPTIONS: ['brainmask']      # No atlas needed for binary brain mask task
   SIZES: [256]             # Image dimensions (first value used as target_size)
-  PADDED_SIZE: 288         # edge padding for better boundary performance
+  PADDED_SIZE: 260         # edge padding for better boundary performance
   AUG: [
     "Scaling",
     "Translation",
