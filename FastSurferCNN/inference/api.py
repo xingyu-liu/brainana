@@ -348,6 +348,19 @@ def run_segmentation(
     # Run prediction (returns segmentation in model/conformed space)
     LOGGER.info(f"Running segmentation on {input_image}")
     pred_data = predictor.get_prediction(str(input_image))
+    
+    # Debug: Log prediction statistics for binary models
+    if is_binary:
+        unique_vals, counts = np.unique(pred_data, return_counts=True)
+        LOGGER.info(f"Binary model prediction statistics: unique values={unique_vals}, counts={counts}")
+        LOGGER.info(f"  Prediction shape: {pred_data.shape}, dtype: {pred_data.dtype}")
+        LOGGER.info(f"  Prediction range: [{pred_data.min()}, {pred_data.max()}]")
+        if len(unique_vals) > 2:
+            LOGGER.warning(f"  WARNING: Binary model prediction has {len(unique_vals)} unique values (expected 2: 0 and 1)")
+        # Ensure binary predictions are integer type (0 or 1)
+        if pred_data.dtype != np.int16 and pred_data.dtype != np.int32 and pred_data.dtype != np.int64:
+            LOGGER.info(f"  Converting binary prediction from {pred_data.dtype} to int16")
+            pred_data = pred_data.astype(np.int16)
 
     # Create masks from the final segmentation
     # Both binary and multi-class models go through the same create_mask() pipeline

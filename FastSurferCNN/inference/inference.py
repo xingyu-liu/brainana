@@ -26,7 +26,7 @@ from pandas import DataFrame
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from FastSurferCNN.data_loader.augmentation import ToTensorTest, EdgePad2DTest
+from FastSurferCNN.data_loader.augmentation import ToTensorTest
 from FastSurferCNN.data_loader.data_utils import map_prediction_sagittal2full
 from FastSurferCNN.data_loader.dataset import MultiScaleOrigDataThickSlices
 from FastSurferCNN.models.networks import build_model
@@ -403,20 +403,11 @@ class Inference:
             )
 
         # ========================================================================
-        # Setup: Prepare for automatic cropping of padded predictions
+        # Setup: Predictions should match conformed image size directly
         # ========================================================================
-        # init_pred has shape matching the conformed image (e.g., 256×256×Z×num_classes)
-        # This represents the target output size (conformed image dimensions, NOT padded)
-        conformed_image_shape = init_pred.shape  # e.g., (256, 256, Z, num_classes)
-        
-        # Extract spatial dimensions (first 3 dims: height, width, depth)
-        # We'll crop predictions to match these dimensions
-        conformed_spatial_dims = conformed_image_shape[:3]  # e.g., (256, 256, Z)
-        
-        # Create slice indices to crop predictions from padded size back to conformed size
-        # Example: if model outputs 272×272 but conformed is 256×256, this crops to 256×256
-        # pred_crop_slices will be: (slice(256), slice(256), slice(Z))
-        pred_crop_slices = tuple(slice(dim_size) for dim_size in conformed_spatial_dims)
+        # init_pred has shape matching the conformed image (e.g., 96×96×Z×num_classes)
+        # Model processes images at conformed size (no resize, no padding)
+        # Predictions should match conformed dimensions directly
         
         # Setup for aggregating predictions into output tensor
         plane = self.cfg.DATA.PLANE
@@ -441,7 +432,8 @@ class Inference:
                     images, scale_factors = batch["image"].to(self.device), batch["scale_factor"].to(self.device)
 
                     # predict the current batch, outputs logits
-                    # Model outputs predictions at PADDED_SIZE (e.g., 272×272)
+                    # Model processes images at conformed size (no resize, no padding)
+                    # Output predictions should match conformed dimensions directly
                     pred = self.model(images, scale_factors, out_scale)
                     batch_size = pred.shape[0]
                     end_index = start_index + batch_size
@@ -466,15 +458,9 @@ class Inference:
                     pred = pred.permute(*self.permute_order[plane]).to(out.device)  # the to-operation is implicit
 
                     # ========================================================================
-                    # Automatic Cropping: Remove padding to match conformed image size
+                    # Predictions are already at conformed image size (no cropping needed)
                     # ========================================================================
-                    # Model outputs predictions at PADDED_SIZE (e.g., 272×272×Z)
-                    # But we need predictions at conformed image size (e.g., 256×256×Z)
-                    # Crop the padded predictions back to conformed dimensions
-                    # This ensures predictions match the conformed image shape for resampling
-                    pred = pred[pred_crop_slices]
-                    # After cropping: pred shape is now (256, 256, Z, num_classes) matching conformed image
-
+                    # Model processes images at conformed size, so predictions match directly
                     # add prediction logits into the output (same as multiplying probabilities)
                     output_slice_indices[index_of_current_plane] = slice(start_index, end_index)
                     out[tuple(output_slice_indices)].add_(pred, alpha=self.alpha[plane])
@@ -550,14 +536,12 @@ class Inference:
                 try:
                     # Set up DataLoader for this plane
                     rescale = self.cfg.DATA.PREPROCESSING.RESCALE
-                    padding_size = self.cfg.DATA.PADDED_SIZE
                     test_dataset = MultiScaleOrigDataThickSlices(
                         orig_data,
                         orig_zoom,
                         self.cfg,
                         transforms=transforms.Compose([
-                            EdgePad2DTest((padding_size, padding_size)),
-                            ToTensorTest(rescale=rescale)
+                            ToTensorTest(rescale=rescale)  # No resize, no padding - process at conformed size
                         ]),
                     )
 
@@ -585,14 +569,12 @@ class Inference:
         # Single-plane mode (original behavior)
         # Set up DataLoader
         rescale = self.cfg.DATA.PREPROCESSING.RESCALE
-        padding_size = self.cfg.DATA.PADDED_SIZE
         test_dataset = MultiScaleOrigDataThickSlices(
             orig_data,
             orig_zoom,
             self.cfg,
             transforms=transforms.Compose([
-                EdgePad2DTest((padding_size, padding_size)),
-                ToTensorTest(rescale=rescale)
+                ToTensorTest(rescale=rescale)  # No resize, no padding - process at conformed size
             ]),
         )
 

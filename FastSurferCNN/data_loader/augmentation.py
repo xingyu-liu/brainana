@@ -74,109 +74,75 @@ class ToTensorTest:
         return img
 
 
-class ZeroPad2DTest:
+class Resize2DTest:
     """
-    Pad the input with zeros to get output size.
-
-    Attributes
-    ----------
-    output_size : Union[Number, Tuple[Number, Number]]
-        Size of the output image either as Number or tuple of two Number.
-    pos : str
-        Position to put the input.
-
-    Methods
-    -------
-    pad
-        Pad zeroes of image.
-    call
-        Call _pad().
+    Resize 2D slice to target size (proportional resize + padding).
+    Uses the unified resize_to_target_size function for consistency with training.
+    
+    This ensures inference pipeline matches training:
+    - Training: slices resized to SIZES[0], then padded to PADDED_SIZE
+    - Inference: slices resized to SIZES[0], then padded to PADDED_SIZE
     """
-    def __init__(
-            self,
-            output_size: Number | tuple[Number, Number],
-            pos: str = 'top_left'
-    ):
+    
+    def __init__(self, target_size: int, order: int = 1):
         """
-        Construct object.
-
+        Initialize Resize2DTest.
+        
         Parameters
         ----------
-        output_size : Union[Number, Tuple[Number, Number]]
-            Size of the output image either as Number or tuple of two Number.
-        pos : Union[Number, Tuple[Number, Number]]
-            Position to put the input. Defaults to 'top_left'.
+        target_size : int
+            Target size for both height and width (e.g., 256)
+        order : int, default=1
+            Interpolation order (0=nearest, 1=linear, 3=cubic)
         """
-        if isinstance(output_size, Number):
-            output_size = (int(output_size),) * 2
-        self.output_size = output_size
-        self.pos = pos
-
-    def _pad(self, image: npt.NDArray) -> np.ndarray:
-        """
-        Pad with zeros of the input image.
-
-        Parameters
-        ----------
-        image : npt.NDArray
-            The image to pad.
-
-        Returns
-        -------
-        padded_img : np.ndarray
-            Original image with padded zeros.
-        """
-        if len(image.shape) == 2:
-            h, w = image.shape
-            padded_img = np.zeros(self.output_size, dtype=image.dtype)
-        else:
-            h, w, c = image.shape
-            padded_img = np.zeros(self.output_size + (c,), dtype=image.dtype)
-
-        if self.pos == "top_left":
-            padded_img[0:h, 0:w] = image
-
-        return padded_img
-
+        self.target_size = target_size
+        self.order = order
+    
     def __call__(self, img: npt.NDArray) -> np.ndarray:
         """
-        Call the _pad() function.
-
+        Resize image proportionally to fit within target_size, then pad to exact dimensions.
+        
         Parameters
         ----------
         img : npt.NDArray
-            The image to pad.
-
+            Image to resize (H, W) or (H, W, C)
+            
         Returns
         -------
-        img : np.ndarray
-            Original image with padded zeros.
+        np.ndarray
+            Resized and padded image (target_size, target_size) or (target_size, target_size, C)
         """
-        img = self._pad(img)
-
-        return img
+        from FastSurferCNN.data_loader.data_utils import resize_to_target_size
+        resized, _ = resize_to_target_size(img, self.target_size, order=self.order)
+        return resized
 
 
 class EdgePad2DTest:
     """
-    Pad the input with edge values (replicates edge pixels) to get output size.
-    This matches the training pipeline which uses edge padding for better boundary performance.
+    Pad the input to get output size. Supports both edge padding and zero padding.
+    
+    Edge padding replicates edge pixels (better for boundary performance).
+    Zero padding fills with zeros (matches training validation pipeline).
 
     Attributes
     ----------
     output_size : Union[Number, Tuple[Number, Number]]
         Size of the output image either as Number or tuple of two Number.
+    mode : str
+        Padding mode: 'edge' (replicates edge pixels) or 'zero' (fills with zeros).
+        Defaults to 'edge'.
     pos : str
         Position to put the input (currently only 'top_left' supported).
 
     Methods
     -------
     __call__
-        Pad image with edge values.
+        Pad image with specified mode.
     """
     def __init__(
             self,
             output_size: Number | tuple[Number, Number],
+            mode: str = 'edge',
             pos: str = 'top_left'
     ):
         """
@@ -186,17 +152,22 @@ class EdgePad2DTest:
         ----------
         output_size : Union[Number, Tuple[Number, Number]]
             Size of the output image either as Number or tuple of two Number.
+        mode : str, default='edge'
+            Padding mode: 'edge' (replicates edge pixels) or 'zero' (fills with zeros).
         pos : str
             Position to put the input. Defaults to 'top_left'.
         """
         if isinstance(output_size, Number):
             output_size = (int(output_size),) * 2
         self.output_size = output_size
+        if mode not in ['edge', 'zero']:
+            raise ValueError(f"mode must be 'edge' or 'zero', got '{mode}'")
+        self.mode = mode
         self.pos = pos
 
     def __call__(self, img: npt.NDArray) -> np.ndarray:
         """
-        Pad image with edge values (replicates edge pixels).
+        Pad image with specified mode (edge or zero).
 
         Parameters
         ----------
@@ -206,7 +177,7 @@ class EdgePad2DTest:
         Returns
         -------
         img : np.ndarray
-            Original image with edge padding.
+            Original image with padding applied.
         """
         if len(img.shape) == 2:
             h, w = img.shape
@@ -224,12 +195,17 @@ class EdgePad2DTest:
                 pad_w = max(0, self.output_size[1] - w)
             
             if pad_h > 0 or pad_w > 0:
-                # Use edge padding (replicates edge values)
-                img = np.pad(
-                    img,
-                    ((0, pad_h), (0, pad_w)),
-                    mode='edge',
-                ).astype(img.dtype)
+                # Use specified padding mode
+                if self.mode == 'edge':
+                    img = np.pad(
+                        img,
+                        ((0, pad_h), (0, pad_w)),
+                        mode='edge',
+                    ).astype(img.dtype)
+                else:  # mode == 'zero'
+                    padded = np.zeros(self.output_size, dtype=img.dtype)
+                    padded[:h, :w] = img
+                    img = padded
         else:
             h, w, c = img.shape
             pad_h = self.output_size[0] - h
@@ -246,12 +222,17 @@ class EdgePad2DTest:
                 pad_w = max(0, self.output_size[1] - w)
             
             if pad_h > 0 or pad_w > 0:
-                # Use edge padding (replicates edge values)
-                img = np.pad(
-                    img,
-                    ((0, pad_h), (0, pad_w), (0, 0)),
-                    mode='edge'
-                ).astype(img.dtype)
+                # Use specified padding mode
+                if self.mode == 'edge':
+                    img = np.pad(
+                        img,
+                        ((0, pad_h), (0, pad_w), (0, 0)),
+                        mode='edge'
+                    ).astype(img.dtype)
+                else:  # mode == 'zero'
+                    padded = np.zeros(self.output_size + (c,), dtype=img.dtype)
+                    padded[:h, :w, :] = img
+                    img = padded
 
         return img
 
@@ -322,25 +303,32 @@ class ToTensor:
 
 class ZeroPad2D:
     """
-    Pad the input with zeros to get output size.
+    Pad the input to get output size. Supports both edge padding and zero padding.
+    
+    Edge padding replicates edge pixels (better for boundary performance).
+    Zero padding fills with zeros (original behavior).
 
     Attributes
     ----------
     output_size : Union[Number, Tuple[Number, Number]]
         Size of the output image either as Number or tuple of two Number.
+    mode : str
+        Padding mode: 'edge' (replicates edge pixels) or 'zero' (fills with zeros).
+        Defaults to 'edge'.
     pos : str, Optional
         Position to put the input.
 
     Methods
     -------
     _pad
-        Pads zeroes of image.
+        Pads image with specified mode.
     __call__
-        Cals _pad for sample.
+        Calls _pad for sample.
     """
     def __init__(
             self,
             output_size: Number | tuple[Number, Number],
+            mode: str = 'edge',
             pos: None | str = 'top_left'
     ):
         """
@@ -351,17 +339,22 @@ class ZeroPad2D:
         output_size : Union[Number, Tuple[Number, Number]]
             Size of the output image either as Number or
             tuple of two Number.
+        mode : str, default='edge'
+            Padding mode: 'edge' (replicates edge pixels) or 'zero' (fills with zeros).
         pos : str, Optional
             Position to put the input. Default = 'top_left'.
         """
         if isinstance(output_size, Number):
             output_size = (int(output_size),) * 2
         self.output_size = output_size
+        if mode not in ['edge', 'zero']:
+            raise ValueError(f"mode must be 'edge' or 'zero', got '{mode}'")
+        self.mode = mode
         self.pos = pos
 
     def _pad(self, image: npt.NDArray) -> np.ndarray:
         """
-        Pad the input image with zeros.
+        Pad the input image with specified mode.
 
         Parameters
         ----------
@@ -371,17 +364,66 @@ class ZeroPad2D:
         Returns
         -------
         padded_img : np.ndarray
-            Original image with padded zeros.
+            Original image with padding applied.
         """
         if len(image.shape) == 2:
             h, w = image.shape
-            padded_img = np.zeros(self.output_size, dtype=image.dtype)
+            pad_h = self.output_size[0] - h
+            pad_w = self.output_size[1] - w
+            
+            if pad_h < 0 or pad_w < 0:
+                # Crop if image is larger than output_size
+                if pad_h < 0:
+                    h = self.output_size[0]
+                if pad_w < 0:
+                    w = self.output_size[1]
+                image = image[:h, :w]
+                pad_h = max(0, self.output_size[0] - h)
+                pad_w = max(0, self.output_size[1] - w)
+            
+            if pad_h > 0 or pad_w > 0:
+                if self.mode == 'edge':
+                    # Use edge padding (replicates edge values)
+                    padded_img = np.pad(
+                        image,
+                        ((0, pad_h), (0, pad_w)),
+                        mode='edge',
+                    ).astype(image.dtype)
+                else:  # mode == 'zero'
+                    padded_img = np.zeros(self.output_size, dtype=image.dtype)
+                    if self.pos == "top_left":
+                        padded_img[0:h, 0:w] = image
+            else:
+                padded_img = image
         else:
             h, w, c = image.shape
-            padded_img = np.zeros(self.output_size + (c,), dtype=image.dtype)
-
-        if self.pos == "top_left":
-            padded_img[0:h, 0:w] = image
+            pad_h = self.output_size[0] - h
+            pad_w = self.output_size[1] - w
+            
+            if pad_h < 0 or pad_w < 0:
+                # Crop if image is larger than output_size
+                if pad_h < 0:
+                    h = self.output_size[0]
+                if pad_w < 0:
+                    w = self.output_size[1]
+                image = image[:h, :w, :]
+                pad_h = max(0, self.output_size[0] - h)
+                pad_w = max(0, self.output_size[1] - w)
+            
+            if pad_h > 0 or pad_w > 0:
+                if self.mode == 'edge':
+                    # Use edge padding (replicates edge values)
+                    padded_img = np.pad(
+                        image,
+                        ((0, pad_h), (0, pad_w), (0, 0)),
+                        mode='edge'
+                    ).astype(image.dtype)
+                else:  # mode == 'zero'
+                    padded_img = np.zeros(self.output_size + (c,), dtype=image.dtype)
+                    if self.pos == "top_left":
+                        padded_img[0:h, 0:w, :] = image
+            else:
+                padded_img = image
 
         return padded_img
 

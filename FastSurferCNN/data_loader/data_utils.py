@@ -34,6 +34,7 @@ from scipy.ndimage import (
     filters,
     generate_binary_structure,
     uniform_filter,
+    zoom,
 )
 from skimage.measure import label
 
@@ -426,6 +427,240 @@ def filter_blank_slices_thick(
     weight_vol = weight_vol[:, :, select_slices]
 
     return img_vol, label_vol, weight_vol
+
+
+# Unified image processing utilities (used in both training and inference)
+def resize_to_target_size(
+    image: npt.NDArray,
+    target_size: int,
+    order: int = 1,
+) -> tuple[np.ndarray, float]:
+    """
+    Resize image proportionally to fit within target_size, then pad to exact dimensions.
+    
+    Works with both 2D slices (H, W) or (H, W, C) and 3D volumes (H, W, D) or (H, W, D, C).
+    This is the unified resize function used in both training and inference.
+    
+    Parameters
+    ----------
+    image : npt.NDArray
+        Image to resize. Can be:
+        - 2D: (H, W) or (H, W, C)
+        - 3D: (H, W, D) or (H, W, D, C)
+    target_size : int
+        Target size for both height and width (e.g., 256)
+    order : int, default=1
+        Interpolation order (0=nearest, 1=linear, 3=cubic)
+        Use 0 for labels, 1 for images
+        
+    Returns
+    -------
+    np.ndarray
+        Resized and padded image with shape (target_size, target_size, ...)
+    float
+        Scale factor used for resizing
+    """
+    h, w = image.shape[:2]
+    max_dim = max(h, w)
+    scale_factor = target_size / max_dim
+    new_h, new_w = round(h * scale_factor), round(w * scale_factor)
+    
+    if scale_factor != 1.0:
+        # Calculate zoom factors for first 2 dimensions
+        zoom_factors = (new_h/h, new_w/w)
+        # Add 1.0 for remaining dimensions (depth, channels, etc.)
+        if len(image.shape) > 2:
+            zoom_factors = zoom_factors + (1.0,) * (len(image.shape) - 2)
+        resized = zoom(image, zoom_factors, order=order)
+    else:
+        resized = image.copy()
+    
+    # Pad to exact target_size for first 2 dimensions
+    pad_shape = (target_size, target_size) + image.shape[2:]
+    padded = np.zeros(pad_shape, dtype=image.dtype)
+    
+    # Place resized image in top-left corner
+    if len(image.shape) == 2:
+        padded[:new_h, :new_w] = resized
+    elif len(image.shape) == 3:
+        padded[:new_h, :new_w, :] = resized
+    else:  # 4D or more
+        padded[:new_h, :new_w, ...] = resized
+    
+    return padded, scale_factor
+
+
+def resize_from_target_size(
+    image: npt.NDArray,
+    target_size: int,
+    output_h: int,
+    output_w: int,
+    order: int = 0,
+) -> np.ndarray:
+    """
+    Reverse of resize_to_target_size: resize from target_size back to output dimensions.
+    
+    This is the exact inverse operation used in inference to reverse the resize applied
+    in the transform pipeline. For small images that were upsampled, only the actual
+    content region (not padding) is resized.
+    
+    Works with both 2D slices (H, W) or (H, W, C) and higher-dimensional arrays.
+    This is the unified reverse resize function used in inference.
+    
+    Parameters
+    ----------
+    image : npt.NDArray
+        Image at target_size. Can be:
+        - 2D: (target_size, target_size) or (target_size, target_size, C)
+        - Higher dims: (target_size, target_size, ...)
+        For upsampled images, padding may be present (zeros in bottom/right)
+    target_size : int
+        Current size of image (e.g., 256)
+    output_h, output_w : int
+        Target output dimensions (conformed size, e.g., 366, 366)
+    order : int, default=0
+        Interpolation order (0=nearest for predictions, 1=linear for images)
+        Use 0 for label predictions to avoid interpolation artifacts
+        
+    Returns
+    -------
+    np.ndarray
+        Resized image with shape (output_h, output_w, ...)
+    """
+    # Calculate what the actual content dimensions should be (matching forward resize logic)
+    # Forward resize: scale = target_size / max(h, w), new_h = round(h * scale), new_w = round(w * scale)
+    # For reverse: calculate what new_h, new_w were, then only resize that region (not padding)
+    max_output_dim = max(output_h, output_w)
+    forward_scale = target_size / max_output_dim  # Same scale used in forward resize
+    actual_content_h = round(output_h * forward_scale)  # What new_h was in forward resize
+    actual_content_w = round(output_w * forward_scale)  # What new_w was in forward resize
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(
+        f"resize_from_target_size: target_size={target_size}, output=({output_h}, {output_w}), "
+        f"max_output_dim={max_output_dim}, forward_scale={forward_scale:.6f}, "
+        f"calculated content=({actual_content_h}, {actual_content_w})"
+    )
+    
+    # IMPORTANT: For small images that were upsampled, the calculated actual_content_h/w
+    # tells us the exact dimensions of the content region (before padding to target_size).
+    # We must use these dimensions to crop before reverse resizing.
+    
+    # Determine content dimensions: use calculated values if they're less than target_size
+    # This handles the case where padding was added during forward resize
+    # IMPORTANT: We must use the EXACT inverse of forward resize to maintain mathematical correctness
+    # Forward resize: zoom_factors = (new_h/h, new_w/w) where new_h = round(h * scale)
+    # Reverse resize: zoom_factors = (h/new_h, w/new_w) = (output_h/content_h, output_w/content_w)
+    # We cannot exclude rows/columns as that breaks the inverse relationship!
+    
+    if actual_content_h < target_size:
+        # Padding was added - only use the actual content region
+        content_h = actual_content_h
+        logger.info(f"resize_from_target_size: Using calculated content_h={content_h} (padding detected, target_size={target_size})")
+    else:
+        # No padding - entire image is content (use exact dimensions for perfect inverse)
+        content_h = target_size
+    
+    if actual_content_w < target_size:
+        # Padding was added - only use the actual content region
+        content_w = actual_content_w
+        logger.info(f"resize_from_target_size: Using calculated content_w={content_w} (padding detected, target_size={target_size})")
+    else:
+        # No padding - entire image is content (use exact dimensions for perfect inverse)
+        content_w = target_size
+    
+    # For upsampled images (target_size > max_output_dim), there may be padding
+    # Only resize the actual content region (top-left corner), not the padding
+    # This is critical for small images where padding was added
+    if content_h < target_size or content_w < target_size:
+        # Crop to actual content region before resizing (exclude padding)
+        if len(image.shape) == 2:
+            content_region = image[:content_h, :content_w]
+        elif len(image.shape) == 3:
+            content_region = image[:content_h, :content_w, :]
+        else:  # 4D or more
+            slices = [slice(None)] * len(image.shape)
+            slices[0] = slice(0, content_h)
+            slices[1] = slice(0, content_w)
+            content_region = image[tuple(slices)]
+        
+        logger.info(
+            f"resize_from_target_size: Cropping to content region ({content_h}, {content_w}) "
+            f"from target_size ({target_size}, {target_size}) before reverse resize. "
+            f"Output will be ({output_h}, {output_w})"
+        )
+    else:
+        # No padding, entire image is content
+        content_region = image
+        content_h = target_size
+        content_w = target_size
+    
+    # Calculate reverse scale factor to resize from content region back to output dimensions
+    # Forward resize uses: zoom_factors = (new_h/h, new_w/w) where new_h = round(h * scale), new_w = round(w * scale)
+    # Reverse should use: zoom_factors = (h/new_h, w/new_w) = (output_h/content_h, output_w/content_w)
+    # This is the EXACT inverse of the forward resize zoom factors
+    zoom_h = output_h / content_h if content_h > 0 else 1.0
+    zoom_w = output_w / content_w if content_w > 0 else 1.0
+    
+    logger.info(
+        f"resize_from_target_size: Resizing content region ({content_h}, {content_w}) "
+        f"to output ({output_h}, {output_w}) using zoom_factors=({zoom_h:.6f}, {zoom_w:.6f})"
+    )
+    
+    zoom_factors = (zoom_h, zoom_w)
+    if len(content_region.shape) > 2:
+        zoom_factors = zoom_factors + (1.0,) * (len(content_region.shape) - 2)
+    
+    # Resize using scipy.ndimage.zoom
+    resized = zoom(content_region, zoom_factors, order=order)
+    
+    logger.info(
+        f"resize_from_target_size: After zoom, resized shape={resized.shape[:2]}, "
+        f"target output=({output_h}, {output_w}), zoom_factors were=({zoom_h:.6f}, {zoom_w:.6f})"
+    )
+    
+    # Crop or pad to exact output dimensions (since proportional resize may not match exactly)
+    if len(image.shape) == 2:
+        # 2D: crop/pad to (output_h, output_w)
+        if resized.shape[0] != output_h or resized.shape[1] != output_w:
+            if resized.shape[0] > output_h or resized.shape[1] > output_w:
+                # Crop if larger
+                resized = resized[:output_h, :output_w]
+            else:
+                # Pad if smaller
+                padded = np.zeros((output_h, output_w), dtype=resized.dtype)
+                padded[:resized.shape[0], :resized.shape[1]] = resized
+                resized = padded
+    elif len(image.shape) == 3:
+        # 3D: crop/pad to (output_h, output_w, C)
+        if resized.shape[0] != output_h or resized.shape[1] != output_w:
+            if resized.shape[0] > output_h or resized.shape[1] > output_w:
+                resized = resized[:output_h, :output_w, :]
+            else:
+                padded = np.zeros((output_h, output_w, resized.shape[2]), dtype=resized.dtype)
+                padded[:resized.shape[0], :resized.shape[1], :] = resized
+                resized = padded
+    else:  # 4D or more
+        # Crop/pad first 2 dimensions
+        if resized.shape[0] != output_h or resized.shape[1] != output_w:
+            if resized.shape[0] > output_h or resized.shape[1] > output_w:
+                slices = [slice(None)] * len(resized.shape)
+                slices[0] = slice(0, output_h)
+                slices[1] = slice(0, output_w)
+                resized = resized[tuple(slices)]
+            else:
+                pad_shape = list(resized.shape)
+                pad_shape[0] = output_h
+                pad_shape[1] = output_w
+                padded = np.zeros(pad_shape, dtype=resized.dtype)
+                slices = [slice(None)] * len(resized.shape)
+                slices[0] = slice(0, resized.shape[0])
+                slices[1] = slice(0, resized.shape[1])
+                padded[tuple(slices)] = resized
+                resized = padded
+    
+    return resized
 
 
 # weight map generator

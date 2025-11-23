@@ -37,7 +37,7 @@ def resize_volume_proportional(volume, target_size=256, order=1):
     h, w = volume.shape[:2]
     max_dim = max(h, w)
     scale_factor = target_size / max_dim
-    new_h, new_w = int(h * scale_factor), int(w * scale_factor)
+    new_h, new_w = round(h * scale_factor), round(w * scale_factor)
     
     if scale_factor != 1.0:
         zoom_factors = (new_h/h, new_w/w) + (1,) * (len(volume.shape) - 2)

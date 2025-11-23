@@ -21,19 +21,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# # anat 
-# input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_anat_2pass_seg.nii.gz"
-# output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_anat"
-# modal = "anat"
-# data_format = "nifti"
-# weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
-
-# func
-input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_func.nii.gz"
-output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_func"
-modal = "func"
+# anat 
+input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_anat_2pass_seg.nii.gz"
+output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_anat"
+modal = "anat"
 data_format = "nifti"
 weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
+
+# # func
+# input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_func.nii.gz"
+# output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_func"
+# modal = "func"
+# data_format = "nifti"
+# weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
 
 # %%
 def main():

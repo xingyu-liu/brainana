@@ -259,6 +259,16 @@ def create_mask(aseg_data: npt.NDArray[int], dnum: int, enum: int) -> npt.NDArra
     """
     print(f"Creating mask (dilate {dnum}, erode {enum})...")
     
+    # Debug: Log input data statistics
+    unique_vals = np.unique(aseg_data)
+    print(f"  Input aseg_data: shape={aseg_data.shape}, dtype={aseg_data.dtype}, unique values={unique_vals}, range=[{aseg_data.min()}, {aseg_data.max()}]")
+    if len(unique_vals) == 2 and set(unique_vals) == {0, 1}:
+        print(f"  Input appears to be binary (0/1)")
+    elif len(unique_vals) <= 10:
+        print(f"  Input appears to be multi-class with {len(unique_vals)} classes")
+    else:
+        print(f"  Input has {len(unique_vals)} unique values (may be continuous/probability map)")
+    
     # 1. Get initial mask (before dilation or erosion)
     mask = (aseg_data != 0).astype(int)
     print(f"  Initial mask: {np.sum(mask):,} voxels")

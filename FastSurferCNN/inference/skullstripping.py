@@ -205,7 +205,12 @@ def skullstripping(
             ckpt_cor=checkpoints.get('coronal'),
             ckpt_sag=checkpoints.get('sagittal')
         )
-        logger.info(f"Atlas: using {atlas_name}")
+        # Check if this is a binary model
+        is_binary = atlas_metadata.get("is_binary_task", False)
+        if is_binary:
+            logger.info(f"Model: binary brain mask task detected (atlas_name={atlas_name}, num_classes={atlas_metadata.get('num_classes', 2)})")
+        else:
+            logger.info(f"Atlas: using {atlas_name} (num_classes={atlas_metadata.get('num_classes', 'unknown')})")
     except Exception as e:
         logger.warning(f"Atlas: could not extract metadata: {e}")
         # Fallback: determine binary from checkpoint
