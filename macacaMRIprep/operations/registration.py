@@ -74,7 +74,6 @@ def compose_ants_registration_cmd(
         '--winsorize-image-intensities', config.get('winsorize_image_intensities'),
         '--output', f"[{output_path_prefix}_,{output_path_prefix}_registered.nii.gz]",
         '--write-composite-transform', str(config.get('write_composite_transform')),
-        '--collapse-output-transforms', str(config.get('collapse_output_transforms')),
         
     ]
 
@@ -92,6 +91,10 @@ def compose_ants_registration_cmd(
     # (e.g., Translation -> Rigid -> Affine)
     if xfm_index >= 1:  # More than just translation (rigid, affine, or syn)
         cmd.extend(['--initialize-transforms-per-stage', '1'])
+        # disable collapse-output-transforms when initialize-transforms-per-stage is enabled
+        cmd.extend(['--collapse-output-transforms', '0'])
+    else:
+        cmd.extend(['--collapse-output-transforms', str(config.get('collapse_output_transforms'))])
     
     # Add transformation stages up to and including the xfm_type
     for i, stage_name in enumerate(stages):
@@ -151,6 +154,14 @@ def ants_register(
     fixed_path = validate_input_file(fixedf, logger)
     moving_path = validate_input_file(movingf, logger)
 
+    # Initialize outputs dictionary
+    outputs = {
+        "output_path_prefix": output_path_prefix,
+        'imagef_registered': None,
+        'forward_transform': None,
+        'inverse_transform': None,
+    }
+
     # Build ANTs registration command
     command_ants = compose_ants_registration_cmd(
         fixed_path, moving_path, output_path_prefix, 
@@ -171,13 +182,7 @@ def ants_register(
         logger.error(f"Step: ANTs registration failed - {str(e)}")
         raise
     
-    # Collect and validate output files
-    outputs = {
-        "output_path_prefix": output_path_prefix,
-        'imagef_registered': None,
-        'forward_transform': None,
-        'inverse_transform': None
-    }
+    # Collect and validate output files (outputs dict already initialized above)
     
     # Main registered image
     registered_image = os.path.join(os.path.dirname(output_path_prefix), 
@@ -193,7 +198,7 @@ def ants_register(
     forward_transform = os.path.join(os.path.dirname(output_path_prefix),
                                    os.path.basename(output_path_prefix) + "_Composite.h5")
     if os.path.exists(forward_transform):
-        outputs[f"forward_transform"] = forward_transform
+        outputs["forward_transform"] = forward_transform
         logger.info(f"Output: forward transform created - {forward_transform}")
     
     inverse_transform = os.path.join(os.path.dirname(output_path_prefix),
@@ -227,10 +232,9 @@ def ants_apply_transforms(
         outputf_name: Name for output file
         fixedf: Fixed (target) image
         working_dir: Working directory for outputs
-        output_name: Name for output file
-        transform_files: List of transformation files to apply
-        config: Configuration dictionary
+        transformf: List of transformation files to apply (ANTs transforms)
         logger: Logger instance
+        reff: Reference image for output space (optional)
         generate_tmean: Whether to generate temporal mean
         
     Returns:
@@ -246,6 +250,8 @@ def ants_apply_transforms(
         
     movingf = validate_input_file(movingf, logger)
     fixedf = validate_input_file(fixedf, logger)
+    if reff is not None:
+        reff = validate_input_file(reff, logger)
     work_dir = ensure_working_directory(working_dir, logger)
 
     outputf_name = work_dir / outputf_name
@@ -254,7 +260,7 @@ def ants_apply_transforms(
     if not isinstance(transformf, list):
         transformf = [transformf]
 
-    # apply the transformations
+    # Apply ANTs transformations
     cmd = [
         "antsApplyTransforms",
         "-d", "3", "-e", str(moving_type),
@@ -296,3 +302,5 @@ def ants_apply_transforms(
     except Exception as e:
         logger.error(f"Step: transform application failed - {e}")
         raise RuntimeError(f"Transform application failed: {e}")
+
+# %%
