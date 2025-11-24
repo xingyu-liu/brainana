@@ -28,14 +28,15 @@ logger = logging.getLogger(__name__)
 # modal = "anat"
 # data_format = "nifti"
 # weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
+# use_mixed_model = False
 
 # func
 input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_func.nii.gz"
 output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_func"
 modal = "func"
 data_format = "nifti"
-weight_coronal, weight_axial, weight_sagittal = 0.2, 0.5, 0.3
-use_mixed_model = True  # Set to True to use mixed-plane model instead of separate plane models
+weight_coronal, weight_axial, weight_sagittal = 0, 0.5, 0.5
+use_mixed_model = False  # Set to True to use mixed-plane model instead of separate plane models
 
 if use_mixed_model:
     output_dir = output_dir + "_mixed"

@@ -615,6 +615,119 @@ def pad_to_size(
     return padded_img
 
 
+def pad_volume_edges_percent(
+    volume: npt.NDArray,
+    padding_percent: float,
+    mode: str = 'edge'
+) -> tuple[np.ndarray, tuple[tuple[int, int], tuple[int, int], tuple[int, int]]]:
+    """
+    Add symmetric edge padding to a 3D volume based on percentage.
+    
+    Pads each dimension by the specified percentage on both sides.
+    For example, 0.05 (5%) padding on a 100x100x100 volume adds 5 voxels
+    on each side, resulting in 110x110x110.
+    
+    Parameters
+    ----------
+    volume : npt.NDArray
+        3D volume array with shape (H, W, D)
+    padding_percent : float
+        Padding percentage (0.0 to 1.0). Applied to each edge.
+        Example: 0.05 = 5% padding on each edge (10% total per dimension)
+    mode : str, default='edge'
+        Padding mode: 'edge' (replicates edge voxels) or 'constant' (zeros)
+        
+    Returns
+    -------
+    np.ndarray
+        Padded volume
+    tuple[tuple[int, int], tuple[int, int], tuple[int, int]]
+        Padding amounts for each dimension: ((pad_h_before, pad_h_after),
+        (pad_w_before, pad_w_after), (pad_d_before, pad_d_after))
+    """
+    if padding_percent <= 0.0:
+        return volume, ((0, 0), (0, 0), (0, 0))
+    
+    if len(volume.shape) != 3:
+        raise ValueError(f"Expected 3D volume, got shape {volume.shape}")
+    
+    h, w, d = volume.shape
+    
+    # Calculate padding amounts (symmetric on each side)
+    pad_h = int(round(h * padding_percent))
+    pad_w = int(round(w * padding_percent))
+    pad_d = int(round(d * padding_percent))
+    
+    # Create padding specification for np.pad
+    # Format: ((before_axis0, after_axis0), (before_axis1, after_axis1), ...)
+    pad_width = ((pad_h, pad_h), (pad_w, pad_w), (pad_d, pad_d))
+    
+    # Apply padding
+    if mode == 'edge':
+        padded_volume = np.pad(volume, pad_width, mode='edge').astype(volume.dtype)
+    elif mode == 'constant':
+        padded_volume = np.pad(volume, pad_width, mode='constant', constant_values=0).astype(volume.dtype)
+    else:
+        raise ValueError(f"mode must be 'edge' or 'constant', got '{mode}'")
+    
+    return padded_volume, pad_width
+
+
+def depad_volume(
+    volume: npt.NDArray | torch.Tensor,
+    pad_width: tuple[tuple[int, int], tuple[int, int], tuple[int, int]]
+) -> npt.NDArray | torch.Tensor:
+    """
+    Remove edge padding from a 3D or 4D volume.
+    
+    Works with both numpy arrays and torch tensors. For 4D volumes (e.g., predictions
+    with shape H, W, D, num_classes), only the first 3 dimensions are depadded.
+    
+    Parameters
+    ----------
+    volume : npt.NDArray | torch.Tensor
+        Padded volume. Can be:
+        - 3D: (H, W, D) - numpy array
+        - 4D: (H, W, D, num_classes) - numpy array or torch tensor
+    pad_width : tuple[tuple[int, int], tuple[int, int], tuple[int, int]]
+        Padding amounts from pad_volume_edges_percent:
+        ((pad_h_before, pad_h_after), (pad_w_before, pad_w_after), (pad_d_before, pad_d_after))
+        
+    Returns
+    -------
+    npt.NDArray | torch.Tensor
+        Depadded volume with original dimensions restored
+    """
+    if all(pad == (0, 0) for pad in pad_width):
+        return volume
+    
+    (pad_h_before, pad_h_after), (pad_w_before, pad_w_after), (pad_d_before, pad_d_after) = pad_width
+    
+    # Calculate slice indices
+    h_start = pad_h_before
+    h_end = -pad_h_after if pad_h_after > 0 else None
+    w_start = pad_w_before
+    w_end = -pad_w_after if pad_w_after > 0 else None
+    d_start = pad_d_before
+    d_end = -pad_d_after if pad_d_after > 0 else None
+    
+    # Handle 3D and 4D cases
+    if len(volume.shape) == 3:
+        # 3D volume: (H, W, D)
+        if isinstance(volume, torch.Tensor):
+            return volume[h_start:h_end, w_start:w_end, d_start:d_end]
+        else:
+            return volume[h_start:h_end, w_start:w_end, d_start:d_end]
+    elif len(volume.shape) == 4:
+        # 4D volume: (H, W, D, num_classes)
+        if isinstance(volume, torch.Tensor):
+            return volume[h_start:h_end, w_start:w_end, d_start:d_end, :]
+        else:
+            return volume[h_start:h_end, w_start:w_end, d_start:d_end, :]
+    else:
+        raise ValueError(f"Expected 3D or 4D volume, got shape {volume.shape}")
+
+
 # Unified image processing utilities (used in both training and inference)
 def resize_to_target_size(
     image: npt.NDArray,

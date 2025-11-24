@@ -5,7 +5,7 @@
 TRAINING_DATA_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_data/EPI_brainmask"
 
 # Direct path to output directory (for training logs, checkpoints, etc.)
-OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/EPI_brainmask_finetune_axial_v3"
+OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/EPI_brainmask_finetune_axial_v4"
 
 # ==============================================================================
 # MODEL ARCHITECTURE
@@ -58,7 +58,7 @@ DATA:
   PLANE: "axial"           # Training plane: coronal, axial, or sagittal
   CLASS_OPTIONS: ["brainmask"]      # atlas name
   SIZES: [256]             # Image dimensions (first value used as target_size)
-  PADDED_SIZE: 260         # edge padding for better boundary performance
+  PADDED_SIZE: 282         # edge padding for better boundary performance
   AUG: [
     "Scaling",
     "Translation",

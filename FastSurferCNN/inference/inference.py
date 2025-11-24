@@ -27,7 +27,11 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from FastSurferCNN.data_loader.data_transforms import ToTensorTest
-from FastSurferCNN.data_loader.data_utils import map_prediction_sagittal2full
+from FastSurferCNN.data_loader.data_utils import (
+    depad_volume,
+    map_prediction_sagittal2full,
+    pad_volume_edges_percent,
+)
 from FastSurferCNN.data_loader.dataset import MultiScaleOrigDataThickSlices
 from FastSurferCNN.models.networks import build_model
 from FastSurferCNN.utils import logging
@@ -517,13 +521,44 @@ class Inference:
         """
         plane = self.cfg.DATA.PLANE
         
+        # Apply edge padding if enabled (inference only)
+        padding_percent = getattr(self.cfg.TEST, 'EDGE_PADDING_PERCENT', 0.0)
+        pad_width = ((0, 0), (0, 0), (0, 0))
+        orig_data_padded = orig_data
+        
+        if padding_percent > 0.0:
+            logger.info(f"Inference: Applying {padding_percent*100:.1f}% edge padding to help recognize brain tissue near boundaries")
+            orig_data_padded, pad_width = pad_volume_edges_percent(orig_data, padding_percent, mode='edge')
+            
+            # Create padded prediction tensor matching padded data dimensions
+            padded_shape = orig_data_padded.shape + (init_pred.shape[3],)  # (H, W, D, num_classes)
+            
+            if out is not None and out.shape[:3] == orig_data.shape:
+                # Pad the provided out tensor to match padded dimensions
+                pad_h, pad_w, pad_d = pad_width[0][0], pad_width[1][0], pad_width[2][0]
+                out = torch.nn.functional.pad(
+                    out,
+                    (0, 0, pad_d, pad_d, pad_w, pad_w, pad_h, pad_h),
+                    mode='constant',
+                    value=0
+                )
+            else:
+                # Create new padded tensor
+                out = torch.zeros(
+                    padded_shape,
+                    dtype=init_pred.dtype,
+                    device=init_pred.device,
+                    requires_grad=False
+                )
+        
+        # Ensure out is set (for no-padding case)
+        if out is None:
+            out = init_pred.detach().clone()
+        
         # Handle mixed-plane mode: process all 3 planes and aggregate
         if plane == "mixed":
             logger.info(f"Inference: Mixed-plane mode - processing all 3 planes (axial, coronal, sagittal)")
             planes_to_process = ["axial", "coronal", "sagittal"]
-            
-            if out is None:
-                out = init_pred.detach().clone()
             
             start = time.time()
             for current_plane in planes_to_process:
@@ -537,11 +572,11 @@ class Inference:
                     # Set up DataLoader for this plane
                     rescale = self.cfg.DATA.PREPROCESSING.RESCALE
                     test_dataset = MultiScaleOrigDataThickSlices(
-                        orig_data,
+                        orig_data_padded,
                         orig_zoom,
                         self.cfg,
                         transforms=transforms.Compose([
-                            ToTensorTest(rescale=rescale)  # No resize, no padding - process at conformed size
+                            ToTensorTest(rescale=rescale)
                         ]),
                     )
 
@@ -564,17 +599,22 @@ class Inference:
                 f"(processed all 3 planes)"
             )
             
+            # Depad output if padding was applied
+            if padding_percent > 0.0:
+                logger.info("Inference: Removing edge padding from predictions")
+                out = depad_volume(out, pad_width)
+            
             return out
         
         # Single-plane mode (original behavior)
         # Set up DataLoader
         rescale = self.cfg.DATA.PREPROCESSING.RESCALE
         test_dataset = MultiScaleOrigDataThickSlices(
-            orig_data,
+            orig_data_padded,
             orig_zoom,
             self.cfg,
             transforms=transforms.Compose([
-                ToTensorTest(rescale=rescale)  # No resize, no padding - process at conformed size
+                ToTensorTest(rescale=rescale)
             ]),
         )
 
@@ -591,5 +631,10 @@ class Inference:
         logger.info(
             f"Inference: {plane} plane on {img_filename} completed in {time_delta:.4f}s"
         )
+        
+        # Depad output if padding was applied (unified for both modes)
+        if padding_percent > 0.0:
+            logger.info("Inference: Removing edge padding from predictions")
+            out = depad_volume(out, pad_width)
 
         return out

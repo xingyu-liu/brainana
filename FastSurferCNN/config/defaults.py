@@ -134,6 +134,12 @@ _C.TEST = CN()
 # input batch size for testing
 _C.TEST.BATCH_SIZE = 16
 
+# Edge padding percentage (0.0 to 1.0) - inference only
+# Adds symmetric padding on each edge after conforming to help model recognize
+# brain tissue near image boundaries. Example: 0.05 = 5% padding on each edge
+# (total 10% increase per dimension). Default: 0.0 (no padding)
+_C.TEST.EDGE_PADDING_PERCENT = 0.05
+
 # ---------------------------------------------------------------------------- #
 # Data options
 # ---------------------------------------------------------------------------- #
