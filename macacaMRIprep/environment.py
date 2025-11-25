@@ -428,16 +428,16 @@ def check_environment(
     
     # ---- GPU check for skullstripping ----
     if config is not None:
-        # Check if either anat or func skullstripping is enabled and using unet
+        # Check if either anat or func skullstripping is enabled and using fastsurfercnn
         anat_ss = config.get('anat', {}).get('skullstripping', {})
         func_ss = config.get('func', {}).get('skullstripping', {})
-        anat_enabled = anat_ss.get('enabled', False) and anat_ss.get('method', '').lower() == 'unet'
-        func_enabled = func_ss.get('enabled', False) and func_ss.get('method', '').lower() == 'unet'
+        anat_enabled = anat_ss.get('enabled', False) and anat_ss.get('method', '').lower() == 'fastsurfercnn'
+        func_enabled = func_ss.get('enabled', False) and func_ss.get('method', '').lower() == 'fastsurfercnn'
         if anat_enabled or func_enabled:
             gpu_info = result['system_resources'].get('gpu', {})
             if not gpu_info.get('cuda_available', False):
                 warn_msg = (
-                    "GPU (CUDA) not available, but skullstripping with UNet is enabled for "
+                    "GPU (CUDA) not available, but skullstripping with FastSurferCNN is enabled for "
                     f"{'anat' if anat_enabled else ''}{' and ' if anat_enabled and func_enabled else ''}{'func' if func_enabled else ''}. "
                     "This will be very slow on CPU."
                 )

@@ -36,6 +36,7 @@ from FastSurferCNN.data_loader.dataset import MultiScaleOrigDataThickSlices
 from FastSurferCNN.models.networks import build_model
 from FastSurferCNN.utils import logging
 from FastSurferCNN.utils.checkpoint import extract_atlas_metadata, read_checkpoint_file
+from FastSurferCNN.utils.constants import LARGE_IMAGE_THRESHOLD
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -248,7 +249,7 @@ class Inference:
                 logger.warning("Checkpoint: could not extract atlas metadata, will need manual specification")
                 self.atlas_metadata = None
         except Exception as e:
-            logger.warning(f"Checkpoint: failed to extract atlas metadata: {e}")
+            logger.warning(f"Checkpoint: No atlas metadata found in {ckpt}")
             self.atlas_metadata = None
 
         # workaround for mps (move the model back to mps)
@@ -526,6 +527,16 @@ class Inference:
         pad_width = ((0, 0), (0, 0), (0, 0))
         orig_data_padded = orig_data
         
+        # Disable padding for large images to avoid OOM
+        # Large images (>320 voxels in any dimension) can create huge padded tensors
+        max_dim = max(orig_data.shape)
+        if padding_percent > 0.0 and max_dim > LARGE_IMAGE_THRESHOLD:
+            logger.warning(
+                f"Inference: Disabling edge padding for large image (max_dim={max_dim} > {LARGE_IMAGE_THRESHOLD}). "
+                f"This saves significant GPU memory. Edge predictions may be slightly less accurate."
+            )
+            padding_percent = 0.0
+        
         if padding_percent > 0.0:
             logger.info(f"Inference: Applying {padding_percent*100:.1f}% edge padding to help recognize brain tissue near boundaries")
             orig_data_padded, pad_width = pad_volume_edges_percent(orig_data, padding_percent, mode='edge')
@@ -533,23 +544,105 @@ class Inference:
             # Create padded prediction tensor matching padded data dimensions
             padded_shape = orig_data_padded.shape + (init_pred.shape[3],)  # (H, W, D, num_classes)
             
+            # Calculate memory requirements for padded tensor
+            padded_size_gb = np.prod(padded_shape) * init_pred.element_size() / (1024**3)
+            
+            # Warn if padding creates an extremely large tensor
+            if padded_size_gb > 20.0:
+                logger.warning(
+                    f"Inference: Padding will create a very large tensor (~{padded_size_gb:.2f} GB). "
+                    f"This may cause memory issues. Consider reducing EDGE_PADDING_PERCENT or disabling padding."
+                )
+            
             if out is not None and out.shape[:3] == orig_data.shape:
                 # Pad the provided out tensor to match padded dimensions
                 pad_h, pad_w, pad_d = pad_width[0][0], pad_width[1][0], pad_width[2][0]
-                out = torch.nn.functional.pad(
-                    out,
-                    (0, 0, pad_d, pad_d, pad_w, pad_w, pad_h, pad_h),
-                    mode='constant',
-                    value=0
-                )
+                
+                # Check GPU memory before padding
+                if out.device.type == "cuda":
+                    device_idx = out.device.index if out.device.index is not None else 0
+                    free_memory = torch.cuda.get_device_properties(device_idx).total_memory - torch.cuda.memory_allocated(device_idx)
+                    free_memory_gb = free_memory / (1024**3)
+                    
+                    logger.info(f"Inference: Padding requires ~{padded_size_gb:.2f} GB, "
+                              f"available GPU memory: {free_memory_gb:.2f} GB")
+                    
+                    if free_memory_gb < padded_size_gb * 1.2:  # Need 20% buffer
+                        logger.warning(
+                            f"Inference: Insufficient GPU memory for padding ({padded_size_gb:.2f} GB required, "
+                            f"{free_memory_gb:.2f} GB available). Moving padding operation to CPU."
+                        )
+                        # Move to CPU for padding, then move back
+                        # CRITICAL: Delete original GPU tensor before creating padded version
+                        # to avoid needing space for both simultaneously
+                        target_device = out.device  # Save device before moving
+                        out_cpu = out.cpu()
+                        del out  # Explicitly delete original GPU tensor to free memory
+                        torch.cuda.empty_cache()  # Free GPU memory
+                        out_cpu = torch.nn.functional.pad(
+                            out_cpu,
+                            (0, 0, pad_d, pad_d, pad_w, pad_w, pad_h, pad_h),
+                            mode='constant',
+                            value=0
+                        )
+                        out = out_cpu.to(target_device)  # Move back to original device
+                        logger.info("Inference: Padding completed on CPU and moved back to GPU")
+                    else:
+                        # Enough memory, pad on GPU
+                        out = torch.nn.functional.pad(
+                            out,
+                            (0, 0, pad_d, pad_d, pad_w, pad_w, pad_h, pad_h),
+                            mode='constant',
+                            value=0
+                        )
+                else:
+                    # CPU device, pad directly
+                    out = torch.nn.functional.pad(
+                        out,
+                        (0, 0, pad_d, pad_d, pad_w, pad_w, pad_h, pad_h),
+                        mode='constant',
+                        value=0
+                    )
             else:
-                # Create new padded tensor
-                out = torch.zeros(
-                    padded_shape,
-                    dtype=init_pred.dtype,
-                    device=init_pred.device,
-                    requires_grad=False
-                )
+                # Create new padded tensor - check memory first
+                if init_pred.device.type == "cuda":
+                    device_idx = init_pred.device.index if init_pred.device.index is not None else 0
+                    free_memory = torch.cuda.get_device_properties(device_idx).total_memory - torch.cuda.memory_allocated(device_idx)
+                    free_memory_gb = free_memory / (1024**3)
+                    
+                    logger.info(f"Inference: Creating padded tensor requires ~{padded_size_gb:.2f} GB, "
+                              f"available GPU memory: {free_memory_gb:.2f} GB")
+                    
+                    if free_memory_gb < padded_size_gb * 1.2:  # Need 20% buffer
+                        logger.warning(
+                            f"Inference: Insufficient GPU memory for padded tensor ({padded_size_gb:.2f} GB required, "
+                            f"{free_memory_gb:.2f} GB available). Creating on CPU."
+                        )
+                        # Create on CPU first, then move to GPU
+                        out = torch.zeros(
+                            padded_shape,
+                            dtype=init_pred.dtype,
+                            device='cpu',
+                            requires_grad=False
+                        )
+                        out = out.to(init_pred.device)
+                        logger.info("Inference: Padded tensor created on CPU and moved to GPU")
+                    else:
+                        # Enough memory, create on GPU
+                        out = torch.zeros(
+                            padded_shape,
+                            dtype=init_pred.dtype,
+                            device=init_pred.device,
+                            requires_grad=False
+                        )
+                else:
+                    # CPU device, create directly
+                    out = torch.zeros(
+                        padded_shape,
+                        dtype=init_pred.dtype,
+                        device=init_pred.device,
+                        requires_grad=False
+                    )
         
         # Ensure out is set (for no-padding case)
         if out is None:

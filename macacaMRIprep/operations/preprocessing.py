@@ -18,16 +18,16 @@ import nibabel as nib
 from .validation import validate_input_file, ensure_working_directory, validate_output_file
 from ..utils import run_command, calculate_func_tmean, reorient_image_to_target, check_image_shape
 from ..config import validate_slice_timing_config
-# Import skullstripping from macacaMRINN package
+# Import skullstripping from FastSurferCNN package
 import sys
 from pathlib import Path
 
-# Add the project root to sys.path to enable macacaMRINN imports
+# Add the project root to sys.path to enable FastSurferCNN imports
 project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from FastSurferCNN.inference.skullstripping import skullstripping
+from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
 
 # %%
 def precheck(
@@ -238,7 +238,7 @@ def slice_timing_correction(
         logger.warning("Step: unknown slice timing pattern - skipping slice timing correction")
         return outputs
     
-        logger.info(f"Data: slice timing pattern - {tpattern}, slice encoding direction - {slice_encoding_direction}")
+    logger.info(f"Data: slice timing pattern - {tpattern}, slice encoding direction - {slice_encoding_direction}")
 
     # double check whether the slice in the encoding direction is matching the slice_timing_data
     img_shape_original = check_image_shape(image_path, logger)
@@ -559,7 +559,7 @@ def despike(
         logger.error(f"Workflow: despiking failed: {str(e)}")
         raise
 
-def run_skullstripping(
+def apply_skullstripping(
     imagef: Union[str, Path],
     modal: str,
     working_dir: Union[str, Path],
@@ -567,7 +567,7 @@ def run_skullstripping(
     logger: logging.Logger,
     config: Dict[str, Any],
 ) -> Dict[str, str]:
-    """Perform skullstripping using UNet model.
+    """Perform skullstripping using various methods (BET or FastSurferCNN).
     
     Args:
         imagef: Input file (functional or anatomical)
@@ -578,7 +578,9 @@ def run_skullstripping(
         config: Configuration dictionary
         
     Returns:
-        Dictionary with output file paths
+        Dictionary with output file paths:
+        - 'imagef_skullstripped': Path to skull-stripped image
+        - 'brain_mask': Path to brain mask file
         
     Raises:
         FileNotFoundError: If input file or model doesn't exist
@@ -601,38 +603,17 @@ def run_skullstripping(
     if not skull_cfg:
         raise ValueError("skullstripping configuration not found")
     method = skull_cfg.get('method')
-    if method not in ['unet', 'bet']:
-        raise ValueError(f"Invalid skull stripping method: {method}. Must be 'unet' or 'bet'")
+    if method not in ['bet', 'fastsurfercnn']:
+        raise ValueError(f"Invalid skull stripping method: {method}. Must be 'bet' or 'fastsurfercnn'")
 
     # Define output paths at the beginning
     brain_mask_path = os.path.join(str(work_dir), 'brain_mask.nii.gz')
+    
+    # Initialize optional output paths (for FastSurferCNN)
+    brain_segmentation_path = None
+    brain_hemimask_path = None
 
-    if method == 'unet':
-        logger.info(f"Workflow: starting skullstripping using UNet method")
-        logger.info(f"Data: input image - {os.path.basename(image_path)}")
-        logger.info(f"System: output path - {brain_mask_path}")
-        
-        # Get UNet configuration parameters
-        unet_cfg = skull_cfg.get('unet', {})
-        
-        try:
-            # Use the streamlined skull stripping API
-            # Note: This calls macacaMRINN.inference.prediction.skullstripping, not FastSurferCNN version
-            skullstripping(
-                input_image=image_path,
-                modal=modal,
-                output_path=brain_mask_path,
-                device_id=unet_cfg.get('gpu_device', 'auto'),
-                logger=logger
-            )
-            # Update brain_mask_path with the actual generated path
-            logger.info("Workflow: UNet completed successfully")
-            
-        except Exception as e:
-            logger.error(f"Workflow: UNet failed - {str(e)}")
-            raise
-
-    elif method == 'bet':
+    if method == 'bet':
         logger.info(f"Workflow: starting skullstripping using FSL BET method")
         logger.info(f"Data: input image - {os.path.basename(image_path)}")
         logger.info(f"System: output path - {brain_mask_path}")
@@ -646,14 +627,102 @@ def run_skullstripping(
             raise RuntimeError(f"bet2 failed (exit code {returncode}): {stderr}")
         logger.info("Workflow: FSL BET completed successfully")
 
+    elif method == 'fastsurfercnn':
+        logger.info(f"Workflow: starting skullstripping using FastSurferCNN method")
+        logger.info(f"Data: input image - {os.path.basename(image_path)}")
+        logger.info(f"System: output path - {brain_mask_path}")
+        
+        # Get FastSurferCNN configuration parameters
+        fscnn_cfg = skull_cfg.get('fastsurfercnn', {})
+        
+        # Create temporary output directory for FastSurferCNN
+        # FastSurferCNN needs a directory, not a file path
+        temp_output_dir = os.path.join(str(work_dir), 'fastsurfercnn_output')
+        os.makedirs(temp_output_dir, exist_ok=True)
+        
+        try:
+            # Prepare FastSurferCNN config dict
+            fscnn_config = {}
+            if 'batch_size' in fscnn_cfg:
+                fscnn_config['batch_size'] = fscnn_cfg['batch_size']
+            if 'threads' in fscnn_cfg:
+                fscnn_config['threads'] = fscnn_cfg['threads']
+            
+            # Call FastSurferCNN skullstripping function
+            # Note: This is the FastSurferCNN.inference.skullstrip_fastsurfercnn function imported at the top
+            result = skullstrip_fastsurfercnn(
+                input_image=image_path,
+                modal=modal,
+                output_dir=temp_output_dir,
+                device_id=fscnn_cfg.get('gpu_device', 'auto'),
+                logger=logger,
+                config=fscnn_config if fscnn_config else None,
+                output_data_format='nifti',
+                enable_crop_2round=fscnn_cfg.get('enable_crop_2round', False),
+                plane_weight_coronal=fscnn_cfg.get('plane_weight_coronal'),
+                plane_weight_axial=fscnn_cfg.get('plane_weight_axial'),
+                plane_weight_sagittal=fscnn_cfg.get('plane_weight_sagittal'),
+                use_mixed_model=fscnn_cfg.get('use_mixed_model', False),
+            )
+            
+            # Extract brain mask path from result
+            fastsurfercnn_mask_path = result.get('brain_mask')
+            if not fastsurfercnn_mask_path or not os.path.exists(fastsurfercnn_mask_path):
+                raise FileNotFoundError(f"FastSurferCNN did not generate brain mask at expected location: {fastsurfercnn_mask_path}")
+            
+            # Move the brain mask to the expected location
+            shutil.move(fastsurfercnn_mask_path, brain_mask_path)
+            logger.info("Workflow: FastSurferCNN completed successfully")
+            logger.info(f"Output: brain mask moved from {fastsurfercnn_mask_path} to {brain_mask_path}")
+            
+            # Move segmentation if it exists
+            fastsurfercnn_seg_path = result.get('segmentation')
+            if fastsurfercnn_seg_path and os.path.exists(fastsurfercnn_seg_path):
+                brain_segmentation_path = os.path.join(str(work_dir), 'brain_segmentation.nii.gz')
+                shutil.move(fastsurfercnn_seg_path, brain_segmentation_path)
+                logger.info(f"Output: brain segmentation moved from {fastsurfercnn_seg_path} to {brain_segmentation_path}")
+            
+            # Move hemimask if it exists
+            fastsurfercnn_hemimask_path = result.get('hemimask')
+            if fastsurfercnn_hemimask_path and os.path.exists(fastsurfercnn_hemimask_path):
+                brain_hemimask_path = os.path.join(str(work_dir), 'brain_hemimask.nii.gz')
+                shutil.move(fastsurfercnn_hemimask_path, brain_hemimask_path)
+                logger.info(f"Output: brain hemimask moved from {fastsurfercnn_hemimask_path} to {brain_hemimask_path}")
+            
+            # Move input cropped if it exists
+            fastsurfercnn_input_cropped_path = result.get('input_cropped')
+            if fastsurfercnn_input_cropped_path and os.path.exists(fastsurfercnn_input_cropped_path):
+                brain_input_cropped_path = os.path.join(str(work_dir), 'brain_input_cropped.nii.gz')
+                shutil.move(fastsurfercnn_input_cropped_path, brain_input_cropped_path)
+                logger.info(f"Output: brain input cropped moved from {fastsurfercnn_input_cropped_path} to {brain_input_cropped_path}")
+
+
+        except Exception as e:
+            logger.error(f"Workflow: FastSurferCNN failed - {str(e)}")
+            raise
+
     # Validate brain mask
     validate_output_file(brain_mask_path, logger)
     logger.info(f"Output: brain mask generated - {os.path.basename(brain_mask_path)}")
+
+    # Validate optional outputs (segmentation and hemimask from FastSurferCNN)
+    if brain_segmentation_path is not None and os.path.exists(brain_segmentation_path):
+        validate_output_file(brain_segmentation_path, logger)
+        logger.info(f"Output: brain segmentation generated - {os.path.basename(brain_segmentation_path)}")
+    if brain_hemimask_path is not None and os.path.exists(brain_hemimask_path):
+        validate_output_file(brain_hemimask_path, logger)
+        logger.info(f"Output: brain hemimask generated - {os.path.basename(brain_hemimask_path)}")
     
     # Apply brain mask to input image
+    # If two-pass refinement was used, the mask is in cropped space, so use cropped input
+    image_to_mask = image_path
+    if brain_input_cropped_path is not None and os.path.exists(brain_input_cropped_path):
+        image_to_mask = brain_input_cropped_path
+        logger.info(f"Step: using cropped input for mask application (two-pass refinement detected)")
+    
     output_path = os.path.join(str(work_dir), output_name)
     command_apply = [
-        'fslmaths', str(image_path),
+        'fslmaths', str(image_to_mask),
         '-mul', str(brain_mask_path),
         str(output_path)
     ]
@@ -665,10 +734,21 @@ def run_skullstripping(
     validate_output_file(output_path, logger)
     logger.info(f"Output: skull stripped image generated - {os.path.basename(output_path)}")
     
-    return {
+    # Build return dictionary with optional segmentation and hemimask
+    return_dict = {
         "imagef_skullstripped": output_path,
         "brain_mask": brain_mask_path
     }
+    
+    # Add segmentation and hemimask if they exist (generated by FastSurferCNN)
+    if brain_segmentation_path is not None and os.path.exists(brain_segmentation_path):
+        return_dict["segmentation"] = brain_segmentation_path
+    if brain_hemimask_path is not None and os.path.exists(brain_hemimask_path):
+        return_dict["hemimask"] = brain_hemimask_path
+    if brain_input_cropped_path is not None and os.path.exists(brain_input_cropped_path):
+        return_dict["input_cropped"] = brain_input_cropped_path
+
+    return return_dict
 
 def bias_correction(
     imagef: Union[str, Path],

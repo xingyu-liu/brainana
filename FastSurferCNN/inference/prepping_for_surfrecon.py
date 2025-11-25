@@ -48,7 +48,7 @@ from FastSurferCNN.inference.predictor_utils import (
     setup_atlas_from_checkpoints,
     validate_checkpoints,
 )
-from FastSurferCNN.inference.skullstripping import skullstripping
+from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
 from FastSurferCNN.seg_statistics.quick_qc import check_volume
 from FastSurferCNN.utils.arg_types import vox_size as _vox_size
 from FastSurferCNN.utils import PLANES, Plane, logging, parser_defaults
@@ -396,7 +396,7 @@ def prepare_freesurfer_subject(
         # Create temporary directory for skullstripping outputs
         temp_skull_dir = Path(tempfile.mkdtemp(prefix="fastsurfer_skull_"))
         try:
-            skullstripping(
+            skullstrip_fastsurfercnn(
                 input_image=str(orig_mgz),
                 modal="anat",  # Always anat for T1w
                 output_dir=temp_skull_dir,

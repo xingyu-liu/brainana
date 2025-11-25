@@ -68,7 +68,7 @@ def test_bids_dataset_processing_full_newcastle():
             },
             "skullstripping": {
                 "enabled": True,
-                "method": "unet"
+                "method": "fastsurfercnn"
             }
         },
         "func": {
@@ -185,7 +185,7 @@ def test_bids_dataset_processing_full_arcaro():
             },
             "skullstripping": {
                 "enabled": True,
-                "method": "unet"
+                "method": "fastsurfercnn"
             }
         },
         "func": {
@@ -197,7 +197,7 @@ def test_bids_dataset_processing_full_arcaro():
             },
             "skullstripping": {
                 "enabled": True,
-                "method": "unet"
+                "method": "fastsurfercnn"
             },
         },
         "registration": {

@@ -13,7 +13,7 @@ _file_dir = Path(__file__).resolve().parent
 if str(_file_dir.parent.parent) not in sys.path:
     sys.path.insert(0, str(_file_dir.parent.parent))
 
-from FastSurferCNN.inference.skullstripping import skullstripping
+from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
 
 # Setup logging
 logging.basicConfig(
@@ -35,7 +35,7 @@ input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_tr
 output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_func"
 modal = "func"
 data_format = "nifti"
-weight_coronal, weight_axial, weight_sagittal = 0, 0.5, 0.5
+weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
 use_mixed_model = False  # Set to True to use mixed-plane model instead of separate plane models
 
 if use_mixed_model:
@@ -123,7 +123,7 @@ def main():
     
     try:
 
-        result = skullstripping(
+        result = skullstrip_fastsurfercnn(
             input_image=args.input_image,
             modal=args.modal,
             output_dir=args.output_dir,
@@ -144,11 +144,13 @@ def main():
         logger.info("=" * 80)
         
         # Verify output file exists
-        output_file = Path(result['brain_mask'])
-        if output_file.exists():
-            logger.info(f"Test: output file created={result['brain_mask']}, size={output_file.stat().st_size} bytes")
-        else:
-            logger.error(f"Test: output file not found: {result['brain_mask']}")
+        for key, value in result.items():
+            if value is not None:
+                output_file = Path(value)
+                if output_file.exists():
+                    logger.info(f"Test: output file created={key}: {value}")
+                else:
+                    logger.error(f"Test: output file not found: {key}: {value}")
             
     except Exception as e:
         logger.error(f"Test: failed with error: {e}", exc_info=True)

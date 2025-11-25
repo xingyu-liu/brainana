@@ -537,6 +537,30 @@ class Trainer:
         # Initialize CSV logging
         self._init_csv_logging()
         
+        # Initialize early stopping if enabled
+        early_stopping_enabled = getattr(self.cfg.TRAIN, 'EARLY_STOPPING', False)
+        if early_stopping_enabled:
+            early_stopping_mode = getattr(self.cfg.TRAIN, 'EARLY_STOPPING_MODE', 'min')
+            early_stopping_patience = getattr(self.cfg.TRAIN, 'EARLY_STOPPING_PATIENCE', 10)
+            early_stopping_wait = getattr(self.cfg.TRAIN, 'EARLY_STOPPING_WAIT', 0)
+            early_stopping_delta = getattr(self.cfg.TRAIN, 'EARLY_STOPPING_DELTA', 0.0)
+            
+            # Initialize early stopping state
+            if early_stopping_mode == 'min':
+                best_metric = float('inf')
+                is_better = lambda current, best: current < best - early_stopping_delta
+            else:  # mode == 'max'
+                best_metric = float('-inf')
+                is_better = lambda current, best: current > best + early_stopping_delta
+            
+            early_stopping_patience_count = 0
+            best_metric_epoch = 0
+            
+            logger.info(f"Early stopping enabled: mode={early_stopping_mode}, patience={early_stopping_patience}, "
+                       f"wait={early_stopping_wait}, delta={early_stopping_delta}")
+        else:
+            logger.info("Early stopping disabled")
+        
         # Perform the training loop.
         logger.info("=" * 80)
         logger.info("Training: starting training loop")
@@ -609,6 +633,40 @@ class Trainer:
                     optimizer,
                     scheduler,
                 )
+            
+            # Early stopping check
+            if early_stopping_enabled:
+                # Determine which metric to monitor
+                if early_stopping_mode == 'min':
+                    current_metric = current_val_loss
+                else:  # mode == 'max'
+                    current_metric = current_dice
+                
+                # Always track the best metric, but only start patience counter after wait period
+                if is_better(current_metric, best_metric):
+                    best_metric = current_metric
+                    best_metric_epoch = epoch
+                    # Reset patience counter only if we're past the wait period
+                    if epoch > early_stopping_wait:
+                        early_stopping_patience_count = 0
+                        logger.info(f"Early stopping: metric improved to {current_metric:.6f} at epoch {epoch}")
+                else:
+                    # Only start counting patience after wait period
+                    if epoch > early_stopping_wait:
+                        early_stopping_patience_count += 1
+                        improvement_needed = early_stopping_delta
+                        logger.info(f"Early stopping: no improvement for {early_stopping_patience_count}/{early_stopping_patience} epochs "
+                                   f"(current: {current_metric:.6f}, best: {best_metric:.6f} at epoch {best_metric_epoch}, "
+                                   f"need improvement of {improvement_needed:.6f})")
+                        
+                        # Check if we should stop
+                        if early_stopping_patience_count >= early_stopping_patience:
+                            logger.info("=" * 80)
+                            logger.info(f"Early stopping triggered at epoch {epoch}")
+                            logger.info(f"Best metric: {best_metric:.6f} at epoch {best_metric_epoch}")
+                            logger.info(f"No improvement for {early_stopping_patience} consecutive epochs")
+                            logger.info("=" * 80)
+                            break
         
         # Close CSV logging when training completes
         self._close_csv_logging()

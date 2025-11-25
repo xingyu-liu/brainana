@@ -18,7 +18,7 @@ from .preprocessing import (
     slice_timing_correction,
     motion_correction,
     despike,
-    run_skullstripping,
+    apply_skullstripping,
     bias_correction
 )
 
@@ -46,7 +46,7 @@ __all__ = [
     'slice_timing_correction',
     'motion_correction',
     'despike',
-    'run_skullstripping',
+    'apply_skullstripping',
     'bias_correction',
     
     # Registration

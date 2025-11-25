@@ -281,46 +281,48 @@ class RunModelOnData:
             and ckpt_ax == ckpt_cor == ckpt_sag
         )
         
-        self.models = {}
+        # LAZY LOADING: Don't load models upfront to save GPU memory (~24 GB → ~8 GB peak)
+        # Models are loaded one at a time during get_prediction() and unloaded after use.
+        # This trades inference speed for memory efficiency.
+        self._all_ckpts_same = all_ckpts_same  # Store for lazy loading
+        
+        # Prepare configs for each plane (but don't load models yet)
+        self._prepared_configs = {}
         for plane, view in self.view_ops.items():
             if all(view[key] is not None for key in ("cfg", "ckpt")):
-                # Skip loading model if plane weight is 0 (waste of resources)
+                # Skip if plane weight is 0
                 plane_weight = self.plane_weights[plane]
                 if plane_weight is not None and plane_weight == 0:
-                    LOGGER.info(
-                        f"Skipping {plane} model loading (plane weight is 0)"
-                    )
+                    LOGGER.info(f"Skipping {plane} plane (weight is 0)")
                     continue
 
-                # Update config with plane weights if provided
+                # Prepare config with plane weights
                 cfg = view["cfg"]
                 
                 # For mixed-plane models: override DATA.PLANE to the specific plane
-                # This ensures each Inference object processes only its assigned plane
-                # (instead of all 3 planes, which would happen if DATA.PLANE == "mixed")
                 if all_ckpts_same and cfg.DATA.PLANE == "mixed":
                     LOGGER.info(
-                        f"Mixed-plane model detected: overriding {plane} config plane from 'mixed' to '{plane}'"
+                        f"Mixed-plane model detected: setting {plane} config plane to '{plane}'"
                     )
                     cfg.DATA.PLANE = plane
                 
-                # Use explicit None check to allow 0 as a valid weight
+                # Apply plane weights
                 if self.plane_weights["coronal"] is not None:
-                    cfg.MULTIVIEW.PLANE_WEIGHTS.CORONAL = (
-                        self.plane_weights["coronal"]
-                    )
+                    cfg.MULTIVIEW.PLANE_WEIGHTS.CORONAL = self.plane_weights["coronal"]
                 if self.plane_weights["axial"] is not None:
-                    cfg.MULTIVIEW.PLANE_WEIGHTS.AXIAL = (
-                        self.plane_weights["axial"]
-                    )
+                    cfg.MULTIVIEW.PLANE_WEIGHTS.AXIAL = self.plane_weights["axial"]
                 if self.plane_weights["sagittal"] is not None:
-                    cfg.MULTIVIEW.PLANE_WEIGHTS.SAGITTAL = (
-                        self.plane_weights["sagittal"]
-                    )
-
-                self.models[plane] = Inference(
-                    cfg, ckpt=view["ckpt"], device=self.device, lut=self.lut
-                )
+                    cfg.MULTIVIEW.PLANE_WEIGHTS.SAGITTAL = self.plane_weights["sagittal"]
+                
+                self._prepared_configs[plane] = {
+                    "cfg": cfg,
+                    "ckpt": view["ckpt"],
+                }
+        
+        LOGGER.info(
+            f"Lazy loading enabled: {len(self._prepared_configs)} plane(s) will be loaded on-demand "
+            f"(saves ~16 GB GPU memory vs loading all at once)"
+        )
 
         # Load preprocessing parameters from checkpoint (required)
         preprocess_from_ckpt = self._extract_preprocessing_params(
@@ -566,14 +568,42 @@ class RunModelOnData:
         shape = orig_data.shape + (self.get_num_classes(),)
         pred_prob = torch.zeros(shape, **kwargs)
 
-        # Inference and view aggregation
-        for plane, model in self.models.items():
-            LOGGER.info(f"Run {plane} prediction")
+        # Inference and view aggregation with LAZY LOADING
+        # Load one model at a time, run inference, then unload to save GPU memory
+        for plane, plane_config in self._prepared_configs.items():
+            LOGGER.info(f"Run {plane} prediction (lazy loading model)")
             self.set_model(plane)
-            # pred_prob is updated inplace to conserve memory
+            
+            # Load model for this plane
+            cfg = plane_config["cfg"]
+            ckpt = plane_config["ckpt"]
+            
+            if self.device.type == "cuda":
+                torch.cuda.empty_cache()
+                if self.device.index is not None:
+                    mem_before = torch.cuda.memory_allocated(self.device.index) / (1024**3)
+                    LOGGER.info(f"  GPU memory before {plane} load: {mem_before:.2f} GB")
+            
+            LOGGER.info(f"  Loading {plane} checkpoint: {ckpt}")
+            model = Inference(cfg, ckpt=ckpt, device=self.device, lut=self.lut)
+            
+            if self.device.type == "cuda" and self.device.index is not None:
+                mem_after_load = torch.cuda.memory_allocated(self.device.index) / (1024**3)
+                LOGGER.info(f"  GPU memory after {plane} load: {mem_after_load:.2f} GB")
+            
+            # Run inference (pred_prob is updated inplace to conserve memory)
             pred_prob = model.run(
                 pred_prob, image_f, orig_data, _zoom, out=pred_prob
             )
+            
+            # Unload model to free GPU memory before loading next plane
+            LOGGER.info(f"  Unloading {plane} model to free GPU memory")
+            del model
+            if self.device.type == "cuda":
+                torch.cuda.empty_cache()
+                if self.device.index is not None:
+                    mem_after_unload = torch.cuda.memory_allocated(self.device.index) / (1024**3)
+                    LOGGER.info(f"  GPU memory after {plane} unload: {mem_after_unload:.2f} GB")
 
         # Get hard predictions
         pred_classes = torch.argmax(pred_prob, 3)

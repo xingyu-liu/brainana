@@ -54,7 +54,7 @@ def _extract_atlas_from_checkpoint(ckpt_path: Path) -> Optional[str]:
     return None
 
 
-def skullstripping(
+def skullstrip_fastsurfercnn(
     input_image: Union[str, Path],
     modal: str,
     output_dir: Union[str, Path],
@@ -71,8 +71,7 @@ def skullstripping(
     """
     Perform skullstripping using FastSurferCNN segmentation model.
     
-    This function provides the same interface as the macacaMRINN skullstripping API
-    but uses FastSurferCNN internally for brain mask generation.
+    This function uses FastSurferCNN internally for brain mask generation.
     
     The function implements an efficient "input space → model space → input space" workflow:
     1. Runs FastSurferCNN segmentation on the input image (in model space)
@@ -144,19 +143,19 @@ def skullstripping(
             logger.addHandler(handler)
             logger.setLevel(logging.INFO)
     
-    logger.info(f"Skullstripping: starting for {modal} modality")
+    logger.info(f"Skullstripping (FastSurferCNN): starting for {modal} modality")
     
     # Validate inputs
     input_image = Path(input_image)
     if not input_image.exists():
-        logger.error(f"Skullstripping: input image not found: {input_image}")
+        logger.error(f"Skullstripping (FastSurferCNN): input image not found: {input_image}")
         raise FileNotFoundError(f"Input image not found: {input_image}")
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if modal not in ['anat', 'func']:
-        logger.error(f"Skullstripping: invalid modality={modal}, must be 'anat' or 'func'")
+        logger.error(f"Skullstripping (FastSurferCNN): invalid modality={modal}, must be 'anat' or 'func'")
         raise ValueError(f"Invalid modality: {modal}. Must be 'anat' or 'func'")
     
     # Get configuration
@@ -293,12 +292,14 @@ def skullstripping(
             enable_crop_2round=enable_crop_2round,
         )
         
-        logger.info("Skullstripping: completed successfully")
+        logger.info("Skullstripping (FastSurferCNN): completed successfully")
         logger.info(f"Output: files saved to {output_dir}")
         logger.info(f"Output: segmentation={seg_results.get('segmentation')}")
         logger.info(f"Output: brain_mask={seg_results.get('mask')}")
         if 'hemimask' in seg_results:
             logger.info(f"Output: hemisphere_mask={seg_results.get('hemimask')}")
+        if 'input_cropped' in seg_results:
+            logger.info(f"Output: input_cropped={seg_results.get('input_cropped')}")
         
         # Return all output file paths
         result = {
@@ -309,10 +310,12 @@ def skullstripping(
             result['segmentation'] = str(seg_results['segmentation'])
         if 'hemimask' in seg_results:
             result['hemimask'] = str(seg_results['hemimask'])
+        if 'input_cropped' in seg_results:
+            result['input_cropped'] = str(seg_results['input_cropped'])
         
         return result
         
     except Exception as e:
-        logger.error(f"Skullstripping: failed: {str(e)}")
-        raise RuntimeError(f"Skullstripping failed: {str(e)}") from e
+        logger.error(f"Skullstripping (FastSurferCNN): failed: {str(e)}")
+        raise RuntimeError(f"Skullstripping (FastSurferCNN) failed: {str(e)}") from e
 

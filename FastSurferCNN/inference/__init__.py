@@ -30,6 +30,6 @@ __all__ = [
     "inference",
     "predictor",
     "predictor_utils",
-    "skullstripping",
+    "skullstripping",  # Module name kept for backward compatibility
 ]
 

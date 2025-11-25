@@ -127,6 +127,10 @@ def setup_step_logging(
     step_logger = logging.getLogger(f"macacaMRIprep.step.{step_name}")
     step_logger.setLevel(level)
     
+    # Don't propagate to parent logger to avoid duplicate messages
+    # Set this BEFORE adding handlers to ensure no propagation happens
+    step_logger.propagate = False
+    
     # Clear any existing handlers to avoid duplicates
     step_logger.handlers.clear()
     
@@ -158,9 +162,6 @@ def setup_step_logging(
         error_msg = f"CRITICAL: Failed to create step log file {log_file}: {e}"
         print(error_msg, file=sys.stderr)
         raise RuntimeError(error_msg)
-    
-    # Don't propagate to parent logger to avoid duplicate messages
-    step_logger.propagate = False
     
     return step_logger
 
@@ -199,6 +200,10 @@ def setup_workflow_logging(
     workflow_logger = logging.getLogger(f"macacaMRIprep.{workflow_name}")
     workflow_logger.setLevel(level)
     
+    # Don't propagate to parent logger to avoid duplicate messages
+    # Set this BEFORE adding handlers to ensure no propagation happens
+    workflow_logger.propagate = False
+    
     # Clear any existing handlers to avoid duplicates
     workflow_logger.handlers.clear()
     
@@ -230,9 +235,6 @@ def setup_workflow_logging(
         error_msg = f"CRITICAL: Failed to create workflow log file {log_file}: {e}"
         print(error_msg, file=sys.stderr)
         raise RuntimeError(error_msg)
-    
-    # Don't propagate to parent logger to avoid duplicate messages  
-    workflow_logger.propagate = False
     
     return workflow_logger
 

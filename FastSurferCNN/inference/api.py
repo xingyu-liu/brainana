@@ -35,21 +35,22 @@ from FastSurferCNN.inference.predictor_utils import (
     setup_atlas_from_checkpoints,
     should_apply_refinement,
     validate_checkpoints,
-    TWO_PASS_BRAIN_RATIO_THRESHOLD,
-    TWO_PASS_CROP_MARGIN,
 )
 from FastSurferCNN.postprocessing.postseg_utils import (
     create_hemisphere_masks,
     create_mask,
 )
 from FastSurferCNN.utils import logging
+from FastSurferCNN.utils.constants import (
+    MASK_DILATION_SIZE_MM,
+    ROUNDS_OF_MORPHOLOGICAL_OPERATIONS,
+    TWO_PASS_BRAIN_RATIO_THRESHOLD,
+    TWO_PASS_CROP_MARGIN,
+)
 
 LOGGER = logging.getLogger(__name__)
 
-# Brain mask creation parameters
-MASK_DILATION_SIZE_MM = 2.0  # Dilation size in millimeters for mask creation
-
-
+# %%
 def _apply_two_pass_refinement(
     input_image: Path,
     output_dir: Path,
@@ -375,10 +376,12 @@ def run_segmentation(
     mask_erosion_voxels = max(0, mask_dilation_voxels - 1)  # Ensure non-negative
     LOGGER.info(f"Mask parameters: dilation={mask_dilation_voxels} voxels, erosion={mask_erosion_voxels} voxels (resolution={resolution:.3f} mm)")
     
+    # do morphological operations
     brain_mask = create_mask(
         copy.deepcopy(pred_data),
         mask_dilation_voxels,
         mask_erosion_voxels,
+        ROUNDS_OF_MORPHOLOGICAL_OPERATIONS,
     )
     brain_mask = brain_mask.astype(np.uint8)
 

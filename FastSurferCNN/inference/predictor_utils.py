@@ -33,6 +33,9 @@ from FastSurferCNN.utils.checkpoint import (
     extract_atlas_metadata,
     extract_training_config,
 )
+from FastSurferCNN.utils.constants import (
+    TWO_PASS_BRAIN_RATIO_THRESHOLD,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -96,6 +99,7 @@ def setup_atlas_from_checkpoints(
     LOGGER.info("Extracting atlas information from checkpoints...")
 
     # Try to extract atlas from each checkpoint (they should all be the same)
+    # Process checkpoints one by one for clearer logging
     atlas_metadatas = {}
     plane_checkpoints = [
         ("axial", ckpt_ax),
@@ -105,6 +109,7 @@ def setup_atlas_from_checkpoints(
 
     for plane, ckpt_path in plane_checkpoints:
         if ckpt_path is not None:
+            LOGGER.info(f"Extracting atlas metadata from {plane} checkpoint: {ckpt_path}")
             metadata = extract_atlas_metadata(ckpt_path)
             if metadata:
                 atlas_metadatas[plane] = metadata
@@ -120,6 +125,8 @@ def setup_atlas_from_checkpoints(
                         f"  {plane.capitalize():9s}: {atlas_name} "
                         f"({metadata['num_classes']} classes)"
                     )
+            else:
+                LOGGER.warning(f"  {plane.capitalize():9s}: No atlas metadata found")
 
     if not atlas_metadatas:
         raise RuntimeError(
@@ -253,10 +260,6 @@ def load_multiplane_configs(
 # ============================================================================
 # Image preprocessing utilities
 # ============================================================================
-
-# Two-pass refinement parameters
-TWO_PASS_BRAIN_RATIO_THRESHOLD = 0.20  # Trigger refinement if brain occupies < 20% of FOV
-TWO_PASS_CROP_MARGIN = 0.08  # 8% margin around brain bounding box
 
 
 def crop_image_to_brain_mask(

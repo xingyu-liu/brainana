@@ -320,3 +320,33 @@ python3 -m macacaMRIprep.cli.preproc \
     ${output_dir} \
     --pipeline ${pipeline} --config ${config_f} \
     --n-procs 3
+
+# pet func2template
+dataset_dir=/mnt/DataDrive2/macaque/data_raw/macaque_pet/dustin_SV2A/bids_correctorient_pet
+output_dir=/mnt/DataDrive2/macaque/data_raw/macaque_pet/dustin_SV2A/preproc_test_pet_func2template_noss
+config_f=${output_dir}/config.json
+
+pipeline=func2template
+python3 -m macacaMRIprep.cli.preproc \
+    ${dataset_dir} \
+    ${output_dir} \
+    --pipeline ${pipeline} --config ${config_f} \
+    --n-procs 3
+
+# ================================================
+# test fastsurfercnn
+# ================================================
+dataset_root=/mnt/DataDrive3/xliu/prep_test/banana_test
+# dataset_dir=${dataset_root}/testing_dataset
+dataset_dir=${dataset_root}/testing_dataset_2pass
+# config_f=${dataset_root}/config.json
+config_f=${dataset_root}/config_linReg.json
+# output_dir=${dataset_root}/testing_dataset_preproc
+# output_dir=${dataset_root}/testing_dataset_preproc_linReg
+output_dir=${dataset_root}/testing_dataset_preproc_2pass
+
+
+pipeline=func2anat2template
+python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
+    --pipeline ${pipeline} --config ${config_f} --n-procs 4 \
+    --anat-only

@@ -36,7 +36,7 @@ from ..utils import (
     check_image_resolution,
     get_filename_stem
 )
-from ..operations import run_skullstripping
+from ..operations import apply_skullstripping
 
 # %%
 class FunctionalProcessor(BasePreprocessingWorkflow):
@@ -330,7 +330,7 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                 
                 step_name = self.pipeline.add_step(
                     name="func_skullstripping",
-                    func=run_skullstripping,
+                    func=apply_skullstripping,
                     inputs={
                         "imagef": funcf_tmean,
                         "modal": "func",
@@ -527,7 +527,7 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                     fixedf=fixedf,
                     transformf=transform_files,
                     reff=reff,
-                    generate_tmean=True
+                    generate_tmean=True,
                 )
                 
                 # Get transformed functional data
@@ -555,7 +555,7 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                         fixedf=fixedf,
                         transformf=transform_files,
                         reff=reff,
-                        generate_tmean=False
+                        generate_tmean=False,
                     )
 
                     funcf_brain_mask_registered = result.output_files["imagef_registered"]

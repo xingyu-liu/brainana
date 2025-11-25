@@ -48,12 +48,19 @@
     },
     "skullstripping": {
       "enabled": true,
-      "method": "unet",
+      "method": "fastsurfercnn",
       "bet": {
         "fractional_intensity": 0.3
       },
-      "unet": {
-        "gpu_device": "auto"
+      "fastsurfercnn": {
+        "gpu_device": "auto",
+        "batch_size": 1,
+        "threads": 1,
+        "use_mixed_model": false,
+        "enable_crop_2round": true,
+        "plane_weight_coronal": 0.3,
+        "plane_weight_axial": 0.5,
+        "plane_weight_sagittal": 0.2
       }
     },
     "t2w": {
@@ -88,12 +95,19 @@
     },
     "skullstripping": {
       "enabled": true,
-      "method": "bet",
+      "method": "fastsurfercnn",
       "bet": {
         "fractional_intensity": 0.3
       },
-      "unet": {
-        "gpu_device": "auto"
+      "fastsurfercnn": {
+        "gpu_device": "auto",
+        "batch_size": 1,
+        "threads": 1,
+        "use_mixed_model": false,
+        "enable_crop_2round": true,
+        "plane_weight_coronal": 0,
+        "plane_weight_axial": 0.6,
+        "plane_weight_sagittal": 0.4
       }
     },
     "bias_correction": {

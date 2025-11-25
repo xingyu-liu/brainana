@@ -30,7 +30,7 @@ from .operations import (
     slice_timing_correction,
     motion_correction,
     despike,
-    run_skullstripping,
+    apply_skullstripping,
     bias_correction,
     ants_register,
     ants_apply_transforms,
@@ -88,7 +88,7 @@ __all__ = [
     'slice_timing_correction',
     'motion_correction',
     'despike',
-    'run_skullstripping',
+    'apply_skullstripping',
     # Shared preprocessing
     'bias_correction',
     # Quality control

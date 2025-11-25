@@ -237,76 +237,114 @@ def fill_label_holes(mask: npt.NDArray[int]) -> npt.NDArray[int]:
     return filled_mask.astype(mask.dtype)
 
 
-def create_mask(aseg_data: npt.NDArray[int], dnum: int, enum: int) -> npt.NDArray[int]:
+def create_mask(seg_data: npt.NDArray[int], dnum: int, enum: int, rounds: int = 1) -> npt.NDArray[int]:
     """
     Create brain mask from aseg.
     
     Extract largest component, fill holes, then apply dilation/erosion.
+    The process can be repeated multiple rounds for better results.
+    
+    Strategy for multiple rounds:
+    - Intermediate rounds (before the last): Apply closing operation
+      (dilate by dnum, then erode by dnum) to smooth the mask.
+    - Final round: Apply the specified dilation/erosion (dilate by dnum,
+      then erode by enum) for final refinement.
     
     Parameters
     ----------
-    aseg_data : np.ndarray
-        Segmentation data
+    seg_data : np.ndarray
+        Segmentation data (can be binary or multi-class)
     dnum : int
         Number of dilation iterations
     enum : int
-        Number of erosion iterations
+        Number of erosion iterations (applied only in the final round)
+    rounds : int, optional
+        Number of processing rounds to apply (default: 1)
         
     Returns
     -------
     np.ndarray
-        Binary mask (1 = brain, 0 = background)
+        Binary mask (1 = brain, 0 = background) with dtype int
     """
-    print(f"Creating mask (dilate {dnum}, erode {enum})...")
+    if rounds < 1:
+        raise ValueError(f"rounds must be >= 1, got {rounds}")
     
-    # Debug: Log input data statistics
-    unique_vals = np.unique(aseg_data)
-    print(f"  Input aseg_data: shape={aseg_data.shape}, dtype={aseg_data.dtype}, unique values={unique_vals}, range=[{aseg_data.min()}, {aseg_data.max()}]")
-    if len(unique_vals) == 2 and set(unique_vals) == {0, 1}:
-        print(f"  Input appears to be binary (0/1)")
-    elif len(unique_vals) <= 10:
-        print(f"  Input appears to be multi-class with {len(unique_vals)} classes")
+    print(f"Creating mask (dilate {dnum}, erode {enum}, rounds {rounds})...")
+    
+    # Log input data statistics
+    unique_vals = np.unique(seg_data)
+    num_unique = len(unique_vals)
+    print(f"  Input: shape={seg_data.shape}, dtype={seg_data.dtype}, "
+          f"range=[{seg_data.min()}, {seg_data.max()}], "
+          f"unique values={num_unique}")
+    
+    if num_unique == 2 and set(unique_vals) == {0, 1}:
+        print(f"  Input is binary (0/1)")
+    elif num_unique <= 10:
+        print(f"  Input is multi-class with {num_unique} classes")
     else:
-        print(f"  Input has {len(unique_vals)} unique values (may be continuous/probability map)")
+        print(f"  Input has {num_unique} unique values (may be continuous/probability map)")
     
-    # 1. Get initial mask (before dilation or erosion)
-    mask = (aseg_data != 0).astype(int)
-    print(f"  Initial mask: {np.sum(mask):,} voxels")
+    # Get initial mask (before dilation or erosion)
+    mask = (seg_data != 0).astype(int)
+    initial_voxels = np.sum(mask)
+    print(f"  Initial mask: {initial_voxels:,} voxels ({100 * initial_voxels / mask.size:.2f}% of volume)")
     
-    # 2. Extract largest component
-    mask = extract_largest_component(mask)
-    print(f"  After extracting largest component: {np.sum(mask):,} voxels")
+    for round_idx in range(rounds):
+        if rounds > 1:
+            print(f"  Round {round_idx + 1}/{rounds}:")
+
+        # 1. Extract largest component and fill holes
+        mask = extract_largest_component(mask)
+        voxels_after_component = np.sum(mask)
+        print(f"    After extracting largest component: {voxels_after_component:,} voxels")
+        
+        mask = fill_label_holes(mask)
+        voxels_after_holes = np.sum(mask)
+        print(f"    After filling holes: {voxels_after_holes:,} voxels")
+        
+        # 2. Apply morphological operations (dilation then erosion)
+        # Use padding to avoid boundary effects where dilation is constrained
+        # but erosion still applies fully, causing over-erosion
+        # Strategy: In intermediate rounds, use closing (dilate+erode by same amount)
+        # to smooth the mask. In the final round, use the specified erosion value.
+        if round_idx == 0:
+            enum_this_round = enum  # Final refinement with specified erosion
+        else:
+            enum_this_round = dnum  # Closing operation for smoothing
+
+        if dnum > 0 or enum_this_round > 0:
+            # Pad by the maximum of dilation/erosion iterations to ensure enough space
+            pad_size = max(dnum, enum_this_round)
+            
+            # Pad the mask (works for any number of dimensions)
+            padded_mask = np.pad(mask, pad_size, mode='constant', constant_values=0)
+            
+            # Apply dilation on padded mask
+            if dnum > 0:
+                padded_mask = scipy.ndimage.binary_dilation(padded_mask, iterations=dnum)
+                voxels_after_dilate = np.sum(padded_mask)
+                print(f"    After dilation ({dnum} iterations): {voxels_after_dilate:,} voxels")
+            
+            # Apply erosion on padded mask
+            if enum_this_round > 0:
+                padded_mask = scipy.ndimage.binary_erosion(padded_mask, iterations=enum_this_round)
+                voxels_after_erode = np.sum(padded_mask)
+                if round_idx < rounds - 1:
+                    print(f"    After closing erosion ({enum_this_round} iterations): {voxels_after_erode:,} voxels")
+                else:
+                    print(f"    After final erosion ({enum_this_round} iterations): {voxels_after_erode:,} voxels")
+            
+            # Crop back to original size using tuple slicing (works for any dimension)
+            slices = tuple(slice(pad_size, -pad_size) if pad_size > 0 else slice(None) 
+                          for _ in range(mask.ndim))
+            mask = padded_mask[slices]
     
-    # 3. Fill holes
-    mask = fill_label_holes(mask)
-    print(f"  After filling holes: {np.sum(mask):,} voxels")
+    final_voxels = np.sum(mask)
+    print(f"  Final mask: {final_voxels:,} voxels ({100 * final_voxels / mask.size:.2f}% of volume)")
     
-    # 4. Apply morphological operations (dilation then erosion)
-    # Use padding to avoid boundary effects where dilation is constrained
-    # but erosion still applies fully, causing over-erosion
-    if dnum > 0 or enum > 0:
-        # Pad by the maximum of dilation/erosion iterations to ensure enough space
-        pad_size = max(dnum, enum)
-        
-        # Pad the mask (3D: pad all three dimensions)
-        padded_mask = np.pad(mask, pad_size, mode='constant', constant_values=0)
-        
-        # Apply dilation on padded mask
-        if dnum > 0:
-            padded_mask = scipy.ndimage.binary_dilation(padded_mask, iterations=dnum)
-            print(f"  After dilation ({dnum} iterations): {np.sum(padded_mask):,} voxels (padded)")
-        
-        # Apply erosion on padded mask
-        if enum > 0:
-            padded_mask = scipy.ndimage.binary_erosion(padded_mask, iterations=enum)
-            print(f"  After erosion ({enum} iterations): {np.sum(padded_mask):,} voxels (padded)")
-        
-        # Crop back to original size
-        # For 3D: [pad_size:-pad_size, pad_size:-pad_size, pad_size:-pad_size]
-        if mask.ndim == 3:
-            mask = padded_mask[pad_size:-pad_size, pad_size:-pad_size, pad_size:-pad_size]
-        elif mask.ndim == 2:
-            mask = padded_mask[pad_size:-pad_size, pad_size:-pad_size]
+    if final_voxels == 0:
+        print("  Warning: Final mask is empty!")
     
     return mask.astype(int)
 

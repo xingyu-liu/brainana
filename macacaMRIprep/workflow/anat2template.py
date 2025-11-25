@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, List
 import json
 
 from .base import BasePreprocessingWorkflow
-from ..operations import bias_correction, run_skullstripping, ants_register, precheck
+from ..operations import bias_correction, apply_skullstripping, ants_register, precheck
 from ..utils import run_command
 from ..utils import resolve_template, get_filename_stem
 from ..utils import log_workflow_start, log_workflow_end
@@ -179,7 +179,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
 
                 step_name = self.pipeline.add_step(
                     name="anat_skullstripping", 
-                    func=run_skullstripping,
+                    func=apply_skullstripping,
                     inputs={
                         "imagef": anatf_cur,
                         "modal": "anat",
@@ -190,8 +190,35 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     step_name,
                     config=self.config.to_dict()
                 )
-                
-                # Update the anatomical file
+
+                # Handle cropped input if two-pass refinement was used
+                if result.output_files.get("input_cropped") is not None:
+                    input_cropped_path = result.output_files["input_cropped"]
+                    self.logger.info(f"Step: two-pass refinement detected - cropped input available")
+
+                    # Move the original preprocessed file to desc-preprocOrigSize
+                    outputf_pre = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-preproc_{self.modality}.nii.gz"
+                    outputf_post = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-preprocOrigSize_{self.modality}.nii.gz"
+                    if outputf_pre.exists():
+                        cmd_output = ["mv", str(outputf_pre), str(outputf_post)]
+                        run_command(cmd_output)
+                        self.generated_files.append(str(outputf_post))
+                        self.logger.info(f"Output: original size anatomical file renamed to {outputf_post.name}")
+                    
+                    # Save the cropped input as desc-preproc
+                    # Note: input_cropped is already bias-corrected (it's cropped from the bias-corrected image)
+                    cmd_output = ["cp", str(input_cropped_path), str(outputf_pre)]
+                    run_command(cmd_output)
+                    self.generated_files.append(str(outputf_pre))
+                    self.logger.info(f"Output: cropped input saved as {outputf_pre.name}")
+                    
+                    # Update anatf_with_skull to use cropped version for QC consistency
+                    # (mask is in cropped space, so underlay should also be in cropped space)
+                    anatf_with_skull = str(input_cropped_path)
+                    self.logger.info(f"QC: updated underlay to cropped version for spatial consistency")
+
+                # Update the anatomical file to skull-stripped version
+                # Note: If two-pass refinement was used, the skull-stripped image is already in cropped space
                 anatf_cur = result.output_files["imagef_skullstripped"]
                 anat_brain_mask = result.output_files["brain_mask"]
                 self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_cur)}")
@@ -209,6 +236,20 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                 run_command(cmd_output)
                 self.generated_files.append(str(outputf))
                 self.logger.info(f"Output: brain mask file saved")
+
+                # if segmentation and hemimask are provided, save them as well
+                if result.output_files.get("segmentation") is not None:
+                    outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-brain_segmentation.nii.gz"
+                    cmd_output = ["cp", result.output_files["segmentation"], str(outputf)]
+                    run_command(cmd_output)
+                    self.generated_files.append(str(outputf))
+                    self.logger.info(f"Output: segmentation file saved")
+                if result.output_files.get("hemimask") is not None:
+                    outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-brain_hemimask.nii.gz"
+                    cmd_output = ["cp", result.output_files["hemimask"], str(outputf)]
+                    run_command(cmd_output)
+                    self.generated_files.append(str(outputf))
+                    self.logger.info(f"Output: hemimask file saved")
 
                 # Generate QC
                 if self.config.get("quality_control.enabled", True):
