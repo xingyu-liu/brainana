@@ -104,7 +104,7 @@
         "batch_size": 1,
         "threads": 1,
         "use_mixed_model": false,
-        "enable_crop_2round": true,
+        "enable_crop_2round": false,
         "plane_weight_coronal": 0,
         "plane_weight_axial": 0.6,
         "plane_weight_sagittal": 0.4

@@ -337,9 +337,14 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                         "output_name": "func_brain.nii.gz",
                     }
                 )
+
+                # set the enable_crop_2round to False for func skull stripping
+                config_cur = self.config.to_dict()
+                config_cur["func"]["skullstripping"]["fastsurfercnn"]["enable_crop_2round"] = False
+
                 result = self.pipeline.run_step(
                     step_name,
-                    config=self.config.to_dict()
+                    config=config_cur
                 )
                 funcf_tmean = result.output_files["imagef_skullstripped"]
                 funcf_brain_mask = result.output_files["brain_mask"]
