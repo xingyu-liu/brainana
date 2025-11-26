@@ -6,6 +6,7 @@ Simple test script for FreeSurfer post-processing function.
 import sys
 from pathlib import Path
 
+# %%
 # Add parent directory to path so we can import FastSurferCNN
 _file_dir = Path(__file__).resolve().parent
 if str(_file_dir.parent.parent) not in sys.path:

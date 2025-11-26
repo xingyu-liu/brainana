@@ -221,7 +221,7 @@ def create_aseg(
     aseg[brain_mask == 0] = 0
     
     # Save aseg
-    aseg_path = output_dir / "mri" / "aseg.auto_noCC.mgz"
+    aseg_path = output_dir / "mri" / "aseg.auto_noCCseg.mgz"
     aseg_dtype = np.int16 if np.any(aseg < 0) else np.uint8
     
     # Use the same header/affine as the segmentation
@@ -507,8 +507,8 @@ def postprocess_for_freesurfer(
     LOGGER.info("=" * 80)
     
     # Save segmentation (both naming conventions)
-    seg_file_generic = mri_dir / "aparc+aseg.deep.mgz"
-    seg_file_atlas = mri_dir / f"aparc.{atlas_name}atlas+aseg.deep.mgz"
+    seg_file_generic = mri_dir / "aparc+aseg.orig.mgz"
+    seg_file_atlas = mri_dir / f"aparc.{atlas_name}atlas+aseg.orig.mgz"
     
     # Use reloaded conformed image header for consistency
     aseg_dtype = np.int16 if np.any(seg_resampled < 0) else np.uint8
@@ -539,7 +539,7 @@ def postprocess_for_freesurfer(
     LOGGER.info(f"Saved mask: {mask_path.name}")
     
     # Save aseg
-    aseg_path = mri_dir / "aseg.auto_noCC.mgz"
+    aseg_path = mri_dir / "aseg.auto_noCCseg.mgz"
     aseg_dtype = np.int16 if np.any(aseg_resampled < 0) else np.uint8
     LOGGER.info(f"DIAGNOSTIC: Saving aseg with shape {aseg_resampled.shape}, dtype {aseg_dtype}")
     data_ultils.save_image(
@@ -594,7 +594,7 @@ def prepare_freesurfer_subject(
         *,
         orig_name: Path | str,
         output_dir: Path,
-        pred_name: str = "mri/aparc+aseg.deep.mgz",
+        pred_name: str = "mri/aparc+aseg.orig.mgz",
         ckpt_ax: Path | None,
         ckpt_sag: Path | None,
         ckpt_cor: Path | None,
@@ -674,8 +674,8 @@ def prepare_freesurfer_subject(
         atlas_name, atlas_metadata = setup_atlas_from_checkpoints(ckpt_ax, ckpt_cor, ckpt_sag)
 
         # Update pred_name to include atlas name
-        if pred_name == "mri/aparc+aseg.deep.mgz":
-            pred_name = f"mri/aparc.{atlas_name}atlas+aseg.deep.mgz"
+        if pred_name == "mri/aparc+aseg.orig.mgz":
+            pred_name = f"mri/aparc.{atlas_name}atlas+aseg.orig.mgz"
             LOGGER.info(f"Updated output filename to: {pred_name}")
 
         # Prepare subject directory

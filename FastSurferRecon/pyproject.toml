@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastsurfer-recon"
+version = "0.1.0"
+description = "FastSurfer surface reconstruction pipeline for neuroimaging"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+authors = [
+    {name = "FastSurfer Team"},
+]
+keywords = ["neuroimaging", "freesurfer", "surface-reconstruction", "mri"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+
+dependencies = [
+    "typer>=0.9.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "pyyaml>=6.0",
+    "numpy>=1.20",
+    "nibabel>=4.0",
+    "scipy>=1.9",
+    "SimpleITK>=2.1",
+    "rich>=13.0",
+    "pandas>=1.5",
+    "lapy>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+
+[project.scripts]
+fastsurfer-recon = "fastsurfer_recon.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/Deep-MI/FastSurfer"
+Documentation = "https://github.com/Deep-MI/FastSurfer"
+Repository = "https://github.com/Deep-MI/FastSurfer"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fastsurfer_recon*"]
+
+[tool.setuptools.package-data]
+"fastsurfer_recon.atlas.lut" = ["**/*.txt"]
+"fastsurfer_recon" = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "W", "I", "UP", "B", "C4"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+

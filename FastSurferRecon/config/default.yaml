@@ -1,0 +1,40 @@
+# FastSurfer Recon - Default Configuration
+# =========================================
+#
+# This file contains default configuration values for the
+# FastSurfer surface reconstruction pipeline.
+#
+# Values can be overridden via command-line arguments.
+
+# Atlas configuration
+atlas:
+  name: ARM2  # Atlas name (ARM2 for macaque, DKT for human)
+
+# Processing options
+processing:
+  # Threading
+  threads: 1
+  parallel_hemis: true
+  
+  # Volume options
+  hires_threshold: 0.999  # Voxel size threshold for hires mode
+  
+  # Non-human options (for macaque processing)
+  skip_cc: true            # Skip corpus callosum segmentation
+  skip_talairach: true     # Skip Talairach registration (no eTIV)
+  skip_topology_fix: false # Skip topology fix (uses orig.nofix)
+  
+  # Method choices
+  use_fs_tessellation: false  # Use mri_mc (marching cubes) instead of mri_tesselate
+  use_fs_qsphere: false       # Use spectral projection instead of FS qsphere
+  use_fs_aparc: false         # Use mapped parcellation instead of FS aparc
+  do_surf_reg: false          # Surface registration to fsaverage
+  
+  # Bias correction parameters (N4)
+  n4_shrink_factor: 4
+  n4_num_iterations: 50
+  n4_levels: 4
+
+# Output control
+verbose: 1  # Verbosity level (0=WARNING, 1=INFO, 2=DEBUG)
+

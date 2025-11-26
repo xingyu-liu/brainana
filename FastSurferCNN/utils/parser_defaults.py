@@ -160,10 +160,10 @@ class SubjectDirectoryConfig:
         flags=("--t1",),
     )
     pred_name: str = field(
-        default="mri/aparc+aseg.deep.mgz",
+        default="mri/aparc+aseg.orig.mgz",
         help="Name of intermediate DL-based segmentation file (similar to aparc+aseg). When using FastSurfer, this "
              "segmentation is already conformed, since inference is always based on a conformed image. Absolute path "
-             "if single image else common image name. Default: mri/aparc+aseg.deep.mgz (will be updated with atlas name if detected from checkpoint).",
+             "if single image else common image name. Default: mri/aparc+aseg.orig.mgz (will be updated with atlas name if detected from checkpoint).",
     )
     conf_name: str = field(
         default="mri/orig.mgz",
