@@ -30,7 +30,7 @@ if str(project_root) not in sys.path:
 from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
 
 # %%
-def precheck(
+def reorient(
     imagef: Union[str, Path],
     working_dir: Union[str, Path],
     logger: logging.Logger,
@@ -38,7 +38,7 @@ def precheck(
     target_file: Optional[Union[str, Path]] = None,
     generate_tmean: bool = False,
 ) -> Dict[str, str]:
-    """Precheck the input file (anatomical or functional).
+    """Reorient the input file (anatomical or functional).
     
     Args:
         imagef: Input image file (anatomical or functional)
@@ -53,7 +53,7 @@ def precheck(
         
     Raises:
         FileNotFoundError: If input file doesn't exist
-        RuntimeError: If precheck fails
+        RuntimeError: If reorient fails
         ValueError: If configuration parameters are invalid
     """
     # Validate inputs
@@ -64,7 +64,7 @@ def precheck(
     if modal not in ["anat", "func"]:
         raise ValueError(f"Modal must be 'anat' or 'func', got '{modal}'")
     
-    logger.info(f"Workflow: starting precheck for {modal} image")
+    logger.info(f"Workflow: starting reorient for {modal} image")
     logger.info(f"Data: input image - {os.path.basename(image_path)}")
     logger.info(f"System: working directory - {work_dir}")
     
@@ -89,7 +89,7 @@ def precheck(
         outputs["imagef_tmean"] = image_tmean_path
         logger.info(f"Output: temporal mean generated - {os.path.basename(image_tmean_path)}")
     
-    logger.info(f"Workflow: precheck completed - {len([v for v in outputs.values() if v is not None])} outputs generated")
+    logger.info(f"Workflow: reorient completed - {len([v for v in outputs.values() if v is not None])} outputs generated")
     return outputs
 
 def determine_tpattern(slice_timings: List[Union[float, int]], direction: str = "z") -> str:

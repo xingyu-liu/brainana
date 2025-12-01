@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, List
 import json
 
 from .base import BasePreprocessingWorkflow
-from ..operations import bias_correction, apply_skullstripping, ants_register, precheck
+from ..operations import bias_correction, apply_skullstripping, ants_register, reorient
 from ..utils import run_command
 from ..utils import resolve_template, get_filename_stem
 from ..utils import log_workflow_start, log_workflow_end
@@ -96,27 +96,30 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
         anatf_cur = str(self.anat_file)
         
         try:
-            # ANAT PRECHECK
+            # ANAT REORIENT
             # ------------------------------------------------------------
-            step_name = self.pipeline.add_step(
-                name="anat_precheck",
-                func=precheck,
-                inputs={
-                    "imagef": anatf_cur,
-                }
-            )
-            # if template file is not provided, keep the step but skip running it
-            result = self.pipeline.run_step(
-                step_name,
-                modal="anat",
-                target_file=str(self.template_file) if self.template_file is not None else None,
-                generate_tmean=False
-            )
-            if result.output_files["imagef_reoriented"] is not None:
-                anatf_cur = result.output_files["imagef_reoriented"]
-                self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_cur)}")
+            if self.config.get("anat.reorient.enabled", True):
+                step_name = self.pipeline.add_step(
+                    name="anat_reorient",
+                    func=reorient,
+                    inputs={
+                        "imagef": anatf_cur,
+                    }
+                )
+                # if template file is not provided, keep the step but skip running it
+                result = self.pipeline.run_step(
+                    step_name,
+                    modal="anat",
+                    target_file=str(self.template_file) if self.template_file is not None else None,
+                    generate_tmean=False
+                )
+                if result.output_files["imagef_reoriented"] is not None:
+                    anatf_cur = result.output_files["imagef_reoriented"]
+                    self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_cur)}")
+                else:
+                    self.logger.info(f"Step: {step_name} skipped - reorientation not needed")
             else:
-                self.logger.info(f"Step: {step_name} skipped - reorientation not needed")
+                self.logger.info("Step: reorient skipped (disabled in configuration)")
 
             # ANAT BIAS CORRECTION
             # ------------------------------------------------------------

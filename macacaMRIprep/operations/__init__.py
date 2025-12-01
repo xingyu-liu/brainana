@@ -14,7 +14,7 @@ from .validation import (
 
 # Import all preprocessing steps (functional, anatomical, and shared)
 from .preprocessing import (
-    precheck,
+    reorient,
     slice_timing_correction,
     motion_correction,
     despike,
@@ -42,7 +42,7 @@ __all__ = [
     'validate_output_file',
     
     # Preprocessing (functional + anatomical)
-    'precheck',
+    'reorient',
     'slice_timing_correction',
     'motion_correction',
     'despike',

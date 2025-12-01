@@ -338,8 +338,8 @@ python3 -m macacaMRIprep.cli.preproc \
 # ================================================
 dataset_root=/mnt/DataDrive3/xliu/prep_test/banana_test/princeton_newdata
 dataset_dir=${dataset_root}/bids
-config_f=${dataset_root}/config_fastSurferCNN.json
-output_dir=${dataset_root}/preproc_fastSurferCNN_reorient
+config_f=${dataset_root}/config_fastSurferCNN_reorient-0.json
+output_dir=${dataset_root}/preproc_fastSurferCNN_reorient-0
 
 pipeline=func2anat2template
 python3 -m macacaMRIprep.cli.preproc \

@@ -38,6 +38,9 @@
   },
 
   "anat": {
+    "reorient": {
+      "enabled": true
+    },
     "bias_correction": {
       "enabled": true,
       "algorithm": "N4BiasFieldCorrection",
@@ -72,6 +75,9 @@
   },
 
   "func": {
+    "reorient": {
+      "enabled": true
+    },
     "slice_timing_correction": {
       "enabled": false,
       "repetition_time": null,

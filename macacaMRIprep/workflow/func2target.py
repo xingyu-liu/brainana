@@ -12,7 +12,7 @@ import json
 
 from .base import BasePreprocessingWorkflow
 from ..operations.preprocessing import (
-    precheck,
+    reorient,
     slice_timing_correction, 
     motion_correction, 
     despike,
@@ -141,28 +141,31 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
         funcf_tmean = None
 
         try:
-            # FUNC PRECHECK
+            # FUNC REORIENT
             # ------------------------------------------------------------
-            step_name = self.pipeline.add_step(
-                name="func_precheck",
-                func=precheck,
-                inputs={
-                    "imagef": funcf_all,
-                }
-            )
-            result = self.pipeline.run_step(
-                step_name,
-                modal="func",
-                target_file=self.target_file,
-                generate_tmean=True
-            )
-        
-            if result.output_files["imagef_reoriented"]:
-                funcf_all = result.output_files["imagef_reoriented"]
-            if result.output_files["imagef_tmean"]:
-                funcf_tmean = result.output_files["imagef_tmean"]
+            if self.config.get("func.reorient.enabled", True):
+                step_name = self.pipeline.add_step(
+                    name="func_reorient",
+                    func=reorient,
+                    inputs={
+                        "imagef": funcf_all,
+                    }
+                )
+                result = self.pipeline.run_step(
+                    step_name,
+                    modal="func",
+                    target_file=self.target_file,
+                    generate_tmean=True
+                )
+            
+                if result.output_files["imagef_reoriented"]:
+                    funcf_all = result.output_files["imagef_reoriented"]
+                if result.output_files["imagef_tmean"]:
+                    funcf_tmean = result.output_files["imagef_tmean"]
 
-            self.logger.info(f"Step: {step_name} completed - {os.path.basename(funcf_tmean) if funcf_tmean else 'no tmean generated'}")
+                self.logger.info(f"Step: {step_name} completed - {os.path.basename(funcf_tmean) if funcf_tmean else 'no tmean generated'}")
+            else:
+                self.logger.info("Step: reorient skipped (disabled in configuration)")
 
             # SLICE TIMING CORRECTION
             # ------------------------------------------------------------

@@ -141,8 +141,7 @@ def create_skullstripping_qc(
             underlay_cmap='gray',
             overlay_cmap='Reds',
             num_contour_levels=1,
-            show_title=False,
-            show_row_labels=False
+            show_title=False
         )
         
         # Ensure the parent directory exists
@@ -205,8 +204,7 @@ def create_registration_qc(
             underlay_cmap='gray',
             overlay_cmap='summer',
             num_contour_levels=6,
-            show_title=False,
-            show_row_labels=False
+            show_title=False
         )
         
         # Ensure the parent directory exists
@@ -306,7 +304,6 @@ def _create_before_after_comparison(
         'perspectives': perspectives,
         'figsize_per_col': (3, 3),
         'show_title': False,
-        'show_row_labels': False,
         'overlay_data': None,
         'underlay_cmap': 'gray'
     }

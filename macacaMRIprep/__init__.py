@@ -26,7 +26,7 @@ from .info import __version__
 
 # Import core functionality - unified preprocessing module
 from .operations import (
-    precheck,
+    reorient,
     slice_timing_correction,
     motion_correction,
     despike,
