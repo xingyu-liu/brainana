@@ -16,11 +16,11 @@ from fastsurfer_recon.pipeline import ReconSurfPipeline
 from fastsurfer_recon.utils.logging import setup_logging
 
 # Test subject
-test_subject_dir = Path("/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon/NMT2Sym_separate/sub-test")
+test_subject_dir = Path("/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon/test_anat_2pass_seg_skullstripping_separate/sub-test")
 subjects_dir = test_subject_dir.parent
 subject_id = test_subject_dir.name
 
-skip_topology_fix = True
+skip_topology_fix = False
 if skip_topology_fix:
     subject_id = f"{subject_id}_nofix"
 else:

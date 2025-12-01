@@ -428,17 +428,34 @@ def check_environment(
     
     # ---- GPU check for skullstripping ----
     if config is not None:
-        # Check if either anat or func skullstripping is enabled and using fastsurfercnn
+        # Check if either anat or func skullstripping is enabled and using fastSurferCNN or macacaMRINN
         anat_ss = config.get('anat', {}).get('skullstripping', {})
         func_ss = config.get('func', {}).get('skullstripping', {})
-        anat_enabled = anat_ss.get('enabled', False) and anat_ss.get('method', '').lower() == 'fastsurfercnn'
-        func_enabled = func_ss.get('enabled', False) and func_ss.get('method', '').lower() == 'fastsurfercnn'
-        if anat_enabled or func_enabled:
+        anat_method = anat_ss.get('method', '').lower() if anat_ss.get('enabled', False) else None
+        func_method = func_ss.get('method', '').lower() if func_ss.get('enabled', False) else None
+        
+        anat_fscnn = anat_method == 'fastsurfercnn'
+        func_fscnn = func_method == 'fastsurfercnn'
+        anat_mrin = anat_method == 'macacamrinn'
+        func_mrin = func_method == 'macacamrinn'
+        
+        if anat_fscnn or func_fscnn:
             gpu_info = result['system_resources'].get('gpu', {})
             if not gpu_info.get('cuda_available', False):
                 warn_msg = (
                     "GPU (CUDA) not available, but skullstripping with FastSurferCNN is enabled for "
-                    f"{'anat' if anat_enabled else ''}{' and ' if anat_enabled and func_enabled else ''}{'func' if func_enabled else ''}. "
+                    f"{'anat' if anat_fscnn else ''}{' and ' if anat_fscnn and func_fscnn else ''}{'func' if func_fscnn else ''}. "
+                    "This will be very slow on CPU."
+                )
+                result['summary']['warnings'].append(warn_msg)
+                logger.warning(warn_msg)
+        
+        if anat_mrin or func_mrin:
+            gpu_info = result['system_resources'].get('gpu', {})
+            if not gpu_info.get('cuda_available', False):
+                warn_msg = (
+                    "GPU (CUDA) not available, but skullstripping with macacaMRINN is enabled for "
+                    f"{'anat' if anat_mrin else ''}{' and ' if anat_mrin and func_mrin else ''}{'func' if func_mrin else ''}. "
                     "This will be very slow on CPU."
                 )
                 result['summary']['warnings'].append(warn_msg)

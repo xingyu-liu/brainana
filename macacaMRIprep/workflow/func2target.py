@@ -340,7 +340,7 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
 
                 # set the enable_crop_2round to False for func skull stripping
                 config_cur = self.config.to_dict()
-                config_cur["func"]["skullstripping"]["fastsurfercnn"]["enable_crop_2round"] = False
+                config_cur["func"]["skullstripping"]["fastSurferCNN"]["enable_crop_2round"] = False
 
                 result = self.pipeline.run_step(
                     step_name,

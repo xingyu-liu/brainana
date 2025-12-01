@@ -22,19 +22,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# anat 
+# # anat 
 # input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_anat_2pass_seg.nii.gz"
 # output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_anat"
 
-surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
-# input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w.nii.gz'
-# output_dir = f'{surfrecon_dir}/NMT2Sym'
-input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w_brain.nii.gz'
-output_dir = f'{surfrecon_dir}/NMT2Sym_brain'
+# # surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
+# # # input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w.nii.gz'
+# # # output_dir = f'{surfrecon_dir}/NMT2Sym_v2'
+# # # input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w_brain.nii.gz'
+# # # output_dir = f'{surfrecon_dir}/NMT2Sym_brain_v2'
+# # input_image = f'{surfrecon_dir}/test_anat_2pass_seg.nii.gz'
+# # output_dir = f'{surfrecon_dir}/test_anat_2pass_seg_skullstripping'
 
+# modal = "anat"
+# data_format = "nifti"
+# weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
+# use_mixed_model = False
+
+# princeton new data
+input_image = "/mnt/DataDrive3/xliu/prep_test/banana_test/princeton_newdata/preproc/working/sub-freddie/ses-anat/anat/sub-freddie_ses-anat_T1w/02_anat_bias_correction/anat_bias_corrected.nii.gz"
+output_dir = "/mnt/DataDrive3/xliu/prep_test/banana_test/princeton_newdata/preproc/working/sub-freddie/ses-anat/anat/sub-freddie_ses-anat_T1w/02_anat_bias_correction/fastsurfercnn_nosagittal"
 modal = "anat"
 data_format = "nifti"
-weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
+weight_coronal, weight_axial, weight_sagittal = 0.5, 0.5, 0
 use_mixed_model = False
 
 # # func

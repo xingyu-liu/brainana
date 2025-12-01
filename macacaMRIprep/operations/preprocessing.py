@@ -567,7 +567,7 @@ def apply_skullstripping(
     logger: logging.Logger,
     config: Dict[str, Any],
 ) -> Dict[str, str]:
-    """Perform skullstripping using various methods (BET or FastSurferCNN).
+    """Perform skullstripping using various methods (BET, FastSurferCNN, or macacaMRINN).
     
     Args:
         imagef: Input file (functional or anatomical)
@@ -603,8 +603,8 @@ def apply_skullstripping(
     if not skull_cfg:
         raise ValueError("skullstripping configuration not found")
     method = skull_cfg.get('method')
-    if method not in ['bet', 'fastsurfercnn']:
-        raise ValueError(f"Invalid skull stripping method: {method}. Must be 'bet' or 'fastsurfercnn'")
+    if method not in ['bet', 'fastSurferCNN', 'macacaMRINN']:
+        raise ValueError(f"Invalid skull stripping method: {method}. Must be 'bet', 'fastSurferCNN', or 'macacaMRINN'")
 
     # Define output paths at the beginning
     brain_mask_path = os.path.join(str(work_dir), 'brain_mask.nii.gz')
@@ -612,6 +612,7 @@ def apply_skullstripping(
     # Initialize optional output paths (for FastSurferCNN)
     brain_segmentation_path = None
     brain_hemimask_path = None
+    brain_input_cropped_path = None
 
     if method == 'bet':
         logger.info(f"Workflow: starting skullstripping using FSL BET method")
@@ -627,13 +628,13 @@ def apply_skullstripping(
             raise RuntimeError(f"bet2 failed (exit code {returncode}): {stderr}")
         logger.info("Workflow: FSL BET completed successfully")
 
-    elif method == 'fastsurfercnn':
+    elif method == 'fastSurferCNN':
         logger.info(f"Workflow: starting skullstripping using FastSurferCNN method")
         logger.info(f"Data: input image - {os.path.basename(image_path)}")
         logger.info(f"System: output path - {brain_mask_path}")
         
         # Get FastSurferCNN configuration parameters
-        fscnn_cfg = skull_cfg.get('fastsurfercnn', {})
+        fscnn_cfg = skull_cfg.get('fastSurferCNN', {})
         
         # Create temporary output directory for FastSurferCNN
         # FastSurferCNN needs a directory, not a file path
@@ -699,6 +700,53 @@ def apply_skullstripping(
 
         except Exception as e:
             logger.error(f"Workflow: FastSurferCNN failed - {str(e)}")
+            raise
+
+    elif method == 'macacaMRINN':
+        logger.info(f"Workflow: starting skullstripping using macacaMRINN method")
+        logger.info(f"Data: input image - {os.path.basename(image_path)}")
+        logger.info(f"System: output path - {brain_mask_path}")
+        
+        # Import macacaMRINN skullstripping function
+        try:
+            from macacaMRINN.inference.prediction import skullstripping as macacaMRINN_skullstripping
+        except ImportError as e:
+            raise ImportError(f"Failed to import macacaMRINN: {e}. Make sure macacaMRINN is installed and available.")
+        
+        # Get macacaMRINN configuration parameters
+        mrin_cfg = skull_cfg.get('macacaMRINN', {})
+        
+        # Don't pass config - let macacaMRINN use parameters from checkpoint
+        # Only pass gpu_device as it's a runtime parameter, not a model parameter
+        try:
+            # Call macacaMRINN skullstripping function
+            # Parameters like rescale_dim, num_input_slices, morph_iterations 
+            # will be loaded from the model checkpoint automatically
+            result = macacaMRINN_skullstripping(
+                input_image=image_path,
+                modal=modal,
+                output_path=brain_mask_path,
+                device_id=mrin_cfg.get('gpu_device', 'auto'),
+                logger=logger,
+                config=None  # Use checkpoint parameters instead
+            )
+            
+            # Extract brain mask path from result
+            mrin_mask_path = result.get('brain_mask')
+            if not mrin_mask_path or not os.path.exists(mrin_mask_path):
+                raise FileNotFoundError(f"macacaMRINN did not generate brain mask at expected location: {mrin_mask_path}")
+            
+            # The mask should already be at brain_mask_path, but verify
+            if mrin_mask_path != brain_mask_path:
+                # Move the brain mask to the expected location if needed
+                if os.path.exists(mrin_mask_path):
+                    shutil.move(mrin_mask_path, brain_mask_path)
+                    logger.info(f"Output: brain mask moved from {mrin_mask_path} to {brain_mask_path}")
+            
+            logger.info("Workflow: macacaMRINN completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Workflow: macacaMRINN failed - {str(e)}")
             raise
 
     # Validate brain mask

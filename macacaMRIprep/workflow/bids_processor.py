@@ -405,8 +405,24 @@ def _process_anatomical_job(job: AnatomicalJob, sub_qc_dir: Path, logger: loggin
         
         if synthesized_t1w:
             primary_anat = t1w_files[0]
-            # Update the primary T1w file to use the synthesized version
-            primary_anat.path = synthesized_t1w
+            synth_entities = primary_anat.entities.copy() if primary_anat.entities else {}
+            synth_entities.pop('run', None)
+            
+            synthesized_bids_file = BIDSFile(
+                path=synthesized_t1w,
+                sub=primary_anat.sub,
+                ses=primary_anat.ses,
+                modality="anat",
+                suffix="T1w",
+                entities=synth_entities,
+                acq=primary_anat.acq,
+                run=None
+            )
+            
+            # Replace all T1w files with synthesized version in processing order
+            non_t1w_files = [f for f in processing_order if f.suffix != "T1w"]
+            processing_order = non_t1w_files + [synthesized_bids_file]
+            
             logger.info(f"Output: using synthesized T1w for processing")
             t1w_files = [primary_anat]
         else:
@@ -441,14 +457,18 @@ def _process_anatomical_job(job: AnatomicalJob, sub_qc_dir: Path, logger: loggin
                 run=None
             )
             
-            # Replace T2w files with synthesized version in processing order
-            # Keep non-T2w files and add single synthesized T2w file
+            # Replace all T2w files with synthesized version in processing order
             non_t2w_files = [f for f in processing_order if f.suffix != "T2w"]
             processing_order = non_t2w_files + [synthesized_bids_file]
             
             logger.info(f"Using synthesized T2w for processing: {synthesized_t2w}")
         else:
             logger.warning("Synthesis: T2w synthesis failed, processing all original T2w files")
+    
+    # Ensure correct processing order: T1w first, then T2w
+    # This handles any order issues from synthesis steps and guarantees T1w < T2w
+    modality_priority = {"T1w": 1, "T2w": 2}
+    processing_order.sort(key=lambda f: modality_priority.get(f.suffix, 99))
     
     # Process files in priority order: T1w first, then T2w
     for i, anat_file in enumerate(processing_order):

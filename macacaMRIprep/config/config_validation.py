@@ -140,10 +140,10 @@ def validate_skullstripping_config(config: Dict[str, Any]) -> None:
         ValueError: If configuration is invalid
     """
     if config.get("enabled", False):
-        method = config.get("method", "fastsurfercnn")
+        method = config.get("method", "fastSurferCNN")
         
-        if method not in ["bet", "fastsurfercnn"]:
-            raise ValueError(f"Invalid skullstripping method: {method}. Must be 'bet' or 'fastsurfercnn'")
+        if method not in ["bet", "fastSurferCNN", "macacaMRINN"]:
+            raise ValueError(f"Invalid skullstripping method: {method}. Must be 'bet', 'fastSurferCNN', or 'macacaMRINN'")
         
         if method == "bet":
             bet_cfg = config.get("bet", {})
@@ -151,40 +151,50 @@ def validate_skullstripping_config(config: Dict[str, Any]) -> None:
             if not isinstance(fractional_intensity, (int, float)) or not (0 < fractional_intensity < 1):
                 raise ValueError(f"bet fractional_intensity must be between 0 and 1, got: {fractional_intensity}")
         
-        elif method == "fastsurfercnn":
-            fscnn_cfg = config.get("fastsurfercnn", {})
+        elif method == "fastSurferCNN":
+            fscnn_cfg = config.get("fastSurferCNN", {})
             
             # Validate gpu_device
             gpu_device = fscnn_cfg.get("gpu_device", "auto")
             if not (isinstance(gpu_device, int) and gpu_device >= -1) and gpu_device != "auto":
-                raise ValueError(f"fastsurfercnn gpu_device must be integer >= -1 (where -1 means CPU) or 'auto' for automatic selection, got: {gpu_device}")
+                raise ValueError(f"fastSurferCNN gpu_device must be integer >= -1 (where -1 means CPU) or 'auto' for automatic selection, got: {gpu_device}")
             
             # Validate batch_size
             batch_size = fscnn_cfg.get("batch_size", 1)
             if not isinstance(batch_size, int) or batch_size < 1:
-                raise ValueError(f"fastsurfercnn batch_size must be a positive integer, got: {batch_size}")
+                raise ValueError(f"fastSurferCNN batch_size must be a positive integer, got: {batch_size}")
             
             # Validate threads
             threads = fscnn_cfg.get("threads", 1)
             if not isinstance(threads, int) or threads < 1:
-                raise ValueError(f"fastsurfercnn threads must be a positive integer, got: {threads}")
+                raise ValueError(f"fastSurferCNN threads must be a positive integer, got: {threads}")
             
             # Validate use_mixed_model
             use_mixed_model = fscnn_cfg.get("use_mixed_model", False)
             if not isinstance(use_mixed_model, bool):
-                raise ValueError(f"fastsurfercnn use_mixed_model must be a boolean, got: {use_mixed_model}")
+                raise ValueError(f"fastSurferCNN use_mixed_model must be a boolean, got: {use_mixed_model}")
             
             # Validate enable_crop_2round
             enable_crop_2round = fscnn_cfg.get("enable_crop_2round", False)
             if not isinstance(enable_crop_2round, bool):
-                raise ValueError(f"fastsurfercnn enable_crop_2round must be a boolean, got: {enable_crop_2round}")
+                raise ValueError(f"fastSurferCNN enable_crop_2round must be a boolean, got: {enable_crop_2round}")
             
             # Validate plane weights (optional, can be None or float)
             for weight_name in ["plane_weight_coronal", "plane_weight_axial", "plane_weight_sagittal"]:
                 weight = fscnn_cfg.get(weight_name)
                 if weight is not None:
                     if not isinstance(weight, (int, float)) or not (0 <= weight <= 1):
-                        raise ValueError(f"fastsurfercnn {weight_name} must be a float between 0 and 1, or None, got: {weight}")
+                        raise ValueError(f"fastSurferCNN {weight_name} must be a float between 0 and 1, or None, got: {weight}")
+        
+        elif method == "macacaMRINN":
+            mrin_cfg = config.get("macacaMRINN", {})
+            
+            # Validate gpu_device (only runtime parameter needed)
+            # Other parameters (rescale_dim, num_input_slices, morph_iterations) 
+            # are loaded from model checkpoint automatically
+            gpu_device = mrin_cfg.get("gpu_device", "auto")
+            if not (isinstance(gpu_device, int) and gpu_device >= -1) and gpu_device != "auto":
+                raise ValueError(f"macacaMRINN gpu_device must be integer >= -1 (where -1 means CPU) or 'auto' for automatic selection, got: {gpu_device}")
 
 def validate_bias_correction_config(config: Dict[str, Any]) -> None:
     """Validate bias correction configuration.
