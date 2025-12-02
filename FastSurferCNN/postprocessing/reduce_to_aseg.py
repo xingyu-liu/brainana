@@ -33,7 +33,6 @@ import pandas as pd
 # Add parent directory to path for data_loader imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from FastSurferCNN.data_loader.data_utils import read_classes_from_lut
-from FastSurferCNN.postprocessing.fix_v1_wm import fix_v1_wm
 
 
 class AtlasInfo:

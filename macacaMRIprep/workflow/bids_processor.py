@@ -1188,6 +1188,24 @@ def _coregister_t2w_to_t1w(
             shutil.copy2(coregistered_path, str(final_output_path))
             logger.info(f"Output: T2w coregistered to T1w space")
             
+            # Save the T2w to T1w transformation matrix
+            if "forward_transform" in registration_result and registration_result["forward_transform"]:
+                xfm_output_filename = f"{filename_base}_from-T2w_to-T1w_mode-image_xfm.h5"
+                xfm_output_path = Path(output_dir) / xfm_output_filename
+                shutil.copy2(registration_result["forward_transform"], str(xfm_output_path))
+                logger.info(f"Output: T2w to T1w transform saved - {xfm_output_filename}")
+            else:
+                logger.warning("Output: T2w to T1w transform not available in registration result")
+            
+            # Save the inverse transform
+            if "inverse_transform" in registration_result and registration_result["inverse_transform"]:
+                xfm_output_filename = f"{filename_base}_from-T1w_to-T2w_mode-image_xfm.h5"
+                xfm_output_path = Path(output_dir) / xfm_output_filename
+                shutil.copy2(registration_result["inverse_transform"], str(xfm_output_path))
+                logger.info(f"Output: T1w to T2w transform saved - {xfm_output_filename}")
+            else:
+                logger.warning("Output: T1w to T2w transform not available in registration result")
+            
             # Generate QC snapshot for T2w coregistration if QC is enabled and directory is provided
             if qc_dir and config and config.get("quality_control", {}).get("enabled", True):
                 try:

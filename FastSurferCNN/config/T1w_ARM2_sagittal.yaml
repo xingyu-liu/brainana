@@ -5,7 +5,7 @@
 TRAINING_DATA_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_data/T1w_seg-ARM2"
 
 # Direct path to output directory (for training logs, checkpoints, etc.)
-OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/ARM2_finetune_sagittal_v5"
+OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/T1w_ARM2_finetune_sagittal_v5"
 
 # ==============================================================================
 # MODEL ARCHITECTURE
@@ -46,7 +46,8 @@ TRAIN:
   EARLY_STOPPING_DELTA: 0.00001
 
 TEST:
-  BATCH_SIZE: 16
+  BATCH_SIZE: 8
+  EDGE_PADDING_PERCENT: 0.00
 
 # ==============================================================================
 # DATA CONFIGURATION

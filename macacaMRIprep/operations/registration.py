@@ -11,8 +11,43 @@ from typing import Dict, Any, Optional, Union, List
 from pathlib import Path
 
 from .validation import validate_input_file, ensure_working_directory, validate_output_file
-from ..utils import run_command, calculate_func_tmean, check_image_shape
+from ..utils import run_command, calculate_func_tmean
 from ..config import get_config
+
+# Default registration step parameters (hardcoded)
+REGISTRATION_STEP_DEFAULTS = {
+    "translation": {
+        "gradient_step": "[0.1]",
+        "metric": ["MI[fixed,moving,1,32,regular,0.25]"],
+        "shrink": "8x4x2x1",
+        "convergence": "[1000x500x250x100,1e-6,10]",
+        "smooth": "3x2x1x0vox"
+    },
+    "rigid": {
+        "gradient_step": "[0.1]",
+        "metric": ["MI[fixed,moving,1,32,regular,0.25]"],
+        "shrink": "8x4x2x1",
+        "convergence": "[1000x500x250x100,1e-6,10]",
+        "smooth": "3x2x1x0vox"
+    },
+    "affine": {
+        "gradient_step": "[0.1]",
+        "metric": ["MI[fixed,moving,1,32,regular,0.25]"],
+        "shrink": "8x4x2x1",
+        "convergence": "[1000x500x250x100,1e-6,10]",
+        "smooth": "3x2x1x0vox"
+    },
+    "syn": {
+        "gradient_step": "[0.1,3,0]",
+        "metric": [
+            "mattes[fixed,moving,0.5,32,regular,0.3]",
+            "cc[fixed,moving,0.5,4,regular,0.3]"
+        ],
+        "shrink": "4x2x1",
+        "convergence": "[500x300x100,1e-8,10]",
+        "smooth": "1x0.5x0vox"
+    }
+}
 
 # %% 
 def compose_transform_cmd(
@@ -100,7 +135,10 @@ def compose_ants_registration_cmd(
     for i, stage_name in enumerate(stages):
         if i > xfm_index:
             break
-        stage_config = config.get(stage_name)
+        # Use hardcoded defaults for registration step parameters
+        stage_config = REGISTRATION_STEP_DEFAULTS.get(stage_name)
+        if stage_config is None:
+            raise ValueError(f"Unknown registration stage: {stage_name}")
         stage_cmd = compose_transform_cmd(stage_name, stage_config, fixedf, movingf)
         cmd.extend(stage_cmd)
     

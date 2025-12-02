@@ -47,6 +47,7 @@ TRAIN:
 
 TEST:
   BATCH_SIZE: 16
+  EDGE_PADDING_PERCENT: 0.05
 
 # ==============================================================================
 # DATA CONFIGURATION

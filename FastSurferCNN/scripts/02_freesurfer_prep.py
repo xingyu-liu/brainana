@@ -24,7 +24,6 @@ t1w_f = f'{skullstripped_dir}/input_cropped.nii.gz'
 seg_f = f'{skullstripped_dir}/segmentation.nii.gz'
 mask_f = f'{skullstripped_dir}/mask.nii.gz'
 output_dir = f'{skullstripped_dir}/sub-test'
-fixv1 = False
 
 # Checkpoint to extract atlas name from
 ckpt_f = '/home/star/github/banana/FastSurferCNN/pretrained_model/T1w_seg-ARM2_coronal.pkl'
@@ -57,8 +56,6 @@ result = postprocess_for_freesurfer(
     mask=mask_f,
     lut_path=lut_path,
     subject_dir=output_dir,
-    hemimask=None,  # Optional: add path if available
-    fixv1=fixv1,
 )
 
 if result == 0:

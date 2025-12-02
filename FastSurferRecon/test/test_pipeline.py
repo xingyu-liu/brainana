@@ -20,7 +20,7 @@ test_subject_dir = Path("/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSu
 subjects_dir = test_subject_dir.parent
 subject_id = test_subject_dir.name
 
-skip_topology_fix = False
+skip_topology_fix = True
 if skip_topology_fix:
     subject_id = f"{subject_id}_nofix"
 else:
@@ -42,7 +42,7 @@ config = ReconSurfConfig(
         parallel_hemis=True,
         skip_cc=True,  # Non-human
         skip_talairach=True,  # Non-human
-        skip_topology_fix=True,
+        skip_topology_fix=skip_topology_fix,
         hires="auto",  # Auto-detect from voxel size
     ),
     verbose=2,  # DEBUG

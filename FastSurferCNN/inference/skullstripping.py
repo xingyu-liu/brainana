@@ -67,6 +67,12 @@ def skullstrip_fastsurfercnn(
     plane_weight_axial: Optional[float] = None,
     plane_weight_sagittal: Optional[float] = None,
     use_mixed_model: bool = False,
+    fix_roi_wm: bool = False,
+    roi_name: str = 'V1',
+    tpl_seg_f: Optional[Union[str, Path]] = None,
+    tpl_T1w_f: Optional[Union[str, Path]] = None,
+    tpl_roi_wm_f: Optional[Union[str, Path]] = None,
+    wm_thr: float = 0.5,
 ) -> Dict[str, str]:
     """
     Perform skullstripping using FastSurferCNN segmentation model.
@@ -114,6 +120,21 @@ def skullstrip_fastsurfercnn(
             {modal}_seg-{atlas}_mixed.pkl (e.g., EPI_seg-brainmask_mixed.pkl).
             When using mixed model, the same checkpoint is used for all 3 planes, and
             each plane is evaluated separately with the specified plane weights.
+        fix_roi_wm: bool, default=False
+            If True, apply ROI white matter fixing using template registration after segmentation.
+            This fixes missing thin WM in the specified ROI by registering template ROI WM to individual space.
+            Requires tpl_seg_f, tpl_T1w_f and tpl_roi_wm_f to be provided. LUT path is automatically determined
+            from checkpoint metadata (atlas_name).
+        roi_name: str, default='V1'
+            ROI name for WM fixing. Default is 'V1'.
+        tpl_seg_f: str or Path, optional
+            Path to template segmentation file. Required if fix_roi_wm is True.
+        tpl_T1w_f: str or Path, optional
+            Path to template T1w file (full image, will be cropped to ROI internally). Required if fix_roi_wm is True.
+        tpl_roi_wm_f: str or Path, optional
+            Path to template WM probability map. Required if fix_roi_wm is True.
+        wm_thr: float, default=0.5
+            Threshold for WM probability map in ROI WM fixing.
             
         Note: Preprocessing parameters (vox_size, orientation, image_size)
         are automatically read from checkpoint metadata (required), ensuring consistency
@@ -300,6 +321,100 @@ def skullstrip_fastsurfercnn(
             logger.info(f"Output: hemisphere_mask={seg_results.get('hemimask')}")
         if 'input_cropped' in seg_results:
             logger.info(f"Output: input_cropped={seg_results.get('input_cropped')}")
+        
+        # Apply ROI WM fixing if enabled
+        if fix_roi_wm:
+            if enable_crop_2round and 'input_cropped' in seg_results:
+                logger.info("2-pass refinement was applied - applying ROI WM fixing to final pass results only")
+            elif enable_crop_2round:
+                logger.info("2-pass criteria not met (single pass) - applying ROI WM fixing to results")
+            logger.info(f"Applying {roi_name} white matter fixing...")
+            
+            # Check required files exist
+            if 'segmentation' not in seg_results:
+                raise ValueError(
+                    f"{roi_name} WM fixing requires segmentation file, but segmentation was not generated. "
+                    "This may occur with binary brain mask models."
+                )
+            if 'hemimask' not in seg_results:
+                raise ValueError(
+                    f"{roi_name} WM fixing requires hemisphere mask file, but hemimask was not generated."
+                )
+            
+            seg_file = Path(seg_results['segmentation'])
+            mask_file = Path(seg_results['mask'])
+            hemi_mask_file = Path(seg_results['hemimask'])
+            
+            # Determine LUT path from checkpoint (same logic as predictor)
+            if atlas_name is None:
+                raise ValueError(
+                    "Cannot determine LUT path: atlas_name is None. "
+                    f"{roi_name} WM fixing requires a multi-class model with atlas_name in checkpoint metadata."
+                )
+            
+            # Use the same logic as RunModelOnData to determine LUT path from atlas_name
+            fastsurfercnn_dir = FASTSURFER_ROOT / "FastSurferCNN"
+            lut_path = fastsurfercnn_dir / "atlas" / f"atlas-{atlas_name}" / f"{atlas_name}_ColorLUT.tsv"
+            
+            if not lut_path.exists():
+                raise FileNotFoundError(
+                    f"LUT file not found at {lut_path}. "
+                    f"This is determined from checkpoint atlas_name='{atlas_name}'. "
+                    "Please ensure the atlas is installed correctly."
+                )
+            logger.info(f"LUT path (from checkpoint): {lut_path}")
+            
+            # Validate template files
+            if tpl_T1w_f is None or tpl_roi_wm_f is None or tpl_seg_f is None:
+                raise ValueError(
+                    f"{roi_name} WM fixing requires tpl_seg_f, tpl_T1w_f, and tpl_roi_wm_f to be provided."
+                )
+            tpl_seg_f = Path(tpl_seg_f)
+            tpl_T1w_f = Path(tpl_T1w_f)
+            tpl_roi_wm_f = Path(tpl_roi_wm_f)
+            if not tpl_seg_f.exists():
+                raise FileNotFoundError(f"Template segmentation file not found: {tpl_seg_f}")
+            if not tpl_T1w_f.exists():
+                raise FileNotFoundError(f"Template T1w file not found: {tpl_T1w_f}")
+            if not tpl_roi_wm_f.exists():
+                raise FileNotFoundError(f"Template WM file not found: {tpl_roi_wm_f}")
+            
+            # Import fix_roi_wm
+            try:
+                from FastSurferCNN.postprocessing.fix_roi_wm import fix_roi_wm
+            except ImportError as e:
+                logger.error(f"Failed to import fix_roi_wm: {e}")
+                raise ImportError(
+                    "Cannot import fix_roi_wm. Please ensure FastSurferCNN.postprocessing.fix_roi_wm is available."
+                ) from e
+            
+            # Determine which T1w to use (original or cropped if 2-round was applied)
+            t1w_file = Path(input_image)
+            if 'input_cropped' in seg_results:
+                # If 2-round cropping was applied, use the cropped input
+                t1w_file = Path(seg_results['input_cropped'])
+                logger.info(f"Using cropped input for {roi_name} WM fixing: {t1w_file}")
+            
+            # Call fix_roi_wm
+            try:
+                fix_roi_wm(
+                    seg_f=str(seg_file),
+                    t1w_f=str(t1w_file),
+                    mask_f=str(mask_file),
+                    hemi_mask_f=str(hemi_mask_file),
+                    lut_path=str(lut_path),
+                    tpl_seg_f=str(tpl_seg_f),
+                    tpl_t1w_f=str(tpl_T1w_f),
+                    tpl_roi_wm_f=str(tpl_roi_wm_f),
+                    roi_name=roi_name,
+                    wm_thr=wm_thr,
+                    backup_original=True,
+                    verbose=True
+                )
+                logger.info(f"{roi_name} white matter fixing completed successfully")
+            except Exception as e:
+                logger.error(f"{roi_name} WM fixing failed: {str(e)}")
+                raise RuntimeError(f"{roi_name} WM fixing failed: {str(e)}") from e
         
         # Return all output file paths
         result = {

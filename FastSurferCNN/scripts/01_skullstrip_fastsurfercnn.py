@@ -22,38 +22,47 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# %%
 # # anat 
 # input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_anat_2pass_seg.nii.gz"
-# output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_anat"
+# output_dir = input_image.split('.nii')[0]
 
-# # surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
-# # # input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w.nii.gz'
-# # # output_dir = f'{surfrecon_dir}/NMT2Sym_v2'
+surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
+# input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'
+# output_dir = f'{surfrecon_dir}/NMT2Sym'
+input_image = f'{surfrecon_dir}/site-arcaro_sub-baby1_ses-anat_T1w.nii.gz'
+output_dir = f'{surfrecon_dir}/arcaro_baby1'
 # # # input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w_brain.nii.gz'
 # # # output_dir = f'{surfrecon_dir}/NMT2Sym_brain_v2'
 # # input_image = f'{surfrecon_dir}/test_anat_2pass_seg.nii.gz'
 # # output_dir = f'{surfrecon_dir}/test_anat_2pass_seg_skullstripping'
 
-# modal = "anat"
-# data_format = "nifti"
-# weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
-# use_mixed_model = False
-
-# princeton new data
-input_image = "/mnt/DataDrive3/xliu/prep_test/banana_test/princeton_newdata/preproc/working/sub-freddie/ses-anat/anat/sub-freddie_ses-anat_T1w/02_anat_bias_correction/anat_bias_corrected.nii.gz"
-output_dir = "/mnt/DataDrive3/xliu/prep_test/banana_test/princeton_newdata/preproc/working/sub-freddie/ses-anat/anat/sub-freddie_ses-anat_T1w/02_anat_bias_correction/fastsurfercnn_nosagittal"
 modal = "anat"
 data_format = "nifti"
-weight_coronal, weight_axial, weight_sagittal = 0.5, 0.5, 0
+weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
 use_mixed_model = False
+enable_crop_2round = True
+
+fix_roi_wm = False
+if fix_roi_wm:
+    roi_name = "V1"  # Use "V1" for ARM2 atlas (primary_visual_cortex). For other atlases, check ColorLUT for correct ROI name.
+    if fix_roi_wm:
+        output_dir = output_dir + f"_fix{roi_name}"
+    tpl_seg_f = f"/home/star/github/banana/macacaMRIprep/templates/atlas-ARM_level-2_space-NMT2Sym_res-05.nii.gz"
+    tpl_T1w_f = f"/home/star/github/banana/macacaMRIprep/templates/tpl-NMT2Sym_res-05_T1w_brain.nii.gz"
+    tpl_roi_wm_f = f"/home/star/github/banana/macacaMRIprep/templates/tpl-NMT2Sym_res-05_T1w_WM_{roi_name}.nii.gz"
+    wm_thr = 0.5
 
 # # func
 # input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_func.nii.gz"
-# output_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_skullstripping_func"
+# output_dir = input_image.split('.nii')[0]
+
 # modal = "func"
 # data_format = "nifti"
 # weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
 # use_mixed_model = False  # Set to True to use mixed-plane model instead of separate plane models
+# enable_crop_2round = False
+# fix_roi_wm = False
 
 if use_mixed_model:
     output_dir = output_dir + "_mixed"
@@ -118,8 +127,44 @@ def main():
     parser.add_argument(
         "--enable_crop_2round",
         action="store_true",
-        default=True,
-        help="Enable two-pass refinement (default: True)"
+        default=enable_crop_2round,
+        help=f"Enable two-pass refinement (default: {enable_crop_2round}, set via hardcoded value in script)"
+    )
+    parser.add_argument(
+        "--fix_roi_wm",
+        action="store_true",
+        default=fix_roi_wm,
+        help=f"Fix ROI white matter (default: {fix_roi_wm}, set via hardcoded value in script)"
+    )
+    parser.add_argument(
+        "--roi_name",
+        type=str,
+        default=None,
+        help="ROI name (optional, only needed if --fix_roi_wm is set)"
+    )
+    parser.add_argument(
+        "--tpl_seg_f",
+        type=str,
+        default=None,
+        help="Path to template segmentation file (optional, only needed if --fix_roi_wm is set)"
+    )
+    parser.add_argument(
+        "--tpl_T1w_f",
+        type=str,
+        default=None,
+        help="Path to template T1w file (optional, only needed if --fix_roi_wm is set)"
+    )
+    parser.add_argument(
+        "--tpl_roi_wm_f",
+        type=str,
+        default=None,
+        help="Path to template WM probability map (optional, only needed if --fix_roi_wm is set)"
+    )
+    parser.add_argument(
+        "--wm_thr",
+        type=float,
+        default=None,
+        help="Threshold for WM probability map (optional, only needed if --fix_roi_wm is set)"
     )
     
     args = parser.parse_args()
@@ -153,6 +198,12 @@ def main():
             plane_weight_axial=args.plane_weight_axial,
             plane_weight_sagittal=args.plane_weight_sagittal,
             use_mixed_model=args.use_mixed_model,
+            fix_roi_wm=args.fix_roi_wm,
+            roi_name=args.roi_name,
+            tpl_seg_f=args.tpl_seg_f,
+            tpl_T1w_f=args.tpl_T1w_f,
+            tpl_roi_wm_f=args.tpl_roi_wm_f,
+            wm_thr=args.wm_thr,
         )
         
         logger.info("=" * 80)

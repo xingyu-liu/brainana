@@ -274,7 +274,6 @@ def postprocess_for_freesurfer(
     mask: Path | str,
     lut_path: Path | str,
     subject_dir: Path | str,
-    hemimask: Path | str | None = None,
     vox_size: VoxSizeOption = "min",
     orientation: OrientationType = "lia",
     image_size: bool = True,
@@ -484,23 +483,6 @@ def postprocess_for_freesurfer(
     # Apply mask to aseg in conformed space
     aseg_resampled[mask_resampled == 0] = 0
     
-    # Resample hemimask if provided
-    hemi_resampled = None
-    if hemimask is not None:
-        hemimask_path = Path(hemimask)
-        if hemimask_path.exists():
-            LOGGER.info("Resampling hemisphere mask to conformed space...")
-            hemi_img = nib.load(hemimask_path)
-            hemi_resampled = map_image(
-                hemi_img,
-                out_affine=target_affine,
-                out_shape=target_shape,
-                order=0,  # Nearest neighbor
-                dtype=np.uint8
-            )
-        else:
-            LOGGER.warning(f"Hemisphere mask not found at {hemimask_path}, skipping")
-    
     # Step 5: Save all files in FreeSurfer structure
     LOGGER.info("=" * 80)
     LOGGER.info("Step 5: Saving files in FreeSurfer structure")
@@ -550,19 +532,6 @@ def postprocess_for_freesurfer(
         dtype=aseg_dtype
     )
     LOGGER.info(f"Saved aseg: {aseg_path.name}")
-    
-    # Save hemimask if available
-    if hemi_resampled is not None:
-        hemi_mask_path = mri_dir / "mask_hemi.mgz"
-        LOGGER.info(f"DIAGNOSTIC: Saving hemimask with shape {hemi_resampled.shape}")
-        data_ultils.save_image(
-            conformed_t1w_reloaded.header.copy(),
-            target_affine,
-            hemi_resampled,
-            hemi_mask_path,
-            dtype=np.uint8
-        )
-        LOGGER.info(f"Saved hemisphere mask: {hemi_mask_path.name}")
     
     # Step 6: Optionally apply V1 WM fixing
     if fixv1:

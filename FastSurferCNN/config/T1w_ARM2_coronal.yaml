@@ -46,7 +46,8 @@ TRAIN:
   EARLY_STOPPING_DELTA: 0.00001
 
 TEST:
-  BATCH_SIZE: 16
+  BATCH_SIZE: 8
+  EDGE_PADDING_PERCENT: 0.00
 
 # ==============================================================================
 # DATA CONFIGURATION
