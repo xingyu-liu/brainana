@@ -21,12 +21,12 @@ compatible with the macacaMRINN skullstripping API.
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Union, Any, Literal
+from typing import Dict, Optional, Union, Literal
 
 from FastSurferCNN.inference.api import run_segmentation
 from FastSurferCNN.inference.predictor_utils import setup_atlas_from_checkpoints
 from FastSurferCNN.utils.checkpoint import extract_atlas_metadata, is_binary_checkpoint
-from FastSurferCNN.utils.constants import FASTSURFER_ROOT
+from FastSurferCNN.utils.constants import FASTSURFER_ROOT, PRETRAINED_MODEL_DIR, TEMPLATE_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,6 @@ def skullstrip_fastsurfercnn(
     output_dir: Union[str, Path],
     device_id: Union[int, str] = 'auto',
     logger: Optional[logging.Logger] = None,
-    config: Optional[Dict[str, Any]] = None,
     output_data_format: Literal["mgz", "nifti"] = "nifti",
     enable_crop_2round: bool = False,
     plane_weight_coronal: Optional[float] = None,
@@ -69,9 +68,6 @@ def skullstrip_fastsurfercnn(
     use_mixed_model: bool = False,
     fix_roi_wm: bool = False,
     roi_name: str = 'V1',
-    tpl_seg_f: Optional[Union[str, Path]] = None,
-    tpl_T1w_f: Optional[Union[str, Path]] = None,
-    tpl_roi_wm_f: Optional[Union[str, Path]] = None,
     wm_thr: float = 0.5,
 ) -> Dict[str, str]:
     """
@@ -94,10 +90,6 @@ def skullstrip_fastsurfercnn(
         output_dir: Directory to save all output files (segmentation, mask, hemimask)
         device_id: GPU device to use ('auto', -1 for CPU, or specific GPU index)
         logger: Logger instance (optional)
-        config: Model configuration (optional)
-            - 'batch_size': Batch size for inference (default: 1)
-            - 'threads': Number of threads for CPU operations (default: 1)
-            - 'base_dir': Base directory for pretrained_model (default: FastSurferCNN root)
         output_data_format: {"mgz", "nifti"}, default="nifti"
             Output file format. "mgz" saves as .mgz (MGH format), "nifti" saves as .nii.gz (NIfTI format).
         enable_crop_2round: bool, default=False
@@ -106,14 +98,11 @@ def skullstrip_fastsurfercnn(
             First-pass outputs are moved to output_dir/pass_1/, and cropped input is saved as
             output_dir/input_cropped.{ext}. Final outputs are in cropped image's native space.
         plane_weight_coronal: float, optional
-            Weight for coronal plane in multi-view prediction. If None, uses default from config.
-            Can also be specified in config dict as 'plane_weight_coronal'.
+            Weight for coronal plane in multi-view prediction.
         plane_weight_axial: float, optional
-            Weight for axial plane in multi-view prediction. If None, uses default from config.
-            Can also be specified in config dict as 'plane_weight_axial'.
+            Weight for axial plane in multi-view prediction.
         plane_weight_sagittal: float, optional
-            Weight for sagittal plane in multi-view prediction. If None, uses default from config.
-            Can also be specified in config dict as 'plane_weight_sagittal'.
+            Weight for sagittal plane in multi-view prediction.
         use_mixed_model: bool, default=False
             If True, use a single mixed-plane model checkpoint for all 3 planes instead of
             separate plane-specific checkpoints. The mixed checkpoint should be named
@@ -123,16 +112,10 @@ def skullstrip_fastsurfercnn(
         fix_roi_wm: bool, default=False
             If True, apply ROI white matter fixing using template registration after segmentation.
             This fixes missing thin WM in the specified ROI by registering template ROI WM to individual space.
-            Requires tpl_seg_f, tpl_T1w_f and tpl_roi_wm_f to be provided. LUT path is automatically determined
+            Template files are automatically located in TEMPLATE_DIR. LUT path is automatically determined
             from checkpoint metadata (atlas_name).
         roi_name: str, default='V1'
             ROI name for WM fixing. Default is 'V1'.
-        tpl_seg_f: str or Path, optional
-            Path to template segmentation file. Required if fix_roi_wm is True.
-        tpl_T1w_f: str or Path, optional
-            Path to template T1w file (full image, will be cropped to ROI internally). Required if fix_roi_wm is True.
-        tpl_roi_wm_f: str or Path, optional
-            Path to template WM probability map. Required if fix_roi_wm is True.
         wm_thr: float, default=0.5
             Threshold for WM probability map in ROI WM fixing.
             
@@ -179,19 +162,8 @@ def skullstrip_fastsurfercnn(
         logger.error(f"Skullstripping (FastSurferCNN): invalid modality={modal}, must be 'anat' or 'func'")
         raise ValueError(f"Invalid modality: {modal}. Must be 'anat' or 'func'")
     
-    # Get configuration
-    if config is None:
-        config = {}
-    
-    # Get plane weights from direct parameters or config (direct parameters take precedence)
-    plane_weight_coronal = plane_weight_coronal if plane_weight_coronal is not None else config.get('plane_weight_coronal')
-    plane_weight_axial = plane_weight_axial if plane_weight_axial is not None else config.get('plane_weight_axial')
-    plane_weight_sagittal = plane_weight_sagittal if plane_weight_sagittal is not None else config.get('plane_weight_sagittal')
-        
-    # Determine base directory for checkpoints
-    base_dir = config.get('base_dir', FASTSURFER_ROOT / "FastSurferCNN")
-    base_dir = Path(base_dir)
-    pretrained_dir = base_dir / "pretrained_model"
+    # Use PRETRAINED_MODEL_DIR from constants
+    pretrained_dir = PRETRAINED_MODEL_DIR
 
     # Get checkpoint template for this modality
     # Hardcoded checkpoint mapping: {modality}_seg-{atlas}_planexxx.pkl
@@ -304,13 +276,12 @@ def skullstrip_fastsurfercnn(
             ckpt_sag=checkpoints.get('sagittal'),
             device=device_str,
             viewagg_device=device_str,
-            threads=config.get('threads', 1),
-            batch_size=config.get('batch_size', 1),
             plane_weight_coronal=plane_weight_coronal,
             plane_weight_axial=plane_weight_axial,
             plane_weight_sagittal=plane_weight_sagittal,
             output_data_format=output_data_format,
             enable_crop_2round=enable_crop_2round,
+            logger=logger,
         )
         
         logger.info("Skullstripping (FastSurferCNN): completed successfully")
@@ -364,14 +335,12 @@ def skullstrip_fastsurfercnn(
                 )
             logger.info(f"LUT path (from checkpoint): {lut_path}")
             
-            # Validate template files
-            if tpl_T1w_f is None or tpl_roi_wm_f is None or tpl_seg_f is None:
-                raise ValueError(
-                    f"{roi_name} WM fixing requires tpl_seg_f, tpl_T1w_f, and tpl_roi_wm_f to be provided."
-                )
-            tpl_seg_f = Path(tpl_seg_f)
-            tpl_T1w_f = Path(tpl_T1w_f)
-            tpl_roi_wm_f = Path(tpl_roi_wm_f)
+            # Construct template file paths from TEMPLATE_DIR
+            tpl_T1w_f = TEMPLATE_DIR / "tpl-NMT2Sym_res-05_T1w_brain.nii.gz"
+            tpl_seg_f = TEMPLATE_DIR / f"atlas-{atlas_name}_space-NMT2Sym_res-05.nii.gz"
+            tpl_roi_wm_f = TEMPLATE_DIR / f"tpl-NMT2Sym_res-05_T1w_WM_{roi_name}.nii.gz"
+            
+            # Validate template files exist
             if not tpl_seg_f.exists():
                 raise FileNotFoundError(f"Template segmentation file not found: {tpl_seg_f}")
             if not tpl_T1w_f.exists():
@@ -419,7 +388,8 @@ def skullstrip_fastsurfercnn(
         # Return all output file paths
         result = {
             'brain_mask': str(seg_results['mask']),
-            'input_image': str(input_image)
+            'input_image': str(input_image),
+            'atlas_name': atlas_name
         }
         if 'segmentation' in seg_results:
             result['segmentation'] = str(seg_results['segmentation'])

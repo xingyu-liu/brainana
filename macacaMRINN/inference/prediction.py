@@ -591,6 +591,8 @@ def skullstripping(
             logger=logger
         )
         
+        atlas_name = model.config.get('atlas_name')
+        
         # Run prediction to generate brain mask
         # We only need the binary label, not probability maps
         result = predict_volumes(
@@ -614,6 +616,7 @@ def skullstripping(
         
         # Return the same format as the old API
         return {
+            'atlas_name': atlas_name,
             'brain_mask': str(output_path),
             'input_image': str(input_image)
         }

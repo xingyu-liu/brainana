@@ -349,20 +349,32 @@ python3 -m macacaMRIprep.cli.preproc \
     --n-procs 3
 
 # ================================================
+# test mebrain
+# ================================================
+dataset_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/MEBRAIN/bids
+output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/MEBRAIN
+config_f=${output_dir}/config.json
+
+pipeline=func2anat2template
+python3 -m macacaMRIprep.cli.preproc \
+    ${dataset_dir} \
+    ${output_dir} \
+    --pipeline ${pipeline} --config ${config_f} \
+    --n-procs 3
+
+# ================================================
 # test fastsurfercnn
 # ================================================
 dataset_root=/mnt/DataDrive3/xliu/prep_test/banana_test
-# dataset_dir=${dataset_root}/testing_dataset
-dataset_dir=${dataset_root}/testing_dataset_2pass
-# config_f=${dataset_root}/config.json
 config_f=${dataset_root}/config_linReg.json
-# output_dir=${dataset_root}/testing_dataset_preproc
-# output_dir=${dataset_root}/testing_dataset_preproc_linReg
-output_dir=${dataset_root}/testing_dataset_preproc_2pass
 
+dataset_dir=${dataset_root}/dataset_2pass
+output_dir=${dataset_root}/preproc/dataset_2pass
+
+dataset_dir=${dataset_root}/dataset_classic
+output_dir=${dataset_root}/preproc/dataset_classic
 
 pipeline=func2anat2template
 python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
-    --pipeline ${pipeline} --config ${config_f} --n-procs 4 \
-    --anat-only
+    --pipeline ${pipeline} --config ${config_f} --n-procs 3
 

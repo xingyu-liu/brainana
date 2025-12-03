@@ -176,6 +176,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
 
             # ANAT SKULL STRIPPING 
             # ------------------------------------------------------------
+            # if config.get(anat.surface_reconstruction.enabled) is True, force to run skullstripping
             if self.config.get("anat.skullstripping.enabled", True):
                 # Store the image before skull stripping for QC
                 anatf_with_skull = anatf_cur
@@ -220,6 +221,14 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     anatf_with_skull = str(input_cropped_path)
                     self.logger.info(f"QC: updated underlay to cropped version for spatial consistency")
 
+                # save the relevant output files for surface reconstruction
+                outpuf_f_for_surfrecon = {
+                    "t1w_image": anatf_with_skull,
+                    "segmentation": None,
+                    "mask": None,
+                    'atlas_name': None
+                }
+
                 # Update the anatomical file to skull-stripped version
                 # Note: If two-pass refinement was used, the skull-stripped image is already in cropped space
                 anatf_cur = result.output_files["imagef_skullstripped"]
@@ -234,19 +243,31 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                 self.generated_files.append(str(outputf))
                 self.logger.info(f"Output: skull stripped anatomical file saved")
 
+                # save the brain mask
                 outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-brain_mask.nii.gz"
                 cmd_output = ["cp", anat_brain_mask, str(outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(outputf))
                 self.logger.info(f"Output: brain mask file saved")
 
+                outpuf_f_for_surfrecon["mask"] = outputf
+
                 # if segmentation and hemimask are provided, save them as well
                 if result.output_files.get("segmentation") is not None:
-                    outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-brain_segmentation.nii.gz"
+                    # Use atlas_name if available, otherwise use default name
+                    atlas_name = result.output_files.get("atlas_name")
+                    if atlas_name:
+                        outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-brain_atlas{atlas_name}.nii.gz"
+                    else:
+                        outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-brain_atlas.nii.gz"
                     cmd_output = ["cp", result.output_files["segmentation"], str(outputf)]
                     run_command(cmd_output)
                     self.generated_files.append(str(outputf))
-                    self.logger.info(f"Output: segmentation file saved")
+                    self.logger.info(f"Output: atlas file saved")
+
+                    outpuf_f_for_surfrecon["segmentation"] = outputf
+                    outpuf_f_for_surfrecon["atlas_name"] = atlas_name
+
                 if result.output_files.get("hemimask") is not None:
                     outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-brain_hemimask.nii.gz"
                     cmd_output = ["cp", result.output_files["hemimask"], str(outputf)]
@@ -365,6 +386,19 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
             else:
                 self.logger.info("Step: template registration skipped (disabled in configuration)")
 
+
+            # SURFACE RECONSTRUCTION
+            # ------------------------------------------------------------
+            # run surface recon by 
+            # 1. reformat outpuf_f_for_surfrecon files into fs format to the fs_subjects_dir
+            # /home/star/github/banana/FastSurferCNN/postprocessing/prepping_for_surfrecon.py
+            # lut path from 
+            # fastsurfercnn_dir = FASTSURFER_ROOT / "FastSurferCNN"
+            # atlas_dir = fastsurfercnn_dir / f"atlas/atlas-{atlas_name}"
+            # lut_path = atlas_dir / f"{atlas_name}_ColorLUT.tsv"
+            # 2. run fastsurferrecon to do surface reconstruction
+            # using /home/star/github/banana/FastSurferRecon
+
             # ------------------------------------------------------------
             # Calculate workflow duration
             duration = time.time() - start_time
@@ -392,3 +426,4 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
             self.logger.error(f"Workflow: Anat2Template pipeline failed - {str(e)}")
             raise
     
+# %%

@@ -20,6 +20,7 @@ segmentation and skullstripping on brain images.
 """
 
 import copy
+import logging
 import shutil
 import traceback
 from pathlib import Path
@@ -27,6 +28,7 @@ from typing import Literal
 
 import nibabel as nib
 import numpy as np
+import torch
 
 from FastSurferCNN.data_loader import data_utils
 from FastSurferCNN.inference.predictor import RunModelOnData
@@ -69,6 +71,7 @@ def _apply_two_pass_refinement(
     plane_weight_sagittal: float | None,
     fix_wm_islands: bool,
     output_data_format: Literal["mgz", "nifti"],
+    logger: logging.Logger | None = None,
 ) -> bool:
     """
     Apply two-pass refinement: crop image and run fresh segmentation.
@@ -115,8 +118,11 @@ def _apply_two_pass_refinement(
     pass_1_dir = output_dir / "pass_1"
     pass_1_dir.mkdir(parents=True, exist_ok=True)
     
-    LOGGER.info("Applying two-pass refinement...")
-    LOGGER.info(f"  Moving first-pass outputs to {pass_1_dir.name}/")
+    # Use provided logger or fall back to module-level logger
+    log = logger if logger is not None else LOGGER
+    
+    log.info("Applying two-pass refinement...")
+    log.info(f"  Moving first-pass outputs to {pass_1_dir.name}/")
     
     # Define first-pass files
     first_pass_files = {
@@ -135,13 +141,13 @@ def _apply_two_pass_refinement(
             if src_path.exists():
                 dst_path = pass_1_dir / src_path.name
                 shutil.move(str(src_path), str(dst_path))
-                LOGGER.info(f"  Moved {key}: {src_path.name}")
+                log.info(f"  Moved {key}: {src_path.name}")
         
         # Step 2: Crop ORIGINAL input image using first-pass mask
         mask_path = pass_1_dir / f"mask{file_ext}"
         cropped_input_path = output_dir / f"input_cropped{file_ext}"
         
-        LOGGER.info(f"  Cropping original input to brain region (margin={TWO_PASS_CROP_MARGIN*100:.0f}%)...")
+        log.info(f"  Cropping original input to brain region (margin={TWO_PASS_CROP_MARGIN*100:.0f}%)...")
         
         # Load original image to get its shape for logging
         orig_img = nib.load(input_image)
@@ -153,13 +159,13 @@ def _apply_two_pass_refinement(
             save_path=cropped_input_path,
         )
         
-        LOGGER.info(f"  ✓ Cropped: {orig_img.shape} → {cropped_img.shape}")
-        LOGGER.info(f"  ✓ Space saved: {np.prod(orig_img.shape) / np.prod(cropped_img.shape):.1f}x reduction")
-        LOGGER.info(f"  ✓ Saved cropped input: {cropped_input_path.name}")
+        log.info(f"  ✓ Cropped: {orig_img.shape} → {cropped_img.shape}")
+        log.info(f"  ✓ Space saved: {np.prod(orig_img.shape) / np.prod(cropped_img.shape):.1f}x reduction")
+        log.info(f"  ✓ Saved cropped input: {cropped_input_path.name}")
         
         # Step 3: Run FRESH segmentation on cropped image (starting from scratch)
-        LOGGER.info("  Running 2nd pass with fresh predictor on cropped image...")
-        LOGGER.info("  (This runs the full pipeline from scratch - no state reuse)")
+        log.info("  Running 2nd pass with fresh predictor on cropped image...")
+        log.info("  (This runs the full pipeline from scratch - no state reuse)")
         
         run_segmentation(
             input_image=cropped_input_path,
@@ -179,27 +185,28 @@ def _apply_two_pass_refinement(
             fix_wm_islands=fix_wm_islands,
             output_data_format=output_data_format,
             enable_crop_2round=False,  # Don't recurse!
+            logger=log,
         )
         
-        LOGGER.info("  ✓ Two-pass refinement completed successfully")
+        log.info("  ✓ Two-pass refinement completed successfully")
         return True
         
     except Exception as e:
-        LOGGER.error(f"  ✗ Two-pass refinement failed: {e}")
-        LOGGER.debug(f"  Error details: {traceback.format_exc()}")
-        LOGGER.warning("  Falling back to first-pass prediction")
-        LOGGER.info(f"  First-pass outputs are available in {pass_1_dir.name}/")
+        log.error(f"  ✗ Two-pass refinement failed: {e}")
+        log.debug(f"  Error details: {traceback.format_exc()}")
+        log.warning("  Falling back to first-pass prediction")
+        log.info(f"  First-pass outputs are available in {pass_1_dir.name}/")
         
         # Try to restore first-pass outputs to main directory
         try:
-            LOGGER.info("  Restoring first-pass outputs to main directory...")
+            log.info("  Restoring first-pass outputs to main directory...")
             for key, src_path in first_pass_files.items():
                 dst_path = pass_1_dir / src_path.name
                 if dst_path.exists():
                     shutil.copy(str(dst_path), str(src_path))
-                    LOGGER.info(f"  Restored {key}: {src_path.name}")
+                    log.info(f"  Restored {key}: {src_path.name}")
         except Exception as restore_error:
-            LOGGER.error(f"  Failed to restore first-pass outputs: {restore_error}")
+            log.error(f"  Failed to restore first-pass outputs: {restore_error}")
         
         return False
 
@@ -213,8 +220,8 @@ def run_segmentation(
     ckpt_sag: Path | None = None,
     ckpt_cor: Path | None = None,
     device: str = "auto",
-    viewagg_device: str = "auto",
-    threads: int = 1,
+    viewagg_device: str = "cpu",
+    threads: int = 8,
     batch_size: int = 1,
     plane_weight_coronal: float | None = None,
     plane_weight_axial: float | None = None,
@@ -222,6 +229,7 @@ def run_segmentation(
     fix_wm_islands: bool = True,
     output_data_format: Literal["mgz", "nifti"] = "nifti",
     enable_crop_2round: bool = False,
+    logger: logging.Logger | None = None,
 ) -> dict[str, Path]:
     """
     Run segmentation and save outputs (segmentation, mask, hemimask) to output directory.
@@ -258,10 +266,10 @@ def run_segmentation(
         Checkpoint paths for each plane. At least one must be provided.
     device : str, default="auto"
         Device to run inference on
-    viewagg_device : str, default="auto"
+    viewagg_device : str, default="cpu"
         Device to run view aggregation on
-    threads : int, default=1
-        Number of threads for CPU operations
+    threads : int, default=8
+        Number of threads for CPU operations (defaults to 8, or uses get_num_threads() if None)
     batch_size : int, default=1
         Batch size for inference
     plane_weight_coronal, plane_weight_axial, plane_weight_sagittal : float, optional
@@ -277,6 +285,8 @@ def run_segmentation(
         and run a completely fresh segmentation on it. First-pass outputs are moved to 
         output_dir/pass_1/, cropped input is saved as output_dir/input_cropped.{ext}, and 
         final outputs (from second pass) are saved to main output_dir in cropped image's native space.
+    logger : logging.Logger, optional
+        Logger instance to use for logging. If not provided, uses the module-level logger.
         
     Note
     ----
@@ -297,13 +307,16 @@ def run_segmentation(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Use provided logger or fall back to module-level logger
+    log = logger if logger is not None else LOGGER
+
     # Validate checkpoints
     validate_checkpoints(ckpt_ax, ckpt_cor, ckpt_sag)
 
     # Auto-detect atlas_name and atlas_metadata from checkpoints if not provided
     # Note: atlas_name can be None for binary models, so only check atlas_metadata
     if atlas_metadata is None:
-        LOGGER.info("Auto-detecting atlas information from checkpoints...")
+        log.info("Auto-detecting atlas information from checkpoints...")
         detected_atlas_name, detected_atlas_metadata = setup_atlas_from_checkpoints(
             ckpt_ax=ckpt_ax,
             ckpt_cor=ckpt_cor,
@@ -317,10 +330,10 @@ def run_segmentation(
     is_binary = atlas_metadata.get("is_binary_task", False)
     
     if is_binary:
-        LOGGER.info("Binary brain mask model detected")
+        log.info("Binary brain mask model detected")
         # Binary models: disable WM island correction (requires LUT with hemisphere info)
         if fix_wm_islands:
-            LOGGER.info("  (fix_wm_islands=True was provided but disabled for binary models)")
+            log.info("  (fix_wm_islands=True was provided but disabled for binary models)")
         fix_wm_islands = False
         create_hemi_mask = False  # Binary models don't have hemisphere labels
     else:
@@ -347,26 +360,26 @@ def run_segmentation(
     )
 
     # Run prediction (returns segmentation in model/conformed space)
-    LOGGER.info(f"Running segmentation on {input_image}")
+    log.info(f"Running segmentation on {input_image}")
     pred_data = predictor.get_prediction(str(input_image))
     
     # Debug: Log prediction statistics for binary models
     if is_binary:
         unique_vals, counts = np.unique(pred_data, return_counts=True)
-        LOGGER.info(f"Binary model prediction statistics: unique values={unique_vals}, counts={counts}")
-        LOGGER.info(f"  Prediction shape: {pred_data.shape}, dtype: {pred_data.dtype}")
-        LOGGER.info(f"  Prediction range: [{pred_data.min()}, {pred_data.max()}]")
+        log.info(f"Binary model prediction statistics: unique values={unique_vals}, counts={counts}")
+        log.info(f"  Prediction shape: {pred_data.shape}, dtype: {pred_data.dtype}")
+        log.info(f"  Prediction range: [{pred_data.min()}, {pred_data.max()}]")
         if len(unique_vals) > 2:
-            LOGGER.warning(f"  WARNING: Binary model prediction has {len(unique_vals)} unique values (expected 2: 0 and 1)")
+            log.warning(f"  WARNING: Binary model prediction has {len(unique_vals)} unique values (expected 2: 0 and 1)")
         # Ensure binary predictions are integer type (0 or 1)
         if pred_data.dtype != np.int16 and pred_data.dtype != np.int32 and pred_data.dtype != np.int64:
-            LOGGER.info(f"  Converting binary prediction from {pred_data.dtype} to int16")
+            log.info(f"  Converting binary prediction from {pred_data.dtype} to int16")
             pred_data = pred_data.astype(np.int16)
 
     # Create masks from the final segmentation
     # Both binary and multi-class models go through the same create_mask() pipeline
     # for topological refinement (dilation, erosion, largest component selection)
-    LOGGER.info("Creating brain mask from segmentation (with topological refinement)...")
+    log.info("Creating brain mask from segmentation (with topological refinement)...")
     
     # Calculate mask dilation and erosion sizes based on image resolution
     # Get voxel size from conformed image (in model space where mask is created)
@@ -374,7 +387,7 @@ def run_segmentation(
     resolution = np.mean(zoom)  # Average voxel size in mm
     mask_dilation_voxels = int(MASK_DILATION_SIZE_MM / resolution)
     mask_erosion_voxels = max(0, mask_dilation_voxels - 1)  # Ensure non-negative
-    LOGGER.info(f"Mask parameters: dilation={mask_dilation_voxels} voxels, erosion={mask_erosion_voxels} voxels (resolution={resolution:.3f} mm)")
+    log.info(f"Mask parameters: dilation={mask_dilation_voxels} voxels, erosion={mask_erosion_voxels} voxels (resolution={resolution:.3f} mm)")
     
     # do morphological operations
     brain_mask = create_mask(
@@ -388,14 +401,14 @@ def run_segmentation(
     # Hemisphere mask creation and saving (multi-class only, requires LUT)
     hemi_mask = None
     if create_hemi_mask:
-        LOGGER.info("Creating hemisphere mask...")
+        log.info("Creating hemisphere mask...")
         try:
             hemi_mask = create_hemisphere_masks(
                 brain_mask, pred_data, lut_path=predictor.lut_path
             )
 
         except Exception as e:
-            LOGGER.warning(f"Could not create hemisphere mask: {e}")
+            log.warning(f"Could not create hemisphere mask: {e}")
 
     # Map output format to file extension
     format_to_ext = {"mgz": ".mgz", "nifti": ".nii.gz"}
@@ -416,14 +429,14 @@ def run_segmentation(
         data_to_save.append(("hemimask", hemi_mask, hemi_mask_path, np.uint8))
     
     if predictor._should_resample():
-        LOGGER.info("Resampling to native space...")
+        log.info("Resampling to native space...")
         
         for name, data, path, dtype in data_to_save:
-            LOGGER.info(f"Resampling {name}...")
+            log.info(f"Resampling {name}...")
             resampled = predictor._resample_to_native(
                 data, interpolation="nearest"
             )
-            LOGGER.info(f"Successfully resampled {name} (shape: {resampled.shape})")
+            log.info(f"Successfully resampled {name} (shape: {resampled.shape})")
             
             data_utils.save_image(
                 predictor._input_native_img.header,
@@ -435,10 +448,10 @@ def run_segmentation(
         
     else:
         # Input was already conformed - save directly (still in native space)
-        LOGGER.info("No resampling needed - input was already conformed")
+        log.info("No resampling needed - input was already conformed")
         
         for name, data, path, dtype in data_to_save:
-            LOGGER.info(f"Saving {name}...")
+            log.info(f"Saving {name}...")
             data_utils.save_image(
                 predictor._conformed_img.header,
                 predictor._conformed_img.affine,
@@ -468,17 +481,32 @@ def run_segmentation(
             brain_mask, reference_img, model_height
         )
         
-        LOGGER.info(f"Checking two-pass refinement criteria...")
-        LOGGER.info(f"  Brain occupancy: {brain_ratio*100:.1f}% of FOV")
-        LOGGER.info(f"  Image dimensions: {reference_img.shape} (max: {max_orig_dim})")
-        LOGGER.info(f"  Model height: {model_height}")
+        log.info("")
+        log.info("=" * 60)
+        log.info("Two-pass refinement decision:")
+        log.info(f"  Brain occupancy: {brain_ratio*100:.1f}% of FOV")
+        log.info(f"  Image dimensions: {reference_img.shape} (max: {max_orig_dim})")
+        log.info(f"  Model height: {model_height}")
+        log.info(f"  Threshold: brain < {TWO_PASS_BRAIN_RATIO_THRESHOLD*100:.0f}% AND dim > {model_height}")
+        
+        # Log the decision clearly
+        if should_refine:
+            log.info(
+                f"  → DECISION: WILL APPLY 2nd pass "
+                f"(brain occupancy {brain_ratio*100:.1f}% < {TWO_PASS_BRAIN_RATIO_THRESHOLD*100:.0f}% "
+                f"AND max dimension {max_orig_dim} > {model_height})"
+            )
+        else:
+            reason = (
+                f"brain occupancy {brain_ratio*100:.1f}% >= {TWO_PASS_BRAIN_RATIO_THRESHOLD*100:.0f}%"
+                if brain_ratio >= TWO_PASS_BRAIN_RATIO_THRESHOLD
+                else f"max dimension {max_orig_dim} <= {model_height}"
+            )
+            log.info(f"  → DECISION: WILL NOT apply 2nd pass ({reason})")
+        log.info("=" * 60)
+        log.info("")
         
         if should_refine:
-            LOGGER.info(
-                f"  → Applying two-pass refinement "
-                f"(brain < {TWO_PASS_BRAIN_RATIO_THRESHOLD*100:.0f}%, dim > {model_height})"
-            )
-            
             # Apply two-pass refinement (runs fresh segmentation on cropped image)
             refinement_applied = _apply_two_pass_refinement(
                 input_image=input_image,
@@ -503,18 +531,15 @@ def run_segmentation(
             # If refinement succeeded, update result paths to reflect second-pass outputs
             # (which are already saved by the fresh run_segmentation call)
             if refinement_applied:
-                LOGGER.info("  ✓ Second-pass outputs are now in main directory")
+                log.info("  ✓ Second-pass outputs are now in main directory")
                 # Update result dict to include cropped input
                 result["input_cropped"] = output_dir / f"input_cropped{file_ext}"
-        else:
-            if brain_ratio >= TWO_PASS_BRAIN_RATIO_THRESHOLD:
-                LOGGER.info(
-                    f"  → Skipping refinement (brain occupancy >= {TWO_PASS_BRAIN_RATIO_THRESHOLD*100:.0f}%)"
-                )
-            else:
-                LOGGER.info(
-                    f"  → Skipping refinement (image dimension <= {model_height})"
-                )
+
+    # Explicit cleanup to free GPU memory
+    del predictor
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        log.info("GPU memory cache cleared after inference")
 
     return result
 

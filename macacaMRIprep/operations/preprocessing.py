@@ -613,6 +613,7 @@ def apply_skullstripping(
     brain_segmentation_path = None
     brain_hemimask_path = None
     brain_input_cropped_path = None
+    atlas_name = None
 
     if method == 'bet':
         logger.info(f"Workflow: starting skullstripping using FSL BET method")
@@ -642,13 +643,6 @@ def apply_skullstripping(
         os.makedirs(temp_output_dir, exist_ok=True)
         
         try:
-            # Prepare FastSurferCNN config dict
-            fscnn_config = {}
-            if 'batch_size' in fscnn_cfg:
-                fscnn_config['batch_size'] = fscnn_cfg['batch_size']
-            if 'threads' in fscnn_cfg:
-                fscnn_config['threads'] = fscnn_cfg['threads']
-            
             # Call FastSurferCNN skullstripping function
             # Note: This is the FastSurferCNN.inference.skullstrip_fastsurfercnn function imported at the top
             result = skullstrip_fastsurfercnn(
@@ -657,7 +651,6 @@ def apply_skullstripping(
                 output_dir=temp_output_dir,
                 device_id=fscnn_cfg.get('gpu_device', 'auto'),
                 logger=logger,
-                config=fscnn_config if fscnn_config else None,
                 output_data_format='nifti',
                 enable_crop_2round=fscnn_cfg.get('enable_crop_2round', False),
                 plane_weight_coronal=fscnn_cfg.get('plane_weight_coronal'),
@@ -666,10 +659,13 @@ def apply_skullstripping(
                 use_mixed_model=fscnn_cfg.get('use_mixed_model', False),
             )
             
-            # Extract brain mask path from result
+            # Extract brain mask path and atlas_name from result
             fastsurfercnn_mask_path = result.get('brain_mask')
             if not fastsurfercnn_mask_path or not os.path.exists(fastsurfercnn_mask_path):
                 raise FileNotFoundError(f"FastSurferCNN did not generate brain mask at expected location: {fastsurfercnn_mask_path}")
+            
+            # Extract atlas_name if available
+            atlas_name = result.get('atlas_name')
             
             # Move the brain mask to the expected location
             shutil.move(fastsurfercnn_mask_path, brain_mask_path)
@@ -731,10 +727,13 @@ def apply_skullstripping(
                 config=None  # Use checkpoint parameters instead
             )
             
-            # Extract brain mask path from result
+            # Extract brain mask path and atlas_name from result
             mrin_mask_path = result.get('brain_mask')
             if not mrin_mask_path or not os.path.exists(mrin_mask_path):
                 raise FileNotFoundError(f"macacaMRINN did not generate brain mask at expected location: {mrin_mask_path}")
+            
+            # Extract atlas_name if available
+            atlas_name = result.get('atlas_name')
             
             # The mask should already be at brain_mask_path, but verify
             if mrin_mask_path != brain_mask_path:
@@ -784,6 +783,7 @@ def apply_skullstripping(
     
     # Build return dictionary with optional segmentation and hemimask
     return_dict = {
+        'atlas_name': atlas_name,
         "imagef_skullstripped": output_path,
         "brain_mask": brain_mask_path
     }

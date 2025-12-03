@@ -470,6 +470,11 @@ class Inference:
                     output_slice_indices[index_of_current_plane] = slice(start_index, end_index)
                     out[tuple(output_slice_indices)].add_(pred, alpha=self.alpha[plane])
                     start_index = end_index
+                    
+                    # Explicitly delete intermediate tensors to free GPU memory
+                    del images, scale_factors, pred
+                    if self.device.type == "cuda":
+                        torch.cuda.empty_cache()
 
             except:
                 batch_num = log_batch_idx + 1 if log_batch_idx is not None else "unknown"
@@ -536,7 +541,7 @@ class Inference:
                 f"This saves significant GPU memory. Edge predictions may be slightly less accurate."
             )
             padding_percent = 0.0
-        
+         
         if padding_percent > 0.0:
             logger.info(f"Inference: Applying {padding_percent*100:.1f}% edge padding to help recognize brain tissue near boundaries")
             orig_data_padded, pad_width = pad_volume_edges_percent(orig_data, padding_percent, mode='edge')

@@ -147,7 +147,7 @@ The project follows a modular architecture with the following main components:
   - `check_dependencies` - Dependency management
 
 #### 10. **Templates**
-- **Location**: `macacaMRIprep/templates/`
+- **Location**: `templatezoo/`
 - **Content**: NMT2Sym template files at various resolutions (0.25mm, 0.5mm, 1mm, 2mm)
 - **Types**: T1w, brain masks, segmentation files, gray matter masks
 
@@ -213,11 +213,11 @@ macacaMRIprep/
 │   │   ├── config.py                 # Configuration management
 │   │   ├── validation.py             # Configuration validation
 │   │   └── defaults.json             # Default configuration
-│   ├── templates/                    # Template files
-│   │   └── *.nii.gz                  # NMT2Sym template files
 │   └── unet_model/                   # UNet models
 │       ├── skullstripping_anat.model # Anatomical skullstripping model
 │       └── skullstripping_func.model # Functional skullstripping model
+├── templatezoo/                      # Template files
+│   └── *.nii.gz                      # NMT2Sym template files
 ├── tests/                            # Test suite
 ├── docs/                             # Documentation
 ├── scripts/                          # Utility scripts

@@ -141,7 +141,7 @@ class ProcessingConfig(BaseModel):
         description="Create T1.mgz (for compatibility with downstream tools)"
     )
     atlas_3t: bool = Field(
-        default=False,
+        default=True,
         description="Use 3T Talairach atlas instead of 1.5T"
     )
     

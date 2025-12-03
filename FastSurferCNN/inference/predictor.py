@@ -42,6 +42,7 @@ from FastSurferCNN.utils.arg_types import OrientationType
 from FastSurferCNN.utils.arg_types import vox_size as _vox_size
 from FastSurferCNN.utils.checkpoint import read_checkpoint_file
 from FastSurferCNN.utils.common import find_device
+from FastSurferCNN.utils.threads import get_num_threads
 
 LOGGER = logging.getLogger(__name__)
 
@@ -110,8 +111,8 @@ class RunModelOnData:
         ckpt_sag: Path | None = None,
         ckpt_cor: Path | None = None,
         device: str = "auto",
-        viewagg_device: str = "auto",
-        threads: int = 1,
+        viewagg_device: str = "cpu",
+        threads: int | None = None,
         batch_size: int = 1,
         plane_weight_coronal: float | None = None,
         plane_weight_axial: float | None = None,
@@ -139,10 +140,11 @@ class RunModelOnData:
             Path to checkpoint file for coronal plane.
         device : str, default="auto"
             Device to run inference on. Can be "auto", "cuda", or "cpu".
-        viewagg_device : str, default="auto"
+        viewagg_device : str, default="cpu"
             Device to run view aggregation on. Can be "auto", "cuda", or "cpu".
-        threads : int, default=1
-            Number of threads for CPU operations.
+        threads : int, optional
+            Number of threads for CPU operations. If None, uses get_num_threads()
+            (defaults to 8 for systems with >8 cores, or all cores if <=8).
         batch_size : int, default=1
             Batch size for inference.
         plane_weight_coronal : float, optional
@@ -156,7 +158,7 @@ class RunModelOnData:
             mislabeled disconnected WM regions by flipping them to the correct hemisphere.
             Enabled by default as it improves downstream processing (e.g., mri_cc performance).
         """
-        self._threads = threads
+        self._threads = threads if threads is not None else get_num_threads()
         torch.set_num_threads(self._threads)
         self.fix_wm_islands = fix_wm_islands
 
@@ -608,6 +610,8 @@ class RunModelOnData:
         # Get hard predictions
         pred_classes = torch.argmax(pred_prob, 3)
         del pred_prob
+        if self.device.type == "cuda":
+            torch.cuda.empty_cache()
 
         # Map to FreeSurfer label space (skip for binary models - output is already 0/1)
         if not self.is_binary and self.labels is not None:
@@ -615,8 +619,13 @@ class RunModelOnData:
                 pred_classes, self.labels
             )
 
-        # Return numpy array
-        pred_classes = pred_classes.cpu().numpy()
+        # Move to CPU and convert to numpy, then delete GPU tensor
+        pred_classes_cpu = pred_classes.cpu()
+        del pred_classes
+        if self.device.type == "cuda":
+            torch.cuda.empty_cache()
+        pred_classes = pred_classes_cpu.numpy()
+        del pred_classes_cpu
 
 
         # Apply WM island fixing (generic post-processing, enabled by default)

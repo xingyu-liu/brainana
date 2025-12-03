@@ -131,7 +131,7 @@ def load_and_crop_roi_data(
     mask_path: Optional[Path],
     roi_cube_range: np.ndarray,
     cerebellum_indices: np.ndarray,
-    keep_largest_component: bool = True,
+    keep_largest_component: bool = False,
     verbose: bool = True
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, nib.Nifti1Image, nib.Nifti1Image]:
     """
@@ -374,7 +374,7 @@ def fix_roi_wm(
         mask_path=mask_f,
         roi_cube_range=roi_cube_range,
         cerebellum_indices=cerebellum_index,
-        keep_largest_component=True,
+        keep_largest_component=False,
         verbose=verbose
     )
     

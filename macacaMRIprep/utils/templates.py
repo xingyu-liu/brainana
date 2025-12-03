@@ -35,9 +35,9 @@ class TemplateManager:
         if custom_dir:
             return Path(custom_dir)
         
-        # Templates are always in project_root/macacaMRIprep/templates
-        package_dir = Path(__file__).parent.parent  # macacaMRIprep/macacaMRIprep -> macacaMRIprep
-        template_dir = package_dir / 'templates'
+        # Templates are always in project_root/templatezoo
+        project_root = Path(__file__).parent.parent.parent  # macacaMRIprep/utils/templates.py -> macacaMRIprep -> banana
+        template_dir = project_root / 'templatezoo'
         
         if not template_dir.exists():
             raise FileNotFoundError(f"Template directory not found: {template_dir}")

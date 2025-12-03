@@ -21,7 +21,7 @@ except ImportError:
     create_grid_mri_image = mri_plotting.create_grid_mri_image
 
 # Input and output paths
-input_nii = '/mnt/DataDrive3/xliu/prep_test/banana_test/princeton_newdata/preproc_fastSurferCNN_reorient/sub-freddie/ses-anat/anat/sub-freddie_ses-anat_desc-preproc_T1w.nii.gz'
+input_nii = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_2pass/sub-1006/anat/sub-1006_desc-preproc_T1w.nii.gz'
 # input_nii = '/mnt/DataDrive3/xliu/prep_test/banana_test/princeton_newdata/bids/sub-freddie/ses-anat/anat/sub-freddie_ses-anat_run-1_T1w.nii.gz'
 # input_nii = "/mnt/DataDrive3/xliu/prep_test/banana_test/princeton_newdata/raw/freddie/freddie_112525-1113-251125_NHP_T1_MPRAGE_0.5mm3_20251125111330_2.nii"
 output_png = input_nii.replace(".nii.gz", ".png").replace(".nii", ".png")

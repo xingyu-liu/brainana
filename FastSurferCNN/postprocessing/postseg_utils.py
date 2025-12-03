@@ -99,7 +99,7 @@ def flip_wm_islands(
             main_com = np.array(main_com)
             
             # Check each island
-            for component_id in unique:
+            for i, component_id in enumerate(unique):
                 if component_id == largest:
                     continue
                 
@@ -124,8 +124,10 @@ def flip_wm_islands(
                 if dist_to_other < dist_to_main:
                     # Use the first other WM label as target
                     target_label = other_wm_labels[0]
-                    print(f"    Flipping island (size={island_size}) to label {target_label}")
+                    print(f"    {i+1} / {len(unique)} island (size={island_size}) is closer to other hemisphere, flipping to label {target_label}")
                     aseg_data[island_mask] = target_label
+                else:
+                    print(f"    {i+1} / {len(unique)} island (size={island_size}) is in the correct hemisphere")
     
     return aseg_data
 

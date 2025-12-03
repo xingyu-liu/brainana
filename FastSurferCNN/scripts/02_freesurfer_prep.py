@@ -18,11 +18,12 @@ from FastSurferCNN.utils.constants import FASTSURFER_ROOT
 
 # Test paths
 common_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
+
 skullstripped_dir = f'{common_dir}/test_anat_2pass_seg_skullstripping_separate'
 t1w_f = f'{skullstripped_dir}/input_cropped.nii.gz'
-
 seg_f = f'{skullstripped_dir}/segmentation.nii.gz'
 mask_f = f'{skullstripped_dir}/mask.nii.gz'
+
 output_dir = f'{skullstripped_dir}/sub-test'
 
 # Checkpoint to extract atlas name from

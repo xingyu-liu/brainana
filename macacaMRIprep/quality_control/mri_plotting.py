@@ -135,7 +135,10 @@ def _get_slice_orientations(data: np.ndarray, voxel_sizes: Optional[np.ndarray] 
             slice_func = lambda i: data[:, :, i]
         
         # Calculate aspect ratio based on voxel sizes of shown axes
-        aspect = voxel_sizes[axis1_idx] / voxel_sizes[axis0_idx]
+        # aspect = dy/dx where dy is the unit size in y-direction (rows, axis0) 
+        # and dx is the unit size in x-direction (cols, axis1)
+        # In imshow: rows (axis0) are y-axis, cols (axis1) are x-axis
+        aspect = voxel_sizes[axis0_idx] / voxel_sizes[axis1_idx]
         
         return {
             'axis': slice_axis,
@@ -388,7 +391,8 @@ def create_grid_mri_image(
         end_idx = min(max_dim - 1, int(0.85 * max_dim))
         slice_indices = np.linspace(start_idx, end_idx, num_cols, dtype=int)
         
-        # Adjust aspect ratio if rotation is 90° or 270° (swaps width/height)
+        # Adjust aspect ratio if rotation is 90° or 270° (swaps rows/cols)
+        # After rotation, the row/col dimensions are swapped, so aspect ratio is inverted
         aspect = orient_info['aspect']
         if rotation in [1, 3]:
             aspect = 1.0 / aspect if aspect != 0 else 1.0
