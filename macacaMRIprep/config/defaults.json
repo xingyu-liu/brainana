@@ -55,13 +55,17 @@
       "fastSurferCNN": {
         "gpu_device": "auto",
         "batch_size": 1,
-        "threads": 1,
+        "threads": 20,
         "use_mixed_model": false,
         "enable_crop_2round": true,
         "plane_weight_coronal": 0.3,
         "plane_weight_axial": 0.5,
         "plane_weight_sagittal": 0.2
       }
+    },
+    "surface_reconstruction": {
+      "enabled": true,
+      "threads": 20
     },
     "t2w": {
       "enabled": true

@@ -71,7 +71,9 @@ class BasePreprocessingWorkflow(ABC):
         self.config = self._load_and_validate_config(config)
         
         # Extract verbose and overwrite from validated config
-        self.verbose = self.config.get("general.verbose")
+        # Normalize verbose to integer (0, 1, or 2) for consistency
+        from ..utils.logger import normalize_verbose
+        self.verbose = normalize_verbose(self.config.get("general.verbose", 1))
         self.overwrite = self.config.get("general.overwrite")
 
         # Setup proper logging with configured level
@@ -99,7 +101,8 @@ class BasePreprocessingWorkflow(ABC):
         try:
             workflow_file_handler = logging.FileHandler(workflow_log_file)
             workflow_file_handler.setFormatter(logging.Formatter(
-                '%(asctime)s | %(levelname)-8s | %(message)s'
+                '%(asctime)s | %(levelname)-8s | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
             ))
             workflow_file_handler.setLevel(log_level)
             
@@ -122,35 +125,27 @@ class BasePreprocessingWorkflow(ABC):
         self.logger.info(f"System: output directory - {os.path.basename(self.working_dir)}")
         self.logger.info(f"System: overwrite mode - {self.overwrite}")
         
-    def _setup_logging(self, verbose: Union[int, bool], logger: Optional[logging.Logger]) -> None:
+    def _setup_logging(self, log_level: Union[str, int], logger: Optional[logging.Logger]) -> None:
         """Setup logging for the workflow.
         
         Args:
-            verbose: Verbosity level (boolean or integer)
+            log_level: Logging level (string like 'INFO', 'DEBUG', or logging constant)
             logger: Optional existing logger
         """
         if logger is not None:
             self.logger = logger
         else:
-            # Convert boolean verbose to integer if needed
-            if isinstance(verbose, bool):
-                verbose_level = 1 if verbose else 0
+            # Convert string level to int if needed
+            if isinstance(log_level, str):
+                level = getattr(logging, log_level.upper())
             else:
-                verbose_level = verbose
-            
-            # Determine log level from verbosity
-            if verbose_level == 0:
-                log_level = logging.WARNING
-            elif verbose_level == 1:
-                log_level = logging.INFO
-            else:
-                log_level = logging.DEBUG
+                level = log_level
             
             # Setup logging
-            setup_logging(level=log_level)
+            setup_logging(level=level)
             self.logger = get_logger(self.__class__.__name__)
         
-        self.verbose = verbose
+        # Note: self.verbose is already set and normalized in __init__, don't overwrite it here
         
     def _load_and_validate_config(
         self, 

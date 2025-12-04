@@ -643,6 +643,12 @@ def apply_skullstripping(
         os.makedirs(temp_output_dir, exist_ok=True)
         
         try:
+            # Get fix_roi_wm setting from config, with default based on modality
+            # For anatomical data, default to True (models typically generate hemimasks)
+            # For functional data, default to False (may use binary mask models without hemimasks)
+            fix_roi_wm_default = True if modal == 'anat' else False
+            fix_roi_wm = fscnn_cfg.get('fix_roi_wm', fix_roi_wm_default)
+            
             # Call FastSurferCNN skullstripping function
             # Note: This is the FastSurferCNN.inference.skullstrip_fastsurfercnn function imported at the top
             result = skullstrip_fastsurfercnn(
@@ -657,6 +663,9 @@ def apply_skullstripping(
                 plane_weight_axial=fscnn_cfg.get('plane_weight_axial'),
                 plane_weight_sagittal=fscnn_cfg.get('plane_weight_sagittal'),
                 use_mixed_model=fscnn_cfg.get('use_mixed_model', False),
+                fix_roi_wm=fix_roi_wm,
+                roi_name=fscnn_cfg.get('roi_name', 'V1'),
+                wm_thr=fscnn_cfg.get('wm_thr', 0.5),
             )
             
             # Extract brain mask path and atlas_name from result

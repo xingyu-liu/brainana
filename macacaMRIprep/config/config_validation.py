@@ -38,6 +38,7 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
     validate_despike_config(func_config.get("despike", {}))
     validate_skullstripping_config(func_config.get("skullstripping", {}))
     validate_skullstripping_config(anat_config.get("skullstripping", {}))
+    validate_surface_reconstruction_config(anat_config.get("surface_reconstruction", {}))
     validate_bias_correction_config(func_config.get("bias_correction", {}))
     validate_bias_correction_config(anat_config.get("bias_correction", {}))
     validate_registration_config(validated_config.get("registration", {}))
@@ -346,6 +347,32 @@ def validate_templates_config(config: Dict[str, Any]) -> None:
         mask_path = Path(config["custom_mask"])
         if not mask_path.exists():
             raise ValueError(f"Custom mask file not found: {mask_path}")
+
+
+def validate_surface_reconstruction_config(config: Dict[str, Any]) -> None:
+    """Validate surface reconstruction configuration.
+    
+    Args:
+        config: Surface reconstruction configuration dictionary
+        
+    Raises:
+        ValueError: If any surface reconstruction parameters are invalid
+    """
+    if not isinstance(config, dict):
+        raise ValueError("surface_reconstruction config must be a dictionary")
+    
+    # Validate enabled flag
+    if "enabled" in config:
+        if not isinstance(config["enabled"], bool):
+            raise ValueError("anat.surface_reconstruction.enabled must be boolean")
+    
+    # Validate threads (optional, can be null for auto-detection)
+    if "threads" in config and config["threads"] is not None:
+        threads = config["threads"]
+        if not isinstance(threads, int):
+            raise ValueError("anat.surface_reconstruction.threads must be an integer or null")
+        if threads < 1:
+            raise ValueError("anat.surface_reconstruction.threads must be >= 1")
 
 
 def validate_output_config(config: Dict[str, Any]) -> None:

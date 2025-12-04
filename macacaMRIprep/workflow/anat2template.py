@@ -3,6 +3,7 @@ Simplified anatomical processor using serial step-by-step structure.
 """
 
 import os
+import sys
 import time
 import logging
 from pathlib import Path
@@ -14,11 +15,18 @@ from ..operations import bias_correction, apply_skullstripping, ants_register, r
 from ..utils import run_command
 from ..utils import resolve_template, get_filename_stem
 from ..utils import log_workflow_start, log_workflow_end
+from ..utils.bids import parse_bids_entities
 from ..quality_control import create_skullstripping_qc
 from ..quality_control.snapshots import (
     create_bias_correction_qc,
     create_registration_qc
 )
+
+# Add the project root to sys.path to enable FastSurferRecon imports
+# Similar to how FastSurferCNN is handled in preprocessing.py
+_project_root = Path(__file__).parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 # %%
 class AnatomicalProcessor(BasePreprocessingWorkflow):
@@ -35,7 +43,8 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
         config: Optional[Dict[str, Any]] = None,
         logger: Optional[logging.Logger] = None,
         qc_dir: Optional[str] = None,
-        modality: str = "T1w"
+        modality: str = "T1w",
+        output_root: Optional[str] = None
     ):
         super().__init__(output_dir, working_dir, config, logger)
         
@@ -43,6 +52,11 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
         self.modality = modality
         self.template_spec = template_spec
         
+        # Store output_root for fastsurfer directory (dataset-level, not subject-level)
+        if output_root:
+            self.output_root = Path(output_root)
+        else:
+            raise ValueError("output_root is required")
         # Template resolution with override logic
         self.template_file = None
         self.template_name = None
@@ -174,12 +188,24 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
             self.generated_files.append(str(outputf))
             self.logger.info(f"Output: preprocessed anatomical file saved")
 
+            # Initialize surface reconstruction file dictionary
+            # This will be populated during skull stripping if enabled
+            outpuf_f_for_surfrecon = {
+                "t1w_image": None,
+                "segmentation": None,
+                "mask": None,
+                "atlas_name": None
+            }
+
             # ANAT SKULL STRIPPING 
             # ------------------------------------------------------------
             # if config.get(anat.surface_reconstruction.enabled) is True, force to run skullstripping
             if self.config.get("anat.skullstripping.enabled", True):
                 # Store the image before skull stripping for QC
                 anatf_with_skull = anatf_cur
+                
+                # Store T1w image for surface reconstruction
+                outpuf_f_for_surfrecon["t1w_image"] = anatf_with_skull
 
                 step_name = self.pipeline.add_step(
                     name="anat_skullstripping", 
@@ -221,13 +247,8 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     anatf_with_skull = str(input_cropped_path)
                     self.logger.info(f"QC: updated underlay to cropped version for spatial consistency")
 
-                # save the relevant output files for surface reconstruction
-                outpuf_f_for_surfrecon = {
-                    "t1w_image": anatf_with_skull,
-                    "segmentation": None,
-                    "mask": None,
-                    'atlas_name': None
-                }
+                    # Update T1w image for surface reconstruction to cropped version
+                    outpuf_f_for_surfrecon["t1w_image"] = anatf_with_skull
 
                 # Update the anatomical file to skull-stripped version
                 # Note: If two-pass refinement was used, the skull-stripped image is already in cropped space
@@ -303,10 +324,20 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
             # ANAT REGISTRATION TO TEMPLATE
             # ------------------------------------------------------------
             # Skip template registration if output_space is native
-            output_space = self.config.get("template", {}).get("output_space", "")
-            skip_template_registration = (output_space.lower() == "native")
+            # Use dot notation for Config class compatibility
+            output_space = self.config.get("template.output_space", "")
+            if not output_space:
+                # Fallback: try accessing via nested dict (for dict configs)
+                template_dict = self.config.get("template", {})
+                if isinstance(template_dict, dict):
+                    output_space = template_dict.get("output_space", "")
+            skip_template_registration = (output_space and output_space.lower() == "native")
             
-            if self.config.get("registration.enabled", True) and not skip_template_registration:
+            # Also skip if template_file is not available (should be None when output_space is native)
+            if skip_template_registration or self.template_file is None:
+                skip_template_registration = True
+            
+            if self.config.get("registration.enabled", True) and not skip_template_registration and self.template_file is not None:
                 qc_modality = "anat2template"
                 step_name = self.pipeline.add_step(
                     name="anat2template_registration",
@@ -376,28 +407,178 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                         self.logger.warning(f"QC: registration failed - {e}")
             elif skip_template_registration:
                 self.logger.info("Step: template registration skipped (output_space is native)")
-                
-                # Save anatomical file in native space (copy current anatomical file)
-                outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_space-native_desc-preproc_{self.modality}.nii.gz"
-                cmd_output = ["cp", anatf_cur, str(outputf)]
-                run_command(cmd_output)
-                self.generated_files.append(str(outputf))
-                self.logger.info(f"Output: native space anatomical file saved")
+                # No need to create space-native file - preprocessed files are already in native space
             else:
                 self.logger.info("Step: template registration skipped (disabled in configuration)")
 
 
             # SURFACE RECONSTRUCTION
             # ------------------------------------------------------------
-            # run surface recon by 
-            # 1. reformat outpuf_f_for_surfrecon files into fs format to the fs_subjects_dir
-            # /home/star/github/banana/FastSurferCNN/postprocessing/prepping_for_surfrecon.py
-            # lut path from 
-            # fastsurfercnn_dir = FASTSURFER_ROOT / "FastSurferCNN"
-            # atlas_dir = fastsurfercnn_dir / f"atlas/atlas-{atlas_name}"
-            # lut_path = atlas_dir / f"{atlas_name}_ColorLUT.tsv"
-            # 2. run fastsurferrecon to do surface reconstruction
-            # using /home/star/github/banana/FastSurferRecon
+            if self.config.get("anat.surface_reconstruction.enabled", True):
+                # Only run if we have the required files from skull stripping
+                if (outpuf_f_for_surfrecon.get("t1w_image") is not None and
+                    outpuf_f_for_surfrecon.get("segmentation") is not None and 
+                    outpuf_f_for_surfrecon.get("mask") is not None and
+                    outpuf_f_for_surfrecon.get("atlas_name") is not None):
+                    
+                    try:
+                        self.logger.info("=" * 80)
+                        self.logger.info("Surface Reconstruction: Starting")
+                        self.logger.info("=" * 80)
+                        
+                        # Extract BIDS subject ID
+                        bids_entities = parse_bids_entities(self.anat_file.name)
+                        subject_id = bids_entities.get("sub")
+                        if not subject_id:
+                            raise ValueError(
+                                f"Could not extract BIDS subject ID from filename: {self.anat_file.name}. "
+                                f"Expected 'sub-XX' entity in filename."
+                            )
+                        if not subject_id.startswith("sub-"):
+                            subject_id = f"sub-{subject_id}"
+                        
+                        # Setup FreeSurfer subjects directory at dataset level
+                        # Structure: {dataset_root}/fastsurfer/sub-XXX
+                        fs_subjects_dir = self.output_root / "fastsurfer"
+                        fs_subjects_dir.mkdir(parents=True, exist_ok=True)
+                        fs_subject_dir = fs_subjects_dir / subject_id
+                        
+                        self.logger.info(f"Surface Recon: Subject ID = {subject_id}")
+                        self.logger.info(f"Surface Recon: Subjects directory = {fs_subjects_dir}")
+                        
+                        # Get atlas name
+                        atlas_name = outpuf_f_for_surfrecon["atlas_name"]
+                        self.logger.info(f"Surface Recon: Atlas = {atlas_name}")
+                        
+                        # Import FastSurferRecon modules (needed for both LUT path and pipeline config)
+                        from FastSurferRecon.fastsurfer_recon.config import ReconSurfConfig, AtlasConfig, ProcessingConfig  # type: ignore
+                        from FastSurferRecon.fastsurfer_recon.pipeline import ReconSurfPipeline  # type: ignore
+                        
+                        # Get LUT path using FastSurferRecon's AtlasConfig (has built-in fallbacks)
+                        atlas_config = AtlasConfig(name=atlas_name)
+                        lut_path = atlas_config.colorlut_path
+                        
+                        if lut_path is None or not lut_path.exists():
+                            raise FileNotFoundError(
+                                f"LUT file not found for atlas {atlas_name}. "
+                                f"AtlasConfig searched but could not locate ColorLUT file."
+                            )
+                        
+                        self.logger.info(f"Surface Recon: LUT path = {lut_path}")
+                        
+                        # Validate required files exist before processing
+                        t1w_path = Path(outpuf_f_for_surfrecon["t1w_image"])
+                        seg_path = Path(outpuf_f_for_surfrecon["segmentation"])
+                        mask_path = Path(outpuf_f_for_surfrecon["mask"])
+                        
+                        for path, name in [(t1w_path, "T1w image"), (seg_path, "segmentation"), (mask_path, "mask")]:
+                            if not path.exists():
+                                raise FileNotFoundError(f"Surface Recon: Required file not found: {name} at {path}")
+                        
+                        self.logger.info("Surface Recon: All required files validated")
+                        
+                        # Step 1: Prepare files for FreeSurfer using postprocess_for_freesurfer
+                        self.logger.info("Surface Recon: Step 1 - Preparing files for FreeSurfer format")
+                        try:
+                            from FastSurferCNN.postprocessing.prepping_for_surfrecon import postprocess_for_freesurfer
+                            
+                            prep_result = postprocess_for_freesurfer(
+                                t1w_image=str(t1w_path),
+                                segmentation=str(seg_path),
+                                mask=str(mask_path),
+                                lut_path=str(lut_path),
+                                subject_dir=str(fs_subject_dir),
+                                vox_size="min",
+                                orientation="lia",
+                                image_size=True
+                            )
+                            
+                            if prep_result != 0:
+                                raise RuntimeError(f"File preparation failed: {prep_result}")
+                            
+                            self.logger.info("Surface Recon: File preparation completed successfully")
+                        except ImportError as e:
+                            self.logger.error(f"Surface Recon: Failed to import postprocess_for_freesurfer - {e}")
+                            raise
+                        except Exception as e:
+                            self.logger.error(f"Surface Recon: File preparation failed - {e}")
+                            raise
+                        
+                        # Step 2: Run surface reconstruction pipeline
+                        self.logger.info("Surface Recon: Step 2 - Running surface reconstruction pipeline")
+                        try:
+
+                            # Get thread count from config
+                            # Use surface_reconstruction.threads if set, otherwise use reasonable default
+                            n_threads = self.config.get("anat.surface_reconstruction.threads")
+                            if n_threads is None:
+                                # Default: use min(8, cpu_count) for reasonable performance
+                                try:
+                                    cpu_count = len(os.sched_getaffinity(0))
+                                except (AttributeError, OSError):
+                                    import multiprocessing
+                                    cpu_count = multiprocessing.cpu_count()
+                                n_threads = min(8, max(1, cpu_count // 2))  # Use half of available CPUs, max 8
+                            
+                            self.logger.info(f"Surface Recon: Using {n_threads} threads")
+                            
+                            # self.verbose is guaranteed to be int (0, 1, or 2) after normalization
+                            # FastSurferRecon expects verbose: 0 or 1, so map >=2 to 1
+                            recon_verbose = 1 if self.verbose >= 2 else 0
+                            
+                            # Create configuration matching test_pipeline.py
+                            recon_config = ReconSurfConfig(
+                                subject_id=subject_id,
+                                subjects_dir=fs_subjects_dir,
+                                atlas=AtlasConfig(name=atlas_name),
+                                processing=ProcessingConfig(
+                                    threads=n_threads,
+                                    parallel_hemis=True,
+                                    skip_cc=True,  # Non-human
+                                    skip_talairach=True,  # Non-human
+                                    skip_topology_fix=False,
+                                    hires="auto",  # Auto-detect from voxel size
+                                ),
+                                verbose=recon_verbose,
+                            )
+                            
+                            # Run pipeline
+                            pipeline = ReconSurfPipeline(recon_config)
+                            pipeline.run()
+                            
+                            self.logger.info("Surface Recon: Surface reconstruction completed successfully")
+                            
+                            # Add FreeSurfer subject directory to generated files
+                            self.generated_files.append(str(fs_subject_dir))
+                            
+                        except ImportError as e:
+                            self.logger.error(f"Surface Recon: Failed to import FastSurferRecon modules - {e}")
+                            raise
+                        except Exception as e:
+                            self.logger.error(f"Surface Recon: Pipeline execution failed - {e}")
+                            raise
+                        
+                        self.logger.info("=" * 80)
+                        self.logger.info("Surface Reconstruction: Completed Successfully")
+                        self.logger.info("=" * 80)
+                        
+                    except Exception as e:
+                        # Log error but don't break the main pipeline
+                        self.logger.warning(f"Surface Reconstruction failed - {e}")
+                        self.logger.warning("Continuing with main pipeline...")
+                else:
+                    missing = []
+                    if outpuf_f_for_surfrecon.get("t1w_image") is None:
+                        missing.append("t1w_image")
+                    if outpuf_f_for_surfrecon.get("segmentation") is None:
+                        missing.append("segmentation")
+                    if outpuf_f_for_surfrecon.get("mask") is None:
+                        missing.append("mask")
+                    if outpuf_f_for_surfrecon.get("atlas_name") is None:
+                        missing.append("atlas_name")
+                    self.logger.info(f"Surface Reconstruction: Skipped - missing required files: {', '.join(missing)}")
+            else:
+                self.logger.info("Surface Reconstruction: Skipped (disabled in configuration)")
 
             # ------------------------------------------------------------
             # Calculate workflow duration

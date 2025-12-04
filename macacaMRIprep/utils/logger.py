@@ -12,12 +12,76 @@ import os
 import logging
 import sys
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, Any
 
 # Create the central logger with default configuration
 _LOGGER = logging.getLogger("macacaMRIprep")
 _LOGGER.setLevel(logging.WARNING)  # Default to WARNING level
 _LOGGER.addHandler(logging.StreamHandler())  # Default to console output
+
+
+def normalize_verbose(value: Any, default: int = 1) -> int:
+    """Normalize any verbose value to integer 0, 1, or 2.
+    
+    This function ensures consistent verbose handling throughout the codebase.
+    All verbose values are normalized to integers: 0 (quiet), 1 (normal), or 2 (verbose).
+    
+    Args:
+        value: Verbose value of any type (int, bool, str, None, etc.)
+        default: Default value to use if normalization fails (default: 1)
+        
+    Returns:
+        Integer verbose level: 0, 1, or 2
+        
+    Examples:
+        >>> normalize_verbose(2)
+        2
+        >>> normalize_verbose(True)
+        2
+        >>> normalize_verbose(False)
+        0
+        >>> normalize_verbose("1")
+        1
+        >>> normalize_verbose("INFO")
+        1
+        >>> normalize_verbose("DEBUG")
+        2
+        >>> normalize_verbose(None)
+        1
+    """
+    # Handle None
+    if value is None:
+        return default
+    
+    # Handle integers - clamp to 0-2 range
+    if isinstance(value, int):
+        return max(0, min(2, value))
+    
+    # Handle booleans
+    if isinstance(value, bool):
+        return 2 if value else 0
+    
+    # Handle strings
+    if isinstance(value, str):
+        # Try to convert numeric strings
+        try:
+            int_value = int(value)
+            return max(0, min(2, int_value))
+        except ValueError:
+            # Map log level strings to verbose levels
+            log_level_upper = value.upper()
+            if log_level_upper in ("DEBUG", "VERBOSE"):
+                return 2
+            elif log_level_upper in ("INFO", "NORMAL"):
+                return 1
+            elif log_level_upper in ("WARNING", "WARN", "ERROR", "CRITICAL", "QUIET"):
+                return 0
+            else:
+                # Unknown string, return default
+                return default
+    
+    # For any other type, return default
+    return default
 
 def setup_logging(
     log_file: Optional[str] = None,
@@ -43,9 +107,10 @@ def setup_logging(
     if isinstance(level, str):
         level = getattr(logging, level.upper())
     
-    # Create formatters
-    console_formatter = logging.Formatter(format_str)
-    file_formatter = logging.Formatter(format_str)
+    # Create formatters (datefmt removes milliseconds from timestamp)
+    datefmt = '%Y-%m-%d %H:%M:%S'
+    console_formatter = logging.Formatter(format_str, datefmt=datefmt)
+    file_formatter = logging.Formatter(format_str, datefmt=datefmt)
     
     # Create handlers
     console_handler = logging.StreamHandler()
@@ -134,9 +199,10 @@ def setup_step_logging(
     # Clear any existing handlers to avoid duplicates
     step_logger.handlers.clear()
     
-    # Create formatters
-    console_formatter = logging.Formatter(format_str)
-    file_formatter = logging.Formatter(format_str)
+    # Create formatters (datefmt removes milliseconds from timestamp)
+    datefmt = '%Y-%m-%d %H:%M:%S'
+    console_formatter = logging.Formatter(format_str, datefmt=datefmt)
+    file_formatter = logging.Formatter(format_str, datefmt=datefmt)
     
     # Create console handler
     console_handler = logging.StreamHandler()
@@ -207,9 +273,10 @@ def setup_workflow_logging(
     # Clear any existing handlers to avoid duplicates
     workflow_logger.handlers.clear()
     
-    # Create formatters
-    console_formatter = logging.Formatter(format_str)
-    file_formatter = logging.Formatter(format_str)
+    # Create formatters (datefmt removes milliseconds from timestamp)
+    datefmt = '%Y-%m-%d %H:%M:%S'
+    console_formatter = logging.Formatter(format_str, datefmt=datefmt)
+    file_formatter = logging.Formatter(format_str, datefmt=datefmt)
     
     # Create console handler
     console_handler = logging.StreamHandler()

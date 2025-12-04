@@ -66,7 +66,9 @@ class Pipeline:
         self.name = name
         self.output_dir = Path(output_dir)
         self.overwrite = config.get("general.overwrite")
-        self.verbose = config.get("general.verbose")
+        # Normalize verbose to integer (0, 1, or 2) for consistency
+        from ..utils.logger import normalize_verbose
+        self.verbose = normalize_verbose(config.get("general.verbose", 1))
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
         

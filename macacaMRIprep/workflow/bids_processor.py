@@ -556,6 +556,7 @@ def _process_anatomical_job(job: AnatomicalJob, sub_qc_dir: Path, logger: loggin
             config=current_config,
             logger=logger,
             qc_dir=str(sub_qc_dir),
+            output_root=str(job.output_root),  # Pass dataset-level output root for fastsurfer
             **processor_kwargs
         )
         
@@ -628,11 +629,22 @@ def _process_functional_job(job: FunctionalJob, sub_qc_dir: Path, logger: loggin
     logger.info(f"Workflow: starting functional processing for {job.job_id}")
     
     # Determine functional processing pipeline from config or use default
-    pipeline_name = job.config.get("general", {}).get("pipeline_name", "func2anat2template")
+    pipeline_name = job.config.get("general.pipeline_name", "func2anat2template")
+    if not pipeline_name:
+        # Fallback: try accessing via nested dict (for dict configs)
+        general_dict = job.config.get("general", {})
+        if isinstance(general_dict, dict):
+            pipeline_name = general_dict.get("pipeline_name", "func2anat2template")
     
     # Check if output_space is native - if so, disable template registration
-    output_space = job.config.get("template", {}).get("output_space", "")
-    is_native_space = (output_space.lower() == "native")
+    # Use dot notation for Config class compatibility
+    output_space = job.config.get("template.output_space", "")
+    if not output_space:
+        # Fallback: try accessing via nested dict (for dict configs)
+        template_dict = job.config.get("template", {})
+        if isinstance(template_dict, dict):
+            output_space = template_dict.get("output_space", "")
+    is_native_space = (output_space and output_space.lower() == "native")
     
     if pipeline_name == "func2anat":
         target_type = "anat"

@@ -204,7 +204,10 @@ def ants_register(
     command_ants = compose_ants_registration_cmd(
         fixed_path, moving_path, output_path_prefix, 
         reg_config, xfm_type=xfm_type)
-    command_ants.extend(['--verbose', str(int(config.get('general', {}).get('verbose', 0)>=1))])
+    # Normalize verbose to integer (0, 1, or 2) and convert to ANTs format (0 or 1)
+    from ..utils.logger import normalize_verbose
+    verbose = normalize_verbose(config.get('general', {}).get('verbose', 1))
+    command_ants.extend(['--verbose', str(1 if verbose >= 1 else 0)])
 
     # Execute ANTs registration
     try:

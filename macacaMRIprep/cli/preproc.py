@@ -248,14 +248,16 @@ def load_and_merge_config(args: argparse.Namespace) -> Dict[str, Any]:
     if args.working_dir:
         config_overrides.setdefault("general", {})["working_dir"] = args.working_dir
     
+    # Handle verbose flag - normalize to integer (0, 1, or 2)
+    from ..utils.logger import normalize_verbose
+    
     if args.verbose:
-        config_overrides.setdefault("general", {})["verbose"] = args.verbose
+        config_overrides.setdefault("general", {})["verbose"] = 1  # --verbose sets to 1
         # Map verbosity to log level
-        log_levels = {1: "INFO", 2: "DEBUG", 3: "DEBUG"}
-        config_overrides.setdefault("general", {})["log_level"] = log_levels.get(args.verbose, "INFO")
+        config_overrides.setdefault("general", {})["log_level"] = "INFO"
     
     if args.quiet:
-        config_overrides.setdefault("general", {})["verbose"] = 0
+        config_overrides.setdefault("general", {})["verbose"] = 0  # --quiet sets to 0
         config_overrides.setdefault("general", {})["log_level"] = "ERROR"
     
     if args.n_procs:

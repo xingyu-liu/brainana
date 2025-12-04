@@ -32,6 +32,11 @@ class Config:
         # Validate configuration
         self._data = validate_config(self._data)
         
+        # Normalize verbose to integer (0, 1, or 2) for consistency
+        if "general" in self._data and "verbose" in self._data["general"]:
+            from ..utils.logger import normalize_verbose
+            self._data["general"]["verbose"] = normalize_verbose(self._data["general"]["verbose"])
+        
         self._logger = logging.getLogger(__name__)
     
     def get(self, key: str, default: Any = None) -> Any:

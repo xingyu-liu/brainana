@@ -295,95 +295,99 @@ def skullstrip_fastsurfercnn(
         
         # Apply ROI WM fixing if enabled
         if fix_roi_wm:
-            if enable_crop_2round and 'input_cropped' in seg_results:
-                logger.info("2-pass refinement was applied - applying ROI WM fixing to final pass results only")
-            elif enable_crop_2round:
-                logger.info("2-pass criteria not met (single pass) - applying ROI WM fixing to results")
-            logger.info(f"Applying {roi_name} white matter fixing...")
-            
-            # Check required files exist
-            if 'segmentation' not in seg_results:
-                raise ValueError(
-                    f"{roi_name} WM fixing requires segmentation file, but segmentation was not generated. "
-                    "This may occur with binary brain mask models."
-                )
-            if 'hemimask' not in seg_results:
-                raise ValueError(
-                    f"{roi_name} WM fixing requires hemisphere mask file, but hemimask was not generated."
-                )
-            
-            seg_file = Path(seg_results['segmentation'])
-            mask_file = Path(seg_results['mask'])
-            hemi_mask_file = Path(seg_results['hemimask'])
-            
-            # Determine LUT path from checkpoint (same logic as predictor)
-            if atlas_name is None:
-                raise ValueError(
-                    "Cannot determine LUT path: atlas_name is None. "
-                    f"{roi_name} WM fixing requires a multi-class model with atlas_name in checkpoint metadata."
-                )
-            
-            # Use the same logic as RunModelOnData to determine LUT path from atlas_name
-            fastsurfercnn_dir = FASTSURFER_ROOT / "FastSurferCNN"
-            lut_path = fastsurfercnn_dir / "atlas" / f"atlas-{atlas_name}" / f"{atlas_name}_ColorLUT.tsv"
-            
-            if not lut_path.exists():
-                raise FileNotFoundError(
-                    f"LUT file not found at {lut_path}. "
-                    f"This is determined from checkpoint atlas_name='{atlas_name}'. "
-                    "Please ensure the atlas is installed correctly."
-                )
-            logger.info(f"LUT path (from checkpoint): {lut_path}")
-            
-            # Construct template file paths from TEMPLATE_DIR
-            tpl_T1w_f = TEMPLATE_DIR / "tpl-NMT2Sym_res-05_T1w_brain.nii.gz"
-            tpl_seg_f = TEMPLATE_DIR / f"atlas-{atlas_name}_space-NMT2Sym_res-05.nii.gz"
-            tpl_roi_wm_f = TEMPLATE_DIR / f"tpl-NMT2Sym_res-05_T1w_WM_{roi_name}.nii.gz"
-            
-            # Validate template files exist
-            if not tpl_seg_f.exists():
-                raise FileNotFoundError(f"Template segmentation file not found: {tpl_seg_f}")
-            if not tpl_T1w_f.exists():
-                raise FileNotFoundError(f"Template T1w file not found: {tpl_T1w_f}")
-            if not tpl_roi_wm_f.exists():
-                raise FileNotFoundError(f"Template WM file not found: {tpl_roi_wm_f}")
-            
-            # Import fix_roi_wm
-            try:
-                from FastSurferCNN.postprocessing.fix_roi_wm import fix_roi_wm
-            except ImportError as e:
-                logger.error(f"Failed to import fix_roi_wm: {e}")
-                raise ImportError(
-                    "Cannot import fix_roi_wm. Please ensure FastSurferCNN.postprocessing.fix_roi_wm is available."
-                ) from e
-            
-            # Determine which T1w to use (original or cropped if 2-round was applied)
-            t1w_file = Path(input_image)
-            if 'input_cropped' in seg_results:
-                # If 2-round cropping was applied, use the cropped input
-                t1w_file = Path(seg_results['input_cropped'])
-                logger.info(f"Using cropped input for {roi_name} WM fixing: {t1w_file}")
-            
-            # Call fix_roi_wm
-            try:
-                fix_roi_wm(
-                    seg_f=str(seg_file),
-                    t1w_f=str(t1w_file),
-                    mask_f=str(mask_file),
-                    hemi_mask_f=str(hemi_mask_file),
-                    lut_path=str(lut_path),
-                    tpl_seg_f=str(tpl_seg_f),
-                    tpl_t1w_f=str(tpl_T1w_f),
-                    tpl_roi_wm_f=str(tpl_roi_wm_f),
-                    roi_name=roi_name,
-                    wm_thr=wm_thr,
-                    backup_original=True,
-                    verbose=True
-                )
-                logger.info(f"{roi_name} white matter fixing completed successfully")
-            except Exception as e:
-                logger.error(f"{roi_name} WM fixing failed: {str(e)}")
-                raise RuntimeError(f"{roi_name} WM fixing failed: {str(e)}") from e
+            # Skip ROI WM fixing for brainmask atlas
+            if atlas_name == 'brainmask':
+                logger.info(f"Skipping {roi_name} white matter fixing: not applicable for brainmask atlas")
+            else:
+                if enable_crop_2round and 'input_cropped' in seg_results:
+                    logger.info("2-pass refinement was applied - applying ROI WM fixing to final pass results only")
+                elif enable_crop_2round:
+                    logger.info("2-pass criteria not met (single pass) - applying ROI WM fixing to results")
+                logger.info(f"Applying {roi_name} white matter fixing...")
+                
+                # Check required files exist
+                if 'segmentation' not in seg_results:
+                    raise ValueError(
+                        f"{roi_name} WM fixing requires segmentation file, but segmentation was not generated. "
+                        "This may occur with binary brain mask models."
+                    )
+                if 'hemimask' not in seg_results:
+                    raise ValueError(
+                        f"{roi_name} WM fixing requires hemisphere mask file, but hemimask was not generated."
+                    )
+                
+                seg_file = Path(seg_results['segmentation'])
+                mask_file = Path(seg_results['mask'])
+                hemi_mask_file = Path(seg_results['hemimask'])
+                
+                # Determine LUT path from checkpoint (same logic as predictor)
+                if atlas_name is None:
+                    raise ValueError(
+                        "Cannot determine LUT path: atlas_name is None. "
+                        f"{roi_name} WM fixing requires a multi-class model with atlas_name in checkpoint metadata."
+                    )
+                
+                # Use the same logic as RunModelOnData to determine LUT path from atlas_name
+                fastsurfercnn_dir = FASTSURFER_ROOT / "FastSurferCNN"
+                lut_path = fastsurfercnn_dir / "atlas" / f"atlas-{atlas_name}" / f"{atlas_name}_ColorLUT.tsv"
+                
+                if not lut_path.exists():
+                    raise FileNotFoundError(
+                        f"LUT file not found at {lut_path}. "
+                        f"This is determined from checkpoint atlas_name='{atlas_name}'. "
+                        "Please ensure the atlas is installed correctly."
+                    )
+                logger.info(f"LUT path (from checkpoint): {lut_path}")
+                
+                # Construct template file paths from TEMPLATE_DIR
+                tpl_T1w_f = TEMPLATE_DIR / "tpl-NMT2Sym_res-05_T1w_brain.nii.gz"
+                tpl_seg_f = TEMPLATE_DIR / f"atlas-{atlas_name}_space-NMT2Sym_res-05.nii.gz"
+                tpl_roi_wm_f = TEMPLATE_DIR / f"tpl-NMT2Sym_res-05_T1w_WM_{roi_name}.nii.gz"
+                
+                # Validate template files exist
+                if not tpl_seg_f.exists():
+                    raise FileNotFoundError(f"Template segmentation file not found: {tpl_seg_f}")
+                if not tpl_T1w_f.exists():
+                    raise FileNotFoundError(f"Template T1w file not found: {tpl_T1w_f}")
+                if not tpl_roi_wm_f.exists():
+                    raise FileNotFoundError(f"Template WM file not found: {tpl_roi_wm_f}")
+                
+                # Import fix_roi_wm
+                try:
+                    from FastSurferCNN.postprocessing.fix_roi_wm import fix_roi_wm
+                except ImportError as e:
+                    logger.error(f"Failed to import fix_roi_wm: {e}")
+                    raise ImportError(
+                        "Cannot import fix_roi_wm. Please ensure FastSurferCNN.postprocessing.fix_roi_wm is available."
+                    ) from e
+                
+                # Determine which T1w to use (original or cropped if 2-round was applied)
+                t1w_file = Path(input_image)
+                if 'input_cropped' in seg_results:
+                    # If 2-round cropping was applied, use the cropped input
+                    t1w_file = Path(seg_results['input_cropped'])
+                    logger.info(f"Using cropped input for {roi_name} WM fixing: {t1w_file}")
+                
+                # Call fix_roi_wm
+                try:
+                    fix_roi_wm(
+                        seg_f=str(seg_file),
+                        t1w_f=str(t1w_file),
+                        mask_f=str(mask_file),
+                        hemi_mask_f=str(hemi_mask_file),
+                        lut_path=str(lut_path),
+                        tpl_seg_f=str(tpl_seg_f),
+                        tpl_t1w_f=str(tpl_T1w_f),
+                        tpl_roi_wm_f=str(tpl_roi_wm_f),
+                        roi_name=roi_name,
+                        wm_thr=wm_thr,
+                        backup_original=True,
+                        verbose=True
+                    )
+                    logger.info(f"{roi_name} white matter fixing completed successfully")
+                except Exception as e:
+                    logger.error(f"{roi_name} WM fixing failed: {str(e)}")
+                    raise RuntimeError(f"{roi_name} WM fixing failed: {str(e)}") from e
         
         # Return all output file paths
         result = {
