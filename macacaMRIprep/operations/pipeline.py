@@ -223,7 +223,8 @@ class Pipeline:
         
         # Setup step-specific logging with configured log level
         # Get log level from config or use logger's level
-        config_log_level = self.config.get("general.log_level", "INFO")
+        # Get log_level from config (will be derived from verbose if not explicitly set)
+        config_log_level = self.config.get_log_level()
         if isinstance(config_log_level, str):
             config_log_level = getattr(logging, config_log_level.upper())
         else:

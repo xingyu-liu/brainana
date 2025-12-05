@@ -1,0 +1,116 @@
+# Default configuration for macacaMRIprep preprocessing pipeline
+_description: "Default configuration for macacaMRIprep preprocessing pipeline"
+_version: "1.1"
+
+general:
+  dataset_dir: "."  # str: path to BIDS dataset directory
+  output_dir: "."  # str: path to output directory
+  working_dir: "."  # str: path to working directory for intermediate files
+  pipeline_name: "func2anat2template"  # str: "func2anat2template", "func2template", "anat2template", or "func2anat"
+  verbose: 2  # int or bool: verbosity level (0=quiet/ERROR, 1=normal/INFO, 2=verbose/DEBUG).
+  overwrite: false  # bool: overwrite existing outputs
+  generate_report_only: false  # bool: only generate QC reports from existing outputs
+  n_procs: 1  # int: number of parallel processes (>= 1)
+  anat_only: false  # bool: process only anatomical data
+  func_only: false  # bool: process only functional data. TODO: add this to the pipeline
+
+bids_filtering:
+  subjects: null  # list of str or null: filter by subject IDs (e.g., ["01", "02"])
+  sessions: null  # list of str or null: filter by session IDs (e.g., ["01", "02"])
+  tasks: null  # list of str or null: filter by task names (e.g., ["rest", "task"])
+  runs: null  # list of str or null: filter by run numbers (e.g., ["01", "02"])
+
+template:
+  output_space: "NMT2Sym:res-05"  # str: template space in format "TEMPLATE_NAME:[:DESCRIPTION]" (e.g., "NMT2Sym:res-1", "native")
+  description: "Template space specification in format TEMPLATE_NAME:[:DESCRIPTION]"
+  examples:
+    - "native"
+    - "NMT2Sym:res-1"
+    - "NMT2Sym:res-025"
+
+anat:
+  reorient:
+    enabled: true  # bool: reorient anatomical images to template orientation when given, otherwise to RAS
+  bias_correction:
+    enabled: true  # bool: perform bias field correction
+    algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
+    dimension: 3  # int: image dimension (2, 3, or 4)
+    shrink_factor: 2  # float: shrink factor for faster processing (> 0)
+    bspline_fitting: "[ 100 ]"  # str: B-spline fitting parameters in ANTs format
+    rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
+  skullstripping:
+    enabled: true  # bool: perform brain extraction
+    method: "fastSurferCNN" 
+    fastSurferCNN:
+      gpu_device: "auto"  # int (>= -1) or "auto": GPU device ID (-1 = CPU, "auto" = auto-select)
+      batch_size: 1  # int: batch size for inference (>= 1)
+      threads: 20  # int: number of CPU threads (>= 1)
+      use_mixed_model: false  # bool: use mixed precision model
+      enable_crop_2round: true  # bool: enable two-round cropping for better accuracy
+      plane_weight_coronal: 0.3  # float: weight for coronal plane (0.0-1.0)
+      plane_weight_axial: 0.5  # float: weight for axial plane (0.0-1.0)
+      plane_weight_sagittal: 0.2  # float: weight for sagittal plane (0.0-1.0)
+      fix_V1_WM: true  # bool: fix missing thin WM in V1 by registering template V1 WM to individual space.
+  surface_reconstruction:
+    enabled: true  # bool: perform surface reconstruction
+    threads: 20  # int: number of threads for surface reconstruction (>= 1)
+
+func:
+  reorient:
+    enabled: true  # bool: reorient functional images to template orientation when given, otherwise to RAS
+  slice_timing_correction:
+    enabled: false
+    repetition_time: null  # float: repetition time in seconds, or null (auto-detect from BIDS)
+    slice_timing: null  # list of floats: slice times in seconds, or null (auto-detect from BIDS)
+    tzero: null  # float: reference time point in seconds, or null (auto-calculate)
+    slice_time_ref: 0.5  # float: reference slice time (0.0-1.0), 0.5 = middle slice
+    slice_encoding_direction: null  # str: "x", "-x", "y", "-y", "z", "-z", or null (auto-detect from BIDS)
+  motion_correction:
+    enabled: true  # bool: perform motion correction
+    dof: 6  # int: degrees of freedom (6, 9, or 12)
+    cost: "mutualinfo"  # str: cost function ("mutualinfo", "woods", "corratio", "normcorr", "normmi", "leastsq")
+    smooth: 1.0  # float: smoothing factor for motion correction
+    ref_vol: "mid"  # int or str: reference volume (integer index, "Tmean", or "mid")
+    cost_tolerance: 0.01  # float: cost function tolerance
+    parameter_tolerance: 0.01  # float: parameter tolerance
+  despike:
+    enabled: true  # bool: perform despiking (outlier removal)
+    c1: 5  # float: first cutoff parameter (> 0, must be < c2)
+    c2: 10  # float: second cutoff parameter (> 0, must be > c1)
+    localedit: true  # bool: use local editing for despiking
+    ignore_first_volumes: 0  # int: number of initial volumes to ignore (>= 0)
+  skullstripping:
+    enabled: true  # bool: perform brain extraction
+    method: "fastSurferCNN"  # str: "bet", "fastSurferCNN", or "macacaMRINN"
+    fastSurferCNN:
+      gpu_device: "auto"  # int (>= -1) or "auto": GPU device ID (-1 = CPU, "auto" = auto-select)
+      batch_size: 1  # int: batch size for inference (>= 1)
+      threads: 1  # int: number of CPU threads (>= 1)
+      use_mixed_model: false  # bool: use mixed precision model
+      enable_crop_2round: false  # bool: enable two-round cropping for better accuracy
+      plane_weight_coronal: 0  # float: weight for coronal plane (0.0-1.0)
+      plane_weight_axial: 0.6  # float: weight for axial plane (0.0-1.0)
+      plane_weight_sagittal: 0.4  # float: weight for sagittal plane (0.0-1.0)
+      fix_V1_WM: true  # bool: when true, sets fix_roi_wm=True and roi_name='V1'; when false, sets fix_roi_wm=False
+  bias_correction:  # only done on tmean image for better registration, not on the functional images directly
+    enabled: true  # bool: perform bias field correction
+    algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
+    dimension: 3  # int: image dimension (2, 3, or 4)
+    shrink_factor: 2  # float: shrink factor for faster processing (> 0)
+    bspline_fitting: "[ 100 ]"  # str: B-spline fitting parameters in ANTs format
+    rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
+
+registration:
+  enabled: true  # bool: perform image registration
+  func2template_xfm_type: "syn"  # str: transform type for func->template ("translation", "rigid", "affine", or "syn")
+  anat2template_xfm_type: "syn"  # str: transform type for anat->template ("translation", "rigid", "affine", or "syn")
+  func2anat_xfm_type: "syn"  # str: transform type for func->anat ("translation", "rigid", "affine", or "syn")
+  keep_original_func_resolution: true  # bool: keep original functional image resolution after registration
+  interpolation: "LanczosWindowedSinc"  # str: interpolation method ("Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline", "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc", "LanczosWindowedSinc", "GenericLabel")
+  collapse_output_transforms: 1  # int: collapse transforms (0 or 1)
+  write_composite_transform: 1  # int: write composite transform (0 or 1)
+  winsorize_image_intensities: "[0.005,0.995]"  # str: intensity winsorization range in ANTs format
+  use_histogram_matching: 0  # int: use histogram matching (0 or 1)
+  initial_moving_transform: "[fixed,moving,1]"  # str: initial transform specification in ANTs format
+  output_registered_image: true  # bool: output registered image
+  output_inverse_registered_image: false  # bool: output inverse registered image

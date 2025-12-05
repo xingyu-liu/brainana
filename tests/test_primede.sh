@@ -366,7 +366,7 @@ python3 -m macacaMRIprep.cli.preproc \
 # test fastsurfercnn
 # ================================================
 dataset_root=/mnt/DataDrive3/xliu/prep_test/banana_test
-config_f=${dataset_root}/preproc/config_linReg_native.json
+config_f=${dataset_root}/preproc/config_linReg_native.yaml
 
 # dataset_dir=${dataset_root}/dataset_2pass
 # output_dir=${dataset_root}/preproc/dataset_2pass

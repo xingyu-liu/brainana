@@ -102,8 +102,9 @@ package "macacaMRIprep System" {
         package "MRI" {
             [calculate_func_tmean] as temp_mean
             [reorient_image_to_target] as img_reorient
-            [check_image_shape] as img_shape
-            [check_image_resolution] as img_res
+            [get_image_shape] as img_shape
+            [get_image_resolution] as img_res
+            [get_image_orientation] as img_orient
         }
         
         package "Templates" {

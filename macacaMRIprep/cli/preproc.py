@@ -253,12 +253,11 @@ def load_and_merge_config(args: argparse.Namespace) -> Dict[str, Any]:
     
     if args.verbose:
         config_overrides.setdefault("general", {})["verbose"] = 1  # --verbose sets to 1
-        # Map verbosity to log level
-        config_overrides.setdefault("general", {})["log_level"] = "INFO"
+        # log_level will be automatically derived from verbose
     
     if args.quiet:
         config_overrides.setdefault("general", {})["verbose"] = 0  # --quiet sets to 0
-        config_overrides.setdefault("general", {})["log_level"] = "ERROR"
+        # log_level will be automatically derived from verbose
     
     if args.n_procs:
         config_overrides.setdefault("general", {})["n_procs"] = args.n_procs
@@ -523,7 +522,13 @@ def main() -> None:
             return
         
         # Setup initial logging
-        log_level = "DEBUG" if args.verbose else ("ERROR" if args.quiet else args.log_level)
+        # Derive log_level from verbose/quiet flags or use explicit --log-level
+        if args.verbose:
+            log_level = "DEBUG"
+        elif args.quiet:
+            log_level = "ERROR"
+        else:
+            log_level = args.log_level
         setup_logging(level=getattr(logging, log_level))
         
         logger.info("Workflow: starting macacaMRIprep BIDS dataset processing")

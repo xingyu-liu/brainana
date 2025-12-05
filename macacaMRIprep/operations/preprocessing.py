@@ -16,7 +16,7 @@ from pathlib import Path
 import nibabel as nib
 
 from .validation import validate_input_file, ensure_working_directory, validate_output_file
-from ..utils import run_command, calculate_func_tmean, reorient_image_to_target, check_image_shape
+from ..utils import run_command, calculate_func_tmean, reorient_image_to_target, reorient_image_to_orientation, get_image_shape
 from ..config import validate_slice_timing_config
 # Import skullstripping from FastSurferCNN package
 import sys
@@ -36,6 +36,7 @@ def reorient(
     logger: logging.Logger,
     modal: str = "func",
     target_file: Optional[Union[str, Path]] = None,
+    target_orientation: Optional[str] = None,
     generate_tmean: bool = False,
 ) -> Dict[str, str]:
     """Reorient the input file (anatomical or functional).
@@ -45,7 +46,8 @@ def reorient(
         working_dir: Working directory
         logger: Logger instance
         modal: Image modality ('anat' or 'func')
-        target_file: Optional target file for reorientation
+        target_file: Optional target file for reorientation (takes precedence over target_orientation)
+        target_orientation: Optional target orientation string (e.g., 'RAS', 'LPI') when no target_file is provided
         generate_tmean: Whether to generate temporal mean (True for func, False for anat)
         
     Returns:
@@ -73,11 +75,19 @@ def reorient(
                "imagef_tmean": None}
 
     if target_file is not None:
-        logger.info(f"Step: reorienting image to target")
+        logger.info(f"Step: reorienting image to target file")
         image_reoriented_path = work_dir / f"{modal}_reoriented.nii.gz"
         reorient_image_to_target(image_path, target_file, image_reoriented_path, logger)
         outputs["imagef_reoriented"] = str(image_reoriented_path)
         logger.info(f"Output: image reoriented to target - {os.path.basename(image_reoriented_path)}")
+        # update the image_path to the reoriented image
+        image_path = str(image_reoriented_path)
+    elif target_orientation is not None:
+        logger.info(f"Step: reorienting image to orientation {target_orientation}")
+        image_reoriented_path = work_dir / f"{modal}_reoriented.nii.gz"
+        reorient_image_to_orientation(image_path, target_orientation, image_reoriented_path, logger)
+        outputs["imagef_reoriented"] = str(image_reoriented_path)
+        logger.info(f"Output: image reoriented to {target_orientation} - {os.path.basename(image_reoriented_path)}")
         # update the image_path to the reoriented image
         image_path = str(image_reoriented_path)
 
@@ -241,7 +251,7 @@ def slice_timing_correction(
     logger.info(f"Data: slice timing pattern - {tpattern}, slice encoding direction - {slice_encoding_direction}")
 
     # double check whether the slice in the encoding direction is matching the slice_timing_data
-    img_shape_original = check_image_shape(image_path, logger)
+    img_shape_original = get_image_shape(image_path, logger)
     if 'x' in slice_encoding_direction:
         img_shape_original = img_shape_original[0]
     elif 'y' in slice_encoding_direction:
@@ -365,7 +375,7 @@ def motion_correction(
         outputs["imagef_motion_corrected_tmean"] = None
 
     # Check number of volumes and skip if fewer than 15
-    shape = check_image_shape(image_path, logger)
+    shape = get_image_shape(image_path, logger)
     if len(shape) < 4:
         logger.error(f"Input image has {len(shape)} dimensions, expected 4D for functional data")
         return outputs
@@ -500,7 +510,7 @@ def despike(
         outputs["imagef_despiked_tmean"] = None
 
     # check if the input is 4D and the last dimension is larger than 15
-    image_shape = check_image_shape(image_path, logger)
+    image_shape = get_image_shape(image_path, logger)
     if len(image_shape) != 4:
         logger.warning("Step: input image is not 4D - skipping despiking")
         return outputs
@@ -643,30 +653,45 @@ def apply_skullstripping(
         os.makedirs(temp_output_dir, exist_ok=True)
         
         try:
-            # Get fix_roi_wm setting from config, with default based on modality
-            # For anatomical data, default to True (models typically generate hemimasks)
-            # For functional data, default to False (may use binary mask models without hemimasks)
-            fix_roi_wm_default = True if modal == 'anat' else False
-            fix_roi_wm = fscnn_cfg.get('fix_roi_wm', fix_roi_wm_default)
+            # Get fix_roi_wm and roi_name settings from config
+            if 'fix_V1_WM' in fscnn_cfg:
+                fix_V1_WM = fscnn_cfg.get('fix_V1_WM', False)
+                if fix_V1_WM:
+                    fix_roi_wm = True
+                    roi_name = 'V1'
+                else:
+                    fix_roi_wm = False
+            else:
+                # Fall back to explicit fix_roi_wm and roi_name settings
+                # For anatomical data, default to True (models typically generate hemimasks)
+                # For functional data, default to False (may use binary mask models without hemimasks)
+                fix_roi_wm_default = True if modal == 'anat' else False
+                fix_roi_wm = fscnn_cfg.get('fix_roi_wm', fix_roi_wm_default)
+                roi_name = fscnn_cfg.get('roi_name', 'V1')
             
             # Call FastSurferCNN skullstripping function
             # Note: This is the FastSurferCNN.inference.skullstrip_fastsurfercnn function imported at the top
-            result = skullstrip_fastsurfercnn(
-                input_image=image_path,
-                modal=modal,
-                output_dir=temp_output_dir,
-                device_id=fscnn_cfg.get('gpu_device', 'auto'),
-                logger=logger,
-                output_data_format='nifti',
-                enable_crop_2round=fscnn_cfg.get('enable_crop_2round', False),
-                plane_weight_coronal=fscnn_cfg.get('plane_weight_coronal'),
-                plane_weight_axial=fscnn_cfg.get('plane_weight_axial'),
-                plane_weight_sagittal=fscnn_cfg.get('plane_weight_sagittal'),
-                use_mixed_model=fscnn_cfg.get('use_mixed_model', False),
-                fix_roi_wm=fix_roi_wm,
-                roi_name=fscnn_cfg.get('roi_name', 'V1'),
-                wm_thr=fscnn_cfg.get('wm_thr', 0.5),
-            )
+            # Build kwargs, only include roi_name if it's not None (when fix_roi_wm is False, roi_name is None)
+            skullstrip_kwargs = {
+                "input_image": image_path,
+                "modal": modal,
+                "output_dir": temp_output_dir,
+                "device_id": fscnn_cfg.get('gpu_device', 'auto'),
+                "logger": logger,
+                "output_data_format": 'nifti',
+                "enable_crop_2round": fscnn_cfg.get('enable_crop_2round', False),
+                "plane_weight_coronal": fscnn_cfg.get('plane_weight_coronal'),
+                "plane_weight_axial": fscnn_cfg.get('plane_weight_axial'),
+                "plane_weight_sagittal": fscnn_cfg.get('plane_weight_sagittal'),
+                "use_mixed_model": fscnn_cfg.get('use_mixed_model', False),
+                "fix_roi_wm": fix_roi_wm,
+            }
+            # Only pass roi_name and wm_thr if fix_roi_wm is True
+            if fix_roi_wm:
+                skullstrip_kwargs["roi_name"] = roi_name
+                skullstrip_kwargs["wm_thr"] = fscnn_cfg.get('wm_thr', 0.5)
+
+            result = skullstrip_fastsurfercnn(**skullstrip_kwargs)
             
             # Extract brain mask path and atlas_name from result
             fastsurfercnn_mask_path = result.get('brain_mask')
@@ -707,55 +732,55 @@ def apply_skullstripping(
             logger.error(f"Workflow: FastSurferCNN failed - {str(e)}")
             raise
 
-    elif method == 'macacaMRINN':
-        logger.info(f"Workflow: starting skullstripping using macacaMRINN method")
-        logger.info(f"Data: input image - {os.path.basename(image_path)}")
-        logger.info(f"System: output path - {brain_mask_path}")
+    # elif method == 'macacaMRINN':
+    #     logger.info(f"Workflow: starting skullstripping using macacaMRINN method")
+    #     logger.info(f"Data: input image - {os.path.basename(image_path)}")
+    #     logger.info(f"System: output path - {brain_mask_path}")
         
-        # Import macacaMRINN skullstripping function
-        try:
-            from macacaMRINN.inference.prediction import skullstripping as macacaMRINN_skullstripping
-        except ImportError as e:
-            raise ImportError(f"Failed to import macacaMRINN: {e}. Make sure macacaMRINN is installed and available.")
+    #     # Import macacaMRINN skullstripping function
+    #     try:
+    #         from macacaMRINN.inference.prediction import skullstripping as macacaMRINN_skullstripping
+    #     except ImportError as e:
+    #         raise ImportError(f"Failed to import macacaMRINN: {e}. Make sure macacaMRINN is installed and available.")
         
-        # Get macacaMRINN configuration parameters
-        mrin_cfg = skull_cfg.get('macacaMRINN', {})
+    #     # Get macacaMRINN configuration parameters
+    #     mrin_cfg = skull_cfg.get('macacaMRINN', {})
         
-        # Don't pass config - let macacaMRINN use parameters from checkpoint
-        # Only pass gpu_device as it's a runtime parameter, not a model parameter
-        try:
-            # Call macacaMRINN skullstripping function
-            # Parameters like rescale_dim, num_input_slices, morph_iterations 
-            # will be loaded from the model checkpoint automatically
-            result = macacaMRINN_skullstripping(
-                input_image=image_path,
-                modal=modal,
-                output_path=brain_mask_path,
-                device_id=mrin_cfg.get('gpu_device', 'auto'),
-                logger=logger,
-                config=None  # Use checkpoint parameters instead
-            )
+    #     # Don't pass config - let macacaMRINN use parameters from checkpoint
+    #     # Only pass gpu_device as it's a runtime parameter, not a model parameter
+    #     try:
+    #         # Call macacaMRINN skullstripping function
+    #         # Parameters like rescale_dim, num_input_slices, morph_iterations 
+    #         # will be loaded from the model checkpoint automatically
+    #         result = macacaMRINN_skullstripping(
+    #             input_image=image_path,
+    #             modal=modal,
+    #             output_path=brain_mask_path,
+    #             device_id=mrin_cfg.get('gpu_device', 'auto'),
+    #             logger=logger,
+    #             config=None  # Use checkpoint parameters instead
+    #         )
             
-            # Extract brain mask path and atlas_name from result
-            mrin_mask_path = result.get('brain_mask')
-            if not mrin_mask_path or not os.path.exists(mrin_mask_path):
-                raise FileNotFoundError(f"macacaMRINN did not generate brain mask at expected location: {mrin_mask_path}")
+    #         # Extract brain mask path and atlas_name from result
+    #         mrin_mask_path = result.get('brain_mask')
+    #         if not mrin_mask_path or not os.path.exists(mrin_mask_path):
+    #             raise FileNotFoundError(f"macacaMRINN did not generate brain mask at expected location: {mrin_mask_path}")
             
-            # Extract atlas_name if available
-            atlas_name = result.get('atlas_name')
+    #         # Extract atlas_name if available
+    #         atlas_name = result.get('atlas_name')
             
-            # The mask should already be at brain_mask_path, but verify
-            if mrin_mask_path != brain_mask_path:
-                # Move the brain mask to the expected location if needed
-                if os.path.exists(mrin_mask_path):
-                    shutil.move(mrin_mask_path, brain_mask_path)
-                    logger.info(f"Output: brain mask moved from {mrin_mask_path} to {brain_mask_path}")
+    #         # The mask should already be at brain_mask_path, but verify
+    #         if mrin_mask_path != brain_mask_path:
+    #             # Move the brain mask to the expected location if needed
+    #             if os.path.exists(mrin_mask_path):
+    #                 shutil.move(mrin_mask_path, brain_mask_path)
+    #                 logger.info(f"Output: brain mask moved from {mrin_mask_path} to {brain_mask_path}")
             
-            logger.info("Workflow: macacaMRINN completed successfully")
+    #         logger.info("Workflow: macacaMRINN completed successfully")
             
-        except Exception as e:
-            logger.error(f"Workflow: macacaMRINN failed - {str(e)}")
-            raise
+    #     except Exception as e:
+    #         logger.error(f"Workflow: macacaMRINN failed - {str(e)}")
+    #         raise
 
     # Validate brain mask
     validate_output_file(brain_mask_path, logger)
@@ -838,7 +863,7 @@ def bias_correction(
     work_dir = ensure_working_directory(working_dir, logger)
     
     # make sure the input image is 3D, not 4D
-    image_shape = check_image_shape(image_path, logger)
+    image_shape = get_image_shape(image_path, logger)
     if image_shape[3] != 1:
         raise ValueError("Input image is not 3D, must be 3D for bias correction")
 

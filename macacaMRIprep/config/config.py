@@ -113,12 +113,25 @@ class Config:
         self._data = validate_config(self._data)
     
     def get_log_level(self) -> str:
-        """Get the configured logging level.
+        """Get the logging level, derived from verbose if log_level not explicitly set.
+        
+        If log_level is explicitly set in config, use it (for backward compatibility).
+        Otherwise, derive log_level from verbose:
+        - verbose=0 -> "ERROR" (quiet)
+        - verbose=1 -> "INFO" (normal)
+        - verbose=2 -> "DEBUG" (verbose)
         
         Returns:
-            Logging level string (default: 'INFO')
+            Logging level string
         """
-        return self.get('general.log_level', 'INFO')
+        # Check if log_level is explicitly set (backward compatibility)
+        if 'general' in self._data and 'log_level' in self._data['general']:
+            return self._data['general']['log_level']
+        
+        # Derive from verbose
+        from ..utils.logger import normalize_verbose, verbose_to_log_level
+        verbose = normalize_verbose(self.get('general.verbose', 1))
+        return verbose_to_log_level(verbose)
     
     def __repr__(self) -> str:
         return f"Config({len(self._data)} sections)"

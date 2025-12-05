@@ -29,10 +29,19 @@ from ..utils import get_logger, setup_logging
 from ..utils.templates import resolve_template
 from ..utils.bids import parse_bids_entities, get_filename_stem, find_bids_metadata
 from ..operations.registration import ants_register
-from ..config import get_config, update_config_from_bids_metadata
+from ..config import get_config, update_config_from_bids_metadata, load_config
 from ..quality_control import generate_qc_report
 from ..quality_control.snapshots import create_registration_qc
 
+# FastSurferCNN imports for PyTorch thread configuration
+try:
+    from FastSurferCNN.utils.threads import setup_pytorch_threads, get_num_threads
+    import torch
+except ImportError:
+    # FastSurferCNN may not be available in all environments
+    setup_pytorch_threads = None
+    get_num_threads = None
+    torch = None
 
 from bids import BIDSLayout
 
@@ -323,26 +332,13 @@ def _process_single_job(
     
     # Setup CPU threads for this worker process (default to 8 for systems with >8 cores)
     # This prevents resource cap issues when multiple processes run in parallel
-    try:
-        # Try to import from macacaMRINN if available (for neural network operations)
-        from macacaMRINN.utils.threads import setup_pytorch_threads
-        setup_pytorch_threads()
-        import torch
-        logger.info(f"System: PyTorch threads set to {torch.get_num_threads()} in worker process")
-    except ImportError:
-        # If macacaMRINN not available, set environment variables directly
-        from os import cpu_count, sched_getaffinity
-        try:
-            num_cores = len(sched_getaffinity(0))
-        except (ImportError, AttributeError):
-            num_cores = cpu_count()
-        
-        num_threads = num_cores if num_cores <= 8 else 8
-        os.environ['OMP_NUM_THREADS'] = str(num_threads)
-        os.environ['MKL_NUM_THREADS'] = str(num_threads)
-        os.environ['NUMEXPR_NUM_THREADS'] = str(num_threads)
-        os.environ['OPENBLAS_NUM_THREADS'] = str(num_threads)
-        logger.info(f"System: CPU threads set to {num_threads} in worker process")
+    if setup_pytorch_threads is not None and get_num_threads is not None:
+        num_threads = get_num_threads()
+        setup_pytorch_threads(num_threads)
+        if torch is not None:
+            logger.info(f"System: PyTorch threads configured to {torch.get_num_threads()} in worker process")
+    else:
+        logger.warning("System: FastSurferCNN not available, skipping PyTorch thread configuration")
     
     # Create subject-level QC directory using PyBIDS-style systematic approach
     output_root = Path(job.output_root)
@@ -1327,11 +1323,9 @@ class BIDSDatasetProcessor:
         # Process config and override template settings with template_spec
         if config is None:
             # Load default config
-            from ..config import get_config
             self.config = get_config()
         elif isinstance(config, (str, Path)):
             # Load config from file
-            from ..config import load_config
             self.config = load_config(config)
         else:
             # Use provided config dict
@@ -1424,8 +1418,6 @@ class BIDSDatasetProcessor:
         Returns:
             List of regex patterns to pass to BIDSLayout ignore parameter
         """
-        import re
-        
         ignore_patterns = []
         
         # Filter by subjects if specified

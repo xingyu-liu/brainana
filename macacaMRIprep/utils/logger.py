@@ -83,6 +83,33 @@ def normalize_verbose(value: Any, default: int = 1) -> int:
     # For any other type, return default
     return default
 
+def verbose_to_log_level(verbose: int) -> str:
+    """Convert verbose integer (0-2) to Python logging level string.
+    
+    Args:
+        verbose: Verbose level (0=quiet, 1=normal, 2=verbose)
+        
+    Returns:
+        Logging level string: "ERROR", "INFO", or "DEBUG"
+        
+    Examples:
+        >>> verbose_to_log_level(0)
+        'ERROR'
+        >>> verbose_to_log_level(1)
+        'INFO'
+        >>> verbose_to_log_level(2)
+        'DEBUG'
+    """
+    # Clamp to valid range
+    verbose = max(0, min(2, int(verbose)))
+    
+    if verbose == 0:
+        return "ERROR"  # Quiet mode - only show errors
+    elif verbose == 1:
+        return "INFO"   # Normal mode - standard information
+    else:  # verbose == 2
+        return "DEBUG"  # Verbose mode - show everything
+
 def setup_logging(
     log_file: Optional[str] = None,
     level: Union[str, int] = logging.INFO,

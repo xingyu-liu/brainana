@@ -1,10 +1,40 @@
 import json
+import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, Union, TYPE_CHECKING
 from copy import deepcopy
 
 
 """Handles loading and saving configuration files in multiple formats."""
+def load_yaml_config(config_path: Union[str, Path]) -> Dict[str, Any]:
+    """Load configuration from YAML file.
+    
+    Args:
+        config_path: Path to YAML configuration file
+        
+    Returns:
+        Configuration dictionary
+        
+    Raises:
+        FileNotFoundError: If config file doesn't exist
+        ValueError: If YAML is invalid
+    """
+    config_file = Path(config_path)
+    
+    if not config_file.exists():
+        raise FileNotFoundError(f"Configuration file not found: {config_file}")
+    
+    try:
+        with open(config_file, 'r') as f:
+            config = yaml.safe_load(f)
+        if config is None:
+            return {}
+        return config
+    except yaml.YAMLError as e:
+        raise ValueError(f"Invalid YAML in config file {config_file}: {e}")
+    except Exception as e:
+        raise ValueError(f"Failed to load config file {config_file}: {e}")
+
 def load_json_config(config_path: Union[str, Path]) -> Dict[str, Any]:
     """Load configuration from JSON file.
     
@@ -78,18 +108,23 @@ def get_default_config() -> Dict[str, Any]:
     Returns:
         Default configuration dictionary
     """
-    # Load from JSON defaults file
-    defaults_path = Path(__file__).parent / "defaults.json"
+    # Load from YAML defaults file (preferred), fallback to JSON for backward compatibility
+    defaults_path_yaml = Path(__file__).parent / "defaults.yaml"
+    defaults_path_json = Path(__file__).parent / "defaults.json"
     
-    if defaults_path.exists():
-        return load_json_config(defaults_path)
+    if defaults_path_yaml.exists():
+        return load_yaml_config(defaults_path_yaml)
+    elif defaults_path_json.exists():
+        return load_json_config(defaults_path_json)
+    else:
+        raise FileNotFoundError(f"Default configuration file not found. Expected defaults.yaml or defaults.json in {Path(__file__).parent}")
     
 
 def load_config(config_path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
     """Load configuration from file or return defaults.
     
     Args:
-        config_path: Path to configuration file (JSON or Python)
+        config_path: Path to configuration file (YAML, JSON, or Python)
         
     Returns:
         Configuration dictionary
@@ -107,13 +142,16 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> Dict[str, Any
             raise FileNotFoundError(f"Configuration file not found: {config_file}")
         
         # Load user configuration based on file extension
-        if config_file.suffix.lower() == '.json':
+        suffix = config_file.suffix.lower()
+        if suffix in ['.yaml', '.yml']:
+            user_config = load_yaml_config(config_file)
+        elif suffix == '.json':
             user_config = load_json_config(config_file)
-        elif config_file.suffix.lower() == '.py':
+        elif suffix == '.py':
             # Legacy Python config support
             user_config = _load_python_config(config_file)
         else:
-            raise ValueError(f"Unsupported config file format: {config_file.suffix}")
+            raise ValueError(f"Unsupported config file format: {suffix}. Supported: .yaml, .yml, .json, .py")
         
         # Merge with defaults
         config = merge_configs(config, user_config)
@@ -148,19 +186,36 @@ def _load_python_config(config_path: Path) -> Dict[str, Any]:
 
 
 def save_config(config: Dict[str, Any], output_path: Union[str, Path]) -> None:
-    """Save configuration to JSON file.
+    """Save configuration to file (YAML or JSON based on extension).
     
     Args:
         config: Configuration dictionary
-        output_path: Path to save configuration
+        output_path: Path to save configuration (determines format by extension)
     """
     output_file = Path(output_path)
     
     # Ensure output directory exists
     output_file.parent.mkdir(parents=True, exist_ok=True)
     
+    # Determine format from extension
+    suffix = output_file.suffix.lower()
+    
     try:
-        with open(output_file, 'w') as f:
-            json.dump(config, f, indent=2, sort_keys=True)
+        if suffix in ['.yaml', '.yml']:
+            # Save as YAML
+            with open(output_file, 'w') as f:
+                yaml.dump(config, f, default_flow_style=False, sort_keys=False, indent=2, allow_unicode=True)
+        elif suffix == '.json':
+            # Save as JSON
+            with open(output_file, 'w') as f:
+                json.dump(config, f, indent=2, sort_keys=True)
+        else:
+            # Default to YAML if no extension or unknown extension
+            if suffix:
+                raise ValueError(f"Unsupported output format: {suffix}. Use .yaml, .yml, or .json")
+            # No extension, default to YAML
+            output_file = output_file.with_suffix('.yaml')
+            with open(output_file, 'w') as f:
+                yaml.dump(config, f, default_flow_style=False, sort_keys=False, indent=2, allow_unicode=True)
     except Exception as e:
         raise ValueError(f"Failed to save config to {output_file}: {e}")

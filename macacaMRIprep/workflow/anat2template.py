@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import logging
+import multiprocessing
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import json
@@ -120,18 +121,23 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                         "imagef": anatf_cur,
                     }
                 )
-                # if template file is not provided, keep the step but skip running it
+                # Get target_file, or default to RAS orientation if no template
+                target_file = str(self.template_file) if self.template_file is not None else None
+                target_orientation = "RAS" if target_file is None else None
+                
                 result = self.pipeline.run_step(
                     step_name,
                     modal="anat",
-                    target_file=str(self.template_file) if self.template_file is not None else None,
+                    target_file=target_file,
+                    target_orientation=target_orientation,
                     generate_tmean=False
                 )
                 if result.output_files["imagef_reoriented"] is not None:
                     anatf_cur = result.output_files["imagef_reoriented"]
                     self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_cur)}")
                 else:
-                    self.logger.info(f"Step: {step_name} skipped - reorientation not needed")
+                    # This should rarely happen since we default to RAS, but kept for defensive programming
+                    self.logger.info(f"Step: {step_name} skipped - no reorientation performed")
             else:
                 self.logger.info("Step: reorient skipped (disabled in configuration)")
 
@@ -516,7 +522,6 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                                 try:
                                     cpu_count = len(os.sched_getaffinity(0))
                                 except (AttributeError, OSError):
-                                    import multiprocessing
                                     cpu_count = multiprocessing.cpu_count()
                                 n_threads = min(8, max(1, cpu_count // 2))  # Use half of available CPUs, max 8
                             

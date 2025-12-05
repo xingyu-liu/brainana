@@ -113,9 +113,11 @@ The project follows a modular architecture with the following main components:
 ##### MRI Utilities
 - `mri.py` - MRI-specific utilities:
   - `calculate_func_tmean` - Calculate functional temporal mean
-  - `reorient_image_to_target` - Image reorientation
-  - `check_image_shape` - Image shape validation
-  - `check_image_resolution` - Image resolution validation
+  - `reorient_image_to_target` - Reorient image to match target file orientation
+  - `reorient_image_to_orientation` - Reorient image to specific orientation (e.g., RAS)
+  - `get_image_shape` - Get image shape
+  - `get_image_resolution` - Get image resolution
+  - `get_image_orientation` - Get image orientation
 
 ##### Template Utilities
 - `templates.py` - Template management:

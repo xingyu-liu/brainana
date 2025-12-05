@@ -33,7 +33,7 @@ from ..utils import (
     resolve_template, 
     run_command, 
     calculate_func_tmean, 
-    check_image_resolution,
+    get_image_resolution,
     get_filename_stem
 )
 from ..operations import apply_skullstripping
@@ -151,10 +151,15 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                         "imagef": funcf_all,
                     }
                 )
+                # Get target_file, or default to RAS orientation if no template
+                target_file = self.target_file
+                target_orientation = "RAS" if target_file is None else None
+                
                 result = self.pipeline.run_step(
                     step_name,
                     modal="func",
-                    target_file=self.target_file,
+                    target_file=target_file,
+                    target_orientation=target_orientation,
                     generate_tmean=True
                 )
             
@@ -391,7 +396,7 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                 fixedf = str(self.target_file)
                 if self.config.get("registration.keep_original_func_resolution", True):
                     reff = self.working_dir / "target_res-func_for_registration.nii.gz"
-                    func_res = np.round(check_image_resolution(funcf_all, logger=self.logger), 1)
+                    func_res = np.round(get_image_resolution(funcf_all, logger=self.logger), 1)
                     cmd_resample = ['3dresample', 
                                     '-input', str(self.target_file), '-prefix', str(reff), 
                                     '-rmode', 'Cu',
@@ -509,7 +514,7 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                     else:
                         # For func2template, still need to resample the template
                         reff = self.working_dir / "target_res-func_for_apply_transforms.nii.gz"
-                        func_res = np.round(check_image_resolution(funcf_all, logger=self.logger), 1)
+                        func_res = np.round(get_image_resolution(funcf_all, logger=self.logger), 1)
                         cmd_resample = ['3dresample', 
                                         '-input', str(fixedf), '-prefix', str(reff), 
                                         '-rmode', 'Cu',

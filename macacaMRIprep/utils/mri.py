@@ -48,78 +48,11 @@ def calculate_func_tmean(
     
     return {"output": outputf} 
 
-
-# def validate_image_orientation(
-#     imagef: str,
-#     targetf: str,
-#     logger: Optional[logging.Logger] = None,
-# ) -> Dict[str, str]:
-#     """Validate image orientation.
-    
-#     Args:
-#         imagef: Input image file
-#         targetf: Target image file that has the correct orientation
-#         logger: Logger instance
-        
-#     Returns:
-#         Dictionary with output file path
-#     """
-
-
-def reorient_image_to_target(
-    imagef: str,
-    targetf: str,
-    outputf: str,
-    logger: Optional[logging.Logger] = None,
-) -> Dict[str, str]:
-    """Reorient image to target.
-    
-    Args:
-        imagef: Input image file
-        targetf: Target image file
-        logger: Logger instance
-    
-    Returns:
-        Dictionary with output file path
-    """
-
-    if logger is None:
-        logger = logging.getLogger(__name__)
-
-    # use 3dinfo to get the orientation of the target file
-    command_3dinfo = [
-        '3dinfo',
-        '-orient',
-        str(targetf)
-    ]
-    returncode, stdout, stderr = run_command(command_3dinfo, step_logger=logger)
-    if returncode == 0:
-        orientation = stdout.strip()  # Remove newline characters
-        logger.info(f"Data: target file orientation - {orientation}")
-    else:
-        logger.error(f"Step: target file orientation retrieval failed - return code {returncode}")
-        raise RuntimeError(f"Failed to get target file orientation: {stderr}")
-
-    # use 3dresample to reorient the image to the target orientation
-    command_3dresample = [
-        '3dresample',
-        '-input', str(imagef),
-        '-prefix', str(outputf),
-        '-orient', orientation
-    ]
-    returncode, stdout, stderr = run_command(command_3dresample, step_logger=logger)
-    if returncode == 0:
-        logger.info(f"Output: image reoriented successfully - {outputf}")
-    else:
-        logger.error(f"Step: image reorientation failed - return code {returncode}")
-        logger.error(f"System: stderr - {stderr}")
-        raise RuntimeError(f"Image reorientation failed: {stderr}")
-    
-def check_image_shape(
+def get_image_shape(
     imagef: str,
     logger: Optional[logging.Logger] = None,
 ) -> list:
-    """Check image shape.
+    """Get image shape.
     
     Args:
         imagef: Input image file
@@ -145,11 +78,11 @@ def check_image_shape(
         logger.error(f"System: stderr - {stderr}")
         raise RuntimeError(f"Image shape retrieval failed: {stderr}")
     
-def check_image_resolution(
+def get_image_resolution(
     imagef: str,
     logger: Optional[logging.Logger] = None,
 ) -> list:
-    """Check image resolution.
+    """Get image resolution.
     
     Args:
         imagef: Input image file
@@ -174,3 +107,116 @@ def check_image_resolution(
         logger.error(f"Step: image resolution retrieval failed - return code {returncode}")
         logger.error(f"System: stderr - {stderr}")
         raise RuntimeError(f"Image resolution retrieval failed: {stderr}")
+
+
+def get_image_orientation(
+    imagef: str,
+    logger: Optional[logging.Logger] = None,
+) -> str:
+    """Get the orientation code of an image file.
+    
+    Args:
+        imagef: Input image file
+        logger: Optional logger instance
+    
+    Returns:
+        Orientation code string (e.g., 'RAS', 'LPI', 'RPS')
+        
+    Raises:
+        RuntimeError: If orientation retrieval fails
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    # use 3dinfo to get the orientation of the image file
+    command_3dinfo = [
+        '3dinfo',
+        '-orient',
+        str(imagef)
+    ]
+    returncode, stdout, stderr = run_command(command_3dinfo, step_logger=logger)
+    if returncode == 0:
+        orientation = stdout.strip()  # Remove newline characters
+        logger.debug(f"Data: image orientation - {orientation}")
+        return orientation
+    else:
+        logger.error(f"Step: image orientation retrieval failed - return code {returncode}")
+        raise RuntimeError(f"Failed to get image orientation: {stderr}")
+
+
+def reorient_image_to_orientation(
+    imagef: str,
+    orientation: str,
+    outputf: str,
+    logger: Optional[logging.Logger] = None,
+) -> Dict[str, str]:
+    """Reorient image to a specific orientation.
+    
+    Args:
+        imagef: Input image file
+        orientation: Target orientation string (e.g., 'RAS', 'LPI', 'RPS')
+        outputf: Output image file
+        logger: Logger instance
+    
+    Returns:
+        Dictionary with output file path
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    # Validate orientation string (should be 3 characters)
+    if len(orientation) != 3:
+        raise ValueError(f"Orientation must be a 3-character string (e.g., 'RAS'), got '{orientation}'")
+    
+    valid_chars = set('RLAPIS')
+    if not all(c in valid_chars for c in orientation.upper()):
+        raise ValueError(f"Orientation contains invalid characters. Must be from {{R, L, A, P, I, S}}, got '{orientation}'")
+    
+    orientation = orientation.upper()
+    logger.info(f"Data: target orientation - {orientation}")
+
+    # use 3dresample to reorient the image to the target orientation
+    command_3dresample = [
+        '3dresample',
+        '-input', str(imagef),
+        '-prefix', str(outputf),
+        '-orient', orientation
+    ]
+    returncode, stdout, stderr = run_command(command_3dresample, step_logger=logger)
+    if returncode == 0:
+        logger.info(f"Output: image reoriented successfully - {outputf}")
+    else:
+        logger.error(f"Step: image reorientation failed - return code {returncode}")
+        logger.error(f"System: stderr - {stderr}")
+        raise RuntimeError(f"Image reorientation failed: {stderr}")
+    
+    return {"output": outputf}
+
+
+def reorient_image_to_target(
+    imagef: str,
+    targetf: str,
+    outputf: str,
+    logger: Optional[logging.Logger] = None,
+) -> Dict[str, str]:
+    """Reorient image to match the orientation of a target file.
+    
+    Args:
+        imagef: Input image file
+        targetf: Target image file (orientation will be extracted from this file)
+        outputf: Output image file
+        logger: Logger instance
+    
+    Returns:
+        Dictionary with output file path
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    # Get orientation from target file
+    orientation = get_image_orientation(targetf, logger)
+    logger.info(f"Data: target file orientation - {orientation}")
+
+    # Use the orientation-based reorientation function
+    return reorient_image_to_orientation(imagef, orientation, outputf, logger)
+    
