@@ -6,7 +6,6 @@ general:
   dataset_dir: "."  # str: path to BIDS dataset directory
   output_dir: "."  # str: path to output directory
   working_dir: "."  # str: path to working directory for intermediate files
-  pipeline_name: "func2anat2template"  # str: "func2anat2template", "func2template", "anat2template", or "func2anat"
   verbose: 2  # int or bool: verbosity level (0=quiet/ERROR, 1=normal/INFO, 2=verbose/DEBUG).
   overwrite: false  # bool: overwrite existing outputs
   generate_report_only: false  # bool: only generate QC reports from existing outputs
@@ -22,11 +21,11 @@ bids_filtering:
 
 template:
   output_space: "NMT2Sym:res-05"  # str: template space in format "TEMPLATE_NAME:[:DESCRIPTION]" (e.g., "NMT2Sym:res-1", "native")
-  description: "Template space specification in format TEMPLATE_NAME:[:DESCRIPTION]"
-  examples:
-    - "native"
-    - "NMT2Sym:res-1"
-    - "NMT2Sym:res-025"
+  # description: "Template space specification in format TEMPLATE_NAME:[:DESCRIPTION]"
+  # examples:
+  #   - "native"
+  #   - "NMT2Sym:res-1"
+  #   - "NMT2Sym:res-025"
 
 anat:
   reorient:
@@ -56,6 +55,7 @@ anat:
     threads: 20  # int: number of threads for surface reconstruction (>= 1)
 
 func:
+  registration_pipeline: "func2anat2template"  # str: "func2anat2template", "func2anat", or "func2template"
   reorient:
     enabled: true  # bool: reorient functional images to template orientation when given, otherwise to RAS
   slice_timing_correction:
@@ -102,9 +102,9 @@ func:
 
 registration:
   enabled: true  # bool: perform image registration
-  func2template_xfm_type: "syn"  # str: transform type for func->template ("translation", "rigid", "affine", or "syn")
   anat2template_xfm_type: "syn"  # str: transform type for anat->template ("translation", "rigid", "affine", or "syn")
   func2anat_xfm_type: "syn"  # str: transform type for func->anat ("translation", "rigid", "affine", or "syn")
+  func2template_xfm_type: "syn"  # str: transform type for func->template ("translation", "rigid", "affine", or "syn")
   keep_original_func_resolution: true  # bool: keep original functional image resolution after registration
   interpolation: "LanczosWindowedSinc"  # str: interpolation method ("Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline", "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc", "LanczosWindowedSinc", "GenericLabel")
   collapse_output_transforms: 1  # int: collapse transforms (0 or 1)

@@ -322,9 +322,11 @@ Advanced Configuration
 
     {
         "general": {
-            "pipeline_name": "func2anat2template",
             "verbose": 2,
             "overwrite": true
+        },
+        "func": {
+            "registration_pipeline": "func2anat2template"
         },
         "registration": {
             "enabled": true,
@@ -363,8 +365,8 @@ Set via configuration:
 .. code-block:: json
 
     {
-        "general": {
-            "pipeline_name": "func2anat2template"
+        "func": {
+            "registration_pipeline": "func2anat2template"
         }
     }
 

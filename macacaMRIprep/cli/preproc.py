@@ -86,7 +86,7 @@ Examples:
     parser.add_argument(
         "--pipeline",
         choices=["func2anat2template", "anat2template", "func2template"],
-        help="Processing pipeline to use: func2anat2template (default), anat2template, func2template. Overrides config pipeline_name."
+        help="Processing pipeline to use: func2anat2template (default), anat2template, func2template. Overrides config func.registration_pipeline."
     )
     
     # BIDS entity filtering
@@ -264,24 +264,24 @@ def load_and_merge_config(args: argparse.Namespace) -> Dict[str, Any]:
     
     # Pipeline selection
     if args.pipeline:
-        config_overrides.setdefault("general", {})["pipeline_name"] = args.pipeline
+        config_overrides.setdefault("func", {})["registration_pipeline"] = args.pipeline
     
     # Processing mode - determine based on pipeline first, then apply overrides
-    pipeline_name = args.pipeline or config.get("general", {}).get("pipeline_name", "func2anat2template")
+    registration_pipeline = args.pipeline or config.get("func", {}).get("registration_pipeline", "func2anat2template")
     
     # Set defaults based on pipeline
     config_overrides.setdefault("general", {})["anat_only"] = False
     config_overrides.setdefault("general", {})["func_only"] = False
     
-    if pipeline_name == "func2template":
+    if registration_pipeline == "func2template":
         # func2template: functional only (direct to template, no anatomical processing needed)
         config_overrides.setdefault("general", {})["run_anat"] = False
         config_overrides.setdefault("general", {})["run_func"] = True
-    elif pipeline_name == "anat2template":
+    elif registration_pipeline == "anat2template":
         # anat2template: anatomical only
         config_overrides.setdefault("general", {})["run_anat"] = True
         config_overrides.setdefault("general", {})["run_func"] = False
-    elif pipeline_name == "func2anat2template":
+    elif registration_pipeline == "func2anat2template":
         # func2anat2template: both anatomical and functional
         config_overrides.setdefault("general", {})["run_anat"] = True
         config_overrides.setdefault("general", {})["run_func"] = True
@@ -439,8 +439,8 @@ def print_configuration(config: Dict[str, Any], args: argparse.Namespace) -> Non
     output_space = config.get("template", {}).get("output_space")
     if output_space:
         print(f"Template space: {output_space}")
-    pipeline_name = config.get("general", {}).get("pipeline_name", "func2anat2template")
-    print(f"Pipeline: {pipeline_name}")
+    registration_pipeline = config.get("func", {}).get("registration_pipeline", "func2anat2template")
+    print(f"Pipeline: {registration_pipeline}")
     
     # Processing mode
     general_config = config.get("general", {})

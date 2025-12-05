@@ -42,8 +42,8 @@ def test_bids_dataset_processing_full_newcastle():
     test_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_datasets"))
     dataset_dir = os.path.join(test_dir, "newcastle")
     # dataset_dir = os.path.join(test_dir, "uwmadison")
-    pipeline_name = "func2anat2template"
-    output_dir = dataset_dir + f"_derivatives_{pipeline_name}"
+    registration_pipeline = "func2anat2template"
+    output_dir = dataset_dir + f"_derivatives_{registration_pipeline}"
 
     print(f"\n=== TESTING FULL ANATOMICAL + FUNCTIONAL PROCESSING ===")
     print(f"Dataset directory: {dataset_dir}")
@@ -57,7 +57,9 @@ def test_bids_dataset_processing_full_newcastle():
         "general": {
             "verbose": 2,
             "overwrite": False,
-            "pipeline_name": pipeline_name
+        },
+        "func": {
+            "registration_pipeline": registration_pipeline
         },
         "template": {
             "output_space": "NMT2Sym:res-1",
@@ -159,8 +161,8 @@ def test_bids_dataset_processing_full_arcaro():
     # Get the test data directory
     test_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_datasets"))
     dataset_dir = os.path.join(test_dir, "arcaro")
-    pipeline_name = "func2template"
-    output_dir = dataset_dir + f"_derivatives_{pipeline_name}"
+    registration_pipeline = "func2template"
+    output_dir = dataset_dir + f"_derivatives_{registration_pipeline}"
 
     print(f"\n=== TESTING FULL ANATOMICAL + FUNCTIONAL PROCESSING ===")
     print(f"Dataset directory: {dataset_dir}")
@@ -174,7 +176,9 @@ def test_bids_dataset_processing_full_arcaro():
         "general": {
             "verbose": 2,
             "overwrite": False,
-            "pipeline_name": pipeline_name
+        },
+        "func": {
+            "registration_pipeline": registration_pipeline
         },
         "template": {
             "output_space": "NMT2Sym:res-1:brainWoCerebellumBrainstem",

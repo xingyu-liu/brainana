@@ -625,12 +625,12 @@ def _process_functional_job(job: FunctionalJob, sub_qc_dir: Path, logger: loggin
     logger.info(f"Workflow: starting functional processing for {job.job_id}")
     
     # Determine functional processing pipeline from config or use default
-    pipeline_name = job.config.get("general.pipeline_name", "func2anat2template")
-    if not pipeline_name:
+    registration_pipeline = job.config.get("func.registration_pipeline", "func2anat2template")
+    if not registration_pipeline:
         # Fallback: try accessing via nested dict (for dict configs)
-        general_dict = job.config.get("general", {})
-        if isinstance(general_dict, dict):
-            pipeline_name = general_dict.get("pipeline_name", "func2anat2template")
+        func_dict = job.config.get("func", {})
+        if isinstance(func_dict, dict):
+            registration_pipeline = func_dict.get("registration_pipeline", "func2anat2template")
     
     # Check if output_space is native - if so, disable template registration
     # Use dot notation for Config class compatibility
@@ -642,13 +642,13 @@ def _process_functional_job(job: FunctionalJob, sub_qc_dir: Path, logger: loggin
             output_space = template_dict.get("output_space", "")
     is_native_space = (output_space and output_space.lower() == "native")
     
-    if pipeline_name == "func2anat":
+    if registration_pipeline == "func2anat":
         target_type = "anat"
         target2template = False
-    elif pipeline_name == "func2anat2template":
+    elif registration_pipeline == "func2anat2template":
         target_type = "anat"
         target2template = not is_native_space  # Simple: False if native, True otherwise
-    elif pipeline_name == "func2template":
+    elif registration_pipeline == "func2template":
         if is_native_space:
             # Native space: switch to func2anat
             logger.info("Pipeline: func2template requested but output_space is native - switching to func2anat")
@@ -659,7 +659,7 @@ def _process_functional_job(job: FunctionalJob, sub_qc_dir: Path, logger: loggin
             target2template = False
     else:
         # Default to func2anat2template if not specified
-        logger.warning(f"Pipeline: unknown pipeline_name '{pipeline_name}', defaulting to func2anat2template")
+        logger.warning(f"Pipeline: unknown registration_pipeline '{registration_pipeline}', defaulting to func2anat2template")
         target_type = "anat"
         target2template = not is_native_space
 
@@ -778,10 +778,10 @@ def _process_functional_job(job: FunctionalJob, sub_qc_dir: Path, logger: loggin
 
         # if none or path not exists, raise an error
         if target_file is None or not Path(target_file).exists():
-            raise ValueError(f"The pipeline {pipeline_name} failed to find a target file ({target_type}) for {func_file.path}")
+            raise ValueError(f"The pipeline {registration_pipeline} failed to find a target file ({target_type}) for {func_file.path}")
         if target2template:
             if target2template_transform is None or not Path(target2template_transform).exists():
-                raise ValueError(f"The pipeline {pipeline_name} failed to find a target({target_type})2template_transform file for {func_file.path}")
+                raise ValueError(f"The pipeline {registration_pipeline} failed to find a target({target_type})2template_transform file for {func_file.path}")
         
         # Log the registration strategy
         if is_native_space:
@@ -1905,19 +1905,19 @@ class BIDSDatasetProcessor:
                     
                     # Add anatomical dependency if there's an anatomical job for this session
                     # BUT only if the pipeline requires anatomical dependencies
-                    pipeline_name = self.config.get("general", {}).get("pipeline_name", "")
+                    registration_pipeline = self.config.get("func", {}).get("registration_pipeline", "")
                     
                     # Only add anatomical dependency if pipeline is NOT func2template
                     # func2template pipeline registers directly to template, no anatomical dependency needed
-                    if anat_files and pipeline_name != "func2template":
+                    if anat_files and registration_pipeline != "func2template":
                         # The anatomical job was just created, so we know its ID
                         anat_job_id = f"sub-{sub}"
                         if ses:
                             anat_job_id += f"_ses-{ses}"
                         anat_job_id += "_anat"
                         func_job.add_dependency(anat_job_id)
-                        self.logger.info(f"Workflow: added anatomical dependency {anat_job_id} for functional job {func_job.job_id} (pipeline: {pipeline_name})")
-                    elif pipeline_name == "func2template":
+                        self.logger.info(f"Workflow: added anatomical dependency {anat_job_id} for functional job {func_job.job_id} (pipeline: {registration_pipeline})")
+                    elif registration_pipeline == "func2template":
                         self.logger.info(f"Workflow: no anatomical dependency for functional job {func_job.job_id} (func2template pipeline)")
                     
                     # Generate cache key for job
