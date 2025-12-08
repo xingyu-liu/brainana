@@ -22,46 +22,46 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # %%
-# # # anat 
-# # input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_anat_2pass_seg.nii.gz"
-# # output_dir = input_image.split('.nii')[0]
+# # anat 
+# input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_anat_2pass_seg.nii.gz"
+# output_dir = input_image.split('.nii')[0]
 
-# surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
-# # input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'
-# # output_dir = f'{surfrecon_dir}/NMT2Sym'
-# input_image = f'{surfrecon_dir}/site-arcaro_sub-baby1_ses-anat_T1w.nii.gz'
-# output_dir = f'{surfrecon_dir}/arcaro_baby1'
-# # # # input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w_brain.nii.gz'
-# # # # output_dir = f'{surfrecon_dir}/NMT2Sym_brain_v2'
-# # # input_image = f'{surfrecon_dir}/test_anat_2pass_seg.nii.gz'
-# # # output_dir = f'{surfrecon_dir}/test_anat_2pass_seg_skullstripping'
+surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
+# input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'
+# output_dir = f'{surfrecon_dir}/NMT2Sym'
+input_image = f'{surfrecon_dir}/site-arcaro_sub-baby1_ses-anat_T1w.nii.gz'
+output_dir = f'{surfrecon_dir}/arcaro_baby1'
+# # # input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w_brain.nii.gz'
+# # # output_dir = f'{surfrecon_dir}/NMT2Sym_brain_v2'
+# # input_image = f'{surfrecon_dir}/test_anat_2pass_seg.nii.gz'
+# # output_dir = f'{surfrecon_dir}/test_anat_2pass_seg_skullstripping'
 
-# modal = "anat"
-# data_format = "nifti"
-# weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
-# use_mixed_model = False
-# enable_crop_2round = True
-
-# fix_roi_wm = True
-# roi_name = "V1"  # Use "V1" for ARM2 atlas (primary_visual_cortex). For other atlases, check ColorLUT for correct ROI name.
-# wm_thr = 0.5
-
-# if fix_roi_wm:
-#     output_dir = output_dir + f"_fix{roi_name}"
-
-
-# func
-input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_func.nii.gz"
-output_dir = input_image.split('.nii')[0]
-
-modal = "func"
+modal = "anat"
 data_format = "nifti"
 weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
 use_mixed_model = False
-enable_crop_2round = False
+enable_crop_2round = True
+
 fix_roi_wm = False
-roi_name = None  # Not used when fix_roi_wm=False
-wm_thr = None  # Default threshold value
+roi_name = "V1"  # Use "V1" for ARM2 atlas (primary_visual_cortex). For other atlases, check ColorLUT for correct ROI name.
+wm_thr = 0.5
+
+if fix_roi_wm:
+    output_dir = output_dir + f"_fix{roi_name}"
+
+
+# # func
+# input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_func.nii.gz"
+# output_dir = input_image.split('.nii')[0]
+
+# modal = "func"
+# data_format = "nifti"
+# weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
+# use_mixed_model = False
+# enable_crop_2round = False
+# fix_roi_wm = False
+# roi_name = None  # Not used when fix_roi_wm=False
+# wm_thr = None  # Default threshold value
 
 if use_mixed_model:
     output_dir = output_dir + "_mixed"

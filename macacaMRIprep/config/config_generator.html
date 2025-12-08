@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>macacaMRIprep Configuration Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.5;
+        }
+        
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+        }
+        
+        h2 {
+            color: #555;
+            margin-top: 30px;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+        }
+        
+        h3 {
+            color: #000;
+            margin-top: 20px;
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+        
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+        }
+        
+        .form-group {
+            margin: 10px 0;
+        }
+        
+        label {
+            display: inline-block;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        
+        .sub-section label {
+            font-weight: normal;
+            color: #000;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+        }
+        
+        .checkbox-group label {
+            font-weight: normal;
+            margin-left: 5px;
+        }
+        
+        input[type="text"],
+        input[type="number"],
+        select,
+        textarea {
+            padding: 5px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+        
+        input[type="text"],
+        textarea {
+            width: 100%;
+        }
+        
+        select {
+            display: inline-block;
+            width: auto;
+            min-width: 200px;
+            margin-left: 5px;
+        }
+        
+        input[type="number"].short {
+            width: 100px;
+        }
+        
+        input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        
+        .sub-section {
+            margin-left: 20px;
+            margin-top: 10px;
+            padding: 10px;
+            background: #f9f9f9;
+        }
+        
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        .error {
+            color: red;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        
+        .help-text {
+            font-size: 11px;
+            color: #666;
+            font-style: italic;
+            margin-top: 3px;
+        }
+        
+        .form-group select + .help-text {
+            display: inline;
+            margin-left: 10px;
+            margin-top: 0;
+        }
+        
+        .save-location {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        
+        .yaml-output {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+        }
+        
+        .yaml-output textarea {
+            width: 100%;
+            min-height: 400px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            padding: 10px;
+        }
+        
+        .copy-button {
+            margin-top: 10px;
+            background: #28a745;
+        }
+        
+        .copy-button:hover {
+            background: #218838;
+        }
+        
+        .success {
+            color: green;
+            padding: 10px;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>macacaMRIprep Configuration Generator</h1>
+    
+    <form id="configForm">
+        <!-- General Settings -->
+        <h2>general</h2>
+        <div class="section">
+            <div class="form-group">
+                <label for="general_verbose">verbose</label>
+                <select id="general_verbose" name="general_verbose">
+                    <option value="0">0</option>
+                    <option value="1">1</option>
+                    <option value="2" selected>2</option>
+                </select>
+                <span class="help-text">(verbosity level: 0=quiet/ERROR, 1=normal/INFO, 2=verbose/DEBUG)</span>
+            </div>
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="general_overwrite" name="general_overwrite">
+                    <label for="general_overwrite">overwrite</label>
+                </div>
+                <div class="help-text">(overwrite existing outputs)</div>
+            </div>
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="general_generate_report_only" name="general_generate_report_only">
+                    <label for="general_generate_report_only">generate_report_only</label>
+                </div>
+                <div class="help-text">(only generate QC reports from existing outputs)</div>
+            </div>
+            <div class="form-group">
+                <label for="general_n_procs">n_procs</label>
+                <input type="number" id="general_n_procs" name="general_n_procs" value="1" min="1" class="short">
+                <div class="help-text">(number of parallel processes, processor is assigned at session level)</div>
+            </div>
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="general_anat_only" name="general_anat_only">
+                    <label for="general_anat_only">anat_only</label>
+                </div>
+                <div class="help-text">(process only anatomical data)</div>
+            </div>
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="general_func_only" name="general_func_only">
+                    <label for="general_func_only">func_only</label>
+                </div>
+                <div class="help-text">(process only functional data)</div>
+            </div>
+        </div>
+
+        <!-- BIDS Filtering -->
+        <h2>bids_filtering</h2>
+        <div class="section">
+            <div class="form-group">
+                <label for="bids_subjects">subjects</label>
+                <input type="text" id="bids_subjects" name="bids_subjects" placeholder='e.g., "01", "02"'>
+                <div class="help-text">(comma-separated, leave empty for processing all)</div>
+            </div>
+            <div class="form-group">
+                <label for="bids_sessions">sessions</label>
+                <input type="text" id="bids_sessions" name="bids_sessions" placeholder='e.g., "01", "02"'>
+                <div class="help-text">(comma-separated, leave empty for null)</div>
+            </div>
+            <div class="form-group">
+                <label for="bids_tasks">tasks</label>
+                <input type="text" id="bids_tasks" name="bids_tasks" placeholder='e.g., "rest", "task"'>
+                <div class="help-text">(comma-separated, leave empty for null)</div>
+            </div>
+            <div class="form-group">
+                <label for="bids_runs">runs</label>
+                <input type="text" id="bids_runs" name="bids_runs" placeholder='e.g., "01", "02"'>
+                <div class="help-text">(comma-separated, leave empty for null)</div>
+            </div>
+        </div>
+
+        <!-- Template -->
+        <h2>template</h2>
+        <div class="section">
+            <div class="form-group">
+                <label for="template_output_space">output_space</label>
+                <input type="text" id="template_output_space" name="template_output_space" value="NMT2Sym:res-05">
+                <div class="help-text">(template space in format "TEMPLATE_NAME:[:DESCRIPTION]", e.g., "native", "NMT2Sym:res-1", "NMT2Sym:res-025")</div>
+            </div>
+        </div>
+
+        <!-- Anatomical Processing -->
+        <h2>anat</h2>
+        <div class="section">
+            <div class="sub-section">
+                <h3>reorient</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="anat_reorient_enabled" name="anat_reorient_enabled" checked>
+                        <label for="anat_reorient_enabled">enabled</label>
+                    </div>
+                    <div class="help-text">(reorient anatomical images to template orientation when given, otherwise to RAS)</div>
+                </div>
+            </div>
+            
+            <div class="sub-section">
+                <h3>bias_correction</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="anat_bias_correction_enabled" name="anat_bias_correction_enabled" checked>
+                        <label for="anat_bias_correction_enabled">enabled</label>
+                    </div>
+                    <div class="help-text">(perform bias field correction)</div>
+                </div>
+                <div class="form-group">
+                    <label for="anat_bias_correction_algorithm">algorithm</label>
+                    <select id="anat_bias_correction_algorithm" name="anat_bias_correction_algorithm">
+                        <option value="N4BiasFieldCorrection" selected>N4BiasFieldCorrection</option>
+                    </select>
+                    <span class="help-text">(bias correction algorithm)</span>
+                </div>
+                <div class="form-group">
+                    <label for="anat_bias_correction_dimension">dimension</label>
+                    <select id="anat_bias_correction_dimension" name="anat_bias_correction_dimension">
+                        <option value="2">2</option>
+                        <option value="3" selected>3</option>
+                        <option value="4">4</option>
+                    </select>
+                    <span class="help-text">(image dimension: 2, 3, or 4)</span>
+                </div>
+                <div class="form-group">
+                    <label for="anat_bias_correction_shrink_factor">shrink_factor</label>
+                    <input type="number" id="anat_bias_correction_shrink_factor" name="anat_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
+                    <div class="help-text">(shrink factor for faster processing, > 0)</div>
+                </div>
+                <div class="form-group">
+                    <label for="anat_bias_correction_bspline_fitting">bspline_fitting</label>
+                    <input type="text" id="anat_bias_correction_bspline_fitting" name="anat_bias_correction_bspline_fitting" value="[ 100 ]">
+                    <div class="help-text">(B-spline fitting parameters in ANTs format)</div>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="anat_bias_correction_rescale_mean_to_100" name="anat_bias_correction_rescale_mean_to_100" checked>
+                        <label for="anat_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
+                    </div>
+                    <div class="help-text">(rescale image mean intensity to 100)</div>
+                </div>
+            </div>
+            
+            <div class="sub-section">
+                <h3>skullstripping</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="anat_skullstripping_enabled" name="anat_skullstripping_enabled" checked>
+                        <label for="anat_skullstripping_enabled">enabled</label>
+                    </div>
+                    <div class="help-text">(perform brain extraction)</div>
+                </div>
+                <div class="form-group">
+                    <label for="anat_skullstripping_method">method</label>
+                    <select id="anat_skullstripping_method" name="anat_skullstripping_method">
+                        <option value="fastSurferCNN" selected>fastSurferCNN</option>
+                    </select>
+                </div>
+                <div id="anat_fastSurferCNN_options" class="sub-section">
+                    <h4>fastSurferCNN</h4>
+                    <div class="form-group">
+                        <label for="anat_fastSurferCNN_gpu_device">gpu_device</label>
+                        <input type="text" id="anat_fastSurferCNN_gpu_device" name="anat_fastSurferCNN_gpu_device" value="auto">
+                        <div class="help-text">(GPU device ID: >= -1 where -1 = CPU, or "auto" for auto-select)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="anat_fastSurferCNN_batch_size">batch_size</label>
+                        <input type="number" id="anat_fastSurferCNN_batch_size" name="anat_fastSurferCNN_batch_size" value="1" min="1">
+                        <div class="help-text">(batch size for inference, >= 1)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="anat_fastSurferCNN_threads">threads</label>
+                        <input type="number" id="anat_fastSurferCNN_threads" name="anat_fastSurferCNN_threads" value="20" min="1">
+                        <div class="help-text">(number of CPU threads, >= 1)</div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="anat_fastSurferCNN_use_mixed_model" name="anat_fastSurferCNN_use_mixed_model">
+                            <label for="anat_fastSurferCNN_use_mixed_model">use_mixed_model</label>
+                        </div>
+                        <div class="help-text">(use mixed precision model)</div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="anat_fastSurferCNN_enable_crop_2round" name="anat_fastSurferCNN_enable_crop_2round" checked>
+                            <label for="anat_fastSurferCNN_enable_crop_2round">enable_crop_2round</label>
+                        </div>
+                        <div class="help-text">(enable two-round cropping for better accuracy)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="anat_fastSurferCNN_plane_weight_coronal">plane_weight_coronal</label>
+                        <input type="number" id="anat_fastSurferCNN_plane_weight_coronal" name="anat_fastSurferCNN_plane_weight_coronal" value="0.3" step="0.1" min="0" max="1">
+                        <div class="help-text">(weight for coronal plane, 0.0-1.0)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="anat_fastSurferCNN_plane_weight_axial">plane_weight_axial</label>
+                        <input type="number" id="anat_fastSurferCNN_plane_weight_axial" name="anat_fastSurferCNN_plane_weight_axial" value="0.5" step="0.1" min="0" max="1">
+                        <div class="help-text">(weight for axial plane, 0.0-1.0)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="anat_fastSurferCNN_plane_weight_sagittal">plane_weight_sagittal</label>
+                        <input type="number" id="anat_fastSurferCNN_plane_weight_sagittal" name="anat_fastSurferCNN_plane_weight_sagittal" value="0.2" step="0.1" min="0" max="1">
+                        <div class="help-text">(weight for sagittal plane, 0.0-1.0)</div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="anat_fastSurferCNN_fix_V1_WM" name="anat_fastSurferCNN_fix_V1_WM" checked>
+                            <label for="anat_fastSurferCNN_fix_V1_WM">fix_V1_WM</label>
+                        </div>
+                        <div class="help-text">(fix missing thin WM in V1 by registering template V1 WM to individual space)</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sub-section">
+                <h3>surface_reconstruction</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="anat_surface_reconstruction_enabled" name="anat_surface_reconstruction_enabled" checked>
+                        <label for="anat_surface_reconstruction_enabled">enabled</label>
+                    </div>
+                    <div class="help-text">(perform surface reconstruction)</div>
+                </div>
+                <div class="form-group">
+                    <label for="anat_surface_reconstruction_threads">threads</label>
+                    <input type="number" id="anat_surface_reconstruction_threads" name="anat_surface_reconstruction_threads" value="20" min="1">
+                    <div class="help-text">(number of threads for surface reconstruction, >= 1)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Functional Processing -->
+        <h2>func</h2>
+        <div class="section">
+            <div class="form-group">
+                <label for="func_registration_pipeline">registration_pipeline</label>
+                <select id="func_registration_pipeline" name="func_registration_pipeline">
+                    <option value="func2anat2template" selected>func2anat2template</option>
+                    <option value="func2anat">func2anat</option>
+                    <option value="func2template">func2template</option>
+                </select>
+                <span class="help-text">("func2anat2template", "func2anat", or "func2template")</span>
+            </div>
+            
+            <div class="sub-section">
+                <h3>reorient</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="func_reorient_enabled" name="func_reorient_enabled" checked>
+                        <label for="func_reorient_enabled">enabled</label>
+                    </div>
+                    <div class="help-text">(reorient functional images to template orientation when given, otherwise to RAS)</div>
+                </div>
+            </div>
+            
+            <div class="sub-section">
+                <h3>slice_timing_correction</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="func_slice_timing_correction_enabled" name="func_slice_timing_correction_enabled" checked>
+                        <label for="func_slice_timing_correction_enabled">enabled</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="func_slice_timing_correction_repetition_time">repetition_time</label>
+                    <input type="number" id="func_slice_timing_correction_repetition_time" name="func_slice_timing_correction_repetition_time" step="0.001" min="0">
+                    <div class="help-text">(repetition time in seconds, leave empty for null/auto-detect from BIDS)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_slice_timing_correction_slice_timing">slice_timing</label>
+                    <input type="text" id="func_slice_timing_correction_slice_timing" name="func_slice_timing_correction_slice_timing" placeholder="e.g., 0.0, 0.1, 0.2">
+                    <div class="help-text">(list of floats: slice times in seconds, leave empty for null/auto-detect from BIDS)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_slice_timing_correction_tzero">tzero</label>
+                    <input type="number" id="func_slice_timing_correction_tzero" name="func_slice_timing_correction_tzero" step="0.001">
+                    <div class="help-text">(reference time point in seconds, leave empty for null/auto-calculate)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_slice_timing_correction_slice_time_ref">slice_time_ref</label>
+                    <input type="number" id="func_slice_timing_correction_slice_time_ref" name="func_slice_timing_correction_slice_time_ref" value="0.5" step="0.1" min="0" max="1">
+                    <div class="help-text">(reference slice time, 0.0-1.0, 0.5 = middle slice)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_slice_timing_correction_slice_encoding_direction">slice_encoding_direction</label>
+                    <select id="func_slice_timing_correction_slice_encoding_direction" name="func_slice_timing_correction_slice_encoding_direction">
+                        <option value="">null (auto-detect)</option>
+                        <option value="x">x</option>
+                        <option value="-x">-x</option>
+                        <option value="y">y</option>
+                        <option value="-y">-y</option>
+                        <option value="z">z</option>
+                        <option value="-z">-z</option>
+                    </select>
+                    <span class="help-text">("x", "-x", "y", "-y", "z", "-z", or null/auto-detect from BIDS)</span>
+                </div>
+            </div>
+            
+            <div class="sub-section">
+                <h3>motion_correction</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="func_motion_correction_enabled" name="func_motion_correction_enabled" checked>
+                        <label for="func_motion_correction_enabled">enabled</label>
+                    </div>
+                    <div class="help-text">(perform motion correction)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_motion_correction_dof">dof</label>
+                    <select id="func_motion_correction_dof" name="func_motion_correction_dof">
+                        <option value="6" selected>6</option>
+                        <option value="9">9</option>
+                        <option value="12">12</option>
+                    </select>
+                    <span class="help-text">(degrees of freedom: 6, 9, or 12)</span>
+                </div>
+                <div class="form-group">
+                    <label for="func_motion_correction_cost">cost</label>
+                    <select id="func_motion_correction_cost" name="func_motion_correction_cost">
+                        <option value="mutualinfo" selected>mutualinfo</option>
+                        <option value="woods">woods</option>
+                        <option value="corratio">corratio</option>
+                        <option value="normcorr">normcorr</option>
+                        <option value="normmi">normmi</option>
+                        <option value="leastsq">leastsq</option>
+                    </select>
+                    <span class="help-text">(cost function: "mutualinfo", "woods", "corratio", "normcorr", "normmi", "leastsq")</span>
+                </div>
+                <div class="form-group">
+                    <label for="func_motion_correction_smooth">smooth</label>
+                    <input type="number" id="func_motion_correction_smooth" name="func_motion_correction_smooth" value="1.0" step="0.1" min="0">
+                    <div class="help-text">(smoothing factor for motion correction)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_motion_correction_ref_vol">ref_vol</label>
+                    <input type="text" id="func_motion_correction_ref_vol" name="func_motion_correction_ref_vol" value="mid">
+                    <div class="help-text">(reference volume: integer index, "Tmean", or "mid")</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_motion_correction_cost_tolerance">cost_tolerance</label>
+                    <input type="number" id="func_motion_correction_cost_tolerance" name="func_motion_correction_cost_tolerance" value="0.01" step="0.001" min="0">
+                    <div class="help-text">(cost function tolerance)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_motion_correction_parameter_tolerance">parameter_tolerance</label>
+                    <input type="number" id="func_motion_correction_parameter_tolerance" name="func_motion_correction_parameter_tolerance" value="0.01" step="0.001" min="0">
+                    <div class="help-text">(parameter tolerance)</div>
+                </div>
+            </div>
+            
+            <div class="sub-section">
+                <h3>despike</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="func_despike_enabled" name="func_despike_enabled" checked>
+                        <label for="func_despike_enabled">enabled</label>
+                    </div>
+                    <div class="help-text">(perform despiking/outlier removal)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_despike_c1">c1</label>
+                    <input type="number" id="func_despike_c1" name="func_despike_c1" value="5" step="0.1" min="0.1">
+                    <div class="help-text">(first cutoff parameter, > 0, must be < c2)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_despike_c2">c2</label>
+                    <input type="number" id="func_despike_c2" name="func_despike_c2" value="10" step="0.1" min="0.1">
+                    <div class="help-text">(second cutoff parameter, > 0, must be > c1)</div>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="func_despike_localedit" name="func_despike_localedit" checked>
+                        <label for="func_despike_localedit">localedit</label>
+                    </div>
+                    <div class="help-text">(use local editing for despiking)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_despike_ignore_first_volumes">ignore_first_volumes</label>
+                    <input type="number" id="func_despike_ignore_first_volumes" name="func_despike_ignore_first_volumes" value="0" min="0">
+                    <div class="help-text">(number of initial volumes to ignore, >= 0)</div>
+                </div>
+            </div>
+            
+            <div class="sub-section">
+                <h3>skullstripping</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="func_skullstripping_enabled" name="func_skullstripping_enabled" checked>
+                        <label for="func_skullstripping_enabled">enabled</label>
+                    </div>
+                    <div class="help-text">(perform brain extraction)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_skullstripping_method">method</label>
+                    <select id="func_skullstripping_method" name="func_skullstripping_method">
+                        <option value="fastSurferCNN" selected>fastSurferCNN</option>
+                    </select>
+                </div>
+                <div id="func_fastSurferCNN_options" class="sub-section">
+                    <h4>fastSurferCNN</h4>
+                    <div class="form-group">
+                        <label for="func_fastSurferCNN_gpu_device">gpu_device</label>
+                        <input type="text" id="func_fastSurferCNN_gpu_device" name="func_fastSurferCNN_gpu_device" value="auto">
+                        <div class="help-text">(GPU device ID: >= -1 where -1 = CPU, or "auto" for auto-select)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="func_fastSurferCNN_batch_size">batch_size</label>
+                        <input type="number" id="func_fastSurferCNN_batch_size" name="func_fastSurferCNN_batch_size" value="1" min="1">
+                        <div class="help-text">(batch size for inference, >= 1)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="func_fastSurferCNN_threads">threads</label>
+                        <input type="number" id="func_fastSurferCNN_threads" name="func_fastSurferCNN_threads" value="1" min="1">
+                        <div class="help-text">(number of CPU threads, >= 1)</div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="func_fastSurferCNN_use_mixed_model" name="func_fastSurferCNN_use_mixed_model">
+                            <label for="func_fastSurferCNN_use_mixed_model">use_mixed_model</label>
+                        </div>
+                        <div class="help-text">(use mixed precision model)</div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="func_fastSurferCNN_enable_crop_2round" name="func_fastSurferCNN_enable_crop_2round">
+                            <label for="func_fastSurferCNN_enable_crop_2round">enable_crop_2round</label>
+                        </div>
+                        <div class="help-text">(enable two-round cropping for better accuracy)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="func_fastSurferCNN_plane_weight_coronal">plane_weight_coronal</label>
+                        <input type="number" id="func_fastSurferCNN_plane_weight_coronal" name="func_fastSurferCNN_plane_weight_coronal" value="0" step="0.1" min="0" max="1">
+                        <div class="help-text">(weight for coronal plane, 0.0-1.0)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="func_fastSurferCNN_plane_weight_axial">plane_weight_axial</label>
+                        <input type="number" id="func_fastSurferCNN_plane_weight_axial" name="func_fastSurferCNN_plane_weight_axial" value="0.6" step="0.1" min="0" max="1">
+                        <div class="help-text">(weight for axial plane, 0.0-1.0)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="func_fastSurferCNN_plane_weight_sagittal">plane_weight_sagittal</label>
+                        <input type="number" id="func_fastSurferCNN_plane_weight_sagittal" name="func_fastSurferCNN_plane_weight_sagittal" value="0.4" step="0.1" min="0" max="1">
+                        <div class="help-text">(weight for sagittal plane, 0.0-1.0)</div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="func_fastSurferCNN_fix_V1_WM" name="func_fastSurferCNN_fix_V1_WM" checked>
+                            <label for="func_fastSurferCNN_fix_V1_WM">fix_V1_WM</label>
+                        </div>
+                        <div class="help-text">(when true, sets fix_roi_wm=True and roi_name='V1'; when false, sets fix_roi_wm=False)</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sub-section">
+                <h3>bias_correction</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="func_bias_correction_enabled" name="func_bias_correction_enabled" checked>
+                        <label for="func_bias_correction_enabled">enabled</label>
+                    </div>
+                    <div class="help-text">(perform bias field correction, only done on tmean image for better registration)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_bias_correction_algorithm">algorithm</label>
+                    <select id="func_bias_correction_algorithm" name="func_bias_correction_algorithm">
+                        <option value="N4BiasFieldCorrection" selected>N4BiasFieldCorrection</option>
+                    </select>
+                    <span class="help-text">(bias correction algorithm, currently only "N4BiasFieldCorrection")</span>
+                </div>
+                <div class="form-group">
+                    <label for="func_bias_correction_dimension">dimension</label>
+                    <select id="func_bias_correction_dimension" name="func_bias_correction_dimension">
+                        <option value="2">2</option>
+                        <option value="3" selected>3</option>
+                        <option value="4">4</option>
+                    </select>
+                    <span class="help-text">(image dimension: 2, 3, or 4)</span>
+                </div>
+                <div class="form-group">
+                    <label for="func_bias_correction_shrink_factor">shrink_factor</label>
+                    <input type="number" id="func_bias_correction_shrink_factor" name="func_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
+                    <div class="help-text">(shrink factor for faster processing, > 0)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_bias_correction_bspline_fitting">bspline_fitting</label>
+                    <input type="text" id="func_bias_correction_bspline_fitting" name="func_bias_correction_bspline_fitting" value="[ 100 ]">
+                    <div class="help-text">(B-spline fitting parameters in ANTs format)</div>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="func_bias_correction_rescale_mean_to_100" name="func_bias_correction_rescale_mean_to_100" checked>
+                        <label for="func_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
+                    </div>
+                    <div class="help-text">(rescale image mean intensity to 100)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Registration -->
+        <h2>registration</h2>
+        <div class="section">
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="registration_enabled" name="registration_enabled" checked>
+                    <label for="registration_enabled">enabled</label>
+                </div>
+                <div class="help-text">(perform image registration)</div>
+            </div>
+            <div class="form-group">
+                <label for="registration_anat2template_xfm_type">anat2template_xfm_type</label>
+                <select id="registration_anat2template_xfm_type" name="registration_anat2template_xfm_type">
+                    <option value="translation">translation</option>
+                    <option value="rigid">rigid</option>
+                    <option value="affine">affine</option>
+                    <option value="syn" selected>syn</option>
+                </select>
+                <span class="help-text">(transform type for anat->template: "translation", "rigid", "affine", or "syn")</span>
+            </div>
+            <div class="form-group">
+                <label for="registration_func2anat_xfm_type">func2anat_xfm_type</label>
+                <select id="registration_func2anat_xfm_type" name="registration_func2anat_xfm_type">
+                    <option value="translation">translation</option>
+                    <option value="rigid">rigid</option>
+                    <option value="affine">affine</option>
+                    <option value="syn" selected>syn</option>
+                </select>
+                <span class="help-text">(transform type for func->anat: "translation", "rigid", "affine", or "syn")</span>
+            </div>
+            <div class="form-group">
+                <label for="registration_func2template_xfm_type">func2template_xfm_type</label>
+                <select id="registration_func2template_xfm_type" name="registration_func2template_xfm_type">
+                    <option value="translation">translation</option>
+                    <option value="rigid">rigid</option>
+                    <option value="affine">affine</option>
+                    <option value="syn" selected>syn</option>
+                </select>
+                <span class="help-text">(transform type for func->template: "translation", "rigid", "affine", or "syn")</span>
+            </div>
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="registration_keep_original_func_resolution" name="registration_keep_original_func_resolution" checked>
+                    <label for="registration_keep_original_func_resolution">keep_original_func_resolution</label>
+                </div>
+                <div class="help-text">(keep original functional image resolution after registration)</div>
+            </div>
+            <div class="form-group">
+                <label for="registration_interpolation">interpolation</label>
+                <select id="registration_interpolation" name="registration_interpolation">
+                    <option value="Linear">Linear</option>
+                    <option value="NearestNeighbor">NearestNeighbor</option>
+                    <option value="MultiLabel">MultiLabel</option>
+                    <option value="Gaussian">Gaussian</option>
+                    <option value="BSpline">BSpline</option>
+                    <option value="CosineWindowedSinc">CosineWindowedSinc</option>
+                    <option value="WelchWindowedSinc">WelchWindowedSinc</option>
+                    <option value="HammingWindowedSinc">HammingWindowedSinc</option>
+                    <option value="LanczosWindowedSinc" selected>LanczosWindowedSinc</option>
+                    <option value="GenericLabel">GenericLabel</option>
+                </select>
+                <span class="help-text">(interpolation method)</span>
+            </div>
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="registration_output_registered_image" name="registration_output_registered_image" checked>
+                    <label for="registration_output_registered_image">output_registered_image</label>
+                </div>
+                <div class="help-text">(output registered image)</div>
+            </div>
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="registration_output_inverse_registered_image" name="registration_output_inverse_registered_image">
+                    <label for="registration_output_inverse_registered_image">output_inverse_registered_image</label>
+                </div>
+                <div class="help-text">(output inverse registered image)</div>
+            </div>
+        </div>
+
+        <!-- Preview Section (injected by CLI if dataset_dir provided) -->
+        <!-- PREVIEW_PLACEHOLDER -->
+        
+        <!-- Orientation Mismatch Correction -->
+        <h2>orientation_mismatch_correction</h2>
+        <div class="section">
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="orientation_mismatch_correction_enabled" name="orientation_mismatch_correction_enabled" checked>
+                    <label for="orientation_mismatch_correction_enabled">enabled</label>
+                </div>
+                <div class="help-text">(perform orientation mismatch correction - this only works if all scans are in the same orientation, as it infers the correct orientation from the first scan)</div>
+            </div>
+            <div class="form-group">
+                <label for="orientation_mismatch_correction_real_A_is_actually_labeled_as">real_A_is_actually_labeled_as</label>
+                <select id="orientation_mismatch_correction_real_A_is_actually_labeled_as" name="orientation_mismatch_correction_real_A_is_actually_labeled_as">
+                    <option value="A" selected>A (Anterior)</option>
+                    <option value="P">P (Posterior)</option>
+                    <option value="S">S (Superior)</option>
+                    <option value="I">I (Inferior)</option>
+                    <option value="L">L (Left)</option>
+                    <option value="R">R (Right)</option>
+                </select>
+                <span class="help-text">(what the real A axis is actually labeled as in the image)</span>
+            </div>
+            <div class="form-group">
+                <label for="orientation_mismatch_correction_real_P_is_actually_labeled_as">real_P_is_actually_labeled_as</label>
+                <select id="orientation_mismatch_correction_real_P_is_actually_labeled_as" name="orientation_mismatch_correction_real_P_is_actually_labeled_as">
+                    <option value="A">A (Anterior)</option>
+                    <option value="P" selected>P (Posterior)</option>
+                    <option value="S">S (Superior)</option>
+                    <option value="I">I (Inferior)</option>
+                    <option value="L">L (Left)</option>
+                    <option value="R">R (Right)</option>
+                </select>
+                <span class="help-text">(what the real P axis is actually labeled as in the image)</span>
+            </div>
+            <div class="form-group">
+                <label for="orientation_mismatch_correction_real_S_is_actually_labeled_as">real_S_is_actually_labeled_as</label>
+                <select id="orientation_mismatch_correction_real_S_is_actually_labeled_as" name="orientation_mismatch_correction_real_S_is_actually_labeled_as">
+                    <option value="A">A (Anterior)</option>
+                    <option value="P">P (Posterior)</option>
+                    <option value="S" selected>S (Superior)</option>
+                    <option value="I">I (Inferior)</option>
+                    <option value="L">L (Left)</option>
+                    <option value="R">R (Right)</option>
+                </select>
+                <span class="help-text">(what the real S axis is actually labeled as in the image)</span>
+            </div>
+            <div class="form-group">
+                <label for="orientation_mismatch_correction_real_I_is_actually_labeled_as">real_I_is_actually_labeled_as</label>
+                <select id="orientation_mismatch_correction_real_I_is_actually_labeled_as" name="orientation_mismatch_correction_real_I_is_actually_labeled_as">
+                    <option value="A">A (Anterior)</option>
+                    <option value="P">P (Posterior)</option>
+                    <option value="S">S (Superior)</option>
+                    <option value="I" selected>I (Inferior)</option>
+                    <option value="L">L (Left)</option>
+                    <option value="R">R (Right)</option>
+                </select>
+                <span class="help-text">(what the real I axis is actually labeled as in the image)</span>
+            </div>
+        </div>
+
+        <button type="button" onclick="generateConfig()">Generate Preprocessing Configuration File</button>
+        <div id="errorMessages"></div>
+        <div id="yamlOutput" class="yaml-output hidden">
+            <h3>Generated Configuration YAML</h3>
+            <textarea id="yamlText" readonly></textarea>
+            <button type="button" class="copy-button" onclick="copyToClipboard()">Copy to Clipboard</button>
+            <button type="button" class="copy-button" onclick="downloadConfig()" style="margin-left: 10px;">Download Config File</button>
+        </div>
+    </form>
+
+    <script>
+        // Default configuration embedded from defaults.yaml
+        const defaults = {
+            _description: "Default configuration for macacaMRIprep preprocessing pipeline",
+            _version: "1.1",
+            general: {
+                verbose: 2,
+                overwrite: false,
+                generate_report_only: false,
+                n_procs: 1,
+                anat_only: false,
+                func_only: false
+            },
+            bids_filtering: {
+                subjects: null,
+                sessions: null,
+                tasks: null,
+                runs: null
+            },
+            template: {
+                output_space: "NMT2Sym:res-05"
+            },
+            anat: {
+                reorient: { enabled: true },
+                bias_correction: {
+                    enabled: true,
+                    algorithm: "N4BiasFieldCorrection",
+                    dimension: 3,
+                    shrink_factor: 2,
+                    bspline_fitting: "[ 100 ]",
+                    rescale_mean_to_100: true
+                },
+                skullstripping: {
+                    enabled: true,
+                    method: "fastSurferCNN",
+                    fastSurferCNN: {
+                        gpu_device: "auto",
+                        batch_size: 1,
+                        threads: 20,
+                        use_mixed_model: false,
+                        enable_crop_2round: true,
+                        plane_weight_coronal: 0.3,
+                        plane_weight_axial: 0.5,
+                        plane_weight_sagittal: 0.2,
+                        fix_V1_WM: true
+                    }
+                },
+                surface_reconstruction: {
+                    enabled: true,
+                    threads: 20
+                }
+            },
+            func: {
+                registration_pipeline: "func2anat2template",
+                reorient: { enabled: true },
+                slice_timing_correction: {
+                    enabled: true,
+                    repetition_time: null,
+                    slice_timing: null,
+                    tzero: null,
+                    slice_time_ref: 0.5,
+                    slice_encoding_direction: null
+                },
+                motion_correction: {
+                    enabled: true,
+                    dof: 6,
+                    cost: "mutualinfo",
+                    smooth: 1.0,
+                    ref_vol: "mid",
+                    cost_tolerance: 0.01,
+                    parameter_tolerance: 0.01
+                },
+                despike: {
+                    enabled: true,
+                    c1: 5,
+                    c2: 10,
+                    localedit: true,
+                    ignore_first_volumes: 0
+                },
+                skullstripping: {
+                    enabled: true,
+                    method: "fastSurferCNN",
+                    fastSurferCNN: {
+                        gpu_device: "auto",
+                        batch_size: 1,
+                        threads: 1,
+                        use_mixed_model: false,
+                        enable_crop_2round: false,
+                        plane_weight_coronal: 0,
+                        plane_weight_axial: 0.6,
+                        plane_weight_sagittal: 0.4,
+                        fix_V1_WM: true
+                    }
+                },
+                bias_correction: {
+                    enabled: true,
+                    algorithm: "N4BiasFieldCorrection",
+                    dimension: 3,
+                    shrink_factor: 2,
+                    bspline_fitting: "[ 100 ]",
+                    rescale_mean_to_100: true
+                }
+            },
+            registration: {
+                enabled: true,
+                anat2template_xfm_type: "syn",
+                func2anat_xfm_type: "syn",
+                func2template_xfm_type: "syn",
+                keep_original_func_resolution: true,
+                interpolation: "LanczosWindowedSinc",
+                output_registered_image: true,
+                output_inverse_registered_image: false
+            },
+            orientation_mismatch_correction: {
+                enabled: true,
+                real_A_is_actually_labeled_as: "A",
+                real_P_is_actually_labeled_as: "P",
+                real_S_is_actually_labeled_as: "S",
+                real_I_is_actually_labeled_as: "I"
+            }
+        };
+
+        // Show/hide conditional sections
+        function updateConditionalVisibility() {
+            const anatMethod = document.getElementById('anat_skullstripping_method').value;
+            const funcMethod = document.getElementById('func_skullstripping_method').value;
+            
+            document.getElementById('anat_fastSurferCNN_options').classList.toggle('hidden', anatMethod !== 'fastSurferCNN');
+            document.getElementById('func_fastSurferCNN_options').classList.toggle('hidden', funcMethod !== 'fastSurferCNN');
+        }
+
+        // Initialize conditional visibility
+        updateConditionalVisibility();
+
+        // Validation functions matching Python validation
+        function validateConfig(config) {
+            const errors = [];
+            
+            // Validate general
+            if (config.general.n_procs < 1) {
+                errors.push("general.n_procs must be >= 1");
+            }
+            
+            // Validate motion correction
+            if (config.func.motion_correction.enabled) {
+                const dof = config.func.motion_correction.dof;
+                if (![6, 9, 12].includes(dof)) {
+                    errors.push("func.motion_correction.dof must be 6, 9, or 12");
+                }
+                
+                const cost = config.func.motion_correction.cost;
+                const validCosts = ["mutualinfo", "woods", "corratio", "normcorr", "normmi", "leastsq"];
+                if (!validCosts.includes(cost)) {
+                    errors.push(`func.motion_correction.cost must be one of ${validCosts.join(', ')}`);
+                }
+                
+                const refVol = config.func.motion_correction.ref_vol;
+                if (typeof refVol !== 'string' && typeof refVol !== 'number') {
+                    errors.push("func.motion_correction.ref_vol must be an integer or 'Tmean'/'mid'");
+                } else if (typeof refVol === 'string' && !['Tmean', 'mid'].includes(refVol)) {
+                    if (isNaN(parseInt(refVol))) {
+                        errors.push("func.motion_correction.ref_vol must be an integer or 'Tmean'/'mid'");
+                    }
+                }
+            }
+            
+            // Validate despike
+            if (config.func.despike.enabled) {
+                const c1 = config.func.despike.c1;
+                const c2 = config.func.despike.c2;
+                if (c1 <= 0) {
+                    errors.push("func.despike.c1 must be > 0");
+                }
+                if (c2 <= 0) {
+                    errors.push("func.despike.c2 must be > 0");
+                }
+                if (c1 >= c2) {
+                    errors.push("func.despike.c1 must be < c2");
+                }
+            }
+            
+            // Validate slice timing
+            if (config.func.slice_timing_correction.enabled) {
+                const tr = config.func.slice_timing_correction.repetition_time;
+                if (tr !== null && tr !== undefined && tr <= 0) {
+                    errors.push("func.slice_timing_correction.repetition_time must be > 0");
+                }
+                
+                const tzero = config.func.slice_timing_correction.tzero;
+                if (tzero !== null && tzero !== undefined) {
+                    if (typeof tzero !== 'number') {
+                        errors.push("func.slice_timing_correction.tzero must be a number");
+                    } else if (tr !== null && tr !== undefined && tzero > tr) {
+                        errors.push("func.slice_timing_correction.tzero must be < repetition_time");
+                    }
+                }
+            }
+            
+            // Validate skullstripping
+            function validateSkullstripping(config, prefix) {
+                if (!config.enabled) return;
+                
+                const method = config.method;
+                if (method !== 'fastSurferCNN') {
+                    errors.push(`${prefix}.skullstripping.method must be 'fastSurferCNN'`);
+                    return;
+                }
+                
+                if (config.fastSurferCNN) {
+                    const fscnn = config.fastSurferCNN;
+                    
+                    if (fscnn.gpu_device !== 'auto' && (typeof fscnn.gpu_device !== 'number' || fscnn.gpu_device < -1)) {
+                        errors.push(`${prefix}.skullstripping.fastSurferCNN.gpu_device must be integer >= -1 or 'auto'`);
+                    }
+                    
+                    if (!Number.isInteger(fscnn.batch_size) || fscnn.batch_size < 1) {
+                        errors.push(`${prefix}.skullstripping.fastSurferCNN.batch_size must be a positive integer`);
+                    }
+                    
+                    if (!Number.isInteger(fscnn.threads) || fscnn.threads < 1) {
+                        errors.push(`${prefix}.skullstripping.fastSurferCNN.threads must be a positive integer`);
+                    }
+                    
+                    ['plane_weight_coronal', 'plane_weight_axial', 'plane_weight_sagittal'].forEach(weight => {
+                        if (fscnn[weight] !== null && fscnn[weight] !== undefined) {
+                            if (typeof fscnn[weight] !== 'number' || fscnn[weight] < 0 || fscnn[weight] > 1) {
+                                errors.push(`${prefix}.skullstripping.fastSurferCNN.${weight} must be between 0 and 1`);
+                            }
+                        }
+                    });
+                }
+            }
+            
+            validateSkullstripping(config.anat.skullstripping, 'anat');
+            validateSkullstripping(config.func.skullstripping, 'func');
+            
+            // Validate bias correction
+            function validateBiasCorrection(config, prefix) {
+                if (!config.enabled) return;
+                
+                if (![2, 3, 4].includes(config.dimension)) {
+                    errors.push(`${prefix}.bias_correction.dimension must be 2, 3, or 4`);
+                }
+                
+                if (config.shrink_factor <= 0) {
+                    errors.push(`${prefix}.bias_correction.shrink_factor must be > 0`);
+                }
+            }
+            
+            validateBiasCorrection(config.anat.bias_correction, 'anat');
+            validateBiasCorrection(config.func.bias_correction, 'func');
+            
+            // Validate surface reconstruction
+            if (config.anat.surface_reconstruction.enabled) {
+                const threads = config.anat.surface_reconstruction.threads;
+                if (threads !== null && threads !== undefined) {
+                    if (!Number.isInteger(threads) || threads < 1) {
+                        errors.push("anat.surface_reconstruction.threads must be an integer >= 1");
+                    }
+                }
+            }
+            
+            // Validate registration
+            if (config.registration.enabled) {
+                const validInterpolations = [
+                    "Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline",
+                    "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc",
+                    "LanczosWindowedSinc", "GenericLabel"
+                ];
+                if (!validInterpolations.includes(config.registration.interpolation)) {
+                    errors.push(`registration.interpolation must be one of ${validInterpolations.join(', ')}`);
+                }
+            }
+            
+            return errors;
+        }
+
+        // Parse list input (comma-separated)
+        function parseListInput(value) {
+            if (!value || value.trim() === '') {
+                return null;
+            }
+            return value.split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
+        }
+
+        // Parse number or null
+        function parseNumberOrNull(value) {
+            if (!value || value.trim() === '') {
+                return null;
+            }
+            const num = parseFloat(value);
+            return isNaN(num) ? null : num;
+        }
+
+        // Parse integer or string (for ref_vol)
+        function parseRefVol(value) {
+            if (value === 'mid' || value === 'Tmean') {
+                return value;
+            }
+            const num = parseInt(value);
+            if (!isNaN(num)) {
+                return num;
+            }
+            return value;
+        }
+
+        // Generate YAML from config object
+        function objectToYAML(obj, indent = 0) {
+            const indentStr = '  '.repeat(indent);
+            let yaml = '';
+            
+            for (const [key, value] of Object.entries(obj)) {
+                if (key.startsWith('_')) {
+                    if (typeof value === 'string') {
+                        yaml += `${indentStr}${key}: "${value}"\n`;
+                    } else {
+                        yaml += `${indentStr}${key}: ${value}\n`;
+                    }
+                } else if (value === null) {
+                    yaml += `${indentStr}${key}: null\n`;
+                } else if (typeof value === 'boolean') {
+                    yaml += `${indentStr}${key}: ${value}\n`;
+                } else if (typeof value === 'number') {
+                    yaml += `${indentStr}${key}: ${value}\n`;
+                } else if (typeof value === 'string') {
+                    if (value.includes(':') || value.includes('[') || value.includes(']') || value.includes(',')) {
+                        yaml += `${indentStr}${key}: "${value}"\n`;
+                    } else {
+                        yaml += `${indentStr}${key}: ${value}\n`;
+                    }
+                } else if (Array.isArray(value)) {
+                    if (value.length === 0) {
+                        yaml += `${indentStr}${key}: []\n`;
+                    } else {
+                        yaml += `${indentStr}${key}:\n`;
+                        value.forEach(item => {
+                            if (typeof item === 'string') {
+                                yaml += `${indentStr}  - "${item}"\n`;
+                            } else {
+                                yaml += `${indentStr}  - ${item}\n`;
+                            }
+                        });
+                    }
+                } else if (typeof value === 'object') {
+                    yaml += `${indentStr}${key}:\n`;
+                    yaml += objectToYAML(value, indent + 1);
+                }
+            }
+            
+            return yaml;
+        }
+
+        // Copy to clipboard
+        function copyToClipboard() {
+            const yamlText = document.getElementById('yamlText');
+            yamlText.select();
+            document.execCommand('copy');
+            alert('YAML copied to clipboard!');
+        }
+        
+        // Download config file
+        async function downloadConfig() {
+            const yaml = document.getElementById('yamlText').value;
+            const filename = 'config.yaml';
+            
+            // Try to use File System Access API if available (allows user to choose save location)
+            if ('showSaveFilePicker' in window) {
+                try {
+                    const fileHandle = await window.showSaveFilePicker({
+                        suggestedName: filename,
+                        types: [{
+                            description: 'YAML Configuration File',
+                            accept: { 'text/yaml': ['.yaml', '.yml'] }
+                        }]
+                    });
+                    
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(yaml);
+                    await writable.close();
+                    
+                    alert('Configuration file saved successfully!');
+                    return;
+                } catch (err) {
+                    // User cancelled or error occurred, fall back to download
+                    if (err.name !== 'AbortError') {
+                        console.error('Error saving file:', err);
+                    }
+                }
+            }
+            
+            // Fallback: download to default download folder
+            const blob = new Blob([yaml], { type: 'text/yaml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            alert('Configuration file downloaded to your default download folder.');
+        }
+
+        // Collect form data and generate config
+        function generateConfig() {
+            const errorDiv = document.getElementById('errorMessages');
+            const yamlOutput = document.getElementById('yamlOutput');
+            errorDiv.innerHTML = '';
+            yamlOutput.classList.add('hidden');
+            
+            // Collect all form values
+            const config = JSON.parse(JSON.stringify(defaults));
+            
+            // General
+            config.general.verbose = parseInt(document.getElementById('general_verbose').value);
+            config.general.overwrite = document.getElementById('general_overwrite').checked;
+            config.general.generate_report_only = document.getElementById('general_generate_report_only').checked;
+            config.general.n_procs = parseInt(document.getElementById('general_n_procs').value);
+            config.general.anat_only = document.getElementById('general_anat_only').checked;
+            config.general.func_only = document.getElementById('general_func_only').checked;
+            
+            // BIDS filtering
+            config.bids_filtering.subjects = parseListInput(document.getElementById('bids_subjects').value);
+            config.bids_filtering.sessions = parseListInput(document.getElementById('bids_sessions').value);
+            config.bids_filtering.tasks = parseListInput(document.getElementById('bids_tasks').value);
+            config.bids_filtering.runs = parseListInput(document.getElementById('bids_runs').value);
+            
+            // Template
+            config.template.output_space = document.getElementById('template_output_space').value || defaults.template.output_space;
+            
+            // Anatomical
+            config.anat.reorient.enabled = document.getElementById('anat_reorient_enabled').checked;
+            config.anat.bias_correction.enabled = document.getElementById('anat_bias_correction_enabled').checked;
+            config.anat.bias_correction.algorithm = document.getElementById('anat_bias_correction_algorithm').value;
+            config.anat.bias_correction.dimension = parseInt(document.getElementById('anat_bias_correction_dimension').value);
+            config.anat.bias_correction.shrink_factor = parseFloat(document.getElementById('anat_bias_correction_shrink_factor').value);
+            config.anat.bias_correction.bspline_fitting = document.getElementById('anat_bias_correction_bspline_fitting').value;
+            config.anat.bias_correction.rescale_mean_to_100 = document.getElementById('anat_bias_correction_rescale_mean_to_100').checked;
+            
+            config.anat.skullstripping.enabled = document.getElementById('anat_skullstripping_enabled').checked;
+            config.anat.skullstripping.method = document.getElementById('anat_skullstripping_method').value;
+            if (config.anat.skullstripping.method === 'fastSurferCNN') {
+                const gpuDevice = document.getElementById('anat_fastSurferCNN_gpu_device').value;
+                config.anat.skullstripping.fastSurferCNN.gpu_device = (gpuDevice === 'auto' || gpuDevice === '') ? 'auto' : parseInt(gpuDevice);
+                config.anat.skullstripping.fastSurferCNN.batch_size = parseInt(document.getElementById('anat_fastSurferCNN_batch_size').value);
+                config.anat.skullstripping.fastSurferCNN.threads = parseInt(document.getElementById('anat_fastSurferCNN_threads').value);
+                config.anat.skullstripping.fastSurferCNN.use_mixed_model = document.getElementById('anat_fastSurferCNN_use_mixed_model').checked;
+                config.anat.skullstripping.fastSurferCNN.enable_crop_2round = document.getElementById('anat_fastSurferCNN_enable_crop_2round').checked;
+                config.anat.skullstripping.fastSurferCNN.plane_weight_coronal = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_coronal').value);
+                config.anat.skullstripping.fastSurferCNN.plane_weight_axial = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_axial').value);
+                config.anat.skullstripping.fastSurferCNN.plane_weight_sagittal = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_sagittal').value);
+                config.anat.skullstripping.fastSurferCNN.fix_V1_WM = document.getElementById('anat_fastSurferCNN_fix_V1_WM').checked;
+            }
+            
+            config.anat.surface_reconstruction.enabled = document.getElementById('anat_surface_reconstruction_enabled').checked;
+            config.anat.surface_reconstruction.threads = parseInt(document.getElementById('anat_surface_reconstruction_threads').value);
+            
+            // Functional
+            config.func.registration_pipeline = document.getElementById('func_registration_pipeline').value;
+            config.func.reorient.enabled = document.getElementById('func_reorient_enabled').checked;
+            
+            config.func.slice_timing_correction.enabled = document.getElementById('func_slice_timing_correction_enabled').checked;
+            const tr = parseNumberOrNull(document.getElementById('func_slice_timing_correction_repetition_time').value);
+            config.func.slice_timing_correction.repetition_time = tr;
+            const sliceTiming = parseListInput(document.getElementById('func_slice_timing_correction_slice_timing').value);
+            config.func.slice_timing_correction.slice_timing = sliceTiming ? sliceTiming.map(s => parseFloat(s)) : null;
+            const tzero = parseNumberOrNull(document.getElementById('func_slice_timing_correction_tzero').value);
+            config.func.slice_timing_correction.tzero = tzero;
+            config.func.slice_timing_correction.slice_time_ref = parseFloat(document.getElementById('func_slice_timing_correction_slice_time_ref').value);
+            const sliceEncodingDir = document.getElementById('func_slice_timing_correction_slice_encoding_direction').value;
+            config.func.slice_timing_correction.slice_encoding_direction = sliceEncodingDir === '' ? null : sliceEncodingDir;
+            
+            config.func.motion_correction.enabled = document.getElementById('func_motion_correction_enabled').checked;
+            config.func.motion_correction.dof = parseInt(document.getElementById('func_motion_correction_dof').value);
+            config.func.motion_correction.cost = document.getElementById('func_motion_correction_cost').value;
+            config.func.motion_correction.smooth = parseFloat(document.getElementById('func_motion_correction_smooth').value);
+            const refVol = document.getElementById('func_motion_correction_ref_vol').value;
+            config.func.motion_correction.ref_vol = parseRefVol(refVol);
+            config.func.motion_correction.cost_tolerance = parseFloat(document.getElementById('func_motion_correction_cost_tolerance').value);
+            config.func.motion_correction.parameter_tolerance = parseFloat(document.getElementById('func_motion_correction_parameter_tolerance').value);
+            
+            config.func.despike.enabled = document.getElementById('func_despike_enabled').checked;
+            config.func.despike.c1 = parseFloat(document.getElementById('func_despike_c1').value);
+            config.func.despike.c2 = parseFloat(document.getElementById('func_despike_c2').value);
+            config.func.despike.localedit = document.getElementById('func_despike_localedit').checked;
+            config.func.despike.ignore_first_volumes = parseInt(document.getElementById('func_despike_ignore_first_volumes').value);
+            
+            config.func.skullstripping.enabled = document.getElementById('func_skullstripping_enabled').checked;
+            config.func.skullstripping.method = document.getElementById('func_skullstripping_method').value;
+            if (config.func.skullstripping.method === 'fastSurferCNN') {
+                const gpuDevice = document.getElementById('func_fastSurferCNN_gpu_device').value;
+                config.func.skullstripping.fastSurferCNN.gpu_device = (gpuDevice === 'auto' || gpuDevice === '') ? 'auto' : parseInt(gpuDevice);
+                config.func.skullstripping.fastSurferCNN.batch_size = parseInt(document.getElementById('func_fastSurferCNN_batch_size').value);
+                config.func.skullstripping.fastSurferCNN.threads = parseInt(document.getElementById('func_fastSurferCNN_threads').value);
+                config.func.skullstripping.fastSurferCNN.use_mixed_model = document.getElementById('func_fastSurferCNN_use_mixed_model').checked;
+                config.func.skullstripping.fastSurferCNN.enable_crop_2round = document.getElementById('func_fastSurferCNN_enable_crop_2round').checked;
+                config.func.skullstripping.fastSurferCNN.plane_weight_coronal = parseFloat(document.getElementById('func_fastSurferCNN_plane_weight_coronal').value);
+                config.func.skullstripping.fastSurferCNN.plane_weight_axial = parseFloat(document.getElementById('func_fastSurferCNN_plane_weight_axial').value);
+                config.func.skullstripping.fastSurferCNN.plane_weight_sagittal = parseFloat(document.getElementById('func_fastSurferCNN_plane_weight_sagittal').value);
+                config.func.skullstripping.fastSurferCNN.fix_V1_WM = document.getElementById('func_fastSurferCNN_fix_V1_WM').checked;
+            }
+            
+            config.func.bias_correction.enabled = document.getElementById('func_bias_correction_enabled').checked;
+            config.func.bias_correction.algorithm = document.getElementById('func_bias_correction_algorithm').value;
+            config.func.bias_correction.dimension = parseInt(document.getElementById('func_bias_correction_dimension').value);
+            config.func.bias_correction.shrink_factor = parseFloat(document.getElementById('func_bias_correction_shrink_factor').value);
+            config.func.bias_correction.bspline_fitting = document.getElementById('func_bias_correction_bspline_fitting').value;
+            config.func.bias_correction.rescale_mean_to_100 = document.getElementById('func_bias_correction_rescale_mean_to_100').checked;
+            
+            // Registration
+            config.registration.enabled = document.getElementById('registration_enabled').checked;
+            config.registration.anat2template_xfm_type = document.getElementById('registration_anat2template_xfm_type').value;
+            config.registration.func2anat_xfm_type = document.getElementById('registration_func2anat_xfm_type').value;
+            config.registration.func2template_xfm_type = document.getElementById('registration_func2template_xfm_type').value;
+            config.registration.keep_original_func_resolution = document.getElementById('registration_keep_original_func_resolution').checked;
+            config.registration.interpolation = document.getElementById('registration_interpolation').value;
+            config.registration.output_registered_image = document.getElementById('registration_output_registered_image').checked;
+            config.registration.output_inverse_registered_image = document.getElementById('registration_output_inverse_registered_image').checked;
+            
+            // Orientation mismatch correction
+            config.orientation_mismatch_correction = {
+                enabled: document.getElementById('orientation_mismatch_correction_enabled').checked,
+                real_A_is_actually_labeled_as: document.getElementById('orientation_mismatch_correction_real_A_is_actually_labeled_as').value,
+                real_P_is_actually_labeled_as: document.getElementById('orientation_mismatch_correction_real_P_is_actually_labeled_as').value,
+                real_S_is_actually_labeled_as: document.getElementById('orientation_mismatch_correction_real_S_is_actually_labeled_as').value,
+                real_I_is_actually_labeled_as: document.getElementById('orientation_mismatch_correction_real_I_is_actually_labeled_as').value
+            };
+            
+            // Validate
+            const errors = validateConfig(config);
+            if (errors.length > 0) {
+                errorDiv.innerHTML = '<div class="error"><strong>Validation Errors:</strong><ul>' + 
+                    errors.map(e => '<li>' + e + '</li>').join('') + '</ul></div>';
+                return;
+            }
+            
+            // Generate YAML
+            let yaml = '# Default configuration for macacaMRIprep preprocessing pipeline\n';
+            yaml += '# Generated by Configuration Generator\n\n';
+            yaml += objectToYAML(config);
+            
+            // Show YAML in textarea
+            document.getElementById('yamlText').value = yaml;
+            yamlOutput.classList.remove('hidden');
+            
+            // Show success message
+            errorDiv.innerHTML = '<div class="success">✓ Configuration file generated successfully! Use "Copy to Clipboard" or "Download Config File" to save it.</div>';
+        }
+    </script>
+</body>
+</html>

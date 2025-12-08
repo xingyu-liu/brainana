@@ -14,28 +14,15 @@ single images, overlays, grids, and motion parameters. All functions properly
 handle image orientation and voxel dimensions from NIfTI headers.
 """
 
+# %%
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import nibabel as nib
 from typing import Optional, Tuple, List, Union
 from pathlib import Path
+from ..utils.mri import get_opposite_orientation, get_image_orientation_from_affine
 
-
-def _get_opposite(direction: str) -> str:
-    """
-    Get the opposite anatomical direction.
-    
-    Args:
-        direction: One of 'R', 'L', 'A', 'P', 'S', 'I'
-        
-    Returns:
-        Opposite direction (e.g., 'R' -> 'L', 'A' -> 'P')
-    """
-    opposites = {'R': 'L', 'L': 'R', 'A': 'P', 'P': 'A', 'S': 'I', 'I': 'S'}
-    return opposites.get(direction, direction)
-
-
+# %%
 def _load_image(image_path: Union[str, Path]) -> Tuple[np.ndarray, np.ndarray, str]:
     """
     Load image and get properly oriented data with voxel dimensions.
@@ -57,12 +44,8 @@ def _load_image(image_path: Union[str, Path]) -> Tuple[np.ndarray, np.ndarray, s
         # Get voxel sizes from header
         voxel_sizes = np.array(img.header.get_zooms()[:3])
         
-        # Get orientation code from affine matrix  
-        axes_codes = nib.aff2axcodes(affine)
-        if not isinstance(axes_codes, (list, tuple)):
-            raise ValueError(f"aff2axcodes returned unexpected type: {type(axes_codes)}, value: {axes_codes}")
-        
-        orientation_code = "".join(axes_codes)
+        # Get orientation code from affine matrix
+        orientation_code = get_image_orientation_from_affine(affine)
         
         return data, voxel_sizes, orientation_code
         
@@ -183,7 +166,7 @@ def _get_rotation_for_perspective(perspective: str, orientation_code: str, shown
     axis1_dir = orientation_code[axis1_idx]  # direction of axis shown as cols
     
     # Determine what direction is currently at the top (row 0)
-    current_top = _get_opposite(axis0_dir)
+    current_top = get_opposite_orientation(axis0_dir)
     
     # Determine what direction should be at the top
     if perspective == 'axial':
@@ -201,7 +184,7 @@ def _get_rotation_for_perspective(perspective: str, orientation_code: str, shown
     possible_directions = {
         'top': current_top,
         'bottom': axis0_dir,
-        'left': _get_opposite(axis1_dir),
+        'left': get_opposite_orientation(axis1_dir),
         'right': axis1_dir
     }
     
@@ -272,9 +255,9 @@ def _get_anatomical_labels(perspective: str, orientation_code: str, shown_axes: 
     # First, determine what direction is actually at each display position
     # based on NIfTI convention (low index = opposite, high index = same)
     # Before rotation:
-    actual_top_before = _get_opposite(axis0_dir)      # row 0 = opposite of axis0 direction
+    actual_top_before = get_opposite_orientation(axis0_dir)      # row 0 = opposite of axis0 direction
     actual_bottom_before = axis0_dir                 # row N-1 = same as axis0 direction
-    actual_left_before = _get_opposite(axis1_dir)    # col 0 = opposite of axis1 direction
+    actual_left_before = get_opposite_orientation(axis1_dir)    # col 0 = opposite of axis1 direction
     actual_right_before = axis1_dir                  # col M-1 = same as axis1 direction
     
     # Apply rotation: each 90° CCW rotation moves directions counterclockwise around the display
@@ -502,7 +485,7 @@ def create_grid_mri_image(
     if title and show_title:
         fig.suptitle(title, fontsize=16, fontweight='bold')
     
-    fig.subplots_adjust(hspace=0, wspace=0)
+    fig.subplots_adjust(hspace=0.05, wspace=0.05)
     fig.patch.set_facecolor('black')
 
     return fig

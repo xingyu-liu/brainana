@@ -98,17 +98,17 @@ def compose_ants_registration_cmd(
         
     Returns:
         List of command arguments
-    """
+    """    
     cmd = [
         'antsRegistration',
         '--dimensionality', '3',
         '--float', '0',
         '--interpolation', config.get('interpolation'),
-        '--use-histogram-matching', str(config.get('use_histogram_matching')),
-        '--initial-moving-transform', str(config.get("initial_moving_transform")).replace("fixed", str(fixedf)).replace("moving", str(movingf)),
-        '--winsorize-image-intensities', config.get('winsorize_image_intensities'),
+        '--use-histogram-matching', '0',
+        '--initial-moving-transform', f"[{str(fixedf)},{str(movingf)},1]",
+        '--winsorize-image-intensities', '[0.005,0.995]',
         '--output', f"[{output_path_prefix}_,{output_path_prefix}_registered.nii.gz]",
-        '--write-composite-transform', str(config.get('write_composite_transform')),
+        '--write-composite-transform', '1',
         
     ]
 
@@ -129,7 +129,7 @@ def compose_ants_registration_cmd(
         # disable collapse-output-transforms when initialize-transforms-per-stage is enabled
         cmd.extend(['--collapse-output-transforms', '0'])
     else:
-        cmd.extend(['--collapse-output-transforms', str(config.get('collapse_output_transforms'))])
+        cmd.extend(['--collapse-output-transforms', '1'])
     
     # Add transformation stages up to and including the xfm_type
     for i, stage_name in enumerate(stages):

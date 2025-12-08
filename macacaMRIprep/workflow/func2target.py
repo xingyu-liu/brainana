@@ -13,6 +13,7 @@ import json
 from .base import BasePreprocessingWorkflow
 from ..operations.preprocessing import (
     reorient,
+    correct_orientation_mismatch,
     slice_timing_correction, 
     motion_correction, 
     despike,
@@ -141,6 +142,35 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
         funcf_tmean = None
 
         try:
+            # FUNC ORIENTATION CORRECTION
+            # ------------------------------------------------------------
+            if self.config.get("func.orientation_correction.enabled", True):
+                step_name = self.pipeline.add_step(
+                    name="func_orientation_correction",
+                    func=correct_orientation_mismatch,
+                    inputs={
+                        "imagef": funcf_all,
+                        "output_name": "func_orientation_corrected.nii.gz"
+                    }
+                )
+                result = self.pipeline.run_step(
+                    step_name,
+                    logger=self.logger,
+                    config=self.config.to_dict(),
+                    generate_tmean=False
+                )
+                if result.output_files["imagef_orientation_corrected"] is not None:
+                    funcf_all = result.output_files["imagef_orientation_corrected"]
+                    self.logger.info(f"Step: {step_name} completed - {os.path.basename(funcf_all)}")
+                else:
+                    self.logger.info(f"Step: {step_name} skipped - no orientation correction performed")
+                
+                # Update funcf_tmean if available
+                if result.output_files.get("imagef_tmean") is not None:
+                    funcf_tmean = result.output_files["imagef_tmean"]
+            else:
+                self.logger.info("Step: orientation correction skipped (disabled in configuration)")
+
             # FUNC REORIENT
             # ------------------------------------------------------------
             if self.config.get("func.reorient.enabled", True):
@@ -149,6 +179,7 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                     func=reorient,
                     inputs={
                         "imagef": funcf_all,
+                        "output_name": "func_reoriented.nii.gz"
                     }
                 )
                 # Get target_file, or default to RAS orientation if no template
@@ -157,7 +188,6 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                 
                 result = self.pipeline.run_step(
                     step_name,
-                    modal="func",
                     target_file=target_file,
                     target_orientation=target_orientation,
                     generate_tmean=True

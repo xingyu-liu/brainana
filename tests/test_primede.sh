@@ -336,10 +336,10 @@ python3 -m macacaMRIprep.cli.preproc \
 # ================================================
 # test princeton new 
 # ================================================
-dataset_root=/mnt/DataDrive3/xliu/prep_test/banana_test/princeton_newdata
-dataset_dir=${dataset_root}/bids
-config_f=${dataset_root}/config_fastSurferCNN_reorient-0.json
-output_dir=${dataset_root}/preproc_fastSurferCNN_reorient-0
+dataset_root=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton
+dataset_dir=${dataset_root}/bids_wrong_orient
+config_f=${dataset_root}/preproc/config_wrong_orient.yaml
+output_dir=${dataset_root}/preproc/preproc_wrong_orient
 
 pipeline=func2anat2template
 python3 -m macacaMRIprep.cli.preproc \

@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional, List
 import json
 
 from .base import BasePreprocessingWorkflow
-from ..operations import bias_correction, apply_skullstripping, ants_register, reorient
+from ..operations import bias_correction, apply_skullstripping, ants_register, reorient, correct_orientation_mismatch
 from ..utils import run_command
 from ..utils import resolve_template, get_filename_stem
 from ..utils import log_workflow_start, log_workflow_end
@@ -111,6 +111,31 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
         anatf_cur = str(self.anat_file)
         
         try:
+            # ANAT ORIENTATION CORRECTION
+            # ------------------------------------------------------------
+            if self.config.get("anat.orientation_correction.enabled", True):
+                step_name = self.pipeline.add_step(
+                    name="anat_orientation_correction",
+                    func=correct_orientation_mismatch,
+                    inputs={
+                        "imagef": anatf_cur,
+                        "output_name": "anat_orientation_corrected.nii.gz"
+                    }
+                )
+                result = self.pipeline.run_step(
+                    step_name,
+                    logger=self.logger,
+                    config=self.config.to_dict(),
+                    generate_tmean=False
+                )
+                if result.output_files["imagef_orientation_corrected"] is not None:
+                    anatf_cur = result.output_files["imagef_orientation_corrected"]
+                    self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_cur)}")
+                else:
+                    self.logger.info(f"Step: {step_name} skipped - no orientation correction performed")
+            else:
+                self.logger.info("Step: orientation correction skipped (disabled in configuration)")
+
             # ANAT REORIENT
             # ------------------------------------------------------------
             if self.config.get("anat.reorient.enabled", True):
@@ -119,6 +144,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     func=reorient,
                     inputs={
                         "imagef": anatf_cur,
+                        "output_name": "anat_reoriented.nii.gz"
                     }
                 )
                 # Get target_file, or default to RAS orientation if no template
@@ -127,7 +153,6 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                 
                 result = self.pipeline.run_step(
                     step_name,
-                    modal="anat",
                     target_file=target_file,
                     target_orientation=target_orientation,
                     generate_tmean=False

@@ -1,7 +1,7 @@
 """
 Test suite for slice timing correction algorithm.
 
-Tests the _analyze_slice_timing_pattern function with various slice timing patterns
+Tests the _determine_tpattern function with various slice timing patterns
 commonly found in MRI data acquisition.
 """
 
@@ -9,7 +9,7 @@ import pytest
 import numpy as np
 import logging
 from unittest.mock import Mock
-from macacaMRIprep.operations.preprocessing import determine_tpattern
+from macacaMRIprep.operations.preprocessing import _determine_tpattern as determine_tpattern
 
 
 class TestSliceTimingPatternAnalysis:

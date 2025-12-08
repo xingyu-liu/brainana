@@ -18,6 +18,8 @@ import nibabel as nib
 from .validation import validate_input_file, ensure_working_directory, validate_output_file
 from ..utils import run_command, calculate_func_tmean, reorient_image_to_target, reorient_image_to_orientation, get_image_shape
 from ..config import validate_slice_timing_config
+from ..utils.mri import correct_affine_for_mismatch_orientation, get_opposite_orientation
+
 # Import skullstripping from FastSurferCNN package
 import sys
 from pathlib import Path
@@ -30,11 +32,115 @@ if str(project_root) not in sys.path:
 from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
 
 # %%
+
+def correct_orientation_mismatch(
+    imagef: Union[str, Path],
+    working_dir: Union[str, Path],
+    output_name: str,
+    logger: logging.Logger,
+    config: Dict[str, Any],
+    generate_tmean: bool = False,
+) -> Dict[str, str]:
+    """Correct orientation mismatch for the input image.
+    
+    This function corrects the affine matrix when there is a physical misorientation
+    of the brain (n×90° rotation). The correction is based on the configuration
+    parameters that specify what the axes currently labeled as 'A' and 'S' actually
+    point to in physical space.
+    
+    Args:
+        imagef: Input image file (anatomical or functional)
+        working_dir: Working directory for output files
+        output_name: Name of output file
+        logger: Logger instance
+        config: Configuration dictionary containing orientation mismatch correction parameters
+        generate_tmean: Whether to generate temporal mean (True for func, False for anat)
+        
+    Returns:
+        Dictionary with output file paths:
+        - 'imagef_orientation_corrected': Path to orientation-corrected image (or None if skipped)
+        - 'imagef_tmean': Path to temporal mean of corrected image (or None if skipped/not generated)
+        
+    Raises:
+        FileNotFoundError: If input file doesn't exist
+        RuntimeError: If orientation correction fails
+        ValueError: If configuration parameters are invalid or correction cannot be performed
+    """
+    # Validate inputs
+    image_path = validate_input_file(imagef, logger)
+    work_dir = ensure_working_directory(working_dir, logger)
+    
+    logger.info(f"Workflow: starting orientation mismatch correction")
+    logger.info(f"Data: input image - {os.path.basename(image_path)}")
+    logger.info(f"System: working directory - {work_dir}")
+
+    # Initialize outputs dictionary
+    outputs = {"imagef_orientation_corrected": None, "imagef_tmean": None}
+
+    # Get configuration from nested structure
+    orientation_cfg = config.get("orientation_mismatch_correction", {})
+    if not orientation_cfg.get("enabled", False):
+        logger.info("Step: orientation mismatch correction skipped (disabled in configuration)")
+        return outputs
+    
+    real_A_is_actually_labeled_as = orientation_cfg.get("real_A_is_actually_labeled_as", "A")
+    real_S_is_actually_labeled_as = orientation_cfg.get("real_S_is_actually_labeled_as", "S")
+    
+    # Normalize to uppercase for consistency (utility function expects uppercase)
+    real_A_is_actually_labeled_as = real_A_is_actually_labeled_as.upper()
+    real_S_is_actually_labeled_as = real_S_is_actually_labeled_as.upper()
+    
+    # Check if correction is needed
+    if real_A_is_actually_labeled_as == "A" and real_S_is_actually_labeled_as == "S":
+        logger.info("Step: orientation mismatch correction skipped (already correct)")
+        return outputs
+    
+    # Perform orientation correction
+    try:
+        logger.info(f"Step: correcting orientation mismatch")
+        logger.info(f"Data: real A axis labeled as - {real_A_is_actually_labeled_as}")
+        logger.info(f"Data: real S axis labeled as - {real_S_is_actually_labeled_as}")
+        
+        # Load image once and reuse
+        img = nib.load(image_path)
+        affine_cur = img.affine
+        
+        # Correct the affine matrix for orientation mismatch
+        affine_corrected = correct_affine_for_mismatch_orientation(
+            affine_cur, real_A_is_actually_labeled_as, real_S_is_actually_labeled_as
+        )
+        
+        # Save the corrected image with updated affine matrix
+        output_path = work_dir / output_name
+        img_corrected = nib.Nifti1Image(img.get_fdata(), affine_corrected, img.header)
+        nib.save(img_corrected, output_path)
+        
+        # Validate output
+        validate_output_file(output_path, logger)
+        logger.info(f"Output: orientation corrected - {os.path.basename(output_path)}")
+        outputs["imagef_orientation_corrected"] = str(output_path)
+
+        # Generate temporal mean of the corrected image if requested
+        if generate_tmean:
+            logger.info(f"Step: generating temporal mean")
+            image_tmean_path = work_dir / (output_name.split('.nii')[0] + "_tmean.nii.gz")
+            calculate_func_tmean(str(output_path), str(image_tmean_path), logger)
+            outputs["imagef_tmean"] = str(image_tmean_path)
+            logger.info(f"Output: tmean generated - {os.path.basename(image_tmean_path)}")
+
+        logger.info(f"Workflow: orientation mismatch correction completed successfully")
+        return outputs
+        
+    except Exception as e:
+        logger.error(f"Workflow: orientation mismatch correction failed: {str(e)}")
+        raise
+        
+
 def reorient(
     imagef: Union[str, Path],
     working_dir: Union[str, Path],
+    output_name: str,
     logger: logging.Logger,
-    modal: str = "func",
     target_file: Optional[Union[str, Path]] = None,
     target_orientation: Optional[str] = None,
     generate_tmean: bool = False,
@@ -44,8 +150,8 @@ def reorient(
     Args:
         imagef: Input image file (anatomical or functional)
         working_dir: Working directory
+        output_name: Name of output file
         logger: Logger instance
-        modal: Image modality ('anat' or 'func')
         target_file: Optional target file for reorientation (takes precedence over target_orientation)
         target_orientation: Optional target orientation string (e.g., 'RAS', 'LPI') when no target_file is provided
         generate_tmean: Whether to generate temporal mean (True for func, False for anat)
@@ -62,30 +168,52 @@ def reorient(
     image_path = validate_input_file(imagef, logger)
     work_dir = ensure_working_directory(working_dir, logger)
     
-    # Validate modal parameter
-    if modal not in ["anat", "func"]:
-        raise ValueError(f"Modal must be 'anat' or 'func', got '{modal}'")
-    
-    logger.info(f"Workflow: starting reorient for {modal} image")
+    logger.info(f"Workflow: starting reorient")
     logger.info(f"Data: input image - {os.path.basename(image_path)}")
     logger.info(f"System: working directory - {work_dir}")
-    
+
     # Initialize outputs dictionary
     outputs = {"imagef_reoriented": None,
                "imagef_tmean": None}
 
     if target_file is not None:
         logger.info(f"Step: reorienting image to target file")
-        image_reoriented_path = work_dir / f"{modal}_reoriented.nii.gz"
+        image_reoriented_path = work_dir / output_name
         reorient_image_to_target(image_path, target_file, image_reoriented_path, logger)
         outputs["imagef_reoriented"] = str(image_reoriented_path)
         logger.info(f"Output: image reoriented to target - {os.path.basename(image_reoriented_path)}")
         # update the image_path to the reoriented image
         image_path = str(image_reoriented_path)
+
     elif target_orientation is not None:
+        # Validate and normalize target orientation
+        target_orientation = str(target_orientation).upper().strip()
+        if len(target_orientation) != 3:
+            raise ValueError(
+                f"target_orientation must be a 3-character string (e.g., 'RAS', 'LPI'), "
+                f"got '{target_orientation}' (length: {len(target_orientation)})"
+            )
+        
+        valid_chars = set('RLAPIS')
+        if not all(c in valid_chars for c in target_orientation):
+            invalid_chars = [c for c in target_orientation if c not in valid_chars]
+            raise ValueError(
+                f"target_orientation contains invalid characters: {invalid_chars}. "
+                f"Must be from {{R, L, A, P, I, S}}, got '{target_orientation}'"
+            )
+        
         logger.info(f"Step: reorienting image to orientation {target_orientation}")
-        image_reoriented_path = work_dir / f"{modal}_reoriented.nii.gz"
-        reorient_image_to_orientation(image_path, target_orientation, image_reoriented_path, logger)
+
+        # AFNI uses opposite orientation convention compared to NIfTI/FSL.
+        # For example, RAS in NIfTI/FSL corresponds to LPI in AFNI.
+        # Convert the target orientation (NIfTI/FSL convention) to AFNI's convention
+        # by flipping each direction using get_opposite_orientation.
+        target_orientation_afni = ''.join([get_opposite_orientation(d) for d in target_orientation])
+        logger.info(f"Data: target orientation (NIfTI/FSL) - {target_orientation}, "
+                   f"converted to AFNI convention - {target_orientation_afni}")
+
+        image_reoriented_path = work_dir / output_name
+        reorient_image_to_orientation(image_path, target_orientation_afni, image_reoriented_path, logger)
         outputs["imagef_reoriented"] = str(image_reoriented_path)
         logger.info(f"Output: image reoriented to {target_orientation} - {os.path.basename(image_reoriented_path)}")
         # update the image_path to the reoriented image
@@ -94,15 +222,16 @@ def reorient(
     if generate_tmean:
         logger.info(f"Step: generating temporal mean")
         # Generate Tmean of the functional data
-        image_tmean_path = os.path.join(str(work_dir), f"{modal}_tmean.nii.gz")
-        calculate_func_tmean(image_path, image_tmean_path, logger)
-        outputs["imagef_tmean"] = image_tmean_path
+        image_tmean_path = work_dir / (output_name.split('.nii')[0] + "_tmean.nii.gz")
+        calculate_func_tmean(image_path, str(image_tmean_path), logger)
+        outputs["imagef_tmean"] = str(image_tmean_path)
         logger.info(f"Output: temporal mean generated - {os.path.basename(image_tmean_path)}")
     
     logger.info(f"Workflow: reorient completed - {len([v for v in outputs.values() if v is not None])} outputs generated")
     return outputs
 
-def determine_tpattern(slice_timings: List[Union[float, int]], direction: str = "z") -> str:
+
+def _determine_tpattern(slice_timings: List[Union[float, int]], direction: str = "z") -> str:
     """
     Determines the slice timing pattern (tpattern) given a list of slice timings.
     Returns one of: 'alt+z', 'alt+z2', 'alt-z', 'alt-z2', 'seq+z', 'seq-z'
@@ -172,7 +301,7 @@ def determine_tpattern(slice_timings: List[Union[float, int]], direction: str = 
 
     return 'unknown'
 
-# %%
+
 def slice_timing_correction(
     imagef: Union[str, Path],
     working_dir: Union[str, Path],
@@ -242,7 +371,7 @@ def slice_timing_correction(
     
     # Custom slice timing values provided - analyze to determine pattern
     logger.info(f"Step: determining slice timing pattern")
-    tpattern = determine_tpattern(slice_timing_data, slice_encoding_direction)
+    tpattern = _determine_tpattern(slice_timing_data, slice_encoding_direction)
     if tpattern == 'unknown':
         # skip slice timing correction
         logger.warning("Step: unknown slice timing pattern - skipping slice timing correction")
@@ -323,8 +452,7 @@ def slice_timing_correction(
         logger.error(f"Workflow: slice timing correction failed: {str(e)}")
         raise
 
-
-# %%
+# 
 def motion_correction(
     imagef: Union[str, Path],
     working_dir: Union[str, Path],
