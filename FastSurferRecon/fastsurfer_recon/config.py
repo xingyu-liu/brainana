@@ -150,6 +150,22 @@ class ProcessingConfig(BaseModel):
     n4_num_iterations: int = Field(default=50, ge=1, description="N4 iterations per level")
     n4_levels: int = Field(default=4, ge=1, description="N4 fitting levels")
     
+    # Surface smoothing and inflation (for monkey/non-human data)
+    smooth_iterations: int = Field(
+        default=2, 
+        ge=1, 
+        description="Surface smoothing iterations (used in s09 and s14). Use 3 for monkey data."
+    )
+    inflate_iterations: Optional[int] = Field(
+        default=None, 
+        ge=1, 
+        description="Surface inflation iterations (None = use FreeSurfer default ~15-20). Use 11 for monkey data (less inflation)."
+    )
+    inflate_no_save_sulc: bool = Field(
+        default=True, 
+        description="Skip saving sulc file during inflation"
+    )
+    
     # Aliases for backward compatibility with recon-surf.sh flags
     @property
     def no_cc(self) -> bool:
@@ -214,6 +230,11 @@ class ReconSurfConfig(BaseModel):
     # Output control
     log_file: Optional[Path] = Field(default=None, description="Log file path")
     verbose: int = Field(default=1, ge=0, le=2, description="Verbosity level (0-2)")
+    
+    @property
+    def cmd_log_file(self) -> Path:
+        """Path to fastsurfer_recon.cmd file (logs all commands)."""
+        return self.subjects_dir / self.subject_id / "scripts" / "fastsurfer_recon.cmd"
     
     # Environment
     freesurfer_home: Optional[Path] = Field(

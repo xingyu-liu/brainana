@@ -149,6 +149,48 @@ def mris_smooth(
     return output_surf
 
 
+def mris_inflate(
+    input_surf: Path,
+    output_surf: Path,
+    n_iterations: Optional[int] = None,
+    no_save_sulc: bool = True,
+    log_file: Optional[Path] = None,
+) -> Path:
+    """
+    Inflate surface to sphere.
+
+    Parameters
+    ----------
+    input_surf : Path
+        Input surface (e.g., smoothwm.nofix or smoothwm)
+    output_surf : Path
+        Output inflated surface (e.g., inflated.nofix or inflated)
+    n_iterations : int, optional
+        Number of inflation iterations (None = use FreeSurfer default).
+        For monkey data, typically use 11 (less inflation than default ~15-20).
+    no_save_sulc : bool, default=True
+        Skip saving sulc file during inflation
+    log_file : Path, optional
+        Log file path
+
+    Returns
+    -------
+    Path
+        Output surface path
+    """
+    cmd = ["mris_inflate"]
+    
+    if no_save_sulc:
+        cmd.append("-no-save-sulc")
+    
+    if n_iterations is not None:
+        cmd.extend(["-n", str(n_iterations)])
+    
+    cmd.extend([str(input_surf), str(output_surf)])
+    run_fs_command(cmd, log_file=log_file)
+    return output_surf
+
+
 def mris_place_surface(
     input_surf: Path,
     output_surf: Path,
@@ -378,6 +420,295 @@ def mris_place_surface_thickness(
     return output_thickness
 
 
+def mris_fix_topology(
+    subject: str,
+    hemi: str,
+    sphere: Path,
+    inflated: Path,
+    orig: Path,
+    output_premesh: Path,
+    mgz: bool = True,
+    ga: bool = True,
+    seed: int = 1234,
+    log_file: Optional[Path] = None,
+    subjects_dir: Optional[Path] = None,
+) -> Path:
+    """
+    Fix topological defects in surface.
+
+    Parameters
+    ----------
+    subject : str
+        Subject ID
+    hemi : str
+        Hemisphere ('lh' or 'rh')
+    sphere : Path
+        Sphere surface (e.g., qsphere.nofix) - can be absolute or relative
+    inflated : Path
+        Inflated surface (e.g., inflated.nofix) - can be absolute or relative
+    orig : Path
+        Original surface (e.g., orig.nofix) - can be absolute or relative
+    output_premesh : Path
+        Output premesh surface (e.g., orig.premesh) - can be absolute or relative
+    mgz : bool, default=True
+        Use mgz format
+    ga : bool, default=True
+        Use -ga flag
+    seed : int, default=1234
+        Random seed
+    log_file : Path, optional
+        Log file path
+    subjects_dir : Path, optional
+        Subjects directory. If provided, command runs from subject's scripts directory
+        and uses relative filenames.
+
+    Returns
+    -------
+    Path
+        Output premesh surface path
+    """
+    cmd = ["mris_fix_topology"]
+    
+    if mgz:
+        cmd.append("-mgz")
+    
+    # mris_fix_topology expects relative filenames (without hemisphere prefix)
+    # when run from the subject's scripts directory
+    if subjects_dir:
+        # Extract just the filename (remove hemisphere prefix if present)
+        def get_rel_filename(path: Path) -> str:
+            name = path.name
+            # Remove hemisphere prefix if present (e.g., "lh.qsphere.nofix" -> "qsphere.nofix")
+            if name.startswith(f"{hemi}."):
+                return name[len(hemi) + 1:]
+            return name
+        
+        sphere_name = get_rel_filename(sphere)
+        inflated_name = get_rel_filename(inflated)
+        orig_name = get_rel_filename(orig)
+        output_name = get_rel_filename(output_premesh)
+        
+        cmd.extend(["-sphere", sphere_name])
+        cmd.extend(["-inflated", inflated_name])
+        cmd.extend(["-orig", orig_name])
+        cmd.extend(["-out", output_name])
+        
+        # Run from subject's scripts directory
+        subject_scripts_dir = subjects_dir / subject / "scripts"
+        subject_scripts_dir.mkdir(parents=True, exist_ok=True)
+        cwd = subject_scripts_dir
+    else:
+        # Use absolute paths (legacy behavior)
+        cmd.extend(["-sphere", str(sphere)])
+        cmd.extend(["-inflated", str(inflated)])
+        cmd.extend(["-orig", str(orig)])
+        cmd.extend(["-out", str(output_premesh)])
+        cwd = None
+    
+    if ga:
+        cmd.append("-ga")
+    cmd.extend(["-seed", str(seed)])
+    cmd.extend([subject, hemi])
+    
+    # Set SUBJECTS_DIR in environment if provided
+    env = None
+    if subjects_dir:
+        env = {"SUBJECTS_DIR": str(subjects_dir)}
+    
+    run_fs_command(cmd, log_file=log_file, cwd=cwd, env=env)
+    return output_premesh
+
+
+def mris_remove_intersection(
+    input_surf: Path,
+    output_surf: Path,
+    log_file: Optional[Path] = None,
+) -> Path:
+    """
+    Remove surface intersections.
+
+    Parameters
+    ----------
+    input_surf : Path
+        Input surface (can be same as output for in-place)
+    output_surf : Path
+        Output surface (can be same as input)
+    log_file : Path, optional
+        Log file path
+
+    Returns
+    -------
+    Path
+        Output surface path
+    """
+    cmd = [
+        "mris_remove_intersection",
+        str(input_surf),
+        str(output_surf),
+    ]
+    run_fs_command(cmd, log_file=log_file)
+    return output_surf
+
+
+def mris_autodet_gwstats(
+    output_stats: Path,
+    input_vol: Path,
+    wm_vol: Path,
+    surface: Path,
+    log_file: Optional[Path] = None,
+) -> Path:
+    """
+    Auto-detect gray/white statistics.
+
+    Parameters
+    ----------
+    output_stats : Path
+        Output statistics file (e.g., autodet.gw.stats.{hemi}.dat)
+    input_vol : Path
+        Input volume (e.g., brain.finalsurfs.mgz)
+    wm_vol : Path
+        White matter volume (e.g., wm.mgz)
+    surface : Path
+        Surface file (e.g., orig.premesh)
+    log_file : Path, optional
+        Log file path
+
+    Returns
+    -------
+    Path
+        Output statistics file path
+    """
+    cmd = [
+        "mris_autodet_gwstats",
+        "--o", str(output_stats),
+        "--i", str(input_vol),
+        "--wm", str(wm_vol),
+        "--surf", str(surface),
+    ]
+    run_fs_command(cmd, log_file=log_file)
+    return output_stats
+
+
+def mris_curvature_stats(
+    subject: str,
+    hemi: str,
+    output_stats: Path,
+    surface_name: str = "smoothwm",
+    curvatures: list[str] = None,
+    write_curvature_files: bool = True,
+    mgz: bool = True,
+    log_file: Optional[Path] = None,
+    subjects_dir: Optional[Path] = None,
+) -> Path:
+    """
+    Compute curvature statistics.
+
+    Parameters
+    ----------
+    subject : str
+        Subject ID
+    hemi : str
+        Hemisphere ('lh' or 'rh')
+    output_stats : Path
+        Output statistics file (e.g., {hemi}.curv.stats)
+    surface_name : str, default="smoothwm"
+        Surface name (e.g., "smoothwm")
+    curvatures : list[str], optional
+        Curvature types (e.g., ["curv", "sulc"]). Defaults to ["curv", "sulc"]
+    write_curvature_files : bool, default=True
+        Write curvature files (-m flag)
+    mgz : bool, default=True
+        Use mgz format (-G flag)
+    log_file : Path, optional
+        Log file path
+    subjects_dir : Path, optional
+        SUBJECTS_DIR path. If None, uses environment variable.
+
+    Returns
+    -------
+    Path
+        Output statistics file path
+    """
+    if curvatures is None:
+        curvatures = ["curv", "sulc"]
+    
+    cmd = ["mris_curvature_stats"]
+    
+    if write_curvature_files:
+        cmd.append("-m")
+    if mgz:
+        cmd.append("--writeCurvatureFiles")
+    cmd.append("-G")
+    cmd.extend(["-o", str(output_stats)])
+    cmd.extend(["-F", surface_name])
+    cmd.extend([subject, hemi] + curvatures)
+    
+    # Set SUBJECTS_DIR if provided
+    env = None
+    if subjects_dir:
+        env = {"SUBJECTS_DIR": str(subjects_dir)}
+    
+    run_fs_command(cmd, log_file=log_file, env=env)
+    return output_stats
+
+
+def mris_volmask(
+    subject: str,
+    aseg_name: str = "aseg.presurf",
+    label_left_white: int = 2,
+    label_left_ribbon: int = 3,
+    label_right_white: int = 41,
+    label_right_ribbon: int = 42,
+    save_ribbon: bool = True,
+    log_file: Optional[Path] = None,
+    subjects_dir: Optional[Path] = None,
+) -> None:
+    """
+    Create cortical ribbon volume mask.
+
+    Parameters
+    ----------
+    subject : str
+        Subject ID
+    aseg_name : str, default="aseg.presurf"
+        Aseg name (without .mgz extension)
+    label_left_white : int, default=2
+        Left white matter label
+    label_left_ribbon : int, default=3
+        Left ribbon label
+    label_right_white : int, default=41
+        Right white matter label
+    label_right_ribbon : int, default=42
+        Right ribbon label
+    save_ribbon : bool, default=True
+        Save ribbon volume (--save-ribbon flag)
+    log_file : Path, optional
+        Log file path
+    subjects_dir : Path, optional
+        SUBJECTS_DIR path. If None, uses environment variable.
+    """
+    cmd = [
+        "mris_volmask",
+        "--aseg_name", aseg_name,
+        "--label_left_white", str(label_left_white),
+        "--label_left_ribbon", str(label_left_ribbon),
+        "--label_right_white", str(label_right_white),
+        "--label_right_ribbon", str(label_right_ribbon),
+    ]
+    
+    if save_ribbon:
+        cmd.append("--save_ribbon")
+    
+    cmd.append(subject)
+    
+    # Set SUBJECTS_DIR if provided
+    env = None
+    if subjects_dir:
+        env = {"SUBJECTS_DIR": str(subjects_dir)}
+    
+    run_fs_command(cmd, log_file=log_file, env=env)
+
+
 def mris_register(
     input_sphere: Path,
     target_atlas: Path,
@@ -506,6 +837,73 @@ def mris_ca_label(
     return output_annot
 
 
+def mris_curvature(
+    surface: Path,
+    hemi: str,
+    seed: Optional[int] = None,
+    thresh: Optional[float] = None,
+    normalize: bool = False,
+    area: Optional[int] = None,
+    weights: bool = False,
+    distances: Optional[tuple[int, int]] = None,
+    log_file: Optional[Path] = None,
+) -> None:
+    """
+    Compute surface curvature.
+
+    Parameters
+    ----------
+    surface : Path
+        Input surface (e.g., white.preaparc or inflated)
+    hemi : str
+        Hemisphere ('lh' or 'rh')
+    seed : int, optional
+        Random seed
+    thresh : float, optional
+        Threshold value (e.g., 0.999)
+    normalize : bool, default=False
+        Normalize curvature (-n flag)
+    area : int, optional
+        Area smoothing iterations (-a flag)
+    weights : bool, default=False
+        Use weights (-w flag)
+    distances : tuple[int, int], optional
+        Distance parameters (e.g., (10, 10))
+    log_file : Path, optional
+        Log file path
+
+    Note
+    ----
+    mris_curvature writes curvature files directly to the surface directory.
+    The output files are named {hemi}.{surface_name}.H and {hemi}.{surface_name}.K
+    """
+    cmd = ["mris_curvature"]
+    
+    if weights:
+        cmd.append("-w")
+    if seed is not None:
+        cmd.extend(["-seed", str(seed)])
+    if thresh is not None:
+        cmd.extend(["-thresh", str(thresh)])
+    if normalize:
+        cmd.append("-n")
+    if area is not None:
+        cmd.extend(["-a", str(area)])
+    if distances:
+        cmd.extend(["-distances", str(distances[0]), str(distances[1])])
+    
+    # Surface name (without path, FreeSurfer expects just the name)
+    surface_name = surface.name
+    if surface_name.startswith(f"{hemi}."):
+        surface_name = surface_name[len(f"{hemi}."):]
+    
+    cmd.append(surface_name)
+    
+    # Change to surface directory for execution (FreeSurfer expects to be in surf dir)
+    surf_dir = surface.parent
+    run_fs_command(cmd, log_file=log_file, cwd=str(surf_dir))
+
+
 def mris_anatomical_stats(
     subject: str,
     hemi: str,
@@ -573,7 +971,10 @@ def mris_anatomical_stats(
     # don't support this flag. If the flag is not supported, the command will fail.
     # For compatibility, we skip the flag if it's not available in this version.
     # The statistics should still compute correctly without it.
-    # TODO: Add FreeSurfer version detection to conditionally use -noxfm
+    # 
+    # Future enhancement: Add FreeSurfer version detection to conditionally use -noxfm.
+    # This would require parsing FreeSurfer's build-stamp.txt or running a version
+    # check command. For now, we skip the flag to maintain compatibility across versions.
     # if noxfm:
     #     cmd.append("-noxfm")
     
@@ -611,6 +1012,13 @@ __all__ = [
     "mris_extract_main_component",
     "mris_remesh",
     "mris_smooth",
+    "mris_inflate",
+    "mris_curvature",
+    "mris_fix_topology",
+    "mris_remove_intersection",
+    "mris_autodet_gwstats",
+    "mris_curvature_stats",
+    "mris_volmask",
     "mris_place_surface",
     "mris_place_surface_curv_map",
     "mris_place_surface_area_map",

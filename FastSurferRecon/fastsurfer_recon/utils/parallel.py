@@ -60,14 +60,22 @@ def run_parallel(
     """
     Run a function on multiple items in parallel.
     
+    Uses ThreadPoolExecutor to process items concurrently. If any item
+    fails, the exception is logged and re-raised, stopping all processing.
+    
     Parameters
     ----------
     func : callable
-        Function to call for each item
-    items : sequence
+        Function to call for each item. Must accept a single argument of type T.
+    items : sequence[T]
         Items to process
-    max_workers : int
-        Maximum number of parallel workers
+    max_workers : int, default=2
+        Maximum number of parallel workers. Should not exceed the number of items.
+        
+    Raises
+    ------
+    Exception
+        Re-raises any exception from item processing, stopping all parallel tasks.
     """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(func, item): item for item in items}

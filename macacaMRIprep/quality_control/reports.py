@@ -411,9 +411,17 @@ please refer to the macacaMRIprep configuration files in your preprocessing dire
             # Use entities to determine modality - more reliable than filename parsing
             entities = snapshot.get('entities', {})
             if entities.get('suffix') == 'T1w' or (entities.get('suffix') != 'T2w' and filename.endswith('_T1w.png')):
-                group_key = f"{base_group_key} (T1w)"
+                # Don't show "ungrouped" prefix when there's no prefix
+                if base_group_key == 'ungrouped':
+                    group_key = "(T1w)"
+                else:
+                    group_key = f"{base_group_key} (T1w)"
             elif entities.get('suffix') == 'T2w' or filename.endswith('_T2w.png'):
-                group_key = f"{base_group_key} (T2w)"
+                # Don't show "ungrouped" prefix when there's no prefix
+                if base_group_key == 'ungrouped':
+                    group_key = "(T2w)"
+                else:
+                    group_key = f"{base_group_key} (T2w)"
             else:
                 group_key = base_group_key
             

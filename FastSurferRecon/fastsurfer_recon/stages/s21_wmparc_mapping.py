@@ -56,6 +56,7 @@ class WMParcMapping(PipelineStage):
             rh_annot_offset=4000,
             threads=self.threads,
             log_file=self.config.log_file,
+            subject_dir=self.sd.subject_dir,
         )
         
         # Create symlink for compatibility

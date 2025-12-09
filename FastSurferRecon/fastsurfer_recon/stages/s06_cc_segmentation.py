@@ -57,6 +57,7 @@ class CCSegmentation(PipelineStage):
             output_lta=cc_lta,
             subject=self.config.subject_id,
             log_file=self.config.log_file,
+            subject_dir=self.sd.subject_dir,
         )
         
         # Add CC to deep segmentation if it exists

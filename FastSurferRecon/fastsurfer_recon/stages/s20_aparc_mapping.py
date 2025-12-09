@@ -48,6 +48,7 @@ class AparcMapping(PipelineStage):
             label_cortex=True,
             threads=self.threads,
             log_file=self.config.log_file,
+            subject_dir=self.sd.subject_dir,
         )
         
         # Create symlinks for compatibility

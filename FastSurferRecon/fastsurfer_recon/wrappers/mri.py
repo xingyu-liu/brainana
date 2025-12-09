@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 import logging
 
-from .base import run_fs_command, FreeSurferError
+from .base import run_fs_command, FreeSurferError, to_relative_path
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,7 @@ def mri_convert(
     input_file: Path,
     output_file: Path,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
     **kwargs,
 ) -> Path:
     """
@@ -38,6 +39,12 @@ def mri_convert(
     Path
         Output file path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        input_file = to_relative_path(input_file, subject_dir)
+        output_file = to_relative_path(output_file, subject_dir)
+    
     cmd = ["mri_convert", str(input_file), str(output_file)]
     
     # Add optional arguments
@@ -48,7 +55,7 @@ def mri_convert(
             cmd.append(f"--{key.replace('_', '-')}")
             cmd.append(str(value))
     
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_file
 
 
@@ -58,6 +65,7 @@ def mri_pretess(
     norm: Path,
     output_vol: Path,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Pretessellate volume before marching cubes.
@@ -80,6 +88,13 @@ def mri_pretess(
     Path
         Output file path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        input_vol = to_relative_path(input_vol, subject_dir)
+        norm = to_relative_path(norm, subject_dir)
+        output_vol = to_relative_path(output_vol, subject_dir)
+    
     cmd = [
         "mri_pretess",
         str(input_vol),
@@ -87,7 +102,7 @@ def mri_pretess(
         str(norm),
         str(output_vol),
     ]
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_vol
 
 
@@ -96,6 +111,7 @@ def mri_mc(
     label: int,
     output_surf: Path,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Extract surface using marching cubes.
@@ -116,13 +132,19 @@ def mri_mc(
     Path
         Output surface path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        input_vol = to_relative_path(input_vol, subject_dir)
+        output_surf = to_relative_path(output_surf, subject_dir)
+    
     cmd = [
         "mri_mc",
         str(input_vol),
         str(label),
         str(output_surf),
     ]
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_surf
 
 
@@ -130,7 +152,9 @@ def mri_mask(
     input_vol: Path,
     mask: Path,
     output_vol: Path,
+    threshold: Optional[float] = None,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Apply mask to volume.
@@ -143,21 +167,36 @@ def mri_mask(
         Mask volume
     output_vol : Path
         Masked output volume
+    threshold : float, optional
+        Threshold value for masking (e.g., -T 5)
     log_file : Path, optional
         Log file path
+    subject_dir : Path, optional
+        Subject directory. If provided, converts paths to relative from subject_dir.
 
     Returns
     -------
     Path
         Output file path
     """
-    cmd = [
-        "mri_mask",
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        input_vol = to_relative_path(input_vol, subject_dir)
+        mask = to_relative_path(mask, subject_dir)
+        output_vol = to_relative_path(output_vol, subject_dir)
+    
+    cmd = ["mri_mask"]
+    
+    if threshold is not None:
+        cmd.extend(["-T", str(threshold)])
+    
+    cmd.extend([
         str(input_vol),
         str(mask),
         str(output_vol),
-    ]
-    run_fs_command(cmd, log_file=log_file)
+    ])
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_vol
 
 
@@ -165,7 +204,12 @@ def mri_normalize(
     input_vol: Path,
     output_vol: Path,
     aseg: Optional[Path] = None,
+    mask: Optional[Path] = None,
+    noconform: bool = False,
+    seed: int = 1234,
+    mprage: bool = True,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
     **kwargs,
 ) -> Path:
     """
@@ -174,34 +218,59 @@ def mri_normalize(
     Parameters
     ----------
     input_vol : Path
-        Input volume (e.g., nu.mgz)
+        Input volume (e.g., nu.mgz or norm.mgz)
     output_vol : Path
-        Output normalized volume (e.g., T1.mgz)
+        Output normalized volume (e.g., T1.mgz or brain.mgz)
     aseg : Path, optional
         Aseg segmentation for better normalization
+    mask : Path, optional
+        Mask volume (e.g., brainmask.mgz)
+    noconform : bool, default=False
+        Do not conform volume
+    seed : int, default=1234
+        Random seed
+    mprage : bool, default=True
+        Use MPRAGE normalization
     log_file : Path, optional
         Log file path
+    subject_dir : Path, optional
+        Subject directory. If provided, converts paths to relative from subject_dir.
     **kwargs
-        Additional arguments (e.g., -g, -seed, -mprage)
+        Additional arguments (e.g., -g)
 
     Returns
     -------
     Path
         Output file path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        input_vol = to_relative_path(input_vol, subject_dir)
+        output_vol = to_relative_path(output_vol, subject_dir)
+        if aseg:
+            aseg = to_relative_path(aseg, subject_dir)
+        if mask:
+            mask = to_relative_path(mask, subject_dir)
+    
     cmd = ["mri_normalize"]
     
     # Common flags
     if "-g" not in kwargs and "g" not in kwargs:
         cmd.extend(["-g", "1"])
-    if "-seed" not in kwargs and "seed" not in kwargs:
-        cmd.extend(["-seed", "1234"])
-    if "-mprage" not in kwargs and "mprage" not in kwargs:
+    cmd.extend(["-seed", str(seed)])
+    if mprage:
         cmd.append("-mprage")
+    if noconform:
+        cmd.append("-noconform")
     
     # Add optional aseg
     if aseg:
         cmd.extend(["-aseg", str(aseg)])
+    
+    # Add optional mask
+    if mask:
+        cmd.extend(["-mask", str(mask)])
     
     # Add other kwargs
     for key, value in kwargs.items():
@@ -215,7 +284,7 @@ def mri_normalize(
                 cmd.append(str(value))
     
     cmd.extend([str(input_vol), str(output_vol)])
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_vol
 
 
@@ -225,6 +294,7 @@ def mri_cc(
     output_lta: Path,
     subject: str,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> tuple[Path, Path]:
     """
     Segment corpus callosum.
@@ -247,6 +317,13 @@ def mri_cc(
     tuple[Path, Path]
         (output_aseg, output_lta)
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        aseg_no_cc = to_relative_path(aseg_no_cc, subject_dir)
+        output_aseg = to_relative_path(output_aseg, subject_dir)
+        output_lta = to_relative_path(output_lta, subject_dir)
+    
     cmd = [
         "mri_cc",
         "-aseg", str(aseg_no_cc),
@@ -254,7 +331,7 @@ def mri_cc(
         "-lta", str(output_lta),
         subject,
     ]
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_aseg, output_lta
 
 
@@ -270,12 +347,14 @@ def mri_surf2volseg(
     rh_white: Optional[Path] = None,
     lh_pial: Optional[Path] = None,
     rh_pial: Optional[Path] = None,
+    ribbon: Optional[Path] = None,
     label_cortex: bool = False,
     label_wm: bool = False,
     lh_annot_offset: int = 1000,
     rh_annot_offset: int = 2000,
     threads: int = 1,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Map surface labels to volume segmentation.
@@ -304,6 +383,8 @@ def mri_surf2volseg(
         Left pial surface
     rh_pial : Path, optional
         Right pial surface
+    ribbon : Path, optional
+        Ribbon volume for fixing presurf aseg (--fix-presurf-with-ribbon)
     label_cortex : bool
         Label cortex regions
     label_wm : bool
@@ -322,12 +403,39 @@ def mri_surf2volseg(
     Path
         Output volume path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        output_vol = to_relative_path(output_vol, subject_dir)
+        input_aseg = to_relative_path(input_aseg, subject_dir)
+        if ribbon:
+            ribbon = to_relative_path(ribbon, subject_dir)
+        if lh_annot:
+            lh_annot = to_relative_path(lh_annot, subject_dir)
+        if rh_annot:
+            rh_annot = to_relative_path(rh_annot, subject_dir)
+        if lh_cortex_mask:
+            lh_cortex_mask = to_relative_path(lh_cortex_mask, subject_dir)
+        if rh_cortex_mask:
+            rh_cortex_mask = to_relative_path(rh_cortex_mask, subject_dir)
+        if lh_white:
+            lh_white = to_relative_path(lh_white, subject_dir)
+        if rh_white:
+            rh_white = to_relative_path(rh_white, subject_dir)
+        if lh_pial:
+            lh_pial = to_relative_path(lh_pial, subject_dir)
+        if rh_pial:
+            rh_pial = to_relative_path(rh_pial, subject_dir)
+    
     cmd = [
         "mri_surf2volseg",
         "--o", str(output_vol),
         "--i", str(input_aseg),
         "--threads", str(threads),
     ]
+    
+    if ribbon:
+        cmd.extend(["--fix-presurf-with-ribbon", str(ribbon)])
     
     if label_cortex:
         cmd.append("--label-cortex")
@@ -354,7 +462,7 @@ def mri_surf2volseg(
     if rh_pial:
         cmd.extend(["--rh-pial", str(rh_pial)])
     
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_vol
 
 
@@ -363,6 +471,7 @@ def mri_add_xform_to_header(
     input_vol: Path,
     output_vol: Path,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Add transform to volume header.
@@ -383,14 +492,192 @@ def mri_add_xform_to_header(
     Path
         Output file path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        xform = to_relative_path(xform, subject_dir)
+        input_vol = to_relative_path(input_vol, subject_dir)
+        output_vol = to_relative_path(output_vol, subject_dir)
+    
     cmd = [
         "mri_add_xform_to_header",
         "-c", str(xform),
         str(input_vol),
         str(output_vol),
     ]
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_vol
+
+
+def mri_fill(
+    wm_vol: Path,
+    output_vol: Path,
+    aseg: Path,
+    cut_log: Optional[Path] = None,
+    ctab: Optional[Path] = None,
+    log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
+) -> Path:
+    """
+    Fill white matter volume.
+
+    Parameters
+    ----------
+    wm_vol : Path
+        Input white matter volume (e.g., wm.mgz)
+    output_vol : Path
+        Output filled volume (e.g., filled.mgz)
+    aseg : Path
+        Aseg segmentation (e.g., aseg.presurf.mgz)
+    cut_log : Path, optional
+        Cut log file (e.g., ../scripts/ponscc.cut.log)
+    ctab : Path, optional
+        Color table file (e.g., SubCorticalMassLUT.txt).
+        If None, uses FreeSurfer's default SubCorticalMassLUT.txt
+    log_file : Path, optional
+        Log file path
+
+    Returns
+    -------
+    Path
+        Output file path
+    """
+    from .base import get_fs_home
+    
+    # Convert paths to relative if subject_dir provided
+    # Note: ctab might be outside subject_dir (FreeSurfer home), so only convert if under subject_dir
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        wm_vol = to_relative_path(wm_vol, subject_dir)
+        output_vol = to_relative_path(output_vol, subject_dir)
+        aseg = to_relative_path(aseg, subject_dir)
+        if cut_log:
+            cut_log = to_relative_path(cut_log, subject_dir)
+        # Only convert ctab if it's under subject_dir (user-provided), not FreeSurfer home
+        if ctab:
+            ctab = to_relative_path(ctab, subject_dir)
+    
+    cmd = ["mri_fill"]
+    
+    # Add cut log if provided
+    if cut_log:
+        cmd.extend(["-a", str(cut_log)])
+    
+    # Add segmentation
+    cmd.extend(["-segmentation", str(aseg)])
+    
+    # Add color table (default to FreeSurfer's SubCorticalMassLUT.txt if not provided)
+    if ctab:
+        cmd.extend(["-ctab", str(ctab)])
+    else:
+        # Use FreeSurfer's default SubCorticalMassLUT.txt
+        fs_home = get_fs_home()
+        default_ctab = fs_home / "SubCorticalMassLUT.txt"
+        if default_ctab.exists():
+            cmd.extend(["-ctab", str(default_ctab)])
+        else:
+            logger.warning(
+                f"SubCorticalMassLUT.txt not found at {default_ctab}. "
+                "mri_fill may fail without -ctab parameter."
+            )
+    
+    cmd.extend([str(wm_vol), str(output_vol)])
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    return output_vol
+
+
+def mri_label2label(
+    surface: Path,
+    aseg: Path,
+    output_label: Path,
+    cortex_only: bool = True,
+    include_hipamyg: bool = False,
+    log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
+) -> Path:
+    """
+    Create cortex label from surface and aseg.
+
+    Parameters
+    ----------
+    surface : Path
+        Surface file (e.g., white.preaparc)
+    aseg : Path
+        Aseg segmentation (e.g., aseg.presurf.mgz)
+    output_label : Path
+        Output label file (e.g., cortex.label or cortex+hipamyg.label)
+    cortex_only : bool, default=True
+        Label cortex only (0) vs cortex+hipamyg (1)
+    include_hipamyg : bool, default=False
+        Include hippocampus and amygdala in label
+    log_file : Path, optional
+        Log file path
+
+    Returns
+    -------
+    Path
+        Output label file path
+    """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        surface = to_relative_path(surface, subject_dir)
+        aseg = to_relative_path(aseg, subject_dir)
+        output_label = to_relative_path(output_label, subject_dir)
+    
+    cmd = [
+        "mri_label2label",
+        "--label-cortex",
+        str(surface),
+        str(aseg),
+        "1" if include_hipamyg else "0",
+        str(output_label),
+    ]
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    return output_label
+
+
+def mri_relabel_hypointensities(
+    input_aseg: Path,
+    surf_dir: Path,
+    output_aseg: Path,
+    log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
+) -> Path:
+    """
+    Relabel hypointensities in aseg.
+
+    Parameters
+    ----------
+    input_aseg : Path
+        Input aseg (e.g., aseg.presurf.mgz)
+    surf_dir : Path
+        Surface directory (e.g., ../surf)
+    output_aseg : Path
+        Output aseg with hypointensities relabeled (e.g., aseg.presurf.hypos.mgz)
+    log_file : Path, optional
+        Log file path
+
+    Returns
+    -------
+    Path
+        Output aseg path
+    """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        input_aseg = to_relative_path(input_aseg, subject_dir)
+        surf_dir = to_relative_path(surf_dir, subject_dir)
+        output_aseg = to_relative_path(output_aseg, subject_dir)
+    
+    cmd = [
+        "mri_relabel_hypointensities",
+        str(input_aseg),
+        str(surf_dir),
+        str(output_aseg),
+    ]
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    return output_aseg
 
 
 __all__ = [
@@ -402,5 +689,8 @@ __all__ = [
     "mri_cc",
     "mri_surf2volseg",
     "mri_add_xform_to_header",
+    "mri_fill",
+    "mri_label2label",
+    "mri_relabel_hypointensities",
 ]
 

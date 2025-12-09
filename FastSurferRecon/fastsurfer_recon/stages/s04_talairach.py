@@ -88,6 +88,7 @@ class Talairach(PipelineStage):
                 input_vol=self.sd.orig_nu,
                 output_vol=self.sd.mri("nu.mgz"),
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
     
     def is_disabled(self) -> bool:

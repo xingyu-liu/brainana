@@ -9,7 +9,8 @@ import logging
 import shutil
 
 from .base import HemisphereStage
-from ..wrappers.recon_all import recon_all_fix
+from ..wrappers.mris import mris_fix_topology, mris_remove_intersection
+from ..wrappers.mris import mris_remesh
 from ..processing.surface_fix import fix_surface_orientation
 
 logger = logging.getLogger(__name__)
@@ -58,18 +59,77 @@ class TopologyFix(HemisphereStage):
             logger.info(f"Creating {self.hemi}.qsphere.nofix from {self.hemi}.sphere (fallback)")
             shutil.copy(sphere, qsphere_nofix)
         
+        # Required inputs for topology fix
+        inflated_nofix = self.hemi_path("inflated.nofix")
+        orig_nofix = self.hemi_path("orig.nofix")
+        if not qsphere_nofix.exists():
+            raise FileNotFoundError(
+                f"{self.hemi}.qsphere.nofix not found. "
+                "This should be created in stage 11 (spherical_projection)."
+            )
+        if not inflated_nofix.exists():
+            raise FileNotFoundError(
+                f"{self.hemi}.inflated.nofix not found. "
+                "This should be created in stage 10 (inflation)."
+            )
+        if not orig_nofix.exists():
+            raise FileNotFoundError(
+                f"{self.hemi}.orig.nofix not found. "
+                "This should be created in stage 08 (tessellation)."
+            )
+        
         logger.info(f"Fixing topology for {self.hemi}...")
-        recon_all_fix(
-            subject=self.config.subject_id,
-            hemi=self.hemi,
-            hires=self.config.hires,
-            threads=self.threads,
+        
+        # Step 1: Fix topology - creates orig.premesh
+        # mris_fix_topology -mgz -sphere qsphere.nofix -inflated inflated.nofix -orig orig.nofix -out orig.premesh -ga -seed 1234 {subject} {hemi}
+        premesh = self.hemi_path("orig.premesh")
+        if not premesh.exists():
+            logger.info(f"Running mris_fix_topology for {self.hemi}...")
+            mris_fix_topology(
+                subject=self.config.subject_id,
+                hemi=self.hemi,
+                sphere=qsphere_nofix,
+                inflated=inflated_nofix,
+                orig=orig_nofix,
+                output_premesh=premesh,
+                mgz=True,
+                ga=True,
+                seed=1234,
+                log_file=self.config.log_file,
+                subjects_dir=self.config.subjects_dir,
+            )
+        
+        # Step 2: Remesh (if needed)
+        # mris_remesh --remesh --iters 3 --input orig.premesh --output orig
+        if not orig.exists():
+            logger.info(f"Remeshing {self.hemi}.orig.premesh to {self.hemi}.orig...")
+            # Note: mris_remesh uses --desired-face-area, but recon-all uses --remesh --iters
+            # The current implementation uses mris_remesh with desired-face-area=1.0, which
+            # produces equivalent results to recon-all's remeshing step. The face area of 1.0
+            # is a standard value that works well for most surfaces.
+            mris_remesh(
+                input_surf=premesh,
+                output_surf=orig,
+                desired_face_area=1.0,  # Default remesh area
+                log_file=self.config.log_file,
+            )
+        
+        # Step 3: Remove intersections
+        # mris_remove_intersection ../surf/{hemi}.orig ../surf/{hemi}.orig
+        logger.info(f"Removing intersections from {self.hemi}.orig...")
+        mris_remove_intersection(
+            input_surf=orig,
+            output_surf=orig,
             log_file=self.config.log_file,
-            subjects_dir=self.config.subjects_dir,
         )
         
+        # Remove inflated.nofix (as done by recon-all after fix)
+        inflated_nofix = self.hemi_path("inflated.nofix")
+        if inflated_nofix.exists():
+            logger.info(f"Removing {self.hemi}.inflated.nofix (no longer needed after fix)")
+            inflated_nofix.unlink()
+        
         # Fix oriented surfaces if needed
-        premesh = self.hemi_path("orig.premesh")
         if premesh.exists():
             fix_surface_orientation(
                 surface_path=premesh,

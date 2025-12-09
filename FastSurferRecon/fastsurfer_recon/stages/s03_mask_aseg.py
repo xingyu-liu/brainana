@@ -47,6 +47,7 @@ class MaskAseg(PipelineStage):
                 mask=mask,
                 output_vol=aseg_presurf,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
         else:
             # Just copy if no mask

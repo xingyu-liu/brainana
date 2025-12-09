@@ -8,7 +8,7 @@ from pathlib import Path
 import logging
 
 from .base import HemisphereStage
-from ..wrappers.recon_all import recon_all_inflate1
+from ..wrappers.mris import mris_inflate
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +28,21 @@ class Inflation(HemisphereStage):
             logger.info(f"{self.hemi}.inflated already exists, skipping")
             return
         
+        # Input is smoothwm.nofix (before topology fix)
+        smoothwm_nofix = self.hemi_path("smoothwm.nofix")
+        if not smoothwm_nofix.exists():
+            raise FileNotFoundError(
+                f"{self.hemi}.smoothwm.nofix not found. "
+                "This should be created in stage 09 (smoothing)."
+            )
+        
         logger.info(f"Inflating {self.hemi} surface...")
-        recon_all_inflate1(
-            subject=self.config.subject_id,
-            hemi=self.hemi,
-            hires=self.config.hires,
-            threads=self.threads,
+        mris_inflate(
+            input_surf=smoothwm_nofix,
+            output_surf=inflated_nofix,
+            n_iterations=self.config.processing.inflate_iterations,
+            no_save_sulc=self.config.processing.inflate_no_save_sulc,
             log_file=self.config.log_file,
-            subjects_dir=self.config.subjects_dir,
         )
     
     def should_skip(self) -> bool:

@@ -7,7 +7,6 @@ Coordinates the execution of all pipeline stages.
 from pathlib import Path
 from typing import Optional, Callable
 import logging
-import time
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -134,6 +133,18 @@ class ReconSurfPipeline:
             f.write(f"Subject: {self.config.subject_id}\n")
             f.write(f"Start: {self.start_time}\n")
             f.write(f"{'='*80}\n\n")
+        
+        # Initialize cmd log file (fastsurfer_recon.cmd)
+        cmd_log_path = self.config.cmd_log_file
+        cmd_log_path.parent.mkdir(parents=True, exist_ok=True)
+        from .wrappers.base import set_cmd_log_file
+        with open(cmd_log_path, "a") as f:
+            timestamp = datetime.now().strftime("%a %b %d %H:%M:%S %Z %Y")
+            f.write(f"\n\n#---------------------------------\n")
+            f.write(f"# New invocation of fastsurfer-recon {timestamp} \n")
+            f.write(f"#--------------------------------------------\n")
+        # Set global cmd log file so all commands are logged
+        set_cmd_log_file(cmd_log_path)
     
     def _run_volume_phase(self) -> None:
         """
@@ -191,6 +202,8 @@ class ReconSurfPipeline:
             logger.info(f"Processing hemisphere: {hemi}")
             
             # Surface stages (sequential per hemisphere)
+            # Note: Statistics is excluded here because mris_anatomical_stats
+            # requires both hemispheres' pial surfaces, so it must run sequentially
             stages = [
                 Tessellation(self.config, self.sd, hemi),
                 Smoothing(self.config, self.sd, hemi),
@@ -201,20 +214,27 @@ class ReconSurfPipeline:
                 Parcellation(self.config, self.sd, hemi),
                 SurfacePlacement(self.config, self.sd, hemi),
                 Registration(self.config, self.sd, hemi),
-                Statistics(self.config, self.sd, hemi),
             ]
             
             for stage in stages:
                 stage.run()
-        
+
+        hemis = ["lh", "rh"]
+
         # Run hemispheres
         if self.config.processing.parallel_hemis and self.config.processing.threads >= 2:
             logger.info("Running hemispheres in parallel")
-            self._run_parallel(process_hemisphere, ["lh", "rh"])
+            self._run_parallel(process_hemisphere, hemis)
         else:
             logger.info("Running hemispheres sequentially")
-            for hemi in ["lh", "rh"]:
+            for hemi in hemis:
                 process_hemisphere(hemi)
+        
+        # Statistics must run sequentially after both hemispheres complete surface placement
+        # because mris_anatomical_stats requires both hemispheres' pial surfaces
+        logger.info("Computing statistics for both hemispheres (sequential)")
+        for hemi in hemis:
+            Statistics(self.config, self.sd, hemi).run()
         
         # Post-surface volume stages (need both hemispheres' surfaces)
         post_surface_stages = [
@@ -250,12 +270,20 @@ class ReconSurfPipeline:
         """
         Run a function on multiple items in parallel.
         
+        Uses ThreadPoolExecutor to process items concurrently. If any item
+        fails, the exception is logged and re-raised, stopping all processing.
+        
         Parameters
         ----------
         func : callable
-            Function to call for each item
-        items : list
-            Items to process
+            Function to call for each item. Must accept a single string argument.
+        items : list[str]
+            Items to process (e.g., hemisphere names like ['lh', 'rh'])
+            
+        Raises
+        ------
+        Exception
+            Re-raises any exception from item processing, stopping all parallel tasks.
         """
         with ThreadPoolExecutor(max_workers=len(items)) as executor:
             futures = {executor.submit(func, item): item for item in items}

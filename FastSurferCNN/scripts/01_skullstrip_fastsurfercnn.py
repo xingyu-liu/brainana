@@ -27,10 +27,10 @@ logger = logging.getLogger(__name__)
 # output_dir = input_image.split('.nii')[0]
 
 surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
-# input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'
-# output_dir = f'{surfrecon_dir}/NMT2Sym'
-input_image = f'{surfrecon_dir}/site-arcaro_sub-baby1_ses-anat_T1w.nii.gz'
-output_dir = f'{surfrecon_dir}/arcaro_baby1'
+input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'
+output_dir = f'{surfrecon_dir}/NMT2Sym'
+# input_image = f'{surfrecon_dir}/site-arcaro_sub-baby1_ses-anat_T1w.nii.gz'
+# output_dir = f'{surfrecon_dir}/arcaro_baby1'
 # # # input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w_brain.nii.gz'
 # # # output_dir = f'{surfrecon_dir}/NMT2Sym_brain_v2'
 # # input_image = f'{surfrecon_dir}/test_anat_2pass_seg.nii.gz'

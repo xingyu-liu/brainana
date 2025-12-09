@@ -34,6 +34,11 @@ processing:
   n4_shrink_factor: 4
   n4_num_iterations: 50
   n4_levels: 4
+  
+  # Surface smoothing and inflation (for monkey/non-human data)
+  smooth_iterations: 3      # Smoothing iterations (used in s09 and s14). Use 3 for monkey data.
+  inflate_iterations: 3     # Inflation iterations (null = FreeSurfer default ~15-20). Use 3 for monkey data (less inflation).
+  inflate_no_save_sulc: true # Skip saving sulc file during inflation
 
 # Output control
 verbose: 1  # Verbosity level (0=WARNING, 1=INFO, 2=DEBUG)

@@ -10,6 +10,7 @@ import logging
 from .base import HemisphereStage
 from ..processing.parcellation import sample_parcellation, smooth_aparc_files
 from ..wrappers.recon_all import recon_all_cortex_label, recon_all_smooth2_inflate2_curvHK
+from ..wrappers.mris import mris_smooth, mris_inflate
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,57 @@ class Parcellation(HemisphereStage):
             incort=cortex_label,
             outaparc=aparc_mapped,
         )
+        
+        # Optional: Apply additional smoothing and inflation adjustments for monkey/non-human data
+        # This allows fine-tuning after recon-all's default smooth2/inflate2
+        # Only apply if inflate_iterations is explicitly set (not None) - this is the main monkey adjustment
+        if self.config.processing.inflate_iterations is not None:
+            logger.info(f"Applying post-processing adjustments for {self.hemi} (monkey-specific inflation)...")
+            
+            smoothwm = self.hemi_path("smoothwm")
+            inflated = self.hemi_path("inflated")
+            white_preaparc = self.hemi_path("white.preaparc")
+            
+            if not smoothwm.exists() or not inflated.exists() or not white_preaparc.exists():
+                logger.warning(
+                    f"Cannot apply post-processing adjustments: missing surfaces. "
+                    f"smoothwm exists: {smoothwm.exists()}, "
+                    f"inflated exists: {inflated.exists()}, "
+                    f"white.preaparc exists: {white_preaparc.exists()}"
+                )
+            else:
+                # Re-smooth smoothwm with configured iterations 
+                logger.info(f"Re-smoothing {self.hemi}.smoothwm with {self.config.processing.smooth_iterations} iterations...")
+                # Create temporary smoothed version
+                smoothwm_adjusted = self.hemi_path("smoothwm.adjusted")
+                mris_smooth(
+                    input_surf=white_preaparc,
+                    output_surf=smoothwm_adjusted,
+                    n_iterations=self.config.processing.smooth_iterations,
+                    nw=True,
+                    seed=1234,
+                    log_file=self.config.log_file,
+                )
+                # Replace original with adjusted version
+                smoothwm_adjusted.replace(smoothwm)
+                logger.info(f"Replaced {self.hemi}.smoothwm with adjusted version")
+                # Update smoothwm path for inflation
+                smoothwm = self.hemi_path("smoothwm")
+                
+                # Re-inflate inflated with configured iterations (less inflation for monkey)
+                logger.info(f"Re-inflating {self.hemi}.inflated with {self.config.processing.inflate_iterations} iterations (less inflation for monkey)...")
+                # Create temporary inflated version
+                inflated_adjusted = self.hemi_path("inflated.adjusted")
+                mris_inflate(
+                    input_surf=smoothwm,
+                    output_surf=inflated_adjusted,
+                    n_iterations=self.config.processing.inflate_iterations,
+                    no_save_sulc=False,  # For inflation2, we want to keep sulc
+                    log_file=self.config.log_file,
+                )
+                # Replace original with adjusted version
+                inflated_adjusted.replace(inflated)
+                logger.info(f"Replaced {self.hemi}.inflated with adjusted version ({self.config.processing.inflate_iterations} iterations)")
     
     def should_skip(self) -> bool:
         """Skip if mapped parcellation exists."""

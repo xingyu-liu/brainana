@@ -32,7 +32,7 @@ class Smoothing(HemisphereStage):
         mris_smooth(
             input_surf=orig_nofix,
             output_surf=smoothwm_nofix,
-            n_iterations=2,
+            n_iterations=self.config.processing.smooth_iterations,
             nw=True,
             seed=1234,
             log_file=self.config.log_file,

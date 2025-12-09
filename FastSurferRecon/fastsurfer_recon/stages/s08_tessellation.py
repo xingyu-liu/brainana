@@ -57,6 +57,7 @@ class Tessellation(HemisphereStage):
                     norm=brain,
                     output_vol=pretess,
                     log_file=self.config.log_file,
+                    subject_dir=self.sd.subject_dir,
                 )
             
             # Marching cubes
@@ -67,6 +68,7 @@ class Tessellation(HemisphereStage):
                 label=self.hemi_value,
                 output_surf=orig_nofix,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
             
             # Fix surface header (scannerRAS -> surfaceRAS)

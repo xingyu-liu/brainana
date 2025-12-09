@@ -36,6 +36,7 @@ class NormT1(PipelineStage):
                 mask=mask,
                 output_vol=norm,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
         else:
             logger.info("norm.mgz already exists")
@@ -50,6 +51,7 @@ class NormT1(PipelineStage):
                     output_vol=t1,
                     aseg=aseg_orig if aseg_orig.exists() else None,
                     log_file=self.config.log_file,
+                    subject_dir=self.sd.subject_dir,
                 )
             else:
                 logger.info("T1.mgz already exists")
@@ -62,6 +64,7 @@ class NormT1(PipelineStage):
                     mask=mask,
                     output_vol=brainmask,
                     log_file=self.config.log_file,
+                    subject_dir=self.sd.subject_dir,
                 )
         else:
             # Link brainmask to norm

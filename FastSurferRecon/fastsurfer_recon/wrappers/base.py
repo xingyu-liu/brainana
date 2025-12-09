@@ -14,9 +14,32 @@ from typing import Optional, Sequence, Any
 
 logger = logging.getLogger(__name__)
 
+# Global cmd log file path (set by pipeline)
+_cmd_log_file: Optional[Path] = None
+
+
+def set_cmd_log_file(cmd_log_file: Optional[Path]) -> None:
+    """Set the global cmd log file path for command logging."""
+    global _cmd_log_file
+    _cmd_log_file = cmd_log_file
+
+
+def get_cmd_log_file() -> Optional[Path]:
+    """Get the global cmd log file path."""
+    return _cmd_log_file
+
 
 class FreeSurferError(Exception):
-    """Exception raised when a FreeSurfer command fails."""
+    """
+    Exception raised when a FreeSurfer command fails.
+    
+    Attributes
+    ----------
+    cmd : str, optional
+        The command that failed
+    returncode : int, optional
+        The exit code of the failed command
+    """
     
     def __init__(self, message: str, cmd: Optional[str] = None, returncode: Optional[int] = None):
         self.cmd = cmd
@@ -77,11 +100,38 @@ def find_command(cmd: str) -> str:
     return path
 
 
+def to_relative_path(path: Path, subject_dir: Path) -> Path:
+    """
+    Convert absolute path to relative path from subject_dir if under it.
+    
+    Parameters
+    ----------
+    path : Path
+        Path to convert (can be absolute or relative)
+    subject_dir : Path
+        Subject directory (e.g., /path/to/subject)
+        
+    Returns
+    -------
+    Path
+        Relative path from subject_dir if path is under it, otherwise original path
+    """
+    if path.is_absolute():
+        try:
+            return path.relative_to(subject_dir)
+        except ValueError:
+            # Path is not under subject_dir, keep absolute
+            return path
+    return path
+
+
 def run_fs_command(
     cmd: Sequence[str | Path],
     log_file: Optional[Path] = None,
+    cmd_log_file: Optional[Path] = None,
     env: Optional[dict[str, str]] = None,
     cwd: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
     check: bool = True,
     capture_output: bool = True,
     timeout: Optional[float] = None,
@@ -95,10 +145,16 @@ def run_fs_command(
         Command and arguments
     log_file : Path, optional
         File to append output to
+    cmd_log_file : Path, optional
+        File to log command (fastsurfer_recon.cmd format). Logs command with timestamp.
     env : dict, optional
         Additional environment variables (merged with os.environ)
     cwd : Path, optional
-        Working directory
+        Working directory (overridden by subject_dir if provided)
+    subject_dir : Path, optional
+        Subject directory. If provided, uses subject_dir as working directory.
+        This enables recon-all style logging with cd commands. Paths should already
+        be converted to relative from subject_dir by wrapper functions.
     check : bool, default=True
         Raise exception on non-zero exit code
     capture_output : bool, default=True
@@ -120,6 +176,10 @@ def run_fs_command(
     cmd_list = [str(c) for c in cmd]
     cmd_str = " ".join(cmd_list)
     
+    # Resolve subject_dir if provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+    
     # Merge environment
     run_env = os.environ.copy()
     if env:
@@ -133,11 +193,26 @@ def run_fs_command(
     
     logger.debug(f"Running: {cmd_str}")
     
+    # Log command to cmd log file (fastsurfer_recon.cmd format)
+    # Use provided cmd_log_file or global one
+    active_cmd_log_file = cmd_log_file or _cmd_log_file
+    if active_cmd_log_file:
+        from datetime import datetime  # Import here to avoid circular dependency
+        active_cmd_log_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(active_cmd_log_file, "a") as f:
+            timestamp = datetime.now().strftime("%a %b %d %H:%M:%S %Z %Y")
+            f.write(f"\n#--------------------------------------------\n")
+            f.write(f"#@# {cmd_list[0]} {timestamp}\n")
+            # Log cd command if using subject_dir (recon-all style)
+            if subject_dir:
+                f.write(f"cd {subject_dir}\n")
+            f.write(f"{' '.join(cmd_list)}\n")
+    
     try:
         result = subprocess.run(
             cmd_list,
             env=run_env,
-            cwd=cwd,
+            cwd=subject_dir if subject_dir else cwd,
             capture_output=capture_output,
             text=True,
             timeout=timeout,
