@@ -673,6 +673,65 @@ def pad_volume_edges_percent(
     return padded_volume, pad_width
 
 
+def pad_volume_to_cube(
+    volume: npt.NDArray,
+    mode: str = 'constant'
+) -> tuple[np.ndarray, tuple[tuple[int, int], tuple[int, int], tuple[int, int]]]:
+    """
+    Pad a 3D volume to make it cubic (same size in all dimensions).
+    
+    Pads the volume symmetrically to match the maximum dimension.
+    For example, a volume of shape (320, 144, 210) will be padded to (320, 320, 320).
+    
+    Parameters
+    ----------
+    volume : npt.NDArray
+        3D volume array with shape (H, W, D) or higher dimensions.
+        If higher dimensions, only the first 3 dimensions are padded.
+    mode : str, default='constant'
+        Padding mode: 'constant' (zeros) or 'edge' (replicates edge voxels)
+        
+    Returns
+    -------
+    np.ndarray
+        Padded volume with cubic shape (max_dim, max_dim, max_dim, ...)
+    tuple[tuple[int, int], tuple[int, int], tuple[int, int]]
+        Padding amounts for first 3 dimensions: ((pad_h_before, pad_h_after),
+        (pad_w_before, pad_w_after), (pad_d_before, pad_d_after))
+    """
+    if len(volume.shape) < 3:
+        raise ValueError(f"Expected at least 3D volume, got shape {volume.shape}")
+    
+    h, w, d = volume.shape[:3]
+    max_dim = max(h, w, d)
+    
+    # Check if already cubic
+    if h == w == d == max_dim:
+        return volume, ((0, 0), (0, 0), (0, 0))
+    
+    # Calculate padding needed for each of the first 3 dimensions
+    pad_widths = []
+    for dim_size in [h, w, d]:
+        pad_total = max_dim - dim_size
+        pad_before = pad_total // 2
+        pad_after = pad_total - pad_before
+        pad_widths.append((pad_before, pad_after))
+    
+    # Add zero padding for any additional dimensions (4th, 5th, etc.)
+    if len(volume.shape) > 3:
+        pad_widths.extend([(0, 0)] * (len(volume.shape) - 3))
+    
+    # Apply padding
+    if mode == 'constant':
+        padded_volume = np.pad(volume, pad_widths, mode='constant', constant_values=0).astype(volume.dtype)
+    elif mode == 'edge':
+        padded_volume = np.pad(volume, pad_widths, mode='edge').astype(volume.dtype)
+    else:
+        raise ValueError(f"mode must be 'constant' or 'edge', got '{mode}'")
+    
+    return padded_volume, tuple(pad_widths[:3])
+
+
 def depad_volume(
     volume: npt.NDArray | torch.Tensor,
     pad_width: tuple[tuple[int, int], tuple[int, int], tuple[int, int]]

@@ -69,6 +69,7 @@ def skullstrip_fastsurfercnn(
     fix_roi_wm: bool = False,
     roi_name: str = 'V1',
     wm_thr: float = 0.5,
+    save_debug_intermediates: bool = False,
 ) -> Dict[str, str]:
     """
     Perform skullstripping using FastSurferCNN segmentation model.
@@ -282,6 +283,7 @@ def skullstrip_fastsurfercnn(
             output_data_format=output_data_format,
             enable_crop_2round=enable_crop_2round,
             logger=logger,
+            save_debug_intermediates=save_debug_intermediates,
         )
         
         logger.info("Skullstripping (FastSurferCNN): completed successfully")

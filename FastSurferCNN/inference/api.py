@@ -230,6 +230,7 @@ def run_segmentation(
     output_data_format: Literal["mgz", "nifti"] = "nifti",
     enable_crop_2round: bool = False,
     logger: logging.Logger | None = None,
+    save_debug_intermediates: bool = False,
 ) -> dict[str, Path]:
     """
     Run segmentation and save outputs (segmentation, mask, hemimask) to output directory.
@@ -287,6 +288,12 @@ def run_segmentation(
         final outputs (from second pass) are saved to main output_dir in cropped image's native space.
     logger : logging.Logger, optional
         Logger instance to use for logging. If not provided, uses the module-level logger.
+    save_debug_intermediates : bool, default=False
+        If True, save intermediate files for debugging:
+        - conformed image (after conforming, before prediction)
+        - prediction after each plane (before aggregation)
+        - final aggregated prediction (before resampling)
+        Files are saved to output_dir/debug_intermediates/
         
     Note
     ----
@@ -340,6 +347,13 @@ def run_segmentation(
         # Multi-class models: enable all features
         create_hemi_mask = True
 
+    # Create debug directory if needed
+    debug_dir = None
+    if save_debug_intermediates:
+        debug_dir = output_dir / "debug_intermediates"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        log.info(f"Debug mode enabled: intermediate files will be saved to {debug_dir}")
+
     # Initialize predictor
     # Preprocessing parameters (vox_size, orientation, image_size)
     # are automatically read from checkpoint metadata if available
@@ -357,11 +371,25 @@ def run_segmentation(
         plane_weight_axial=plane_weight_axial,
         plane_weight_sagittal=plane_weight_sagittal,
         fix_wm_islands=fix_wm_islands,
+        save_debug_intermediates=save_debug_intermediates,
+        debug_dir=debug_dir,
     )
 
     # Run prediction (returns segmentation in model/conformed space)
     log.info(f"Running segmentation on {input_image}")
     pred_data = predictor.get_prediction(str(input_image))
+    
+    # Save final aggregated prediction before resampling (debug)
+    if save_debug_intermediates and debug_dir is not None:
+        debug_pred_path = debug_dir / "prediction_aggregated_before_resample.nii.gz"
+        log.info(f"Saving aggregated prediction (before resampling) to {debug_pred_path.name}")
+        data_utils.save_image(
+            predictor._conformed_img.header,
+            predictor._conformed_img.affine,
+            pred_data,
+            debug_pred_path,
+            dtype=np.int16,
+        )
     
     # Debug: Log prediction statistics for binary models
     if is_binary:

@@ -337,15 +337,13 @@ python3 -m macacaMRIprep.cli.preproc \
 # ================================================
 dataset_root=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton
 dataset_dir=${dataset_root}/bids_wrong_orient
-config_f=${dataset_root}/preproc/config_wrong_orient.yaml
-output_dir=${dataset_root}/preproc/preproc_wrong_orient
+output_dir=${dataset_root}/preproc/preproc_freddie
+config_f=${output_dir}/config.yaml
 
-pipeline=func2anat2template
 python3 -m macacaMRIprep.cli.preproc \
     ${dataset_dir} \
     ${output_dir} \
-    --pipeline ${pipeline} --config ${config_f} \
-    --n-procs 3
+    --config ${config_f}
 
 # ================================================
 # test mebrain

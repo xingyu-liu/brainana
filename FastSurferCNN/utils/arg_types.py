@@ -19,7 +19,7 @@ import nibabel as nib
 import numpy as np
 
 VoxSizeOption = float | Literal["min"]
-ImageSizeOption = int | Literal["fov", "auto"]
+ImageSizeOption = int | Literal["fov", "cube"]
 
 __axcode = ("rl", "ap", "si")
 __orders = tuple(permutations(range(3)))
@@ -112,33 +112,33 @@ def vox_size(a: str | float | None) -> VoxSizeOption | None:
 
 def img_size(a: str) -> ImageSizeOption | None:
     """
-    Convert the img_size argument to 'fov', 'auto' or int as a valid image size.
+    Convert the img_size argument to 'fov', 'cube' or int as a valid image size.
 
     Parameters
     ----------
     a : str
-        Image size type. Can be auto, fov or an integer greater than 0.
+        Image size type. Can be cube, fov or an integer greater than 0.
 
     Returns
     -------
     str or int
-        If 'auto' or 'fov' is provided, it returns a string('auto' or 'fov').
+        If 'cube' or 'fov' is provided, it returns a string('cube' or 'fov').
         If a valid image size (greater than 0) is provided, it returns an int.
         If 'any', it returns None.
 
     Raises
     ------
     ValueError
-        If the argument is not "fov", "auto" or convertible to an int greater than 0.
+        If the argument is not "fov", "cube" or convertible to an int greater than 0.
     """
-    if a.lower() in ("auto", "fov"):
+    if a.lower() in ("cube", "fov"):
         return cast(ImageSizeOption, a.lower())
     if a.lower() == "any":
         return None
     try:
         return int_gt_zero(a)
     except ValueError as e:
-        raise ValueError(e.args[0] + " Additionally, img_size may be 'fov'.") from None
+        raise ValueError(e.args[0] + " Additionally, img_size may be 'fov' or 'cube'.") from None
 
 
 def float_gt_zero_and_le_one(a: str | float) -> float | None:

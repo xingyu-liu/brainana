@@ -189,8 +189,17 @@ _C.DATA.PREPROCESSING = CN()
 # Target orientation (LIA = Left-Inferior-Anterior)
 _C.DATA.PREPROCESSING.ORIENTATION = "lia"
 
-# Image size: int (e.g. 256) or "auto" (adaptive) or "fov"
-_C.DATA.PREPROCESSING.IMG_SIZE = "auto"
+# Image size: int (e.g. 256), "fov" (preserve field of view), or "cube" (make cube)
+#   - "fov" (RECOMMENDED): Preserves exact physical FOV, brain position maintained
+#     Calculates: target_size = ceil(original_FOV / target_vox_size)
+#     Result: May have different dimensions per axis (e.g., [320, 144, 210])
+#     Use when: You want to preserve brain position exactly (no shifting)
+#   - "cube": First calculates FOV-based size, then pads to cube using max dimension
+#     Result: Same size in all axes (e.g., [320, 320, 320])
+#     Preserves brain position by padding after affine calculation
+#     Use when: You need a cube for model compatibility
+#   - int: Forces a cube of that size (e.g., 256 → [256, 256, 256])
+_C.DATA.PREPROCESSING.IMG_SIZE = "fov"
 
 # Voxel size: float (e.g. 1.0) or "min" (adaptive)
 _C.DATA.PREPROCESSING.VOX_SIZE = "min"

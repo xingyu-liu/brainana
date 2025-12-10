@@ -19,8 +19,6 @@ import argparse
 import re
 import sys
 from collections.abc import Callable, Iterable, Sequence
-from functools import partial
-from itertools import chain
 from typing import TYPE_CHECKING, Literal, TypeVar, cast
 
 import nibabel
@@ -41,7 +39,6 @@ from scipy.ndimage import affine_transform
 if TYPE_CHECKING:
     import torch
     from torch import is_tensor as _is_tensor
-    from torch.nn.functional import pad as _pad
 else:
     # stub imports so TypeVar works
     class torch:
@@ -50,9 +47,6 @@ else:
     
     def _is_tensor(obj):
         return False
-    
-    def _pad(*args, **kwargs):
-        raise NotImplementedError("torch not available")
 
 from FastSurferCNN.utils import logging
 from FastSurferCNN.utils.arg_types import ImageSizeOption, OrientationType, StrictOrientationType, VoxSizeOption
@@ -188,12 +182,12 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--img_size",
         dest="img_size",
-        default="auto",
-        metavar="<int>|auto|fov|any",
+        default="fov",
+        metavar="<int>|cube|fov|any",
         type=__img_size,
         help="Specifies the image size to conform to, cube: same value for all three directions. Options: <int> "
-             "(cube, sets dimension of the target image), 'auto' (cube, infer dimensions of image from largest "
-             "field-of-view dimension, min. 256), 'fov' (may not be cube, set all three dimensions of image to keep "
+             "(cube, sets dimension of the target image), 'cube' (cube, infer dimensions of image from largest "
+             "field-of-view dimension, then pad to cube), 'fov' (may not be cube, set all three dimensions of image to keep "
              "the field of view the same) or 'any' (ignore this criteria, in practice similar to fov).",
     )
     parser.add_argument(
@@ -451,21 +445,9 @@ def map_image(
         return image_data
 
     inv_vox2vox = np.linalg.inv(vox2vox)
-    if not does_vox2vox_rot_require_interpolation(vox2vox, vox_eps=vox_eps, rot_eps=rot_eps):
-
-        LOGGER.debug(f"vox2vox: {vox2vox}")
-        # second condition: translations are integers
-        if np.allclose(vox2vox[:, 3], np.round(vox2vox[:, 3]), atol=1e-4):
-            # reorder axes
-            ornt = nib.orientations.io_orientation(vox2vox)
-            new_old_index = list(enumerate(map(int, ornt[:, 0])))
-            # if the direction is flipped (ornt[j, 1] == -1), offset has to start at the other end
-            offsets = [ornt[j, 1] * vox2vox[i, 3] + (ornt[j, 1] == -1) * img.shape[j] for i, j in new_old_index]
-            offsets = list(map(lambda x: int(x.astype(int)), offsets))
-            reordered = apply_orientation(image_data, ornt)
-            # pad=0 => pad with zeros
-            return crop_transform(reordered, offsets=offsets, target_shape=out_shape, pad=0)
-
+    # NOTE: A crop_transform optimization path existed here but had a bug in offset 
+    # calculation for axis-permuting transformations (e.g., LIA<->RAS). 
+    # Using affine_transform handles all cases correctly.
     return affine_transform(image_data, inv_vox2vox, output_shape=out_shape, order=order)
 
 
@@ -644,7 +626,7 @@ def conform(
         img: nib.analyze.SpatialImage,
         order: int = 1,
         vox_size: VoxSizeOption | None = "min",
-        img_size: ImageSizeOption | None = 256,
+        img_size: ImageSizeOption | None = "fov",
         dtype: type | None = np.uint8,
         orientation: OrientationType | None = "lia",
         rescale: int | float | Literal["none"] = 255,
@@ -668,10 +650,15 @@ def conform(
         Conform the image to this voxel size, a specific smaller voxel size (0-1, for high-res), or automatically
         determine the 'minimum voxel size' from the image (value 'min'). This assumes the smallest of the three voxel
         sizes. `None` disables this criterion.
-    img_size : int, "fov", "auto", None, default=256
-        Conform the image to this image size, e.g. a specific smaller size (for example for high-res), or automatically
-        determine the image size from the field of view ('fov' or 'auto', the former may yield non-cube-images). `None`
-        disables this criterion.
+    img_size : int, "fov", "cube", None, default="fov"
+        Conform the image to this image size:
+        - int: Force a cube of that size (e.g., 256 → [256, 256, 256])
+        - "fov" (RECOMMENDED): Preserve exact physical FOV, may yield non-cubic images
+          (e.g., [320, 144, 210]). Maintains brain position exactly (no shifting).
+        - "cube": First calculates FOV-based size, then pads to cube using max dimension.
+          Preserves brain position by padding after affine calculation.
+          Use when you need a cube for model compatibility.
+        - None: Disables this criterion.
     dtype : type, None, default=np.unit8
         The dtype to enforce in the image (default: UCHAR, as mri_convert -c). `None` disregards this criterion.
     orientation : "soft-<orientationcode>", "<orientationcode>", "native", None, default="lia"
@@ -752,9 +739,126 @@ def conform(
     if limits is not None:
         mapped_data = np.clip(mapped_data, *limits)
 
+    # Handle "cube" img_size: pad to cube after FOV-based resampling
+    # This preserves brain position by using FOV-based affine, then padding symmetrically
+    if img_size == "cube" or (isinstance(img_size, str) and img_size.lower() == "cube"):
+        # Lazy import to avoid circular dependency (data_utils imports from conform)
+        from FastSurferCNN.data_loader.data_utils import pad_volume_to_cube
+        
+        current_shape = mapped_data.shape[:3]
+        
+        # Use existing padding function to make volume cubic
+        mapped_data, pad_widths = pad_volume_to_cube(mapped_data, mode='constant')
+        
+        # Check if padding was applied
+        if any(p[0] != 0 or p[1] != 0 for p in pad_widths):
+            # Adjust affine to account for padding
+            # When we pad symmetrically, the volume center shifts by half the total padding in each dimension
+            # The brain center (Pxyz_c) in world space should stay the same
+            # But the volume center in voxel space changes, which affects the affine translation
+            
+            # Calculate how much the volume center shifted in voxel space
+            # Original center: old_shape / 2
+            # New center: new_shape / 2 = (old_shape + padding_total) / 2
+            # Shift: new_center - old_center = padding_total / 2
+            pad_total = np.array([p[0] + p[1] for p in pad_widths])  # Total padding per dimension
+            center_shift_vox = pad_total / 2.0  # Volume center shifts by half the total padding
+            
+            # Get MdcD matrix (rotation * voxel size) from header
+            # MdcD = Mdc^T * delta (from the comment at line 872)
+            # Each column of Mdc^T is multiplied by the corresponding delta value
+            mdc = np.asarray(h1["Mdc"])
+            delta = np.array(h1.get_zooms()[:3])
+            mdcD = mdc.T * delta  # Broadcasting: (3,3) * (3,) -> each column multiplied by delta
+            
+            # Convert center shift from voxel space to world space
+            center_shift_world = mdcD @ center_shift_vox
+            
+            # Adjust affine translation
+            # The affine translation is: Pxyz_c - vol_center
+            # When vol_center shifts by center_shift_world, the translation needs to shift by -center_shift_world
+            
+            # First, update header shape to reflect padded dimensions
+            padded_shape = mapped_data.shape[:3]
+            h1.set_data_shape(list(padded_shape) + [1])
+            
+            # Now adjust the affine translation to account for padding
+            # The vol_center in the header will be recomputed from the new shape
+            # So we need to adjust the affine translation by -center_shift_world
+            target_affine = target_affine.copy()
+            target_affine_before = target_affine[:3, 3].copy()
+            target_affine[:3, 3] = target_affine[:3, 3] - center_shift_world
+            
+            if verbose:
+                LOGGER.info(f"Affine adjustment details:")
+                LOGGER.info(f"  Before padding: {target_affine_before}")
+                LOGGER.info(f"  Adjustment: -{center_shift_world}")
+                LOGGER.info(f"  After adjustment: {target_affine[:3, 3]}")
+            
+            # CRITICAL: The brain center in world space should conceptually stay the same
+            # The padding doesn't move the brain, it just adds zeros around it.
+            # However, we manually adjusted target_affine[:3, 3] to account for the new volume center.
+            # To ensure consistency, we need to update h1["Pxyz_c"] so that when h1.get_affine() 
+            # is called later, it computes the same affine as our manually adjusted target_affine.
+            # 
+            # The affine is computed as: affine_translation = Pxyz_c - vol_center
+            # We want: target_affine[:3, 3] = Pxyz_c - new_vol_center
+            # Therefore: Pxyz_c = target_affine[:3, 3] + new_vol_center
+            mdc = np.asarray(h1["Mdc"])
+            delta = np.array(h1.get_zooms()[:3])
+            mdcD = mdc.T * delta
+            new_vol_center = mdcD @ (np.array(padded_shape, dtype=float) / 2.0)
+            
+            # Update Pxyz_c so that: target_affine[:3, 3] = Pxyz_c - new_vol_center
+            # Therefore: Pxyz_c = target_affine[:3, 3] + new_vol_center
+            h1["Pxyz_c"] = target_affine[:3, 3] + new_vol_center
+            
+            # CRITICAL: Verify that header-computed affine matches our adjusted target_affine
+            # We keep using target_affine (which was used for mapping) to preserve orientation
+            # But we update Pxyz_c so that h1.get_affine() matches when accessed later
+            if verbose:
+                header_affine = h1.get_affine()
+                header_affine_trans = np.array(h1["Pxyz_c"]) - new_vol_center
+                LOGGER.debug(f"Affine verification after padding:")
+                LOGGER.debug(f"  Adjusted affine translation: {target_affine[:3, 3]}")
+                LOGGER.debug(f"  Header would compute translation: {header_affine_trans}")
+                LOGGER.debug(f"  Translation difference: {target_affine[:3, 3] - header_affine_trans}")
+                # Check if rotation/orientation matches (should be identical)
+                rotation_diff = np.abs(target_affine[:3, :3] - header_affine[:3, :3]).max()
+                LOGGER.debug(f"  Rotation matrix max difference: {rotation_diff}")
+                LOGGER.debug(f"  target_affine[:3,:3]:\n{target_affine[:3, :3]}")
+                LOGGER.debug(f"  header_affine[:3,:3]:\n{header_affine[:3, :3]}")
+                if not np.allclose(target_affine[:3, 3], header_affine_trans, atol=1e-4):
+                    LOGGER.warning(
+                        f"WARNING: Adjusted affine translation doesn't match header computation! "
+                        f"This may cause brain shifting during resampling."
+                    )
+                elif rotation_diff > 1e-6:
+                    # Log more details about the discrepancy
+                    LOGGER.warning(
+                        f"WARNING: Rotation matrix differs! This will cause orientation issues. "
+                        f"Max difference: {rotation_diff}"
+                    )
+                    LOGGER.warning(f"  target_affine rotation:\n{target_affine[:3, :3]}")
+                    LOGGER.warning(f"  header_affine rotation:\n{header_affine[:3, :3]}")
+                    LOGGER.warning(f"  Difference:\n{target_affine[:3, :3] - header_affine[:3, :3]}")
+                else:
+                    LOGGER.debug(f"  ✓ Affine matches header computation (translation and rotation)")
+            
+            if verbose:
+                LOGGER.info(f"Padded image from {current_shape} to {padded_shape} (cubic) for img_size='cube'")
+                LOGGER.info(f"Padding (voxel space): {[f'{p[0]}+{p[1]}={p[0]+p[1]}' for p in pad_widths]}")
+                LOGGER.info(f"Volume center shift (voxel space): {center_shift_vox}")
+                LOGGER.info(f"Volume center shift (world space): {center_shift_world}")
+                LOGGER.info(f"Affine translation adjusted by: {center_shift_world}")
+
     # mapped data is still float here, clip to integers now
     if np.issubdtype(target_dtype, np.integer):
         mapped_data = np.rint(mapped_data)
+    
+    # CRITICAL: Use target_affine (which was used for mapping) to preserve orientation
+    # The header's Pxyz_c has been updated to match, so h1.get_affine() should match target_affine
+    # But we use target_affine directly to ensure exact match with what was used for mapping
     new_img = nibabel.MGHImage(mapped_data.astype(target_dtype), target_affine, h1)
 
     # make sure we store uchar
@@ -902,7 +1006,7 @@ def does_vox2vox_rot_require_interpolation(
 def is_conform(
         img: nib.analyze.SpatialImage,
         vox_size: VoxSizeOption | None = "min",
-        img_size: ImageSizeOption | None = 256,
+        img_size: ImageSizeOption | None = "fov",
         dtype: type | None = np.uint8,
         orientation: OrientationType | None = "lia",
         verbose: bool = True,
@@ -923,9 +1027,9 @@ def is_conform(
         Which voxel size to conform to. Can either be a float between 0.0 and 1.0, 'min' (to check, whether the image is
         conformed to the minimal voxels size, i.e. conforming to smaller, but isotropic voxel sizes for high-res), or
         None to disable the criteria.
-    img_size : int, "fov", "auto", None, default=256
+    img_size : int, "fov", "cube", None, default="fov"
         Conform the image to this image size, a specific smaller size (0-1, for high-res), or automatically determine
-        the target size: "fov": derive from the fov per dimension; "auto": get the largest "fov" and use this 3 times.
+        the target size: "fov": derive from the fov per dimension; "cube": get the largest "fov" and pad to cube.
     dtype : Type, None, default=numpy.uint8
         Specifies the intended target dtype, if None the dtype check is disabled.
     orientation : "soft-XXX", "XXX", "native", None, default="lia"
@@ -1109,10 +1213,10 @@ def conformed_vox_img_size(
     vox_size : float, "min", None
         The voxel size parameter to use: either a voxel size as float, or the string "min" to automatically find a
         suitable voxel size (smallest per-dimension voxel size). None disregards the criterion (output also None).
-    img_size : int, "fov", "auto", None
+    img_size : int, "fov", "cube", None
         The image size parameter: either an image size as int, the string "fov" to automatically derive a suitable
-        image size (field of view), or "auto" like "fov" but largest size in every direction.
-        `None` disregards the criterion, if vox_size is also `None`, else like "auto".
+        image size (field of view), or "cube" like "fov" but pads to cube using largest dimension.
+        `None` disregards the criterion, if vox_size is also `None`, else like "cube".
     vox_eps : float, default=1e-4
         The threshold to compare vox_sizes (differences below this are ignored).
 
@@ -1149,21 +1253,30 @@ def conformed_vox_img_size(
     if img_size is None:
         target_img_size = None
     elif isinstance(img_size, int) and img_size > 0:
+        # Fixed size: Force a cube of the specified size
         target_img_size = np.full((3,), img_size)
-    elif isinstance(img_size, str) and (img_size := img_size.lower()) in ["fov", "auto"]:
+    elif isinstance(img_size, str) and (img_size := img_size.lower()) in ["fov", "cube"]:
         # REMOVED: Special case that forced 256³ for 1mm isotropic data
         # This was problematic for small FOV images (e.g., EPI) where 256³ is too large
         # Now all data uses FOV-based sizing consistently
+        
+        # Step 1: Start with original image dimensions
         target_img_size = np.array(img.shape[:3])
+        
+        # Step 2: Adjust for voxel size changes (preserve physical FOV)
         if target_vox_size is not None:
-            # correct sizes for changing voxel size (if voxel size is changing)
-            # compute field of view dimensions in mm (in native orientation)
+            # Compute field of view dimensions in mm (in native orientation)
             fov = np.array(img.header.get_zooms()[:3]) * target_img_size
-            # compute number of voxels needed to cover field of view
+            # Compute number of voxels needed to cover field of view with new voxel size
             target_img_size = np.ceil((fov / target_vox_size * 10000).astype(int).astype(float) / 10000).astype(int)
-        # use cube (same size in all directions) with MAX_DIMENSION in each direction as minimum
-        if img_size == "auto":
-            target_img_size = np.full_like(np.maximum(MAX_DIMENSION, target_img_size), np.amax(target_img_size))
+        
+        # Step 3: Handle "fov" vs "cube" difference
+        #   - "fov" (RECOMMENDED): Keep FOV-based dimensions (may be non-cubic, e.g., [320, 144, 210])
+        #     Preserves exact physical FOV, maintains brain position (no shifting)
+        #   - "cube": Return FOV-based size here, will be padded to cube later in conform()
+        #     This preserves brain position by padding after affine is calculated
+        #     (Padding happens after map_image() with proper affine adjustment)
+        # Note: For "cube", we don't expand here - padding happens in conform() after resampling
     else:
         raise ValueError("Invalid value for img_size passed.")
     return target_vox_size, target_img_size
@@ -1268,187 +1381,6 @@ def print_options(options: dict):
     for m in msg:
         if m is not None:
             _logger.info(m.format(**options))
-
-
-def _crop_transform_make_indices(image_shape, offsets, target_shape):
-    """
-    Create the indexing tuple and return padding tuples for the last N dimensions.
-
-    Parameters
-    ----------
-    image_shape : np.ndarray
-        The shape of the image from which a region is to be cropped.
-    offsets : Sequence[int]
-        Exact location within the image from which the cropping should start.
-    target_shape : Sequence[int], optional
-        The desired shape of the cropped region.
-
-    Returns
-    -------
-    paddings: list of 2-tuples of paddings or None
-        A list of per-axis tuples of the padding to apply to the slice to get the target_shape.
-    indices : tuple of indices
-        A tuple of per-axis indices to index in the data to get the target_shape.
-    """
-    if len(offsets) != len(target_shape):
-        raise ValueError(
-            f"offsets {offsets} and target shape {target_shape} must be same length."
-        )
-    if len(offsets) > len(image_shape):
-        raise ValueError("offsets too long for image")
-    batch_dims = len(image_shape) - len(offsets)
-    indices = [slice(None)] * batch_dims
-    paddings = []
-    any_pad = False
-    for offset, t_shape, i_shape in zip(
-        offsets, target_shape, image_shape[batch_dims:], strict=False
-    ):
-        crop_end = min(offset + t_shape, i_shape)
-        indices.append(slice(max(0, offset), crop_end))
-        pads = (max(0, -offset), max(0, offset + t_shape - crop_end))
-        paddings.append(pads)
-        any_pad = any_pad or any(p != 0 for p in pads)
-
-    return paddings if any_pad else None, tuple(indices)
-
-
-def _crop_transform_pad_fn(image, pad_tuples, pad):
-    """
-    Generate a parameterized pad function.
-
-    Parameters
-    ----------
-    image : np.ndarray, torch.Tensor
-        Input image.
-    pad_tuples : List[Tuple[int, int]]
-        List of padding tuples for each axis.
-
-    Returns
-    -------
-    partial
-        A partial function to pad the image.
-    """
-    if all(p1 == 0 and p2 == 0 for p1, p2 in pad_tuples):
-        return None
-
-    kwargs = {"mode": "constant"}
-    if isinstance(pad, str):
-        kwargs["mode"] = pad
-    elif isinstance(image, np.ndarray):
-        kwargs["constant_values"] = pad
-    else:  # Tensor
-        kwargs["value"] = pad
-
-    if isinstance(image, np.ndarray):
-        return partial(np.pad, pad_width=[(0, 0)] * (image.ndim - len(pad_tuples)) + pad_tuples, **kwargs)
-    else:  # Tensor
-        return partial(_pad, pad=list(chain.from_iterable(reversed(pad_tuples))), **kwargs)
-
-
-def crop_transform(
-        image: _TA,
-        offsets: Sequence[int] | None = None,
-        target_shape: Sequence[int] | None = None,
-        out: _TA | None = None,
-        pad: int = 0,
-) -> _TA:
-    """
-    Perform a crop transform of the last N dimensions on the image data.
-    Cropping does not interpolate the image, but "just removes" border pixels/voxels.
-    Negative offsets lead to padding.
-
-    Parameters
-    ----------
-    image : np.ndarray, torch.Tensor
-        Image of size [..., D_1, D_2, ..., D_N], where D_1, D_2, ..., D_N are the N
-        image dimensions.
-    offsets : Sequence[int], optional
-        Offset of the cropped region for the last N dimensions (default: center crop
-        with less crop/pad towards index 0).
-    target_shape : Sequence[int], optional
-        If defined, target_shape specifies the target shape of the "cropped region",
-        else the crop will be centered cropping offset[dim] voxels on each side (then
-        the shape is derived by subtracting 2x the dimension-specific offset).
-        target_shape should have the same number of elements as offsets.
-        May be implicitly defined by out.
-    out : np.ndarray, torch.Tensor, optional
-        Array to store the cropped image in (optional), can be a view on image for
-        memory-efficiency.
-    pad :  int, str, default=0/zero-pad
-        Padding strategy to use when padding is required, if int, pad with that value.
-
-    Returns
-    -------
-    out : np.ndarray, torch.Tensor
-        The image (stack) cropped in the last N dimensions by offsets to the shape
-        target_shape, or if target_shape is not given image.shape[i+2] - 2*offset[i].
-
-    Raises
-    ------
-    ValueError
-        If neither offsets nor target_shape nor out are defined.
-    ValueError
-        If out is not target_shape.
-    TypeError
-        If the type of image is not an np.ndarray or a torch.Tensor.
-    RuntimeError
-        If the dimensionality of image, out, offset or target_shape is invalid or
-        inconsistent.
-
-    See Also
-    --------
-    numpy.pad
-        For additional information refer to numpy.pad function.
-
-    Notes
-    -----
-    Either offsets, target_shape or out must be defined.
-    """
-    if target_shape is None and out is not None:
-        target_shape = out.shape
-
-    # check the type of offsets
-    if offsets is None:
-        if target_shape is None:
-            raise ValueError("Either target_shape or offsets must be defined!")
-        _target_shape = image.shape[: -len(target_shape)] + tuple(target_shape)
-        offsets = tuple(int((i - t) / 2) for t, i in zip(_target_shape, image.shape, strict=False))
-        len_off = len(offsets)
-    else:
-        len_off = len(offsets)
-        if target_shape is None:
-            _target_shape = image.shape[:-len_off] + tuple(
-                i - 2 * o for i, o in zip(image.shape[-len_off:], offsets, strict=False)
-            )
-        elif len_off == len(target_shape):
-            _target_shape = tuple(
-                i if t == -1 else t
-                for i, t in zip(image.shape[-len_off:], target_shape, strict=False)
-            )
-            _target_shape = image.shape[:-len_off] + _target_shape
-        else:
-            raise ValueError("Incompatible offset and target_shape dimensionality (at least once).")
-
-    if len_off > image.ndim:
-        raise RuntimeError("shape of offsets is larger than dim of image allows.")
-
-    pad_tuples, indices = _crop_transform_make_indices(
-        image.shape, offsets, _target_shape
-    )
-    if out is None:
-        if pad_tuples is None:
-            return image[indices]
-        else:
-            pad_fn = _crop_transform_pad_fn(image, pad_tuples, pad)
-            return pad_fn(image[indices])
-    else:
-        if pad_tuples is None:
-            out[:] = image[indices]
-        else:
-            pad_fn = _crop_transform_pad_fn(image, pad_tuples, pad)
-            out[:] = pad_fn(image[indices])
-
-    return out
 
 
 if __name__ == "__main__":

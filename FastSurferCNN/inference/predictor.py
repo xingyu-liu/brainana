@@ -118,6 +118,8 @@ class RunModelOnData:
         plane_weight_axial: float | None = None,
         plane_weight_sagittal: float | None = None,
         fix_wm_islands: bool = True,
+        save_debug_intermediates: bool = False,
+        debug_dir: Path | None = None,
     ):
         """
         Construct RunModelOnData object.
@@ -157,10 +159,16 @@ class RunModelOnData:
             Whether to apply WM island correction after segmentation. This fixes
             mislabeled disconnected WM regions by flipping them to the correct hemisphere.
             Enabled by default as it improves downstream processing (e.g., mri_cc performance).
+        save_debug_intermediates : bool, default=False
+            If True, save intermediate files for debugging.
+        debug_dir : Path, optional
+            Directory to save debug intermediate files. Only used if save_debug_intermediates=True.
         """
         self._threads = threads if threads is not None else get_num_threads()
         torch.set_num_threads(self._threads)
         self.fix_wm_islands = fix_wm_islands
+        self.save_debug_intermediates = save_debug_intermediates
+        self.debug_dir = debug_dir
 
         # Context for native space resampling
         self._input_master_path: Path | None = None
@@ -367,9 +375,38 @@ class RunModelOnData:
                 "Must be a float between 0 and 1, or 'min'."
             ) from None
 
+        # Convert and validate image_size
+        # Valid types: str ("fov" or "cube"), int (> 0), or None
+        # Handle legacy "auto" value → "cube"
+        if isinstance(self.image_size, str):
+            img_size_lower = self.image_size.lower()
+            if img_size_lower == "auto":
+                self.image_size = "cube"  # Legacy "auto" maps to "cube"
+            elif img_size_lower not in ("fov", "cube"):
+                # Try to convert to int if it's a numeric string
+                try:
+                    self.image_size = int(self.image_size)
+                except ValueError:
+                    raise ValueError(
+                        f"Invalid image_size value in checkpoint: '{self.image_size}'. "
+                        "Must be 'fov', 'cube', or an integer > 0."
+                    ) from None
+        elif isinstance(self.image_size, int):
+            if self.image_size <= 0:
+                raise ValueError(
+                    f"Invalid image_size value in checkpoint: {self.image_size}. "
+                    "Must be > 0 if an integer."
+                )
+            # Keep as int
+        elif self.image_size is not None:
+            raise ValueError(
+                f"Invalid image_size type in checkpoint: {type(self.image_size).__name__} "
+                f"(value: {self.image_size}). Must be 'fov', 'cube', an integer > 0, or None."
+            )
+
         LOGGER.info(
             f"  Preprocessing: from checkpoint "
-            f"(vox_size={self.vox_size}, orientation={self.orientation})"
+            f"(vox_size={self.vox_size}, orientation={self.orientation}, img_size={self.image_size})"
         )
 
     def _extract_preprocessing_params(
@@ -469,8 +506,34 @@ class RunModelOnData:
                 "Cannot resample: native image context not available. "
                 "Call get_prediction() first to establish resampling context."
             )
-
-        # Create image object for map_image (expects SpatialImage)
+        
+        # DEBUG: Log affine information for diagnosis (always log to help diagnose brain shifting)
+        conf_center_vox = np.array(self._conformed_img.shape[:3], dtype=float) / 2.0
+        conf_center_world = (self._conformed_img.affine @ np.hstack((conf_center_vox, [1.0])))[:3]
+        native_center_vox = np.array(self._input_native_img.shape[:3], dtype=float) / 2.0
+        native_center_world = (self._input_native_img.affine @ np.hstack((native_center_vox, [1.0])))[:3]
+        
+        LOGGER.info("=" * 80)
+        LOGGER.info("RESAMPLING DEBUG: Affine Information")
+        LOGGER.info("=" * 80)
+        LOGGER.info(f"Conformed image:")
+        LOGGER.info(f"  Shape: {self._conformed_img.shape[:3]}")
+        LOGGER.info(f"  Affine translation: {self._conformed_img.affine[:3, 3]}")
+        LOGGER.info(f"  Center (voxel): {conf_center_vox}")
+        LOGGER.info(f"  Center (world): {conf_center_world}")
+        LOGGER.info(f"Native image:")
+        LOGGER.info(f"  Shape: {self._input_native_img.shape[:3]}")
+        LOGGER.info(f"  Affine translation: {self._input_native_img.affine[:3, 3]}")
+        LOGGER.info(f"  Center (voxel): {native_center_vox}")
+        LOGGER.info(f"  Center (world): {native_center_world}")
+        LOGGER.info(f"Center shift (world): {conf_center_world - native_center_world}")
+        
+        # Compute vox2vox transformation
+        vox2vox = np.linalg.inv(self._input_native_img.affine) @ self._conformed_img.affine
+        LOGGER.info(f"Vox2vox transformation:")
+        LOGGER.info(f"  Translation: {vox2vox[:3, 3]}")
+        LOGGER.info("=" * 80)
+        
         conformed_data_img = nib.nifti1.Nifti1Image(
                 data,
                 self._conformed_img.affine,
@@ -540,12 +603,66 @@ class RunModelOnData:
         # Conform image if needed
         if not is_conform(img, **conform_kwargs, verbose=True):
             LOGGER.info("Conforming image to standard space...")
+            
+            # Debug: Log original image properties
+            if self.save_debug_intermediates:
+                orig_shape = img.shape[:3]
+                orig_zooms = img.header.get_zooms()[:3]
+                orig_affine = img.affine
+                orig_orientation = "".join(nib.orientations.aff2axcodes(orig_affine))
+                orig_center_vox = np.array(orig_shape, dtype=float) / 2.0
+                orig_center_world = (orig_affine @ np.hstack((orig_center_vox, [1.0])))[:3]
+                
+                LOGGER.info("=" * 80)
+                LOGGER.info("CONFORMING DEBUG: Original Image Properties")
+                LOGGER.info("=" * 80)
+                LOGGER.info(f"  Shape: {orig_shape}")
+                LOGGER.info(f"  Voxel sizes (mm): {orig_zooms}")
+                LOGGER.info(f"  Orientation: {orig_orientation}")
+                LOGGER.info(f"  Center (voxel space): {orig_center_vox}")
+                LOGGER.info(f"  Center (world space): {orig_center_world}")
+                LOGGER.info(f"  Target parameters: vox_size={self.vox_size}, orientation={self.orientation}, img_size={self.image_size}")
+                LOGGER.info("=" * 80)
+            
             img = conform(img, **conform_kwargs)
+            
+            # Debug: Log conformed image properties
+            if self.save_debug_intermediates:
+                conf_shape = img.shape[:3]
+                conf_zooms = img.header.get_zooms()[:3]
+                conf_affine = img.affine
+                conf_orientation = "".join(nib.orientations.aff2axcodes(conf_affine))
+                conf_center_vox = np.array(conf_shape, dtype=float) / 2.0
+                conf_center_world = (conf_affine @ np.hstack((conf_center_vox, [1.0])))[:3]
+                
+                LOGGER.info("=" * 80)
+                LOGGER.info("CONFORMING DEBUG: Conformed Image Properties")
+                LOGGER.info("=" * 80)
+                LOGGER.info(f"  Shape: {conf_shape}")
+                LOGGER.info(f"  Voxel sizes (mm): {conf_zooms}")
+                LOGGER.info(f"  Orientation: {conf_orientation}")
+                LOGGER.info(f"  Center (voxel space): {conf_center_vox}")
+                LOGGER.info(f"  Center (world space): {conf_center_world}")
+                LOGGER.info(f"  Center shift (world space): {conf_center_world - orig_center_world}")
+                LOGGER.info("=" * 80)
         else:
             LOGGER.info("Image is already conformed")
 
         # Store conformed image
         self._conformed_img = img
+        
+        # Save conformed image for debugging
+        if self.save_debug_intermediates and self.debug_dir is not None:
+            # Default to nifti format for debug files
+            debug_conformed_path = self.debug_dir / "conformed_image.nii.gz"
+            LOGGER.info(f"Saving conformed image (after conforming) to {debug_conformed_path.name}")
+            data_utils.save_image(
+                img.header,
+                img.affine,
+                np.asanyarray(img.dataobj),
+                debug_conformed_path,
+                dtype=np.float32,
+            )
 
         # Extract data and zoom from conformed image
         orig_data = np.asanyarray(img.dataobj)
@@ -597,6 +714,27 @@ class RunModelOnData:
             pred_prob = model.run(
                 pred_prob, image_f, orig_data, _zoom, out=pred_prob
             )
+            
+            # Save prediction after this plane (before aggregation) for debugging
+            if self.save_debug_intermediates and self.debug_dir is not None:
+                debug_pred_path = self.debug_dir / f"prediction_{plane}_before_aggregation.nii.gz"
+                LOGGER.info(f"Saving {plane} prediction (before aggregation) to {debug_pred_path.name}")
+                # Get hard predictions for this plane
+                pred_plane = torch.argmax(pred_prob, 3)
+                # Map to label space if needed
+                if not self.is_binary and self.labels is not None:
+                    pred_plane = data_utils.map_label2aparc_aseg(pred_plane, self.labels)
+                # Convert to numpy
+                pred_plane_np = pred_plane.cpu().numpy()
+                # Save
+                data_utils.save_image(
+                    self._conformed_img.header,
+                    self._conformed_img.affine,
+                    pred_plane_np,
+                    debug_pred_path,
+                    dtype=np.int16,
+                )
+                del pred_plane, pred_plane_np
             
             # Unload model to free GPU memory before loading next plane
             LOGGER.info(f"  Unloading {plane} model to free GPU memory")

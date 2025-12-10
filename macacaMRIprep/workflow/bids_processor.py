@@ -30,6 +30,7 @@ from ..utils.templates import resolve_template
 from ..utils.bids import parse_bids_entities, get_filename_stem, find_bids_metadata
 from ..operations.registration import ants_register
 from ..config import get_config, update_config_from_bids_metadata, load_config
+from ..config.config_io import save_config
 from ..quality_control import generate_qc_report
 from ..quality_control.snapshots import create_registration_qc
 
@@ -1638,10 +1639,9 @@ class BIDSDatasetProcessor:
             
         # Save processing configuration for reproducibility
         if self.config:
-            config_file = self.output_dir / "processing_config.json"
+            config_file = self.output_dir / "processing_config.yaml"
             config_dict = _ensure_config_dict(self.config)
-            with open(config_file, 'w') as f:
-                json.dump(config_dict, f, indent=2, default=str)
+            save_config(config_dict, config_file)
             self.logger.info(f"System: saved processing configuration - {config_file}")
         
         self.logger.info("System: BIDS derivatives structure setup completed")

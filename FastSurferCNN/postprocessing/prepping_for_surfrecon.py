@@ -125,7 +125,6 @@ def postprocess_for_freesurfer(
     subject_dir: Path | str,
     vox_size: VoxSizeOption = "min",
     orientation: OrientationType = "lia",
-    image_size: bool = True,
 ) -> Literal[0] | str:
     """
     Post-process skullstripping outputs for FreeSurfer surface reconstruction.
@@ -153,8 +152,6 @@ def postprocess_for_freesurfer(
         Voxel size option for conforming
     orientation : OrientationType, default="lia"
         Target orientation for conforming
-    image_size : bool, default=True
-        Whether to enforce standard image size
     
     Returns
     -------
@@ -199,19 +196,14 @@ def postprocess_for_freesurfer(
     
     t1w_img = nib.load(t1w_image)
     
-    # Convert boolean image_size to proper img_size parameter for conform function
-    # image_size=True means use None (no size constraint, minimum size needed)
-    # image_size=False means don't enforce size (None)
-    if isinstance(image_size, bool):
-        conform_img_size: int | str | None = 'auto' if image_size else None
+    # Hardcode to 'cube' for FreeSurfer compatibility (cubic images required)
+    conform_img_size: int | str = 'cube'
     
     conform_kwargs = {
         "vox_size": _vox_size(vox_size) if isinstance(vox_size, str) else vox_size,
         "orientation": orientation,
         "img_size": conform_img_size,
     }
-    
-    LOGGER.info(f"DIAGNOSTIC: image_size parameter: {image_size} -> conform_img_size: {conform_img_size}")
     
     if not is_conform(t1w_img, **conform_kwargs, verbose=True):
         LOGGER.info("Conforming T1w image to FreeSurfer standard space...")

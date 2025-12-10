@@ -40,9 +40,10 @@ output_dir = input_image.split('.nii')[0]
 
 modal = "anat"
 data_format = "nifti"
-weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
+weight_coronal, weight_axial, weight_sagittal = 1, 0, 0
 use_mixed_model = False
 enable_crop_2round = False
+save_debug_intermediates = True
 
 fix_roi_wm = False
 roi_name = "V1"  # Use "V1" for ARM2 atlas (primary_visual_cortex). For other atlases, check ColorLUT for correct ROI name.
@@ -50,7 +51,6 @@ wm_thr = 0.5
 
 if fix_roi_wm:
     output_dir = output_dir + f"_fix{roi_name}"
-
 
 # # func
 # input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_func.nii.gz"
@@ -102,6 +102,7 @@ def main():
             fix_roi_wm=fix_roi_wm,
             roi_name=roi_name,
             wm_thr=wm_thr,
+            save_debug_intermediates=save_debug_intermediates,
         )
         
         logger.info("=" * 80)
@@ -110,7 +111,12 @@ def main():
         logger.info("=" * 80)
         
         # Verify output file exists
+        # Skip non-file-path keys like 'atlas_name' and 'input_image'
+        skip_keys = {'atlas_name', 'input_image'}
         for key, value in result.items():
+            if key in skip_keys:
+                logger.info(f"Test: {key}={value} (metadata, skipping file check)")
+                continue
             if value is not None:
                 output_file = Path(value)
                 if output_file.exists():

@@ -311,10 +311,10 @@ ALL_FLAGS = {
         "--image_size",
         type=__image_size,
         dest="image_size",
-        default="auto",
+        default="fov",
         help="Select how the image should be conformed. A positive integer yields a cube of that size, 'fov' yields "
-             "dimensions, so the field of view stays consistent, 'auto' yields a cube of dimensions fully containing "
-             "the field of view (default).",
+             "dimensions, so the field of view stays consistent (default, recommended), 'cube' yields a cube of dimensions fully containing "
+             "the field of view.",
     ),
     "lut": __arg(
         "--lut",
