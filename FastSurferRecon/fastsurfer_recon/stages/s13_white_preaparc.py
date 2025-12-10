@@ -62,15 +62,21 @@ class WhitePreaparc(HemisphereStage):
                 log_file=self.config.log_file,
             )
         else:
-            # Use recon-all
-            logger.info(f"Creating {self.hemi}.white.preaparc...")
-            recon_all_white_preaparc(
-                subject=self.config.subject_id,
+            # Pre-conversion: mris_place_surface --adgws-in ... --wm wm.mgz --threads 12 --invol brain.finalsurfs.mgz --rh --i ../surf/rh.orig --o ../surf/rh.white.preaparc --white --seg aseg.presurf.mgz --nsmooth 5
+            # Use direct placement to match pre-conversion (uses orig as input, not white.preaparc)
+            logger.info(f"Creating {self.hemi}.white.preaparc (matching pre-conversion)...")
+            mris_place_surface(
+                input_surf=self.hemi_path("orig"),  # Pre uses orig, not white.preaparc
+                output_surf=white_preaparc,
                 hemi=self.hemi,
-                hires=self.config.hires,
+                wm=self.sd.mri("wm.mgz"),
+                invol=self.sd.mri("brain.finalsurfs.mgz"),
+                aseg=self.sd.mri("aseg.presurf.mgz"),
+                adgws_in=autodet_stats,
+                white=True,
                 threads=self.threads,
+                nsmooth=5,  # Pre uses --nsmooth 5
                 log_file=self.config.log_file,
-                subjects_dir=self.config.subjects_dir,
             )
     
     def should_skip(self) -> bool:

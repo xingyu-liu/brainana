@@ -256,8 +256,18 @@ def mri_normalize(
     cmd = ["mri_normalize"]
     
     # Common flags
-    if "-g" not in kwargs and "g" not in kwargs:
-        cmd.extend(["-g", "1"])
+    # Only add -g 1 if not explicitly disabled (g=0 means don't add it)
+    g_value = None
+    if "-g" not in kwargs:
+        if "g" in kwargs:
+            g_value = kwargs["g"]
+        else:
+            g_value = 1  # Default
+    
+    # Add -g flag only if g_value is not 0
+    if g_value is not None and g_value != 0:
+        cmd.extend(["-g", str(g_value)])
+    
     cmd.extend(["-seed", str(seed)])
     if mprage:
         cmd.append("-mprage")
@@ -272,8 +282,10 @@ def mri_normalize(
     if mask:
         cmd.extend(["-mask", str(mask)])
     
-    # Add other kwargs
+    # Add other kwargs (skip 'g' as it's already handled)
     for key, value in kwargs.items():
+        if key == "g":  # Skip 'g' as it's already handled above
+            continue
         if key.startswith("-"):
             cmd.append(key)
             if value is not True:

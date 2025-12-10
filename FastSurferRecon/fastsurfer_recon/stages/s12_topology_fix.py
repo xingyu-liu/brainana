@@ -100,17 +100,15 @@ class TopologyFix(HemisphereStage):
             )
         
         # Step 2: Remesh (if needed)
-        # mris_remesh --remesh --iters 3 --input orig.premesh --output orig
+        # Pre-conversion: mris_remesh --remesh --iters 3 --input orig.premesh --output orig
         if not orig.exists():
             logger.info(f"Remeshing {self.hemi}.orig.premesh to {self.hemi}.orig...")
-            # Note: mris_remesh uses --desired-face-area, but recon-all uses --remesh --iters
-            # The current implementation uses mris_remesh with desired-face-area=1.0, which
-            # produces equivalent results to recon-all's remeshing step. The face area of 1.0
-            # is a standard value that works well for most surfaces.
+            # Use pre-conversion style: --remesh --iters 3
             mris_remesh(
                 input_surf=premesh,
                 output_surf=orig,
-                desired_face_area=1.0,  # Default remesh area
+                remesh=True,
+                iters=3,
                 log_file=self.config.log_file,
             )
         

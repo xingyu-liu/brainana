@@ -71,11 +71,13 @@ def mris_extract_main_component(
 def mris_remesh(
     input_surf: Path,
     output_surf: Path,
-    desired_face_area: float,
+    desired_face_area: Optional[float] = None,
+    remesh: bool = False,
+    iters: Optional[int] = None,
     log_file: Optional[Path] = None,
 ) -> Path:
     """
-    Remesh surface to target face area.
+    Remesh surface to target face area or using remesh mode.
 
     Parameters
     ----------
@@ -83,8 +85,12 @@ def mris_remesh(
         Input surface
     output_surf : Path
         Output remeshed surface
-    desired_face_area : float
-        Target average face area
+    desired_face_area : float, optional
+        Target average face area (used if remesh=False)
+    remesh : bool, default=False
+        Use --remesh --iters mode (pre-conversion style) instead of --desired-face-area
+    iters : int, optional
+        Number of remesh iterations (required if remesh=True)
     log_file : Path, optional
         Log file path
 
@@ -93,12 +99,20 @@ def mris_remesh(
     Path
         Output surface path
     """
-    cmd = [
-        "mris_remesh",
-        "--desired-face-area", str(desired_face_area),
-        "--input", str(input_surf),
-        "--output", str(output_surf),
-    ]
+    cmd = ["mris_remesh"]
+    
+    if remesh:
+        # Pre-conversion style: --remesh --iters 3
+        if iters is None:
+            raise ValueError("iters must be specified when remesh=True")
+        cmd.extend(["--remesh", "--iters", str(iters)])
+    else:
+        # Post-conversion style: --desired-face-area
+        if desired_face_area is None:
+            raise ValueError("desired_face_area must be specified when remesh=False")
+        cmd.extend(["--desired-face-area", str(desired_face_area)])
+    
+    cmd.extend(["--input", str(input_surf), "--output", str(output_surf)])
     run_fs_command(cmd, log_file=log_file)
     return output_surf
 

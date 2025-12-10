@@ -76,6 +76,8 @@ class WMFilled(PipelineStage):
                         "This should be created in stage 05 (norm_t1)."
                     )
                 
+                # Pre-conversion: mri_normalize -seed 1234 -mprage -noconform -aseg aseg.presurf.mgz -mask brainmask.mgz norm.mgz brain.mgz
+                # Note: Pre does NOT use -g flag
                 mri_normalize(
                     input_vol=norm,
                     output_vol=brain,
@@ -84,6 +86,7 @@ class WMFilled(PipelineStage):
                     noconform=True,
                     seed=1234,
                     mprage=True,
+                    g=0,  # Explicitly disable -g flag to match pre-conversion (no -g flag)
                     log_file=self.config.log_file,
                     subject_dir=self.sd.subject_dir,
                 )
@@ -94,11 +97,12 @@ class WMFilled(PipelineStage):
             # mri_mask -T 5 brain.mgz brainmask.mgz brain.finalsurfs.mgz
             if not brain_finalsurfs.exists():
                 logger.info("Creating brain.finalsurfs.mgz (masked brain.mgz)...")
+                # Pre-conversion: mri_mask -T 5 brain.mgz brainmask.mgz brain.finalsurfs.mgz
                 mri_mask(
                     input_vol=brain,
                     mask=brainmask,
                     output_vol=brain_finalsurfs,
-                    threshold=5.0,
+                    threshold=5,  # Pre uses 5, not 5.0
                     log_file=self.config.log_file,
                     subject_dir=self.sd.subject_dir,
                 )
@@ -106,14 +110,17 @@ class WMFilled(PipelineStage):
                 logger.info("brain.finalsurfs.mgz already exists")
             
             # Step 3: Fill
-            # mri_fill -a ../scripts/ponscc.cut.log -segmentation aseg.presurf.mgz -ctab ... wm.mgz filled.mgz
+            # Pre-conversion: mri_fill -a ../scripts/ponscc.cut.log -segmentation aseg.presurf.mgz -ctab ... wm.mgz filled.mgz
             logger.info("Creating filled.mgz from wm.mgz...")
             cut_log = self.sd.scripts_dir / "ponscc.cut.log"
+            # Pre-conversion always includes -a flag, so we should always pass it
+            if not cut_log.exists():
+                logger.warning(f"ponscc.cut.log not found at {cut_log}, but pre-conversion always includes it")
             mri_fill(
                 wm_vol=wm,
                 output_vol=filled,
                 aseg=aseg_presurf,
-                cut_log=cut_log if cut_log.exists() else None,
+                cut_log=cut_log,  # Always pass cut_log to match pre-conversion (even if it doesn't exist)
                 ctab=None,  # Use FreeSurfer default SubCorticalMassLUT.txt
                 log_file=self.config.log_file,
                 subject_dir=self.sd.subject_dir,
