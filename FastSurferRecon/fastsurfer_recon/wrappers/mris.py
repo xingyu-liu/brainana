@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 import logging
 
-from .base import run_fs_command, FreeSurferError
+from .base import run_fs_command, FreeSurferError, to_relative_path
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 def mris_info(
     surface: Path,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> str:
     """
     Get information about a surface.
@@ -26,14 +27,21 @@ def mris_info(
         Surface file
     log_file : Path, optional
         Log file path
+    subject_dir : Path, optional
+        Subject directory. If provided, converts paths to relative from subject_dir.
 
     Returns
     -------
     str
         Surface information text
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        surface = to_relative_path(surface, subject_dir)
+    
     cmd = ["mris_info", str(surface)]
-    result = run_fs_command(cmd, log_file=log_file, capture_output=True)
+    result = run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir, capture_output=True)
     return result.stdout
 
 
@@ -41,6 +49,7 @@ def mris_extract_main_component(
     input_surf: Path,
     output_surf: Path,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Extract the largest connected component from a surface.
@@ -53,18 +62,26 @@ def mris_extract_main_component(
         Output surface (can be same as input)
     log_file : Path, optional
         Log file path
+    subject_dir : Path, optional
+        Subject directory. If provided, converts paths to relative from subject_dir.
 
     Returns
     -------
     Path
         Output surface path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        input_surf = to_relative_path(input_surf, subject_dir)
+        output_surf = to_relative_path(output_surf, subject_dir)
+    
     cmd = [
         "mris_extract_main_component",
         str(input_surf),
         str(output_surf),
     ]
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_surf
 
 
@@ -75,6 +92,7 @@ def mris_remesh(
     remesh: bool = False,
     iters: Optional[int] = None,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Remesh surface to target face area or using remesh mode.
@@ -93,12 +111,20 @@ def mris_remesh(
         Number of remesh iterations (required if remesh=True)
     log_file : Path, optional
         Log file path
+    subject_dir : Path, optional
+        Subject directory. If provided, converts paths to relative from subject_dir.
 
     Returns
     -------
     Path
         Output surface path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        input_surf = to_relative_path(input_surf, subject_dir)
+        output_surf = to_relative_path(output_surf, subject_dir)
+    
     cmd = ["mris_remesh"]
     
     if remesh:
@@ -113,7 +139,7 @@ def mris_remesh(
         cmd.extend(["--desired-face-area", str(desired_face_area)])
     
     cmd.extend(["--input", str(input_surf), "--output", str(output_surf)])
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_surf
 
 
@@ -124,6 +150,7 @@ def mris_smooth(
     nw: bool = True,
     seed: Optional[int] = None,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Smooth a surface.
@@ -142,12 +169,20 @@ def mris_smooth(
         Random seed
     log_file : Path, optional
         Log file path
+    subject_dir : Path, optional
+        Subject directory. If provided, converts paths to relative from subject_dir.
 
     Returns
     -------
     Path
         Output surface path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        input_surf = to_relative_path(input_surf, subject_dir)
+        output_surf = to_relative_path(output_surf, subject_dir)
+    
     cmd = [
         "mris_smooth",
         "-n", str(n_iterations),
@@ -159,7 +194,7 @@ def mris_smooth(
         cmd.extend(["-seed", str(seed)])
     
     cmd.extend([str(input_surf), str(output_surf)])
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_surf
 
 
@@ -169,6 +204,7 @@ def mris_inflate(
     n_iterations: Optional[int] = None,
     no_save_sulc: bool = True,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Inflate surface to sphere.
@@ -186,12 +222,20 @@ def mris_inflate(
         Skip saving sulc file during inflation
     log_file : Path, optional
         Log file path
+    subject_dir : Path, optional
+        Subject directory. If provided, converts paths to relative from subject_dir.
 
     Returns
     -------
     Path
         Output surface path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        input_surf = to_relative_path(input_surf, subject_dir)
+        output_surf = to_relative_path(output_surf, subject_dir)
+    
     cmd = ["mris_inflate"]
     
     if no_save_sulc:
@@ -201,7 +245,7 @@ def mris_inflate(
         cmd.extend(["-n", str(n_iterations)])
     
     cmd.extend([str(input_surf), str(output_surf)])
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_surf
 
 
@@ -217,6 +261,7 @@ def mris_place_surface(
     pial: bool = False,
     threads: int = 1,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
     **kwargs,
 ) -> Path:
     """
@@ -249,6 +294,8 @@ def mris_place_surface(
         Number of threads
     log_file : Path, optional
         Log file path
+    subject_dir : Path, optional
+        Subject directory. If provided, converts paths to relative from subject_dir.
     **kwargs
         Additional arguments:
         - rip_label: cortex label file
@@ -268,6 +315,17 @@ def mris_place_surface(
     Path
         Output surface path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        input_surf = to_relative_path(input_surf, subject_dir)
+        output_surf = to_relative_path(output_surf, subject_dir)
+        wm = to_relative_path(wm, subject_dir)
+        invol = to_relative_path(invol, subject_dir)
+        aseg = to_relative_path(aseg, subject_dir)
+        if adgws_in:
+            adgws_in = to_relative_path(adgws_in, subject_dir)
+    
     cmd = ["mris_place_surface"]
     
     # Required arguments
@@ -307,6 +365,9 @@ def mris_place_surface(
             if value is True:
                 cmd.append(flag)
             elif value is not False and value is not None:
+                # Convert path values to relative if subject_dir provided
+                if isinstance(value, Path) and subject_dir:
+                    value = to_relative_path(value, subject_dir)
                 cmd.append(flag)
                 cmd.append(str(value))
     
@@ -314,7 +375,7 @@ def mris_place_surface(
     if "--i" not in cmd:
         cmd.extend(["--i", str(input_surf)])
     
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_surf
 
 
@@ -324,6 +385,7 @@ def mris_place_surface_curv_map(
     n_smooth: int = 2,
     n_iterations: int = 10,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Compute curvature map from surface.
@@ -340,12 +402,20 @@ def mris_place_surface_curv_map(
         Number of iterations
     log_file : Path, optional
         Log file path
+    subject_dir : Path, optional
+        Subject directory. If provided, converts paths to relative from subject_dir.
 
     Returns
     -------
     Path
         Output curvature file path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        surface = to_relative_path(surface, subject_dir)
+        output_curv = to_relative_path(output_curv, subject_dir)
+    
     cmd = [
         "mris_place_surface",
         "--curv-map",
@@ -354,7 +424,7 @@ def mris_place_surface_curv_map(
         str(n_iterations),
         str(output_curv),
     ]
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_curv
 
 
@@ -362,6 +432,7 @@ def mris_place_surface_area_map(
     surface: Path,
     output_area: Path,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Compute area map from surface.
@@ -374,19 +445,27 @@ def mris_place_surface_area_map(
         Output area file
     log_file : Path, optional
         Log file path
+    subject_dir : Path, optional
+        Subject directory. If provided, converts paths to relative from subject_dir.
 
     Returns
     -------
     Path
         Output area file path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        surface = to_relative_path(surface, subject_dir)
+        output_area = to_relative_path(output_area, subject_dir)
+    
     cmd = [
         "mris_place_surface",
         "--area-map",
         str(surface),
         str(output_area),
     ]
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_area
 
 
@@ -397,6 +476,7 @@ def mris_place_surface_thickness(
     n_smooth: int = 20,
     n_iterations: int = 5,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Compute thickness map between white and pial surfaces.
@@ -415,12 +495,21 @@ def mris_place_surface_thickness(
         Number of iterations
     log_file : Path, optional
         Log file path
+    subject_dir : Path, optional
+        Subject directory. If provided, converts paths to relative from subject_dir.
 
     Returns
     -------
     Path
         Output thickness file path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        white_surf = to_relative_path(white_surf, subject_dir)
+        pial_surf = to_relative_path(pial_surf, subject_dir)
+        output_thickness = to_relative_path(output_thickness, subject_dir)
+    
     cmd = [
         "mris_place_surface",
         "--thickness",
@@ -430,7 +519,7 @@ def mris_place_surface_thickness(
         str(n_iterations),
         str(output_thickness),
     ]
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_thickness
 
 
@@ -489,6 +578,7 @@ def mris_fix_topology(
     # mris_fix_topology expects relative filenames (without hemisphere prefix)
     # when run from the subject's scripts directory
     if subjects_dir:
+        subjects_dir = Path(subjects_dir).resolve()
         # Extract just the filename (remove hemisphere prefix if present)
         def get_rel_filename(path: Path) -> str:
             name = path.name
@@ -510,14 +600,15 @@ def mris_fix_topology(
         # Run from subject's scripts directory
         subject_scripts_dir = subjects_dir / subject / "scripts"
         subject_scripts_dir.mkdir(parents=True, exist_ok=True)
-        cwd = subject_scripts_dir
+        # Use subject_scripts_dir for both logging and execution
+        subject_dir = subject_scripts_dir
     else:
         # Use absolute paths (legacy behavior)
         cmd.extend(["-sphere", str(sphere)])
         cmd.extend(["-inflated", str(inflated)])
         cmd.extend(["-orig", str(orig)])
         cmd.extend(["-out", str(output_premesh)])
-        cwd = None
+        subject_dir = None
     
     if ga:
         cmd.append("-ga")
@@ -529,7 +620,8 @@ def mris_fix_topology(
     if subjects_dir:
         env = {"SUBJECTS_DIR": str(subjects_dir)}
     
-    run_fs_command(cmd, log_file=log_file, cwd=cwd, env=env)
+    # Pass subject_dir (scripts directory) for both logging and execution
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir, env=env)
     return output_premesh
 
 
@@ -537,6 +629,7 @@ def mris_remove_intersection(
     input_surf: Path,
     output_surf: Path,
     log_file: Optional[Path] = None,
+    subject_dir: Optional[Path] = None,
 ) -> Path:
     """
     Remove surface intersections.
@@ -549,18 +642,26 @@ def mris_remove_intersection(
         Output surface (can be same as input)
     log_file : Path, optional
         Log file path
+    subject_dir : Path, optional
+        Subject directory. If provided, converts paths to relative from subject_dir.
 
     Returns
     -------
     Path
         Output surface path
     """
+    # Convert paths to relative if subject_dir provided
+    if subject_dir:
+        subject_dir = Path(subject_dir).resolve()
+        input_surf = to_relative_path(input_surf, subject_dir)
+        output_surf = to_relative_path(output_surf, subject_dir)
+    
     cmd = [
         "mris_remove_intersection",
         str(input_surf),
         str(output_surf),
     ]
-    run_fs_command(cmd, log_file=log_file)
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_surf
 
 

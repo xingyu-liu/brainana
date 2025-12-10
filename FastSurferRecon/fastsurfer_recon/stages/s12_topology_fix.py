@@ -110,6 +110,7 @@ class TopologyFix(HemisphereStage):
                 remesh=True,
                 iters=3,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
         
         # Step 3: Remove intersections
@@ -119,6 +120,7 @@ class TopologyFix(HemisphereStage):
             input_surf=orig,
             output_surf=orig,
             log_file=self.config.log_file,
+            subject_dir=self.sd.subject_dir,
         )
         
         # Remove inflated.nofix (as done by recon-all after fix)

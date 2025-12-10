@@ -26,21 +26,23 @@ logger = logging.getLogger(__name__)
 # input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_anat_2pass_seg.nii.gz"
 # output_dir = input_image.split('.nii')[0]
 
-surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
-input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'
-output_dir = f'{surfrecon_dir}/NMT2Sym'
+# surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
+# input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'
+# output_dir = f'{surfrecon_dir}/NMT2Sym'
 # input_image = f'{surfrecon_dir}/site-arcaro_sub-baby1_ses-anat_T1w.nii.gz'
 # output_dir = f'{surfrecon_dir}/arcaro_baby1'
 # # # input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w_brain.nii.gz'
 # # # output_dir = f'{surfrecon_dir}/NMT2Sym_brain_v2'
 # # input_image = f'{surfrecon_dir}/test_anat_2pass_seg.nii.gz'
 # # output_dir = f'{surfrecon_dir}/test_anat_2pass_seg_skullstripping'
+input_image = "/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_classic/working/sub-032309/ses-001/anat/sub-032309_ses-001_T1w/03_anat_bias_correction/anat_bias_corrected.nii.gz"
+output_dir = input_image.split('.nii')[0]
 
 modal = "anat"
 data_format = "nifti"
 weight_coronal, weight_axial, weight_sagittal = 0.4, 0.4, 0.2
 use_mixed_model = False
-enable_crop_2round = True
+enable_crop_2round = False
 
 fix_roi_wm = False
 roi_name = "V1"  # Use "V1" for ARM2 atlas (primary_visual_cortex). For other atlases, check ColorLUT for correct ROI name.

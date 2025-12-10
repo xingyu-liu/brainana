@@ -60,6 +60,7 @@ class WhitePreaparc(HemisphereStage):
                 threads=self.threads,
                 max_cbv_dist=3.5,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
         else:
             # Pre-conversion: mris_place_surface --adgws-in ... --wm wm.mgz --threads 12 --invol brain.finalsurfs.mgz --rh --i ../surf/rh.orig --o ../surf/rh.white.preaparc --white --seg aseg.presurf.mgz --nsmooth 5
@@ -77,6 +78,7 @@ class WhitePreaparc(HemisphereStage):
                 threads=self.threads,
                 nsmooth=5,  # Pre uses --nsmooth 5
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
     
     def should_skip(self) -> bool:

@@ -266,7 +266,6 @@ python3 -m macacaMRIprep.cli.preproc \
     --pipeline ${pipeline} --config ${config_f} \
     --n-procs 3 
 
-
 # ------------------------------------------------------------
 # unc
 # ------------------------------------------------------------
@@ -376,5 +375,16 @@ output_dir=${dataset_root}/preproc/dataset_classic
 
 pipeline=func2anat2template
 python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
-    --pipeline ${pipeline} --config ${config_f} --n-procs 3
+    --config ${config_f} --n-procs 3
 
+# ================================================
+# test banana
+# ================================================
+dataset_root=/mnt/DataDrive3/xliu/prep_test/banana_test
+dataset_dir=${dataset_root}/dataset_classic
+output_dir=${dataset_root}/preproc/dataset_classic
+config_f=${dataset_root}/preproc/config_test_inz.yaml
+
+pipeline=func2anat2template
+python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
+    --config ${config_f}

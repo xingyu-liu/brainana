@@ -11,6 +11,7 @@ This module provides comprehensive system environment validation including:
 
 import os
 import sys
+import re
 import shutil
 import logging
 import subprocess
@@ -40,24 +41,27 @@ OPTIONAL_PYTHON_PACKAGES = {
     'jupyter': '1.0.0'
 }
 
+# Define required external tools with exact version requirements
 REQUIRED_EXTERNAL_TOOLS = {
     'fsl': {
-        'commands': ['fslmaths', 'mcflirt', 'slicetimer'],
         'env_var': 'FSLDIR',
         'version_cmd': 'flirt -version',
-        'min_version': '6.0'
+        'required_version': '6.0'
     },
     'ants': {
-        'commands': ['antsRegistration', 'N4BiasFieldCorrection'],
         'env_var': 'ANTSPATH',
         'version_cmd': 'antsRegistration --version',
-        'min_version': '2.3'
+        'required_version': '2.3'
     },
     'afni': {
-        'commands': ['3dDespike'],
         'env_var': 'AFNIPATH',
         'version_cmd': '3dinfo -ver',
-        'min_version': '20.0'
+        'required_version': '20.0'
+    },
+    'freesurfer': {
+        'env_var': 'FREESURFER_HOME',
+        'version_cmd': 'mri_info --version',
+        'required_version': '7.4.1'
     }
 }
 
@@ -162,6 +166,35 @@ def get_command_version(version_cmd: str) -> Optional[str]:
     return None
 
 
+def extract_version_number(version_string: str) -> Optional[str]:
+    """Extract version number from version string output.
+    
+    Handles various formats like:
+    - "mri_info freesurfer 7.4.1"
+    - "6.0.5.2"
+    - "ANTs Version: 2.3.1"
+    
+    Args:
+        version_string: Raw version output from command
+        
+    Returns:
+        Extracted version number (e.g., "7.4.1") or None
+    """
+    if not version_string:
+        return None
+    
+    # Try to find version pattern (e.g., X.Y.Z or X.Y)
+    # Look for patterns like: number.number.number or number.number
+    version_pattern = r'\b(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)\b'
+    matches = re.findall(version_pattern, version_string)
+    
+    if matches:
+        # Return the first (usually most complete) version match
+        return matches[0]
+    
+    return None
+
+
 def check_external_tool(tool_name: str, tool_config: Dict[str, Any]) -> Dict[str, Any]:
     """Check availability and configuration of an external tool.
     
@@ -182,6 +215,9 @@ def check_external_tool(tool_name: str, tool_config: Dict[str, Any]) -> Dict[str
         'env_var_set': False,
         'env_var_path': None,
         'version_info': None,
+        'version_matches': False,
+        'installed_version': None,
+        'required_version': None,
         'errors': []
     }
     
@@ -207,15 +243,51 @@ def check_external_tool(tool_name: str, tool_config: Dict[str, Any]) -> Dict[str
     
     # Check version if available
     version_cmd = tool_config.get('version_cmd')
-    if version_cmd and len(result['commands_found']) > 0:
-        version_info = get_command_version(version_cmd)
-        if version_info:
-            result['version_info'] = version_info
-        else:
-            result['errors'].append(f"Could not get version info using: {version_cmd}")
+    required_version = tool_config.get('required_version')
+    result['required_version'] = required_version
     
-    # Tool is available if all commands are found
-    result['available'] = len(result['commands_missing']) == 0
+    if version_cmd:
+        # Check version if we have commands found, or if no commands are required
+        if len(result['commands_found']) > 0 or len(commands) == 0:
+            version_info = get_command_version(version_cmd)
+            if version_info:
+                result['version_info'] = version_info
+                # Extract and compare version
+                installed_version = extract_version_number(version_info)
+                if installed_version:
+                    result['installed_version'] = installed_version
+                    if required_version:
+                        # Check for exact version match
+                        try:
+                            result['version_matches'] = version.parse(installed_version) == version.parse(required_version)
+                            if not result['version_matches']:
+                                result['errors'].append(
+                                    f"Version mismatch: installed {installed_version} != required {required_version}"
+                                )
+                        except Exception as e:
+                            result['errors'].append(f"Error comparing versions: {str(e)}")
+                    else:
+                        # No version requirement, consider it a match
+                        result['version_matches'] = True
+                else:
+                    result['errors'].append(f"Could not extract version number from: {version_info}")
+            else:
+                result['errors'].append(f"Could not get version info using: {version_cmd}")
+    
+    # Tool is available if:
+    # 1. All required commands are found (if commands are specified), OR
+    # 2. Env var is set and version can be checked (if no commands specified)
+    # AND version matches exactly (if version requirement exists)
+    if len(commands) > 0:
+        commands_ok = len(result['commands_missing']) == 0
+    else:
+        # No commands required - check env_var and version instead
+        commands_ok = result['env_var_set'] and result['version_info'] is not None
+    
+    # Version must match exactly if required
+    version_ok = result['required_version'] is None or result['version_matches']
+    
+    result['available'] = commands_ok and version_ok
     
     logger.debug(f"System: tool check for {tool_name} - {'✓' if result['available'] else '✗'}")
     
@@ -527,7 +599,11 @@ def print_environment_report(env_results: Dict[str, Any]) -> None:
             print(f"      env: {tool_info['env_var_path']}")
         for cmd_info in tool_info['commands_found']:
             print(f"      cmd: {cmd_info['command']} -> {cmd_info['path']}")
-        if tool_info['version_info']:
+        if tool_info['installed_version']:
+            version_status = "✓" if tool_info.get('version_matches', False) else "✗"
+            required = tool_info.get('required_version', 'any')
+            print(f"      ver: {tool_info['installed_version']} (required: {required}) {version_status}")
+        elif tool_info['version_info']:
             version_line = tool_info['version_info'].split('\n')[0]
             print(f"      ver: {version_line}")
     

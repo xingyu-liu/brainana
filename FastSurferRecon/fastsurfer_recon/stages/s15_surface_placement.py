@@ -62,6 +62,7 @@ class SurfacePlacement(HemisphereStage):
                 rip_surf=self.hemi_path("white.preaparc"),
                 aparc=aparc if aparc.exists() else None,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
         
         # Place pial surface
@@ -83,6 +84,7 @@ class SurfacePlacement(HemisphereStage):
                 white_surf=white,
                 aparc=aparc if aparc.exists() else None,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
         
         # Link pial.T1 to pial
@@ -104,6 +106,7 @@ class SurfacePlacement(HemisphereStage):
                 n_smooth=2,
                 n_iterations=10,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
         
         curv_pial = self.hemi_path("curv.pial")
@@ -114,6 +117,7 @@ class SurfacePlacement(HemisphereStage):
                 n_smooth=2,
                 n_iterations=10,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
         
         # Area maps
@@ -123,6 +127,7 @@ class SurfacePlacement(HemisphereStage):
                 surface=white,
                 output_area=area_white,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
         
         area_pial = self.hemi_path("area.pial")
@@ -131,6 +136,7 @@ class SurfacePlacement(HemisphereStage):
                 surface=pial,
                 output_area=area_pial,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
         
         # Thickness
@@ -143,6 +149,7 @@ class SurfacePlacement(HemisphereStage):
                 n_smooth=20,
                 n_iterations=5,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
     
     def should_skip(self) -> bool:

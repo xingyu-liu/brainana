@@ -2,6 +2,9 @@
 Stage 10: Surface Inflation
 
 Inflates surface to sphere (inflate1).
+This is the first inflation, performed before topology fix.
+For high-resolution data, sufficient inflation (e.g., 100 iterations) is critical
+for correct surface mapping onto sphere and subsequent defect labeling.
 """
 
 from pathlib import Path
@@ -14,13 +17,17 @@ logger = logging.getLogger(__name__)
 
 
 class Inflation(HemisphereStage):
-    """Inflate surface to sphere."""
+    """Inflate surface to sphere (inflate1, before topology fix)."""
     
     name = "inflation"
     description = "Surface inflation (inflate1)"
     
     def _run(self) -> None:
-        """Inflate surface."""
+        """Inflate surface (inflate1, before topology fix).
+        
+        Uses inflate_iterations parameter. For high-resolution data (0.75mm isotropic),
+        use 20-50 or even 100 iterations to ensure sufficient inflation.
+        """
         # Check for both inflated and inflated.nofix (depending on whether fix was run)
         inflated = self.hemi_path("inflated")
         inflated_nofix = self.hemi_path("inflated.nofix")
@@ -36,13 +43,14 @@ class Inflation(HemisphereStage):
                 "This should be created in stage 09 (smoothing)."
             )
         
-        logger.info(f"Inflating {self.hemi} surface...")
+        logger.info(f"Inflating {self.hemi} surface (inflate1, n={self.config.processing.inflate_iterations})...")
         mris_inflate(
             input_surf=smoothwm_nofix,
             output_surf=inflated_nofix,
             n_iterations=self.config.processing.inflate_iterations,
             no_save_sulc=self.config.processing.inflate_no_save_sulc,
             log_file=self.config.log_file,
+            subject_dir=self.sd.subject_dir,
         )
     
     def should_skip(self) -> bool:

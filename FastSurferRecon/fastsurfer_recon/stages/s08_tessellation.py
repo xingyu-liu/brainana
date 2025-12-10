@@ -79,7 +79,7 @@ class Tessellation(HemisphereStage):
             )
             
             # Verify surfaceRAS header
-            info = mris_info(orig_nofix, log_file=self.config.log_file)
+            info = mris_info(orig_nofix, log_file=self.config.log_file, subject_dir=self.sd.subject_dir)
             # Check for surfaceRAS with flexible whitespace (mris_info uses variable spacing)
             if not re.search(r"vertex\s+locs\s*:\s*surfaceRAS", info):
                 logger.error(f"mris_info full output:\n{info}")
@@ -93,6 +93,7 @@ class Tessellation(HemisphereStage):
                 input_surf=orig_nofix,
                 output_surf=orig_nofix,
                 log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
             )
             
             # Re-fix header after extraction (mris_extract_main_component may reset it)
@@ -103,7 +104,7 @@ class Tessellation(HemisphereStage):
             )
             
             # Verify surfaceRAS header again after extraction
-            info = mris_info(orig_nofix, log_file=self.config.log_file)
+            info = mris_info(orig_nofix, log_file=self.config.log_file, subject_dir=self.sd.subject_dir)
             # Check for surfaceRAS with flexible whitespace (mris_info uses variable spacing)
             if not re.search(r"vertex\s+locs\s*:\s*surfaceRAS", info):
                 logger.error(f"mris_info full output after extraction:\n{info}")
@@ -120,6 +121,7 @@ class Tessellation(HemisphereStage):
                     output_surf=orig_nofix_final,
                     desired_face_area=0.5,
                     log_file=self.config.log_file,
+                    subject_dir=self.sd.subject_dir,
                 )
                 orig_nofix = orig_nofix_final
     

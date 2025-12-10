@@ -154,12 +154,22 @@ class ProcessingConfig(BaseModel):
     smooth_iterations: int = Field(
         default=2, 
         ge=1, 
-        description="Surface smoothing iterations (used in s09 and s14). Use 3 for monkey data."
+        description="Surface smoothing iterations for smooth1 (Stage 09, before topology fix). Creates smoothwm.nofix from orig.nofix."
+    )
+    smooth2_iterations: int = Field(
+        default=2, 
+        ge=1, 
+        description="Surface smoothing iterations for smooth2 (Stage 14, after topology fix, for visualization). Re-smooths smoothwm from white.preaparc. Use 3 for monkey data."
     )
     inflate_iterations: Optional[int] = Field(
         default=None, 
         ge=1, 
-        description="Surface inflation iterations (None = use FreeSurfer default ~15-20). Use 11 for monkey data (less inflation)."
+        description="Surface inflation iterations for inflate1 (Stage 10, before topology fix). None = use FreeSurfer default ~15-20. For high-resolution data (0.75mm isotropic), use 20-50 or even 100 to ensure sufficient inflation for correct surface mapping onto sphere."
+    )
+    inflate2_iterations: Optional[int] = Field(
+        default=None, 
+        ge=1, 
+        description="Surface inflation iterations for inflate2 (Stage 14, after topology fix, for visualization). None = use FreeSurfer default. Use 3 for monkey data (less inflation for visualization)."
     )
     inflate_no_save_sulc: bool = Field(
         default=True, 
