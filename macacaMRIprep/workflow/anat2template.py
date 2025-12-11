@@ -520,8 +520,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                                 lut_path=str(lut_path),
                                 subject_dir=str(fs_subject_dir),
                                 vox_size="min",
-                                orientation="lia",
-                                image_size=True
+                                orientation="lia"
                             )
                             
                             if prep_result != 0:

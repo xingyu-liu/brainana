@@ -275,15 +275,6 @@ def validate_bias_correction_config(config: Dict[str, Any]) -> None:
     Raises:
         ValueError: If configuration is invalid
     """
-    if "dimension" in config:
-        dim = config["dimension"]
-        if not isinstance(dim, int) or dim not in [2, 3, 4]:
-            raise ValueError(
-                f"Configuration error in bias_correction: "
-                f"dimension must be 2, 3, or 4, got {dim}. "
-                f"Please fix this in your configuration file."
-            )
-    
     if "shrink_factor" in config:
         shrink = config["shrink_factor"]
         if not isinstance(shrink, (int, float)) or shrink <= 0:

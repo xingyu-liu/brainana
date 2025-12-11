@@ -1,20 +1,105 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "macacamriprep"
+name = "banana"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "A Python package for preprocessing and registration of macaque neuroimaging data with BIDS dataset support"
+readme = "README_for_inz.rst"
+license = {text = "MIT"}
 requires-python = ">=3.11"
+authors = [
+    {name = "Your Name", email = "your.email@example.com"},
+]
+keywords = [
+    "neuroimaging",
+    "mri",
+    "macaque",
+    "bids",
+    "preprocessing",
+    "registration",
+    "freesurfer",
+    "fastsurfer",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+
 dependencies = [
+    # Core neuroimaging and scientific computing
     "nibabel>=5.3.2",
     "numpy>=2.3.0",
-    "scipy>=1.15.3", 
+    "scipy>=1.15.3",
     "matplotlib>=3.10.3",
     "pandas>=2.3.0",
     "packaging>=20.0",
+    # PyTorch for FastSurferCNN models
     "torch>=2.0.0",
     "torchvision>=0.15.0",
+    "torchio>=0.18.0",
+    # Image processing
     "Pillow>=8.0.0",
+    "scikit-image>=0.20.0",
+    "SimpleITK>=2.1.0",
+    # FastSurferCNN dependencies
+    "yacs>=0.1.8",
+    "h5py>=3.8.0",
+    # FastSurferRecon dependencies
+    "pydantic>=2.0.0",
+    "lapy>=1.0.0",
+    # BIDS support
+    "pybids>=0.15.0",
+    # System utilities
+    "psutil>=5.0.0",
+    # Utilities
     "joblib>=1.5.1",
     "tqdm>=4.67.1",
-    "pyyaml>=6.0"
+    "pyyaml>=6.0",
+    # For reading pyproject.toml in Python < 3.11
+    "tomli>=2.0.0; python_version<'3.11'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+
+[project.scripts]
+macacaMRIprep-preproc = "macacaMRIprep.cli.preproc:main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/banana"
+Documentation = "https://github.com/yourusername/banana"
+Repository = "https://github.com/yourusername/banana"
+Issues = "https://github.com/yourusername/banana/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["macacaMRIprep*", "FastSurferCNN*", "FastSurferRecon*"]
+
+[tool.setuptools.package-data]
+"macacaMRIprep" = [
+    "config/*.yaml",
+    "config/*.html",
+]
+"FastSurferCNN" = [
+    "config/*.yaml",
+    "atlas/**/*",
+    "pretrained_model/*.pkl",
+]
+"FastSurferRecon" = [
+    "config/*.yaml",
+    "fastsurfer_recon/atlas/**/*",
 ]

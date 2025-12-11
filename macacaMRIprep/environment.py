@@ -16,32 +16,76 @@ import shutil
 import logging
 import subprocess
 import importlib
-import warnings
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from packaging import version
 
-from .info import __version__
+from . import __version__
 
-# Define minimum required versions
-REQUIRED_PYTHON_PACKAGES = {
-    'nibabel': '3.0.0',
-    'numpy': '1.19.0',
-    'scipy': '1.5.0',
-    'matplotlib': '3.0.0',
-    'pandas': '1.0.0',
-    'packaging': '20.0'
-}
+# Read dependencies from pyproject.toml to avoid duplication
+def _load_dependencies_from_pyproject() -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Load required and optional dependencies from pyproject.toml.
+    
+    Returns:
+        Tuple of (required_packages, optional_packages) dictionaries
+        with package names as keys and minimum versions as values.
+    
+    Raises:
+        FileNotFoundError: If pyproject.toml is not found
+        ValueError: If pyproject.toml cannot be parsed
+    """
+    required = {}
+    optional = {}
+    
+    # Use same pattern as info.py for reading pyproject.toml
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
+    
+    pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
+    if not pyproject_path.exists():
+        raise FileNotFoundError(f"pyproject.toml not found at {pyproject_path}")
+    
+    with open(pyproject_path, "rb") as f:
+        data = tomllib.load(f)
+    
+    # Parse dependencies from pyproject.toml
+    dependencies = data.get("project", {}).get("dependencies", [])
+    if not dependencies:
+        raise ValueError("No dependencies found in pyproject.toml")
+    
+    for dep in dependencies:
+        # Skip conditional dependencies (e.g., "tomli>=2.0.0; python_version<'3.11'")
+        if ";" in dep:
+            continue
+        
+        # Parse package name and version requirement
+        # Format: "package>=version" or "package==version" or "package~=version"
+        match = re.match(r"([a-zA-Z0-9_-]+)\s*(?:>=|==|~=)([\d.]+)", dep)
+        if match:
+            pkg_name = match.group(1).lower()
+            min_version = match.group(2)
+            required[pkg_name] = min_version
+    
+    # Optional dependencies from optional-dependencies groups
+    optional_deps = data.get("project", {}).get("optional-dependencies", {})
+    for group_name, deps in optional_deps.items():
+        for dep in deps:
+            if ";" in dep:
+                continue
+            match = re.match(r"([a-zA-Z0-9_-]+)\s*(?:>=|==|~=)([\d.]+)", dep)
+            if match:
+                pkg_name = match.group(1).lower()
+                min_version = match.group(2)
+                optional[pkg_name] = min_version
+    
+    return required, optional
 
-OPTIONAL_PYTHON_PACKAGES = {
-    'psutil': '5.0.0',
-    'nilearn': '0.7.0',
-    'seaborn': '0.11.0',
-    'plotly': '4.0.0',
-    'jupyter': '1.0.0'
-}
+# Load dependencies from pyproject.toml
+REQUIRED_PYTHON_PACKAGES, OPTIONAL_PYTHON_PACKAGES = _load_dependencies_from_pyproject()
 
-# Define required external tools with exact version requirements
+# Define required external tools with minimum version requirements
 REQUIRED_EXTERNAL_TOOLS = {
     'fsl': {
         'env_var': 'FSLDIR',
@@ -257,12 +301,12 @@ def check_external_tool(tool_name: str, tool_config: Dict[str, Any]) -> Dict[str
                 if installed_version:
                     result['installed_version'] = installed_version
                     if required_version:
-                        # Check for exact version match
+                        # Check for minimum version requirement (>=)
                         try:
-                            result['version_matches'] = version.parse(installed_version) == version.parse(required_version)
+                            result['version_matches'] = version.parse(installed_version) >= version.parse(required_version)
                             if not result['version_matches']:
                                 result['errors'].append(
-                                    f"Version mismatch: installed {installed_version} != required {required_version}"
+                                    f"Version too old: installed {installed_version} < required minimum {required_version}"
                                 )
                         except Exception as e:
                             result['errors'].append(f"Error comparing versions: {str(e)}")

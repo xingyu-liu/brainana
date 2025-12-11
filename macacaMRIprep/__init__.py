@@ -22,7 +22,21 @@ The core functionality is now organized into modular components:
 - core.validation: Input/output validation utilities
 """
 
-from .info import __version__
+# Get version from pyproject.toml
+from pathlib import Path
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+
+def _get_version_from_pyproject() -> str:
+    """Get version from pyproject.toml."""
+    pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
+    with open(pyproject_path, "rb") as f:
+        data = tomllib.load(f)
+        return data["project"]["version"]
+
+__version__ = _get_version_from_pyproject()
 
 # Import core functionality - unified preprocessing module
 from .operations import (

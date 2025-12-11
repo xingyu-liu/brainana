@@ -990,10 +990,21 @@ def bias_correction(
     image_path = validate_input_file(imagef, logger)
     work_dir = ensure_working_directory(working_dir, logger)
     
-    # make sure the input image is 3D, not 4D
+    # Get image shape and calculate dimension from it
     image_shape = get_image_shape(image_path, logger)
-    if image_shape[3] != 1:
+    
+    # Make sure the input image is 3D, not 4D (4th dimension must be 1 if present)
+    if len(image_shape) > 3 and image_shape[3] != 1:
         raise ValueError("Input image is not 3D, must be 3D for bias correction")
+
+    # Calculate dimension from image shape (number of spatial dimensions)
+    # Count non-singleton dimensions, but cap at 3 for spatial dimensions
+    # This handles 2D [x,y], 3D [x,y,z], and 4D with t=1 [x,y,z,1] cases
+    non_singleton_dims = [d for d in image_shape if d > 1]
+    dimension = min(len(non_singleton_dims), 3)
+    
+    if dimension < 2 or dimension > 3:
+        raise ValueError(f"Unsupported image dimension: {dimension}. Expected 2 or 3 spatial dimensions.")
 
     # Get configuration
     bias_cfg = config.get(modal, {}).get('bias_correction')
@@ -1028,11 +1039,11 @@ def bias_correction(
     # Build command
     if bias_cfg.get('algorithm') == 'N4BiasFieldCorrection':
         logger.info(f"Workflow: starting bias field correction using N4BiasFieldCorrection algorithm")
-        logger.info(f"Data: input image - {os.path.basename(image_path)}")
+        logger.info(f"Data: input image - {os.path.basename(image_path)}, dimension - {dimension}")
         logger.info(f"System: output path - {output_path}")
         command = [
             'N4BiasFieldCorrection',
-            '-d', str(bias_cfg.get('dimension')),
+            '-d', str(dimension),
             '-i', str(image_path),
             '-o', f"[{output_path},{bias_field_path}]",
             '-s', str(bias_cfg.get('shrink_factor')),

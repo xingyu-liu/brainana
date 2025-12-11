@@ -30,7 +30,6 @@ anat:
   bias_correction:
     enabled: true  # bool: perform bias field correction
     algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
-    dimension: 3  # int: image dimension (2, 3, or 4)
     shrink_factor: 2  # float: shrink factor for faster processing (> 0)
     bspline_fitting: "[ 100 ]"  # str: B-spline fitting parameters in ANTs format
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
@@ -91,7 +90,6 @@ func:
   bias_correction:  # only done on tmean image for better registration, not on the functional images directly
     enabled: true  # bool: perform bias field correction
     algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
-    dimension: 3  # int: image dimension (2, 3, or 4)
     shrink_factor: 2  # float: shrink factor for faster processing (> 0)
     bspline_fitting: "[ 100 ]"  # str: B-spline fitting parameters in ANTs format
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100

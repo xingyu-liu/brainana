@@ -295,15 +295,6 @@
                     <span class="help-text">(bias correction algorithm)</span>
                 </div>
                 <div class="form-group">
-                    <label for="anat_bias_correction_dimension">dimension</label>
-                    <select id="anat_bias_correction_dimension" name="anat_bias_correction_dimension">
-                        <option value="2">2</option>
-                        <option value="3" selected>3</option>
-                        <option value="4">4</option>
-                    </select>
-                    <span class="help-text">(image dimension: 2, 3, or 4)</span>
-                </div>
-                <div class="form-group">
                     <label for="anat_bias_correction_shrink_factor">shrink_factor</label>
                     <input type="number" id="anat_bias_correction_shrink_factor" name="anat_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
                     <div class="help-text">(shrink factor for faster processing, > 0)</div>
@@ -650,15 +641,6 @@
                     <span class="help-text">(bias correction algorithm, currently only "N4BiasFieldCorrection")</span>
                 </div>
                 <div class="form-group">
-                    <label for="func_bias_correction_dimension">dimension</label>
-                    <select id="func_bias_correction_dimension" name="func_bias_correction_dimension">
-                        <option value="2">2</option>
-                        <option value="3" selected>3</option>
-                        <option value="4">4</option>
-                    </select>
-                    <span class="help-text">(image dimension: 2, 3, or 4)</span>
-                </div>
-                <div class="form-group">
                     <label for="func_bias_correction_shrink_factor">shrink_factor</label>
                     <input type="number" id="func_bias_correction_shrink_factor" name="func_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
                     <div class="help-text">(shrink factor for faster processing, > 0)</div>
@@ -857,7 +839,6 @@
                 bias_correction: {
                     enabled: true,
                     algorithm: "N4BiasFieldCorrection",
-                    dimension: 3,
                     shrink_factor: 2,
                     bspline_fitting: "[ 100 ]",
                     rescale_mean_to_100: true
@@ -1070,10 +1051,6 @@
             function validateBiasCorrection(config, prefix) {
                 if (!config.enabled) return;
                 
-                if (![2, 3, 4].includes(config.dimension)) {
-                    errors.push(`${prefix}.bias_correction.dimension must be 2, 3, or 4`);
-                }
-                
                 if (config.shrink_factor <= 0) {
                     errors.push(`${prefix}.bias_correction.shrink_factor must be > 0`);
                 }
@@ -1265,7 +1242,6 @@
             config.anat.reorient.enabled = document.getElementById('anat_reorient_enabled').checked;
             config.anat.bias_correction.enabled = document.getElementById('anat_bias_correction_enabled').checked;
             config.anat.bias_correction.algorithm = document.getElementById('anat_bias_correction_algorithm').value;
-            config.anat.bias_correction.dimension = parseInt(document.getElementById('anat_bias_correction_dimension').value);
             config.anat.bias_correction.shrink_factor = parseFloat(document.getElementById('anat_bias_correction_shrink_factor').value);
             config.anat.bias_correction.bspline_fitting = document.getElementById('anat_bias_correction_bspline_fitting').value;
             config.anat.bias_correction.rescale_mean_to_100 = document.getElementById('anat_bias_correction_rescale_mean_to_100').checked;
@@ -1335,7 +1311,6 @@
             
             config.func.bias_correction.enabled = document.getElementById('func_bias_correction_enabled').checked;
             config.func.bias_correction.algorithm = document.getElementById('func_bias_correction_algorithm').value;
-            config.func.bias_correction.dimension = parseInt(document.getElementById('func_bias_correction_dimension').value);
             config.func.bias_correction.shrink_factor = parseFloat(document.getElementById('func_bias_correction_shrink_factor').value);
             config.func.bias_correction.bspline_fitting = document.getElementById('func_bias_correction_bspline_fitting').value;
             config.func.bias_correction.rescale_mean_to_100 = document.getElementById('func_bias_correction_rescale_mean_to_100').checked;
