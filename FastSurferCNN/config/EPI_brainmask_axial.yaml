@@ -74,7 +74,7 @@ DATA:
   # 2. Training (saved to checkpoint)
   # 3. Inference (reads from checkpoint)
   PREPROCESSING:
-    ORIENTATION: "lia"     # Keep native orientation for EPI (don't reorient - causes misalignment)
+    ORIENTATION: "RAS"        # Target orientation (RAS = Right-Anterior-Superior)
     IMG_SIZE: "fov"           # Image size: int (e.g. 256), "fov" (RECOMMENDED), or "cube"
     VOX_SIZE: "min"           # Voxel size: float (e.g. 1.0) or "min" (adaptive)
     DTYPE_IMAGE: "uint8"      # Data type for IMAGES: "uint8" (0-255), "float32", etc.

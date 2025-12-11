@@ -186,8 +186,9 @@ _C.DATA.AUG_PROBABILITIES.RGamma = 0.8
 # ---------------------------------------------------------------------------- #
 _C.DATA.PREPROCESSING = CN()
 
-# Target orientation (LIA = Left-Inferior-Anterior)
-_C.DATA.PREPROCESSING.ORIENTATION = "lia"
+# Target orientation: 3-letter code
+# Common orientations: RAS (Right-Anterior-Superior), LIA (Left-Inferior-Anterior)
+_C.DATA.PREPROCESSING.ORIENTATION = "RAS"
 
 # Image size: int (e.g. 256), "fov" (preserve field of view), or "cube" (make cube)
 #   - "fov" (RECOMMENDED): Preserves exact physical FOV, brain position maintained

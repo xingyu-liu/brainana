@@ -18,7 +18,7 @@
 
 # YAML config file (SINGLE SOURCE OF TRUTH - like macacaMRINN!)
 export PYTHONPATH="/home/star/github/banana:$PYTHONPATH"
-YAML_CONFIG=/home/star/github/banana/FastSurferCNN/config/T1w_ARM2_coronal.yaml
+YAML_CONFIG=/home/star/github/banana/FastSurferCNN/config/T1w_ARM2_axial.yaml
 # YAML_CONFIG=/home/star/github/banana/FastSurferCNN/config/EPI_brainmask_sagittal.yaml
 
 # ============================================================================

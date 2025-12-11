@@ -311,58 +311,335 @@ def save_image(
 
 
 ##
-# Spatial Transformations
+# Orientation-aware spatial transformations
 ##
 
-# Transformation for mapping
-def transform_axial(
+def get_plane_axes(orientation_code: str) -> dict[str, dict[str, int | tuple[int, int]]]:
+    """
+    Parse orientation code and return axis mappings for each anatomical plane view.
+    
+    This function determines which array axis corresponds to each anatomical plane
+    by parsing the 3-letter orientation code (e.g., 'LIA', 'RAS', 'LPS').
+    
+    Anatomical planes are defined by the axis they slice through:
+    - Axial: slices along Superior-Inferior (S/I) axis - horizontal brain cuts
+    - Coronal: slices along Anterior-Posterior (A/P) axis - front-to-back cuts
+    - Sagittal: slices along Left-Right (L/R) axis - side cuts
+    
+    Parameters
+    ----------
+    orientation_code : str
+        3-letter orientation code where each letter indicates the direction
+        that axis points to. E.g., 'LIA' means:
+        - Axis 0 points Left
+        - Axis 1 points Inferior
+        - Axis 2 points Anterior
+        
+    Returns
+    -------
+    dict
+        Dictionary with keys 'axial', 'coronal', 'sagittal', each containing:
+        - 'slice_axis': int - which axis to iterate over for slices
+        - 'shown_axes': tuple[int, int] - which two axes appear in the 2D slice
+        
+    Examples
+    --------
+    >>> get_plane_axes('LIA')
+    {'axial': {'slice_axis': 1, 'shown_axes': (0, 2)},
+     'coronal': {'slice_axis': 2, 'shown_axes': (0, 1)},
+     'sagittal': {'slice_axis': 0, 'shown_axes': (1, 2)}}
+     
+    >>> get_plane_axes('RAS')
+    {'axial': {'slice_axis': 2, 'shown_axes': (0, 1)},
+     'coronal': {'slice_axis': 1, 'shown_axes': (0, 2)},
+     'sagittal': {'slice_axis': 0, 'shown_axes': (1, 2)}}
+    """
+    orientation_code = orientation_code.upper()
+    
+    if len(orientation_code) != 3:
+        raise ValueError(f"Orientation code must be 3 letters, got: '{orientation_code}'")
+    
+    # Find which axis corresponds to each anatomical direction
+    si_axis = None  # Superior-Inferior axis (for axial slices)
+    ap_axis = None  # Anterior-Posterior axis (for coronal slices)
+    lr_axis = None  # Left-Right axis (for sagittal slices)
+    
+    for i, direction in enumerate(orientation_code):
+        if direction in ('S', 'I'):
+            si_axis = i
+        elif direction in ('A', 'P'):
+            ap_axis = i
+        elif direction in ('L', 'R'):
+            lr_axis = i
+        else:
+            raise ValueError(f"Invalid direction '{direction}' in orientation code '{orientation_code}'. "
+                           f"Must be one of: L, R, A, P, S, I")
+    
+    # Validate all axes were found
+    if si_axis is None or ap_axis is None or lr_axis is None:
+        raise ValueError(f"Orientation code '{orientation_code}' must contain exactly one of "
+                        f"(S/I), (A/P), and (L/R)")
+    
+    def get_shown_axes(slice_axis: int) -> tuple[int, int]:
+        """Get the two axes shown in a 2D slice (perpendicular to slice_axis)."""
+        return tuple(i for i in range(3) if i != slice_axis)
+    
+    return {
+        'axial': {
+            'slice_axis': si_axis,
+            'shown_axes': get_shown_axes(si_axis),
+        },
+        'coronal': {
+            'slice_axis': ap_axis,
+            'shown_axes': get_shown_axes(ap_axis),
+        },
+        'sagittal': {
+            'slice_axis': lr_axis,
+            'shown_axes': get_shown_axes(lr_axis),
+        },
+    }
+
+
+def get_plane_transform(
+        plane: str,
+        orientation_code: str = "lia",
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """
+    Get the axis transformation needed for a specific plane view.
+    
+    For 2D CNN processing with get_thick_slices(), we need to rearrange the 3D volume so that:
+    - The slice axis is at position 2 (last axis) - get_thick_slices operates on axis 2
+    - The two in-plane axes are at positions 0 and 1
+    
+    The in-plane axes are ordered so that the A-P axis (if present) comes first,
+    matching the original FastSurfer transform behavior for LIA orientation.
+    
+    Parameters
+    ----------
+    plane : str
+        One of 'axial', 'coronal', 'sagittal'.
+    orientation_code : str, default='lia'
+        3-letter orientation code (e.g., 'LIA', 'RAS').
+        
+    Returns
+    -------
+    forward_axes : tuple[int, ...]
+        Axis order for np.moveaxis source argument to transform volume for plane processing.
+    inverse_axes : tuple[int, ...]
+        Axis order to reverse the transformation.
+        
+    Examples
+    --------
+    >>> fwd, inv = get_plane_transform('axial', 'LIA')
+    >>> # For LIA: axial slices along axis 1 (I)
+    >>> # Transform: move axis 1 to position 2 (last)
+    >>> transformed = np.moveaxis(vol, fwd, (0, 1, 2))
+    >>> original = np.moveaxis(transformed, inv, (0, 1, 2))
+    """
+    plane_axes = get_plane_axes(orientation_code)
+    
+    if plane not in plane_axes:
+        raise ValueError(f"Invalid plane '{plane}'. Must be one of: axial, coronal, sagittal")
+    
+    slice_axis = plane_axes[plane]['slice_axis']
+    shown_axes = list(plane_axes[plane]['shown_axes'])
+    
+    # For coronal plane (slicing along A-P), keep the natural order of shown axes
+    # For other planes, we need to match the legacy behavior where A-P axis comes first
+    # in the in-plane dimensions when it's not the slice axis.
+    # 
+    # Original LIA transforms:
+    #   - coronal (slice=A): identity, in-plane is (L, I) at positions (0, 1)
+    #   - axial (slice=I): in-plane is (A, L) at positions (0, 1) → A first
+    #   - sagittal (slice=L): in-plane is (A, I) at positions (0, 1) → A first
+    #
+    # The pattern: when A-P is in shown_axes, put it first
+    ap_axis = plane_axes['coronal']['slice_axis']  # A-P axis
+    
+    if plane != 'coronal' and ap_axis in shown_axes:
+        # Put A-P axis first among the shown axes
+        shown_axes.remove(ap_axis)
+        shown_axes.insert(0, ap_axis)
+    
+    # Forward transform: shown_axes -> positions 0, 1 and slice_axis -> position 2
+    forward_axes = (shown_axes[0], shown_axes[1], slice_axis)
+    
+    # Inverse transform: reverse the mapping
+    inverse_axes = tuple(forward_axes.index(i) for i in range(3))
+    
+    return forward_axes, inverse_axes
+
+
+def transform_for_plane(
         vol: npt.NDArray,
-        coronal2axial: bool = True
+        plane: str,
+        orientation_code: str = "lia",
+        inverse: bool = False,
 ) -> np.ndarray:
     """
-    Transform volume into Axial axis and back.
-
+    Transform volume for processing a specific anatomical plane view.
+    
+    Rearranges the volume axes so that:
+    - The slice axis (axis being iterated over) is at position 2 (last)
+    - The two in-plane axes are at positions 0 and 1
+    
+    Works with any 3-letter orientation code (e.g., 'LIA', 'RAS', 'LPS').
+    
     Parameters
     ----------
     vol : npt.NDArray
-        Image volume to transform.
-    coronal2axial : bool
-        Transform from coronal to axial = True (default).
-
+        Image volume to transform. Can be 3D (H, W, D) or 4D (H, W, D, C).
+    plane : str
+        One of 'axial', 'coronal', 'sagittal'.
+    orientation_code : str, default='lia'
+        3-letter orientation code (e.g., 'LIA', 'RAS').
+    inverse : bool, default=False
+        If True, apply the inverse transformation (back to original orientation).
+        
     Returns
     -------
     np.ndarray
-        Transformed image.
+        Transformed volume with axes rearranged for the specified plane.
+        
+    Examples
+    --------
+    >>> # Transform for axial plane processing
+    >>> axial_vol = transform_for_plane(vol, 'axial', 'LIA')
+    >>> # Process slices...
+    >>> # Transform back
+    >>> original_vol = transform_for_plane(axial_vol, 'axial', 'LIA', inverse=True)
     """
-    if coronal2axial:
-        return np.moveaxis(vol, [0, 1, 2], [1, 2, 0])
+    forward_axes, inverse_axes = get_plane_transform(plane, orientation_code)
+    
+    if inverse:
+        axes = inverse_axes
     else:
-        return np.moveaxis(vol, [0, 1, 2], [2, 0, 1])
+        axes = forward_axes
+    
+    # np.moveaxis expects source and destination
+    # We want to move axes to positions (0, 1, 2)
+    return np.moveaxis(vol, axes, (0, 1, 2))
 
 
-def transform_sagittal(
-        vol: npt.NDArray,
-        coronal2sagittal: bool = True
-) -> np.ndarray:
+def get_zoom_indices_for_plane(
+        plane: str,
+        orientation_code: str = "lia",
+) -> tuple[int, int]:
     """
-    Transform volume into Sagittal axis and back.
-
+    Get the voxel size indices for the in-plane dimensions of a specific plane.
+    
+    When processing a plane, we need to know the voxel sizes for the two
+    in-plane dimensions to properly scale the network input. The indices are
+    returned in the order that corresponds to positions (0, 1) in the 
+    transformed volume (after transform_for_plane).
+    
     Parameters
     ----------
-    vol : npt.NDArray
-        Image volume to transform.
-    coronal2sagittal : bool
-        Transform from coronal to sagittal = True (default).
-
+    plane : str
+        One of 'axial', 'coronal', 'sagittal'.
+    orientation_code : str, default='lia'
+        3-letter orientation code (e.g., 'LIA', 'RAS').
+        
     Returns
     -------
-    np.ndarray:
-        Transformed image.
+    tuple[int, int]
+        Indices into the voxel size array for the two in-plane dimensions,
+        in the order they appear after the plane transform.
+        
+    Examples
+    --------
+    >>> voxel_sizes = np.array([0.5, 0.5, 0.5])  # LIA orientation
+    >>> idx = get_zoom_indices_for_plane('axial', 'LIA')
+    >>> in_plane_voxels = voxel_sizes[list(idx)]
     """
-    if coronal2sagittal:
-        return np.moveaxis(vol, [0, 1, 2], [2, 1, 0])
-    else:
-        return np.moveaxis(vol, [0, 1, 2], [2, 1, 0])
+    # Get the forward transform axes - positions 0, 1 correspond to in-plane dims
+    forward_axes, _ = get_plane_transform(plane, orientation_code)
+    return (forward_axes[0], forward_axes[1])
+
+
+def get_permute_order_for_plane(
+        plane: str,
+        orientation_code: str = "lia",
+) -> tuple[int, int, int, int]:
+    """
+    Get the permutation order for rearranging a 4D tensor after plane inference.
+    
+    After 2D CNN inference on a plane, predictions have shape:
+        (slice_batch, classes, in_plane_dim1, in_plane_dim2)
+    
+    We need to permute to the canonical volume format:
+        (vol_dim0, vol_dim1, vol_dim2, classes)
+    
+    This function computes the permutation indices for torch.permute().
+    
+    Parameters
+    ----------
+    plane : str
+        One of 'axial', 'coronal', 'sagittal'.
+    orientation_code : str, default='lia'
+        3-letter orientation code (e.g., 'LIA', 'RAS').
+        
+    Returns
+    -------
+    tuple[int, int, int, int]
+        Permutation indices for torch.permute(). The index `0` appears at the
+        position corresponding to the slice axis.
+        
+    Examples
+    --------
+    For LIA orientation:
+    >>> get_permute_order_for_plane('axial', 'LIA')
+    (3, 0, 2, 1)  # slice axis is 1 (I), so 0 goes to position 1
+    
+    >>> get_permute_order_for_plane('coronal', 'LIA')
+    (2, 3, 0, 1)  # slice axis is 2 (A), so 0 goes to position 2
+    
+    >>> get_permute_order_for_plane('sagittal', 'LIA')
+    (0, 3, 2, 1)  # slice axis is 0 (L), so 0 goes to position 0
+    
+    For RAS orientation:
+    >>> get_permute_order_for_plane('axial', 'RAS')
+    (2, 3, 0, 1)  # slice axis is 2 (S), so 0 goes to position 2
+    
+    >>> get_permute_order_for_plane('coronal', 'RAS')
+    (3, 0, 2, 1)  # slice axis is 1 (A), so 0 goes to position 1
+    
+    >>> get_permute_order_for_plane('sagittal', 'RAS')
+    (0, 3, 2, 1)  # slice axis is 0 (R), so 0 goes to position 0
+    """
+    # Get the forward transform to understand how axes are reordered
+    # forward_axes = (in_plane_0_orig_axis, in_plane_1_orig_axis, slice_orig_axis)
+    forward_axes, _ = get_plane_transform(plane, orientation_code)
+    
+    in_plane_0_axis = forward_axes[0]  # Original axis at transformed position 0
+    in_plane_1_axis = forward_axes[1]  # Original axis at transformed position 1
+    slice_axis = forward_axes[2]       # Original axis at transformed position 2 (slice)
+    
+    # Input tensor shape after dataset processing: (slice_batch, classes, in_plane_dim0, in_plane_dim1)
+    # - Position 0: slice_batch → goes to slice_axis in output
+    # - Position 1: classes → goes to position 3 in output
+    # - Position 2: in_plane_dim0 → goes to in_plane_0_axis in output
+    # - Position 3: in_plane_dim1 → goes to in_plane_1_axis in output
+    #
+    # Output tensor shape: (vol_dim0, vol_dim1, vol_dim2, classes)
+    #
+    # We need to compute: for each output position, which input position provides it?
+    
+    permute = [0, 0, 0, 0]
+    
+    # Slice axis in output comes from input position 0
+    permute[slice_axis] = 0
+    
+    # in_plane_0_axis in output comes from input position 2
+    permute[in_plane_0_axis] = 2
+    
+    # in_plane_1_axis in output comes from input position 3
+    permute[in_plane_1_axis] = 3
+    
+    # Classes (position 3 in output) comes from input position 1
+    permute[3] = 1
+    
+    return tuple(permute)
 
 
 ##

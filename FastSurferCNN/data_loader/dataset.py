@@ -75,20 +75,14 @@ class MultiScaleOrigDataThickSlices(Dataset):
                 "before creating dataset. This is handled automatically in Inference.run()."
             )
 
-        if self.plane == "sagittal":
-            orig_data = data_ultils.transform_sagittal(orig_data)
-            self.zoom = np.asarray(orig_zoom)[[2, 1]]
-            logger.info(f"Dataset: loading sagittal plane with voxelsize {self.zoom}")
-
-        elif self.plane == "axial":
-            orig_data = data_ultils.transform_axial(orig_data)
-            self.zoom = np.asarray(orig_zoom)[[2, 0]]
-            logger.info(f"Dataset: loading axial plane with voxelsize {self.zoom}")
-
-        else:
-            # Default to coronal if not sagittal or axial
-            self.zoom = np.asarray(orig_zoom)[[0, 1]]
-            logger.info(f"Dataset: loading coronal plane with voxelsize {self.zoom}")
+        # Get orientation from config (default to 'lia' for backward compatibility)
+        orientation = getattr(cfg.DATA.PREPROCESSING, 'ORIENTATION', 'lia')
+        
+        # Use orientation-aware transform for any plane
+        orig_data = data_ultils.transform_for_plane(orig_data, self.plane, orientation)
+        zoom_indices = data_ultils.get_zoom_indices_for_plane(self.plane, orientation)
+        self.zoom = np.asarray(orig_zoom)[list(zoom_indices)]
+        logger.info(f"Dataset: loading {self.plane} plane with voxelsize {self.zoom} (orientation: {orientation})")
 
         # Create thick slices
         orig_thick = data_ultils.get_thick_slices(orig_data, self.slice_thickness)

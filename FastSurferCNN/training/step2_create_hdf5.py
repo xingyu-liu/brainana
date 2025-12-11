@@ -26,8 +26,8 @@ from FastSurferCNN.data_loader.data_utils import (
     create_weight_mask,
     filter_blank_slices_thick,
     get_thick_slices,
-    transform_axial,
-    transform_sagittal,
+    get_zoom_indices_for_plane,
+    transform_for_plane,
 )
 from FastSurferCNN.data_loader.conform import conform
 
@@ -103,14 +103,32 @@ def load_and_map_labels(label_path, plane="coronal", atlas_manager=None, preproc
         return atlas_manager.map_labels_to_dense(sparse_labels)
 
 
-def _get_plane_transform(plane):
-    """Get transform function and zoom extraction for given plane."""
-    if plane == "sagittal":
-        return transform_sagittal, lambda z: np.asarray(z)[::-1][:2]
-    elif plane == "axial":
-        return transform_axial, lambda z: np.asarray(z)[[2, 0]]
-    else:  # coronal
-        return lambda x: x, lambda z: np.asarray(z)[:2]
+def _get_plane_transform(plane, orientation="lia"):
+    """
+    Get transform function and zoom extraction for given plane and orientation.
+    
+    Parameters
+    ----------
+    plane : str
+        One of 'axial', 'coronal', 'sagittal'.
+    orientation : str, default='lia'
+        3-letter orientation code (e.g., 'LIA', 'RAS').
+        
+    Returns
+    -------
+    transform_func : callable
+        Function to transform volume for the given plane.
+    zoom_extract : callable
+        Function to extract 2D zoom values for the in-plane dimensions.
+    """
+    def transform_func(vol):
+        return transform_for_plane(vol, plane, orientation)
+    
+    zoom_indices = get_zoom_indices_for_plane(plane, orientation)
+    def zoom_extract(z):
+        return np.asarray(z)[list(zoom_indices)]
+    
+    return transform_func, zoom_extract
 
 
 def _append_to_datasets(datasets, result, subject_name):
@@ -190,8 +208,9 @@ def process_subject(image_path, label_path, plane, slice_thickness=3, target_siz
         verbose=False
     )
     
-    # Transform to requested plane
-    transform_func, zoom_extract = _get_plane_transform(plane)
+    # Transform to requested plane (using orientation from preprocess_params)
+    orientation = preprocess_params.get('ORIENTATION', 'lia').lower()
+    transform_func, zoom_extract = _get_plane_transform(plane, orientation)
     image_data = transform_func(image_data)
     label_data = transform_func(label_data)
     weights = transform_func(weights)

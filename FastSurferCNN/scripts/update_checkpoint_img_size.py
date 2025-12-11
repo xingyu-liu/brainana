@@ -45,20 +45,17 @@ def update_checkpoint_img_size(checkpoint_path: Path) -> bool:
     config_str = checkpoint['config']
     config_dict = yaml.safe_load(config_str)
     
-    # Check if IMG_SIZE needs updating
+    # update orientation to RAS
     updated = False
     if 'DATA' in config_dict and 'PREPROCESSING' in config_dict['DATA']:
         preproc = config_dict['DATA']['PREPROCESSING']
-        if 'IMG_SIZE' in preproc:
-            current_value = preproc['IMG_SIZE']
-            if current_value == 'auto':
-                preproc['IMG_SIZE'] = 'cube'
-                updated = True
-                print(f"  Updated IMG_SIZE: 'auto' → 'cube'")
-            else:
-                print(f"  IMG_SIZE is already '{current_value}' (no update needed)")
+        if 'ORIENTATION' in preproc:
+            preproc['ORIENTATION'] = 'RAS'
+            updated = True
+            print(f"  Updated ORIENTATION → 'RAS'")
+
         else:
-            print(f"  WARNING: IMG_SIZE not found in PREPROCESSING")
+            print(f"  WARNING: ORIENTATION not found in PREPROCESSING")
     else:
         print(f"  WARNING: DATA.PREPROCESSING not found in config")
     

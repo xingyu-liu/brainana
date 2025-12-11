@@ -29,6 +29,7 @@ from torchvision import transforms
 from FastSurferCNN.data_loader.data_transforms import ToTensorTest
 from FastSurferCNN.data_loader.data_utils import (
     depad_volume,
+    get_permute_order_for_plane,
     map_prediction_sagittal2full,
     pad_volume_edges_percent,
 )
@@ -138,11 +139,17 @@ class Inference:
             "axial": cfg.MULTIVIEW.PLANE_WEIGHTS.AXIAL,
             "sagittal": cfg.MULTIVIEW.PLANE_WEIGHTS.SAGITTAL,
         }
+        
+        # Compute permute_order dynamically based on orientation
+        # This allows the model to work with any orientation (LIA, RAS, etc.)
+        orientation = getattr(cfg.DATA.PREPROCESSING, 'ORIENTATION', 'lia')
+        self.orientation = orientation
         self.permute_order = {
-            "axial": (3, 0, 2, 1),
-            "coronal": (2, 3, 0, 1),
-            "sagittal": (0, 3, 2, 1),
+            "axial": get_permute_order_for_plane("axial", orientation),
+            "coronal": get_permute_order_for_plane("coronal", orientation),
+            "sagittal": get_permute_order_for_plane("sagittal", orientation),
         }
+        logger.debug(f"Inference: using orientation '{orientation}', permute_order={self.permute_order}")
         self.lut = lut
 
         # Initial checkpoint loading

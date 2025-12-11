@@ -5,7 +5,7 @@
 TRAINING_DATA_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_data/T1w_seg-ARM2"
 
 # Direct path to output directory (for training logs, checkpoints, etc.)
-OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/T1w_ARM2_finetune_axial_v5"
+OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/T1w_ARM2_finetune_axial_fov_ras"
 
 # ==============================================================================
 # MODEL ARCHITECTURE
@@ -74,7 +74,7 @@ DATA:
   # 2. Training (saved to checkpoint)
   # 3. Inference (reads from checkpoint)
   PREPROCESSING:
-    ORIENTATION: "lia"        # Target orientation (LIA = Left-Inferior-Anterior)
+    ORIENTATION: "RAS"        # Target orientation (RAS = Right-Anterior-Superior)
     IMG_SIZE: "fov"           # Image size: int (e.g. 256), "fov" (RECOMMENDED), or "cube"
     VOX_SIZE: "min"           # Voxel size: float (e.g. 1.0) or "min" (adaptive)
     DTYPE_IMAGE: "uint8"      # Data type for IMAGES: "uint8" (0-255), "float32", etc.

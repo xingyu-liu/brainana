@@ -19,11 +19,11 @@ from FastSurferCNN.utils.constants import FASTSURFER_ROOT
 # Test paths
 common_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
 
-skullstripped_dir = f'{common_dir}/NMT2Sym_separate'
-# t1w_f = f'{skullstripped_dir}/input.nii.gz'
-# seg_f = f'{skullstripped_dir}/segmentation.nii.gz'
-t1w_f = f'{skullstripped_dir}/tpl-NMT2Sym_res-05_T1w.nii.gz'
-seg_f = f'{skullstripped_dir}/atlas-ARM2_space-NMT2Sym_res-05.nii.gz'
+skullstripped_dir = f'{common_dir}/NMT2Sym_fov_ras_separate'
+t1w_f = f'{skullstripped_dir}/input.nii.gz'
+seg_f = f'{skullstripped_dir}/segmentation.nii.gz'
+# t1w_f = f'{skullstripped_dir}/tpl-NMT2Sym_res-05_T1w.nii.gz'
+# seg_f = f'{skullstripped_dir}/atlas-ARM2_space-NMT2Sym_res-05.nii.gz'
 mask_f = f'{skullstripped_dir}/mask.nii.gz'
 
 output_dir = f'{skullstripped_dir}/sub-NMT2Sym'
