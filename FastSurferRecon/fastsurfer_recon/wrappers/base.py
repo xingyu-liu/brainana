@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 # Global cmd log file path (set by pipeline)
 _cmd_log_file: Optional[Path] = None
 
+# Global current stage identifier (set by pipeline stages)
+_current_stage_id: Optional[str] = None
+
 
 def set_cmd_log_file(cmd_log_file: Optional[Path]) -> None:
     """Set the global cmd log file path for command logging."""
@@ -27,6 +30,17 @@ def set_cmd_log_file(cmd_log_file: Optional[Path]) -> None:
 def get_cmd_log_file() -> Optional[Path]:
     """Get the global cmd log file path."""
     return _cmd_log_file
+
+
+def set_current_stage_id(stage_id: Optional[str]) -> None:
+    """Set the current stage identifier for command logging."""
+    global _current_stage_id
+    _current_stage_id = stage_id
+
+
+def get_current_stage_id() -> Optional[str]:
+    """Get the current stage identifier."""
+    return _current_stage_id
 
 
 class FreeSurferError(Exception):
@@ -202,7 +216,11 @@ def run_fs_command(
         with open(active_cmd_log_file, "a") as f:
             timestamp = datetime.now().strftime("%a %b %d %H:%M:%S %Z %Y")
             f.write(f"\n#--------------------------------------------\n")
-            f.write(f"#@# {cmd_list[0]} {timestamp}\n")
+            # Include stage identifier if available
+            if _current_stage_id:
+                f.write(f"#@# {_current_stage_id}: {cmd_list[0]} {timestamp}\n")
+            else:
+                f.write(f"#@# {cmd_list[0]} {timestamp}\n")
             # Log cd command if using subject_dir (recon-all style)
             if subject_dir:
                 f.write(f"cd {subject_dir}\n")

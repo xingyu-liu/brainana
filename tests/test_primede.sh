@@ -386,3 +386,13 @@ config_f=${dataset_root}/config.yaml
 pipeline=func2anat2template
 python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
     --config ${config_f}
+
+# test resource management
+dataset_root=/mnt/DataDrive3/xliu/prep_test/banana_test/testing_inz
+dataset_dir=${dataset_root}/dataset_classic
+output_dir=${dataset_root}/dataset_classic_testing_resource
+config_f=${dataset_root}/config_test_resource.yaml
+
+pipeline=func2anat2template
+python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
+    --config ${config_f}

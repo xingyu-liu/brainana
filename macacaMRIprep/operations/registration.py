@@ -200,6 +200,13 @@ def ants_register(
         'inverse_transform': None,
     }
 
+    # Get thread count from config, default to 8 to avoid oversubscription when running multiple processes
+    num_threads = reg_config.get('threads', 8)
+    
+    # Set up ITK thread environment variables
+    from ..utils.system import setup_itk_thread_env
+    env = setup_itk_thread_env(num_threads)
+
     # Build ANTs registration command
     command_ants = compose_ants_registration_cmd(
         fixed_path, moving_path, output_path_prefix, 
@@ -209,10 +216,11 @@ def ants_register(
     verbose = normalize_verbose(config.get('general', {}).get('verbose', 1))
     command_ants.extend(['--verbose', str(1 if verbose >= 1 else 0)])
 
-    # Execute ANTs registration
+    # Execute ANTs registration with thread-limited environment
     try:
         logger.info(f"Step: executing ANTs registration command with {len(command_ants)} arguments")
-        returncode, stdout, stderr = run_command(command_ants, step_logger=logger)
+        logger.info(f"System: using {num_threads} threads for ITK operations (capped at 32)")
+        returncode, stdout, stderr = run_command(command_ants, env=env, step_logger=logger)
         
         if returncode != 0:
             raise RuntimeError(f"antsRegistration failed (exit code {returncode}): {stderr}")
@@ -322,8 +330,23 @@ def ants_apply_transforms(
     
     logger.debug(f"System: apply transforms command - {' '.join(cmd)}")
     
+    # Get thread count from config if available, default to 8
+    num_threads = 8
     try:
-        run_command(cmd, step_logger=logger)
+        config = get_config().to_dict()
+        reg_config = config.get("registration", {})
+        num_threads = reg_config.get('threads', 8)
+    except Exception:
+        pass  # Use default if config access fails
+    
+    # Set up ITK thread environment variables
+    from ..utils.system import setup_itk_thread_env
+    env = setup_itk_thread_env(num_threads)
+    
+    logger.debug(f"System: using {num_threads} threads for ITK operations (capped at 32)")
+    
+    try:
+        run_command(cmd, env=env, step_logger=logger)
         
         # Validate output
         validate_output_file(outputf_name, logger)

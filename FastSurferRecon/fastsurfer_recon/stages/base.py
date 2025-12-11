@@ -68,6 +68,9 @@ class PipelineStage(ABC):
         if self.hemi:
             stage_desc += f" ({self.hemi})"
         
+        # Get stage identifier for command logging
+        stage_id = self._get_stage_id()
+        
         # Check if disabled
         if self.is_disabled():
             self.logger.info(f"Skipping {stage_desc} (disabled)")
@@ -78,6 +81,11 @@ class PipelineStage(ABC):
             self.logger.info(f"Skipping {stage_desc} (already complete)")
             return
         
+        # Set current stage identifier for command logging
+        if stage_id:
+            from ..wrappers.base import set_current_stage_id
+            set_current_stage_id(stage_id)
+        
         self.logger.info(f"Starting {stage_desc}")
         self._start_time = time.time()
         
@@ -86,10 +94,38 @@ class PipelineStage(ABC):
         except Exception as e:
             self.logger.error(f"Failed {stage_desc}: {e}")
             raise
+        finally:
+            # Clear stage identifier after stage completes
+            if stage_id:
+                from ..wrappers.base import set_current_stage_id
+                set_current_stage_id(None)
         
         self._end_time = time.time()
         elapsed = self._end_time - self._start_time
         self.logger.info(f"Completed {stage_desc} in {elapsed:.1f}s")
+    
+    def _get_stage_id(self) -> Optional[str]:
+        """
+        Get stage identifier (e.g., 's07_wm_filled') from module name.
+        
+        Extracts the identifier from the module name which follows
+        the pattern 'fastsurfer_recon.stages.s##_name'.
+        
+        Returns
+        -------
+        str, optional
+            Stage identifier like 's07_wm_filled', or None if not found
+        """
+        import inspect
+        module = inspect.getmodule(self)
+        if module:
+            module_name = module.__name__
+            # Extract stage identifier from module name
+            # e.g., 'fastsurfer_recon.stages.s07_wm_filled' -> 's07_wm_filled'
+            if '.stages.' in module_name:
+                stage_id = module_name.split('.stages.')[-1]
+                return stage_id
+        return None
     
     @abstractmethod
     def _run(self) -> None:

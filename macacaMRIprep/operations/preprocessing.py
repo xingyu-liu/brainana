@@ -1036,11 +1036,19 @@ def bias_correction(
     output_path = os.path.join(str(work_dir), output_name)
     bias_field_path = os.path.join(str(work_dir), output_name.split('.nii')[0] + '_bias_field.nii.gz')
 
+    # Get thread count from config, default to 8 to avoid oversubscription when running multiple processes
+    num_threads = bias_cfg.get('threads', 8)
+    
+    # Set up ITK thread environment variables
+    from ..utils.system import setup_itk_thread_env
+    env = setup_itk_thread_env(num_threads)
+
     # Build command
     if bias_cfg.get('algorithm') == 'N4BiasFieldCorrection':
         logger.info(f"Workflow: starting bias field correction using N4BiasFieldCorrection algorithm")
         logger.info(f"Data: input image - {os.path.basename(image_path)}, dimension - {dimension}")
         logger.info(f"System: output path - {output_path}")
+        logger.info(f"System: using {num_threads} threads for ITK operations (capped at 32)")
         command = [
             'N4BiasFieldCorrection',
             '-d', str(dimension),
@@ -1053,9 +1061,9 @@ def bias_correction(
         # TODO: add other bias correction algorithms
         pass
 
-    # Execute command
+    # Execute command with thread-limited environment
     try:
-        returncode, stdout, stderr = run_command(command, step_logger=logger)
+        returncode, stdout, stderr = run_command(command, env=env, step_logger=logger)
         if returncode != 0:
             raise RuntimeError(f"N4BiasFieldCorrection failed (exit code {returncode}): {stderr}")
         

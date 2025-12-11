@@ -99,8 +99,8 @@ REQUIRED_EXTERNAL_TOOLS = {
     },
     'afni': {
         'env_var': 'AFNIPATH',
-        'version_cmd': '3dinfo -ver',
-        'required_version': '20.0'
+        'version_cmd': 'afni_vcheck',
+        'required_version': '24.0'
     },
     'freesurfer': {
         'env_var': 'FREESURFER_HOME',
@@ -114,11 +114,11 @@ def get_logger() -> logging.Logger:
     return logging.getLogger(__name__)
 
 
-def check_python_version(min_version: str = "3.7") -> Tuple[bool, str]:
+def check_python_version(min_version: str = "3.11") -> Tuple[bool, str]:
     """Check Python version requirement.
     
     Args:
-        min_version: Minimum required Python version
+        min_version: Minimum required Python version (default: 3.11)
         
     Returns:
         Tuple of (is_compatible, version_info)
@@ -129,18 +129,30 @@ def check_python_version(min_version: str = "3.7") -> Tuple[bool, str]:
     return is_compatible, current_version
 
 
+# Mapping from package names (as in pyproject.toml) to their import names
+PACKAGE_IMPORT_MAP = {
+    'pillow': 'PIL',  # Pillow package is imported as PIL
+    'pyyaml': 'yaml',  # pyyaml package is imported as yaml
+    'simpleitk': 'SimpleITK',  # SimpleITK package is imported as SimpleITK
+    'scikit-image': 'skimage',  # scikit-image package is imported as skimage
+    'pybids': 'bids',  # pybids package is imported as bids
+}
+
 def check_package_version(package_name: str, min_version: str) -> Tuple[bool, Optional[str], Optional[str]]:
     """Check if a Python package meets version requirements.
     
     Args:
-        package_name: Name of the package
+        package_name: Name of the package (as in pyproject.toml, lowercase)
         min_version: Minimum required version
         
     Returns:
         Tuple of (is_available, installed_version, error_message)
     """
+    # Map package name to import name if needed
+    import_name = PACKAGE_IMPORT_MAP.get(package_name.lower(), package_name)
+    
     try:
-        module = importlib.import_module(package_name)
+        module = importlib.import_module(import_name)
         
         # Try to get version from different common attributes
         installed_version = None
@@ -199,10 +211,11 @@ def get_command_version(version_cmd: str) -> Optional[str]:
             timeout=10
         )
         
-        if result.returncode == 0:
-            # Extract version from output (this is tool-specific)
-            output = result.stdout + result.stderr
-            return output.strip()
+        # Some commands (like afni_vcheck) return non-zero exit codes but still produce valid output
+        # Check if we have any output (stdout or stderr)
+        output = (result.stdout + result.stderr).strip()
+        if output:
+            return output
         
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
         pass
@@ -216,7 +229,8 @@ def extract_version_number(version_string: str) -> Optional[str]:
     Handles various formats like:
     - "mri_info freesurfer 7.4.1"
     - "6.0.5.2"
-    - "ANTs Version: 2.3.1"
+    - "ANTs Version: 2.5.1.post13-g4a0fb48" -> "2.5.1"
+    - "Version ID = AFNI_24.0.08" -> "24.0.08"
     
     Args:
         version_string: Raw version output from command
@@ -227,14 +241,31 @@ def extract_version_number(version_string: str) -> Optional[str]:
     if not version_string:
         return None
     
-    # Try to find version pattern (e.g., X.Y.Z or X.Y)
-    # Look for patterns like: number.number.number or number.number
-    version_pattern = r'\b(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)\b'
-    matches = re.findall(version_pattern, version_string)
+    # Try multiple patterns to handle different formats
     
-    if matches:
-        # Return the first (usually most complete) version match
-        return matches[0]
+    # Pattern 1: Standard version pattern with word boundaries (handles most cases)
+    # Matches: "2.5.1", "24.0.08", "7.4.1"
+    version_pattern1 = r'\b(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)\b'
+    matches1 = re.findall(version_pattern1, version_string)
+    
+    # Pattern 2: Version after underscore or prefix (for AFNI_24.0.08 format)
+    # Matches: "AFNI_24.0.08" -> "24.0.08"
+    version_pattern2 = r'[A-Z_]+(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)'
+    matches2 = re.findall(version_pattern2, version_string)
+    
+    # Pattern 3: Version after colon or equals (for "Version: 2.5.1" format)
+    # Matches: "ANTs Version: 2.5.1" -> "2.5.1"
+    version_pattern3 = r'[:=]\s*(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)'
+    matches3 = re.findall(version_pattern3, version_string)
+    
+    # Combine all matches and prefer longer/more complete versions
+    all_matches = matches1 + matches2 + matches3
+    
+    if all_matches:
+        # Sort by length (longer = more complete) and return the longest
+        # This handles cases where multiple patterns match
+        all_matches_sorted = sorted(all_matches, key=lambda x: (len(x), x), reverse=True)
+        return all_matches_sorted[0]
     
     return None
 
@@ -271,9 +302,6 @@ def check_external_tool(tool_name: str, tool_config: Dict[str, Any]) -> Dict[str
         env_path = os.environ.get(env_var)
         result['env_var_set'] = env_path is not None
         result['env_var_path'] = env_path
-        
-        if not env_path:
-            result['errors'].append(f"Environment variable {env_var} not set")
     
     # Check required commands
     commands = tool_config.get('commands', [])
@@ -290,6 +318,19 @@ def check_external_tool(tool_name: str, tool_config: Dict[str, Any]) -> Dict[str
     required_version = tool_config.get('required_version')
     result['required_version'] = required_version
     
+    # Extract version command name once if it exists
+    version_cmd_name = None
+    if version_cmd:
+        version_cmd_name = version_cmd.split()[0]
+        
+        # Check if version command is available
+        is_available, cmd_path = check_external_command(version_cmd_name)
+        if is_available:
+            # Add to commands_found if not already there
+            if not any(c['command'] == version_cmd_name for c in result['commands_found']):
+                result['commands_found'].append({'command': version_cmd_name, 'path': cmd_path})
+    
+    # Check version if available
     if version_cmd:
         # Check version if we have commands found, or if no commands are required
         if len(result['commands_found']) > 0 or len(commands) == 0:
@@ -316,22 +357,43 @@ def check_external_tool(tool_name: str, tool_config: Dict[str, Any]) -> Dict[str
                 else:
                     result['errors'].append(f"Could not extract version number from: {version_info}")
             else:
-                result['errors'].append(f"Could not get version info using: {version_cmd}")
+                if not version_cmd_name or not any(c['command'] == version_cmd_name for c in result['commands_found']):
+                    result['errors'].append(f"Version command '{version_cmd_name}' not found in PATH")
+                else:
+                    result['errors'].append(f"Could not get version info using: {version_cmd}")
     
     # Tool is available if:
     # 1. All required commands are found (if commands are specified), OR
-    # 2. Env var is set and version can be checked (if no commands specified)
-    # AND version matches exactly (if version requirement exists)
+    # 2. Version command is available and version can be checked (if no commands specified), OR
+    # 3. Env var is set and version can be checked (if no commands and no version_cmd)
+    # AND version matches if required
     if len(commands) > 0:
+        # If commands are specified, check if they're found
+        # Commands in PATH are sufficient even if env var is not set
         commands_ok = len(result['commands_missing']) == 0
+    elif version_cmd and version_cmd_name:
+        # No commands specified, but version_cmd exists - check if version command is available
+        commands_ok = any(c['command'] == version_cmd_name for c in result['commands_found']) and result['version_info'] is not None
     else:
-        # No commands required - check env_var and version instead
+        # No commands and no version_cmd - check env_var and version instead
         commands_ok = result['env_var_set'] and result['version_info'] is not None
     
-    # Version must match exactly if required
+    # Version must match if required
     version_ok = result['required_version'] is None or result['version_matches']
     
+    # Tool is available if commands are OK and version is OK
+    # Note: env_var not being set is a warning, not a blocker if commands/version_cmd are found
     result['available'] = commands_ok and version_ok
+    
+    # Only add env var error if tool is not available and env var is required
+    if not result['available'] and not result['env_var_set'] and env_var:
+        # Check if commands/version_cmd are also missing - if so, env var might be the issue
+        if len(result['commands_found']) == 0 and (not version_cmd or not result['version_info']):
+            result['errors'].append(f"Environment variable {env_var} not set and tool not found in PATH")
+    
+    # If env var is not set but tool is available via commands, add a warning (not error)
+    if not result['env_var_set'] and result['available'] and env_var:
+        logger.warning(f"System: {tool_name} available via PATH but environment variable {env_var} not set")
     
     logger.debug(f"System: tool check for {tool_name} - {'✓' if result['available'] else '✗'}")
     
@@ -446,8 +508,9 @@ def check_dependencies(
     }
     
     if not is_compatible:
-        result['errors'].append(f"Python version {py_version} < required 3.7")
-        logger.error(f"System: incompatible Python version - {py_version}")
+        min_py_version = "3.11"  # Match pyproject.toml requires-python
+        result['errors'].append(f"Python version {py_version} < required {min_py_version}")
+        logger.error(f"System: incompatible Python version - {py_version} < {min_py_version}")
     
     # Check required packages
     for pkg_name, min_version in REQUIRED_PYTHON_PACKAGES.items():
@@ -555,27 +618,35 @@ def check_environment(
         anat_mrin = anat_method == 'macacamrinn'
         func_mrin = func_method == 'macacamrinn'
         
-        if anat_fscnn or func_fscnn:
-            gpu_info = result['system_resources'].get('gpu', {})
-            if not gpu_info.get('cuda_available', False):
-                warn_msg = (
-                    "GPU (CUDA) not available, but skullstripping with FastSurferCNN is enabled for "
-                    f"{'anat' if anat_fscnn else ''}{' and ' if anat_fscnn and func_fscnn else ''}{'func' if func_fscnn else ''}. "
-                    "This will be very slow on CPU."
-                )
-                result['summary']['warnings'].append(warn_msg)
-                logger.warning(warn_msg)
+        # Check GPU availability for GPU-accelerated skullstripping methods
+        gpu_info = result['system_resources'].get('gpu', {})
+        cuda_available = gpu_info.get('cuda_available', False)
         
-        if anat_mrin or func_mrin:
-            gpu_info = result['system_resources'].get('gpu', {})
-            if not gpu_info.get('cuda_available', False):
-                warn_msg = (
-                    "GPU (CUDA) not available, but skullstripping with macacaMRINN is enabled for "
-                    f"{'anat' if anat_mrin else ''}{' and ' if anat_mrin and func_mrin else ''}{'func' if func_mrin else ''}. "
-                    "This will be very slow on CPU."
-                )
-                result['summary']['warnings'].append(warn_msg)
-                logger.warning(warn_msg)
+        if (anat_fscnn or func_fscnn) and not cuda_available:
+            modalities = []
+            if anat_fscnn:
+                modalities.append('anat')
+            if func_fscnn:
+                modalities.append('func')
+            warn_msg = (
+                f"GPU (CUDA) not available, but skullstripping with FastSurferCNN is enabled for "
+                f"{' and '.join(modalities)}. This will be very slow on CPU."
+            )
+            result['summary']['warnings'].append(warn_msg)
+            logger.warning(warn_msg)
+        
+        if (anat_mrin or func_mrin) and not cuda_available:
+            modalities = []
+            if anat_mrin:
+                modalities.append('anat')
+            if func_mrin:
+                modalities.append('func')
+            warn_msg = (
+                f"GPU (CUDA) not available, but skullstripping with macacaMRINN is enabled for "
+                f"{' and '.join(modalities)}. This will be very slow on CPU."
+            )
+            result['summary']['warnings'].append(warn_msg)
+            logger.warning(warn_msg)
     # -------------------------------------
     
     # Determine overall status
@@ -594,6 +665,33 @@ def check_environment(
         print(f"✗ Environment check failed - critical issues found")
         for issue in result['summary']['critical_issues']:
             print(f"  - {issue}")
+    
+    return result
+
+
+def check_environment_and_exit(
+    logger: Optional[logging.Logger] = None,
+    config: Optional[Dict[str, Any]] = None,
+    exit_on_failure: bool = True
+) -> Dict[str, Any]:
+    """Perform comprehensive environment check and exit on critical failures.
+    
+    Args:
+        logger: Logger instance
+        config: Configuration dictionary (optional)
+        exit_on_failure: If True, exit with code 1 on critical failures
+        
+    Returns:
+        Dictionary with environment check results
+        
+    Exits:
+        sys.exit(1) if exit_on_failure=True and critical issues are found
+    """
+    result = check_environment(logger=logger, config=config)
+    
+    if exit_on_failure and result['summary']['overall_status'] == 'failed':
+        logger.error("System: exiting due to environment check failures")
+        sys.exit(1)
     
     return result
 
@@ -701,10 +799,5 @@ def info() -> str:
     return f"macacaMRIprep v{__version__} | Python {python_version} | Core packages: {packages_ok}/{len(key_packages)} | Status: {status}"
 
 
-# Run basic checks on import
-if __name__ != "__main__":
-    # Only run basic checks when imported
-    try:
-        check_dependencies(include_optional=False)
-    except Exception:
-        pass  # Don't break import if check fails 
+# Note: We don't run checks on import to avoid slowing down module loading
+# Checks are performed explicitly when needed via check_environment() or check_dependencies() 

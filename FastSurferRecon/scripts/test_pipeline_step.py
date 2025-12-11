@@ -1,0 +1,311 @@
+#!/usr/bin/env python3
+"""
+Test script for FastSurfer surface reconstruction pipeline with step control.
+
+Allows testing arguments and parameters for each step by specifying a stop point.
+Edit the STOP_STEP variable below to specify where to stop.
+"""
+
+import sys
+import logging
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+
+# Add package to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from fastsurfer_recon.config import ReconSurfConfig, AtlasConfig, ProcessingConfig
+from fastsurfer_recon.io.subjects_dir import SubjectsDir
+from fastsurfer_recon.utils.logging import setup_logging
+from fastsurfer_recon.stages import (
+    # Volume stages
+    VolumePrep,
+    BiasCorrection,
+    MaskAseg,
+    Talairach,
+    NormT1,
+    CCSegmentation,
+    WMFilled,
+    # Surface stages
+    Tessellation,
+    Smoothing,
+    Inflation,
+    SphericalProjection,
+    TopologyFix,
+    WhitePreaparc,
+    Parcellation,
+    SurfacePlacement,
+    Registration,
+    Statistics,
+    CorticalRibbon,
+    AsegRefinement,
+    AparcMapping,
+    WMParcMapping,
+)
+
+# ============================================================================
+# Configuration - Edit these variables as needed
+# ============================================================================
+
+# Stop at this step (e.g., "s07", "s12", "s21")
+# Pipeline will run all steps up to and including this step
+STOP_STEP = "s07"
+
+# Test subject
+subject_root = Path("/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon")
+subject_dir = subject_root / "NMT2Sym_separate" / f"sub-NMT2Sym_stage"
+subjects_dir = subject_dir.parent
+subject_id = subject_dir.name
+
+skip_topology_fix = False
+
+n_threads = 24
+parallel_hemis = False
+
+# ============================================================================
+
+
+# Valid step names
+VALID_STEPS = {
+    "s01", "s02", "s03", "s04", "s05", "s06", "s07",
+    "s08", "s09", "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17",
+    "s18", "s19", "s20", "s21",
+}
+
+
+def get_stage_number(step: str) -> int:
+    """Get numeric stage number from step string (e.g., 's07' -> 7)."""
+    if not step.startswith("s"):
+        raise ValueError(f"Step must start with 's', got: {step}")
+    try:
+        return int(step[1:])
+    except ValueError:
+        raise ValueError(f"Invalid step format: {step}")
+
+
+def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
+    """Run pipeline up to and including the specified step."""
+    sd = SubjectsDir(config.subjects_dir, config.subject_id)
+    
+    # Setup directories
+    sd.setup()
+    
+    # Setup logging
+    if config.log_file:
+        log_path = config.log_file
+    else:
+        log_path = sd.log_file
+    
+    logger = logging.getLogger("fastsurfer_recon")
+    file_handler = logging.FileHandler(log_path, mode="a")
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
+    logger.addHandler(file_handler)
+    
+    # Write header
+    from datetime import datetime
+    with open(log_path, "a") as f:
+        start_time = datetime.now()
+        f.write(f"\n{'='*80}\n")
+        f.write(f"FastSurfer Recon Pipeline Log (Step Test)\n")
+        f.write(f"Subject: {config.subject_id}\n")
+        f.write(f"Stop Step: {stop_step}\n")
+        f.write(f"Start: {start_time}\n")
+        f.write(f"{'='*80}\n\n")
+    
+    # Initialize cmd log file (fastsurfer_recon.cmd)
+    cmd_log_path = config.cmd_log_file
+    cmd_log_path.parent.mkdir(parents=True, exist_ok=True)
+    from fastsurfer_recon.wrappers.base import set_cmd_log_file
+    with open(cmd_log_path, "a") as f:
+        timestamp = datetime.now().strftime("%a %b %d %H:%M:%S %Z %Y")
+        f.write(f"\n\n#---------------------------------\n")
+        f.write(f"# New invocation of fastsurfer-recon (step test) {timestamp} \n")
+        f.write(f"# Stop Step: {stop_step}\n")
+        f.write(f"#--------------------------------------------\n")
+    # Set global cmd log file so all commands are logged
+    set_cmd_log_file(cmd_log_path)
+    
+    stop_num = get_stage_number(stop_step)
+    
+    print("=" * 80)
+    print(f"Running Pipeline up to Step: {stop_step}")
+    print("=" * 80)
+    print()
+    
+    # Phase 1: Volume Processing (s01-s07)
+    if stop_num >= 1:
+        print("=" * 60)
+        print("Phase 1: Volume Processing")
+        print("=" * 60)
+        
+        volume_stages = [
+            ("s01", VolumePrep),
+            ("s02", BiasCorrection),
+            ("s03", MaskAseg),
+            ("s04", Talairach),
+            ("s05", NormT1),
+            ("s06", CCSegmentation),
+            ("s07", WMFilled),
+        ]
+        
+        for step_name, stage_class in volume_stages:
+            step_num = get_stage_number(step_name)
+            if step_num > stop_num:
+                break
+            
+            print(f"\nRunning {step_name}: {stage_class.__name__}")
+            print("-" * 60)
+            stage = stage_class(config, sd)
+            stage.run()
+            
+            if step_num == stop_num:
+                print(f"\nStopped at {step_name} as requested.")
+                return
+    
+    # Phase 2: Surface Creation (s08-s17)
+    if stop_num >= 8:
+        print("\n" + "=" * 60)
+        print("Phase 2: Surface Creation")
+        print("=" * 60)
+        
+        surface_stages = [
+            ("s08", Tessellation),
+            ("s09", Smoothing),
+            ("s10", Inflation),
+            ("s11", SphericalProjection),
+            ("s12", TopologyFix),
+            ("s13", WhitePreaparc),
+            ("s14", Parcellation),
+            ("s15", SurfacePlacement),
+            ("s16", Registration),
+            ("s17", Statistics),
+        ]
+        
+        hemis = ["lh", "rh"]
+        
+        for step_name, stage_class in surface_stages:
+            step_num = get_stage_number(step_name)
+            if step_num > stop_num:
+                break
+            
+            print(f"\nRunning {step_name}: {stage_class.__name__}")
+            print("-" * 60)
+            
+            # Statistics (s17) needs special handling - run sequentially for both hemispheres
+            if step_name == "s17":
+                print("Computing statistics for both hemispheres (sequential)")
+                for hemi in hemis:
+                    print(f"  Processing {hemi}...")
+                    stage = stage_class(config, sd, hemi)
+                    stage.run()
+            else:
+                # Other surface stages run per hemisphere
+                if config.processing.parallel_hemis and config.processing.threads >= 2:
+                    print(f"Running for both hemispheres in parallel...")
+                    logger = logging.getLogger(__name__)
+                    
+                    def process_hemi(hemi: str):
+                        stage = stage_class(config, sd, hemi)
+                        stage.run()
+                    
+                    with ThreadPoolExecutor(max_workers=len(hemis)) as executor:
+                        futures = {executor.submit(process_hemi, hemi): hemi for hemi in hemis}
+                        for future in as_completed(futures):
+                            hemi = futures[future]
+                            try:
+                                future.result()
+                            except Exception as e:
+                                logger.error(f"Error processing {hemi}: {e}")
+                                raise
+                else:
+                    print(f"Running for both hemispheres sequentially...")
+                    for hemi in hemis:
+                        print(f"  Processing {hemi}...")
+                        stage = stage_class(config, sd, hemi)
+                        stage.run()
+            
+            if step_num == stop_num:
+                print(f"\nStopped at {step_name} as requested.")
+                return
+    
+    # Phase 3: Post-Surface (s18-s21)
+    if stop_num >= 18:
+        print("\n" + "=" * 60)
+        print("Phase 3: Post-Surface Processing")
+        print("=" * 60)
+        
+        post_surface_stages = [
+            ("s18", CorticalRibbon),
+            ("s19", AsegRefinement),
+            ("s20", AparcMapping),
+            ("s21", WMParcMapping),
+        ]
+        
+        for step_name, stage_class in post_surface_stages:
+            step_num = get_stage_number(step_name)
+            if step_num > stop_num:
+                break
+            
+            print(f"\nRunning {step_name}: {stage_class.__name__}")
+            print("-" * 60)
+            stage = stage_class(config, sd)
+            stage.run()
+            
+            if step_num == stop_num:
+                print(f"\nStopped at {step_name} as requested.")
+                return
+    
+    print("\n" + "=" * 80)
+    print(f"Pipeline completed up to step {stop_step}")
+    print("=" * 80)
+
+
+def main():
+    """Main entry point."""
+    # Validate stop step
+    if STOP_STEP not in VALID_STEPS:
+        print(f"Error: Invalid step '{STOP_STEP}'")
+        print(f"Valid steps are: {', '.join(sorted(VALID_STEPS))}")
+        sys.exit(1)
+    
+    # Setup logging
+    setup_logging()
+    
+    # Create configuration
+    config = ReconSurfConfig(
+        subject_id=subject_id,
+        subjects_dir=subjects_dir,
+        atlas=AtlasConfig(name="ARM2"),
+        processing=ProcessingConfig(
+            threads=n_threads,
+            parallel_hemis=parallel_hemis,
+            skip_cc=True,  # Non-human
+            skip_talairach=True,  # Non-human
+            skip_topology_fix=skip_topology_fix,
+            hires="auto",  # Auto-detect from voxel size
+        ),
+        verbose=2,  # DEBUG
+    )
+    
+    # Run pipeline to specified step
+    try:
+        run_pipeline_to_step(config, STOP_STEP)
+        print()
+        print("=" * 80)
+        print(f"Pipeline Test Completed Successfully (stopped at {STOP_STEP})!")
+        print("=" * 80)
+    except Exception as e:
+        print()
+        print("=" * 80)
+        print(f"Pipeline Test Failed: {e}")
+        print("=" * 80)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

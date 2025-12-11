@@ -33,6 +33,7 @@ anat:
     shrink_factor: 2  # float: shrink factor for faster processing (> 0)
     bspline_fitting: "[ 100 ]"  # str: B-spline fitting parameters in ANTs format
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
+    threads: 8  # int: number of CPU threads for ITK operations (>= 1). Default 8 to avoid oversubscription when running multiple processes in parallel.
   skullstripping:
     enabled: true  # bool: perform brain extraction
     method: "fastSurferCNN" 
@@ -93,6 +94,7 @@ func:
     shrink_factor: 2  # float: shrink factor for faster processing (> 0)
     bspline_fitting: "[ 100 ]"  # str: B-spline fitting parameters in ANTs format
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
+    threads: 8  # int: number of CPU threads for ITK operations (>= 1). Default 8 to avoid oversubscription when running multiple processes in parallel.
 
 registration:
   enabled: true  # bool: perform image registration
@@ -103,6 +105,7 @@ registration:
   interpolation: "LanczosWindowedSinc"  # str: interpolation method ("Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline", "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc", "LanczosWindowedSinc", "GenericLabel")
   output_registered_image: true  # bool: output registered image
   output_inverse_registered_image: false  # bool: output inverse registered image
+  threads: 8  # int: number of CPU threads for ITK operations (>= 1). Default 8 to avoid oversubscription when running multiple processes in parallel.
 
 orientation_mismatch_correction:
   enabled: true  # bool: perform orientation mismatch correction

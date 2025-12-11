@@ -596,10 +596,14 @@ def main() -> None:
         
         # Check dependencies
         logger.info("System: checking dependencies")
-        check_dependencies()
+        deps_result = check_dependencies()
+        if deps_result.get('missing_required'):
+            logger.error("System: missing required dependencies - exiting")
+            sys.exit(1)
         
-        # Check environment
-        check_environment()
+        # Check environment (will exit on critical failures)
+        from ..environment import check_environment_and_exit
+        check_environment_and_exit(logger=logger, config=config, exit_on_failure=True)
         
         if args.check_only:
             logger.info("System: ✓ dependencies and configuration check completed successfully")

@@ -198,7 +198,9 @@ class BasePreprocessingWorkflow(ABC):
         
         try:
             # Check Python dependencies
-            check_dependencies()
+            deps_result = check_dependencies()
+            if deps_result.get('missing_required'):
+                raise RuntimeError("Missing required Python packages")
             
             # Check external tools and environment variables
             # Check if skull stripping is enabled for any modality
@@ -206,7 +208,11 @@ class BasePreprocessingWorkflow(ABC):
                         self.config.get("func.skullstripping.enabled", False) or
         self.config.get("anat.skullstripping.enabled", False)
             )
-            check_environment()
+            env_result = check_environment(logger=self.logger, config=self.config.to_dict() if hasattr(self.config, 'to_dict') else self.config)
+            
+            # Exit on critical failures
+            if env_result['summary']['overall_status'] == 'failed':
+                raise RuntimeError("Environment check failed - critical issues found")
             
             self.logger.info("✓ Dependencies and environment check completed")
             

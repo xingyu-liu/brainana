@@ -4,15 +4,46 @@ System utilities for macacaMRIprep.
 This module provides system-level utilities for command execution.
 """
 
+import os
 import subprocess
 import logging
 import time
 import shutil
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from .logger import get_logger
 
 # Get logger for this module
 logger = get_logger(__name__)
+
+def setup_itk_thread_env(num_threads: int, max_threads: int = 32) -> Dict[str, str]:
+    """Set up environment variables for ITK/OpenMP threading.
+    
+    Creates a dictionary of environment variables that limit thread usage
+    for ITK-based operations (ANTs, SimpleITK, etc.). This prevents
+    excessive thread usage when running multiple processes in parallel.
+    
+    Args:
+        num_threads: Number of threads to use (will be capped at max_threads)
+        max_threads: Maximum allowed threads (default: 32)
+        
+    Returns:
+        Dictionary of environment variables to set for subprocess execution
+    """
+    # Cap threads at maximum to prevent excessive resource usage
+    num_threads = min(num_threads, max_threads)
+    
+    # Set environment variables for ITK/OpenMP threading
+    # ITK binaries respect ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS
+    # OMP_NUM_THREADS is also needed for OpenMP-based operations
+    env = os.environ.copy()
+    env['ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS'] = str(num_threads)
+    env['OMP_NUM_THREADS'] = str(num_threads)
+    env['MKL_NUM_THREADS'] = str(num_threads)
+    env['NUMEXPR_NUM_THREADS'] = str(num_threads)
+    env['OPENBLAS_NUM_THREADS'] = str(num_threads)
+    
+    return env
+
 
 def check_dependency(command: str, step_logger: Optional[logging.Logger] = None) -> bool:
     """Check if a command/dependency is available on the system.
