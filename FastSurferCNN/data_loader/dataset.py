@@ -181,6 +181,10 @@ class MultiScaleDataset(Dataset):
         # Store dataset metadata (indices and sizes) without loading all data
         self.dataset_indices = []  # List of (size, index) tuples
         self.count = 0
+        
+        # Persistent HDF5 file handle (opened lazily, kept open for lifetime of dataset)
+        # Each worker process gets its own dataset instance, so this is safe for multiprocessing
+        self._hdf5_file = None
 
         # Open file in reading mode to get metadata only
         start = time.time()
@@ -217,9 +221,23 @@ class MultiScaleDataset(Dataset):
                     f"    4. Data split file includes subjects for this split"
                 )
 
+    def _get_hdf5_file(self):
+        """
+        Get persistent HDF5 file handle (opened lazily on first access).
+        The file remains open for the lifetime of the dataset to avoid repeated open/close operations.
+        Each worker process gets its own dataset instance, so this is safe for multiprocessing.
+        """
+        if self._hdf5_file is None:
+            # Open with larger cache for better performance
+            self._hdf5_file = h5py.File(self.dataset_path, "r", rdcc_nbytes=2*1024**3, rdcc_nslots=20000)
+        return self._hdf5_file
+    
     def _open_hdf5_file(self):
-        """Open HDF5 file for reading (used for lazy loading)."""
-        return h5py.File(self.dataset_path, "r", rdcc_nbytes=1024**3, rdcc_nslots=10000)
+        """
+        Legacy method for backward compatibility.
+        Now returns the persistent file handle instead of creating a new one.
+        """
+        return self._get_hdf5_file()
     
     def get_subject_names(self):
         """
@@ -232,13 +250,21 @@ class MultiScaleDataset(Dataset):
         """
         # Load subject names lazily when requested
         subjects = []
-        with self._open_hdf5_file() as hf:
-            for size, idx in self.dataset_indices:
-                subject = hf[f"{size}"]["subject"][idx]
-                if isinstance(subject, bytes):
-                    subject = subject.decode('utf-8')
-                subjects.append(subject)
+        hf = self._get_hdf5_file()
+        for size, idx in self.dataset_indices:
+            subject = hf[f"{size}"]["subject"][idx]
+            if isinstance(subject, bytes):
+                subject = subject.decode('utf-8')
+            subjects.append(subject)
         return subjects
+    
+    def __del__(self):
+        """Cleanup: close HDF5 file if it was opened."""
+        if self._hdf5_file is not None:
+            try:
+                self._hdf5_file.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
 
     def _get_scale_factor(
             self,
@@ -348,14 +374,15 @@ class MultiScaleDataset(Dataset):
         dict
             Dictionary containing torch tensors for image, label, weight, and scale factor.
         """
-        # Lazy load data from HDF5 file
+        # Lazy load data from HDF5 file using persistent handle
         size, idx = self.dataset_indices[index]
         
-        with self._open_hdf5_file() as hf:
-            image = hf[f"{size}"]["orig_dataset"][idx]
-            label = hf[f"{size}"]["aseg_dataset"][idx]
-            weight = hf[f"{size}"]["weight_dataset"][idx]
-            zoom = hf[f"{size}"]["zoom_dataset"][idx]
+        # Use persistent file handle (no context manager - file stays open)
+        hf = self._get_hdf5_file()
+        image = hf[f"{size}"]["orig_dataset"][idx]
+        label = hf[f"{size}"]["aseg_dataset"][idx]
+        weight = hf[f"{size}"]["weight_dataset"][idx]
+        zoom = hf[f"{size}"]["zoom_dataset"][idx]
         
         padded_img, padded_label, padded_weight = self.unify_imgs(
             image, label, weight
@@ -425,6 +452,10 @@ class MultiScaleDatasetVal(Dataset):
         # Store dataset metadata (indices and sizes) without loading all data
         self.dataset_indices = []  # List of (size, index) tuples
         self.count = 0
+        
+        # Persistent HDF5 file handle (opened lazily, kept open for lifetime of dataset)
+        # Each worker process gets its own dataset instance, so this is safe for multiprocessing
+        self._hdf5_file = None
 
         # Open file in reading mode to get metadata only
         start = time.time()
@@ -461,9 +492,23 @@ class MultiScaleDatasetVal(Dataset):
                 f"    4. Data split file includes subjects for this split"
             )
 
+    def _get_hdf5_file(self):
+        """
+        Get persistent HDF5 file handle (opened lazily on first access).
+        The file remains open for the lifetime of the dataset to avoid repeated open/close operations.
+        Each worker process gets its own dataset instance, so this is safe for multiprocessing.
+        """
+        if self._hdf5_file is None:
+            # Open with larger cache for better performance
+            self._hdf5_file = h5py.File(self.dataset_path, "r", rdcc_nbytes=2*1024**3, rdcc_nslots=20000)
+        return self._hdf5_file
+    
     def _open_hdf5_file(self):
-        """Open HDF5 file for reading (used for lazy loading)."""
-        return h5py.File(self.dataset_path, "r", rdcc_nbytes=1024**3, rdcc_nslots=10000)
+        """
+        Legacy method for backward compatibility.
+        Now returns the persistent file handle instead of creating a new one.
+        """
+        return self._get_hdf5_file()
     
     def get_subject_names(self):
         """
@@ -471,13 +516,21 @@ class MultiScaleDatasetVal(Dataset):
         """
         # Load subject names lazily when requested
         subjects = []
-        with self._open_hdf5_file() as hf:
-            for size, idx in self.dataset_indices:
-                subject = hf[f"{size}"]["subject"][idx]
-                if isinstance(subject, bytes):
-                    subject = subject.decode('utf-8')
-                subjects.append(subject)
+        hf = self._get_hdf5_file()
+        for size, idx in self.dataset_indices:
+            subject = hf[f"{size}"]["subject"][idx]
+            if isinstance(subject, bytes):
+                subject = subject.decode('utf-8')
+            subjects.append(subject)
         return subjects
+    
+    def __del__(self):
+        """Cleanup: close HDF5 file if it was opened."""
+        if self._hdf5_file is not None:
+            try:
+                self._hdf5_file.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
 
     def _get_scale_factor(self, img_zoom):
         """
@@ -506,14 +559,15 @@ class MultiScaleDatasetVal(Dataset):
         """
         Get item.
         """
-        # Lazy load data from HDF5 file
+        # Lazy load data from HDF5 file using persistent handle
         size, idx = self.dataset_indices[index]
         
-        with self._open_hdf5_file() as hf:
-            img = hf[f"{size}"]["orig_dataset"][idx]
-            label = hf[f"{size}"]["aseg_dataset"][idx]
-            weight = hf[f"{size}"]["weight_dataset"][idx]
-            zoom = hf[f"{size}"]["zoom_dataset"][idx]
+        # Use persistent file handle (no context manager - file stays open)
+        hf = self._get_hdf5_file()
+        img = hf[f"{size}"]["orig_dataset"][idx]
+        label = hf[f"{size}"]["aseg_dataset"][idx]
+        weight = hf[f"{size}"]["weight_dataset"][idx]
+        zoom = hf[f"{size}"]["zoom_dataset"][idx]
         
         scale_factor = self._get_scale_factor(zoom)
 

@@ -236,11 +236,19 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
         logger.error(error_msg)
         raise ValueError(error_msg)
 
+    # Use DATA_LOADER.NUM_WORKERS directly (no fallback)
+    num_workers = cfg.DATA_LOADER.NUM_WORKERS
+    
+    # Use DATA_LOADER.PIN_MEMORY (default to True if not specified)
+    pin_memory = getattr(cfg.DATA_LOADER, 'PIN_MEMORY', True)
+    
     dataloader = DataLoader(
         dataset,
         batch_size=cfg.TRAIN.BATCH_SIZE,
-        num_workers=cfg.TRAIN.NUM_WORKERS,
+        num_workers=num_workers,
         shuffle=shuffle,
-        pin_memory=True,
+        pin_memory=pin_memory,
+        prefetch_factor=2,  # Prefetch 2 batches per worker to overlap data loading with training
+        persistent_workers=True if num_workers > 0 else False,  # Keep workers alive between epochs
     )
     return dataloader

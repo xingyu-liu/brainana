@@ -38,7 +38,7 @@ TRAIN:
   FINE_TUNE: true
   PRETRAINED_MODEL: "/home/star/github/banana/FastSurferCNN/pretrained_model/EPI_seg-brainmask_axial.pkl"
   CHECKPOINT_PERIOD: 5
-  NUM_WORKERS: 4
+  NUM_WORKERS: 12  # Optimized for system: 192 cores, 2 GPUs
   EARLY_STOPPING: true
   EARLY_STOPPING_MODE: "min"
   EARLY_STOPPING_PATIENCE: 20
@@ -100,7 +100,7 @@ DATA:
     ORDER_LABEL: 0            # Interpolation order for labels (always 0=nearest)
 
 DATA_LOADER:
-  NUM_WORKERS: 8
+  NUM_WORKERS: 12  # Optimized for 192 CPU cores, 2 GPUs, 4 training processes
   PIN_MEMORY: true
 
 OPTIMIZER:
