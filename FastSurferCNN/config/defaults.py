@@ -181,6 +181,14 @@ _C.DATA.AUG_PROBABILITIES.Elastic = 0.8
 _C.DATA.AUG_PROBABILITIES.RAnisotropy = 0.8
 _C.DATA.AUG_PROBABILITIES.RGamma = 0.8
 
+# Elastic deformation parameters (for performance tuning)
+# Reducing NUM_CONTROL_POINTS from 7 to 5 significantly speeds up Elastic transform
+# while maintaining reasonable deformation quality
+# Note: With locked_borders=2, torchio requires at least 5 control points
+_C.DATA.AUG_ELASTIC = CN()
+_C.DATA.AUG_ELASTIC.NUM_CONTROL_POINTS = 5  # Reduced from 7 for better performance (minimum: 5 with locked_borders=2)
+_C.DATA.AUG_ELASTIC.MAX_DISPLACEMENT = (20, 20, 0)  # Max displacement in pixels
+
 # ---------------------------------------------------------------------------- #
 # Preprocessing options - Single Source of Truth for HDF5, Training & Inference
 # ---------------------------------------------------------------------------- #
@@ -227,6 +235,11 @@ _C.DATA_LOADER = CN()
 
 # Number of data loader workers
 _C.DATA_LOADER.NUM_WORKERS = 8
+
+# Prefetch factor: number of batches each worker prepares ahead
+# Higher values (4-8) improve GPU utilization but use more memory
+# Lower values (1-2) use less memory but may cause GPU to wait for data
+_C.DATA_LOADER.PREFETCH_FACTOR = 4
 
 # Load data to pinned host memory.
 _C.DATA_LOADER.PIN_MEMORY = True

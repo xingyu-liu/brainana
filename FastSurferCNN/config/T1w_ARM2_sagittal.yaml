@@ -96,7 +96,7 @@ DATA:
     DTYPE_IMAGE: "uint8"      # Data type for IMAGES: "uint8" (0-255), "float32", etc.
     DTYPE_LABEL: "int16"      # Data type for LABELS: "int16" or "int32" (supports negative IDs!)
     RESCALE: 255              # Rescale image intensity to [0, RESCALE]
-    ORDER_IMAGE: 3            # Interpolation order for images (0=nearest, 1=linear, 3=cubic)
+    ORDER_IMAGE: 1            # Interpolation order for images (0=nearest, 1=linear, 3=cubic)
     ORDER_LABEL: 0            # Interpolation order for labels (always 0=nearest)
 
 DATA_LOADER:

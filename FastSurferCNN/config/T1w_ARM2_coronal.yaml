@@ -89,12 +89,14 @@ DATA:
   # 1. HDF5 creation (train_2_create_hdf5_dataset.py)
   # 2. Training (saved to checkpoint)
   # 3. Inference (reads from checkpoint)
-  PREPROCESSING:    ORIENTATION: "RAS"        # Target orientation (RAS = Right-Anterior-Superior)    IMG_SIZE: "fov"           # Image size: int (e.g. 256), "fov" (RECOMMENDED), or "cube"
+  PREPROCESSING:    
+    ORIENTATION: "RAS"        # Target orientation (RAS = Right-Anterior-Superior)
+    IMG_SIZE: "fov"           # Image size: int (e.g. 256), "fov" (RECOMMENDED), or "cube"
     VOX_SIZE: "min"           # Voxel size: float (e.g. 1.0) or "min" (adaptive)
     DTYPE_IMAGE: "uint8"      # Data type for IMAGES: "uint8" (0-255), "float32", etc.
     DTYPE_LABEL: "int16"      # Data type for LABELS: "int16" or "int32" (supports negative IDs!)
     RESCALE: 255              # Rescale image intensity to [0, RESCALE]
-    ORDER_IMAGE: 3            # Interpolation order for images (0=nearest, 1=linear, 3=cubic)
+    ORDER_IMAGE: 1            # Interpolation order for images (0=nearest, 1=linear, 3=cubic)
     ORDER_LABEL: 0            # Interpolation order for labels (always 0=nearest)
 
 DATA_LOADER:

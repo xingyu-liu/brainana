@@ -402,7 +402,18 @@ class MultiScaleDataset(Dataset):
         zoom_aug = torch.as_tensor([0.0, 0.0])
 
         if self.transforms is not None:
+            # Profile augmentation time (only log slow augmentations to avoid spam)
+            import time
+            aug_start = time.time()
             tx_sample = self.transforms(subject)  # this returns data as torch.tensors
+            aug_time = time.time() - aug_start
+            
+            # Log slow augmentations (>100ms) for performance monitoring
+            if aug_time > 0.1:
+                logger.debug(
+                    f"Slow augmentation: {aug_time:.3f}s for sample {index} "
+                    f"(size={size}, idx={idx})"
+                )
 
             img = torch.squeeze(tx_sample["img"].data).float()
             label = torch.squeeze(tx_sample["label"].data).byte()

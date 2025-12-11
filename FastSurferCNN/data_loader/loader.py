@@ -62,10 +62,18 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
 
             dataset = dset.MultiScaleDatasetVal(data_path, cfg, transforms.Compose(tfs))
         else:
-            # Elastic
+            # Elastic - Optimized: reduced control points from 7 to 5 for better performance
+            # Note: With locked_borders=2, torchio requires at least 5 control points
+            # Can be configured via cfg.DATA.AUG_ELASTIC if needed
+            if hasattr(cfg.DATA, 'AUG_ELASTIC'):
+                elastic_num_points = getattr(cfg.DATA.AUG_ELASTIC, 'NUM_CONTROL_POINTS', 5)
+                elastic_max_disp = getattr(cfg.DATA.AUG_ELASTIC, 'MAX_DISPLACEMENT', (20, 20, 0))
+            else:
+                elastic_num_points = 5  # Minimum required with locked_borders=2
+                elastic_max_disp = (20, 20, 0)
             elastic = tio.RandomElasticDeformation(
-                num_control_points=7,
-                max_displacement=(20, 20, 0),
+                num_control_points=elastic_num_points,
+                max_displacement=elastic_max_disp,
                 locked_borders=2,
                 image_interpolation="linear",
                 include=["img", "label", "weight"],
@@ -150,11 +158,14 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
                 except Exception:
                     aug_probs = {}
             
-            # Separate geometric and intensity transforms for better organization
-            geometric_augs = ["Rotation", "Scaling", "Translation"]
-            intensity_augs = ["BiasField"]
+            # Separate transforms by computational cost for optimal ordering
+            # Cheap transforms first (fail-fast), expensive transforms last
+            cheap_geometric = ["Rotation", "Scaling", "Translation"]  # Fast: simple affine transforms
+            expensive_geometric = ["Elastic", "RAnisotropy"]  # Slow: complex deformations
+            intensity = ["BiasField", "RGamma"]  # Medium: intensity modifications
             
-            geometric_tfs = {}
+            cheap_tfs = {}
+            expensive_tfs = {}
             intensity_tfs = {}
             
             for aug in cfg.DATA.AUG:
@@ -165,22 +176,29 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
                     continue
                 
                 prob = aug_probs.get(aug, default_prob)
-                if aug in geometric_augs:
-                    geometric_tfs[all_augs[aug]] = prob
-                elif aug in intensity_augs:
+                
+                # Categorize by computational cost
+                if aug in cheap_geometric:
+                    cheap_tfs[all_augs[aug]] = prob
+                elif aug in expensive_geometric:
+                    expensive_tfs[all_augs[aug]] = prob
+                elif aug in intensity:
                     intensity_tfs[all_augs[aug]] = prob
                 else:
-                    # For other augs (Elastic, RAnisotropy, RGamma), add to geometric by default
-                    geometric_tfs[all_augs[aug]] = prob
+                    # Default to cheap for unknown augs
+                    cheap_tfs[all_augs[aug]] = prob
             
             gaussian_noise = True if "Gaussian" in cfg.DATA.AUG else False
             
-            # Compose transforms: geometric first, then intensity
+            # Compose transforms in order: cheap → expensive → intensity
+            # This ordering allows cheap transforms to fail-fast and reduces overall computation
             # Each transform in the dict has its own probability, so we use p=1.0 for the Compose
             # and let individual transforms handle their probabilities
             transform_list = []
-            if geometric_tfs:
-                transform_list.append(tio.Compose(geometric_tfs, p=1.0))
+            if cheap_tfs:
+                transform_list.append(tio.Compose(cheap_tfs, p=1.0))
+            if expensive_tfs:
+                transform_list.append(tio.Compose(expensive_tfs, p=1.0))
             if intensity_tfs:
                 transform_list.append(tio.Compose(intensity_tfs, p=1.0))
             
@@ -242,13 +260,16 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
     # Use DATA_LOADER.PIN_MEMORY (default to True if not specified)
     pin_memory = getattr(cfg.DATA_LOADER, 'PIN_MEMORY', True)
     
+    # Get prefetch_factor from config (default to 4 for better GPU utilization)
+    prefetch_factor = getattr(cfg.DATA_LOADER, 'PREFETCH_FACTOR', 4)
+    
     dataloader = DataLoader(
         dataset,
         batch_size=cfg.TRAIN.BATCH_SIZE,
         num_workers=num_workers,
         shuffle=shuffle,
         pin_memory=pin_memory,
-        prefetch_factor=2,  # Prefetch 2 batches per worker to overlap data loading with training
+        prefetch_factor=prefetch_factor,  # Configurable prefetch factor (default: 4)
         persistent_workers=True if num_workers > 0 else False,  # Keep workers alive between epochs
     )
     return dataloader
