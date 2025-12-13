@@ -14,6 +14,7 @@ Based on original spherically_project.py and rotate_sphere.py from FastSurfer.
 from pathlib import Path
 import math
 import logging
+import os
 
 import nibabel.freesurfer.io as fs
 import numpy as np
@@ -193,6 +194,7 @@ def compute_rotation_angles(
 def spherically_project_surface(
     input_path: Path,
     output_path: Path,
+    threads: int = 1,
 ) -> None:
     """
     Project a surface to sphere and save.
@@ -203,7 +205,16 @@ def spherically_project_surface(
         Input surface file
     output_path : Path
         Output sphere file
+    threads : int, default=1
+        Number of threads to use for linear algebra operations.
+        Limits OpenMP/MKL/OpenBLAS threading to prevent system slowdown.
     """
+    # Set environment variables to limit threading for numerical libraries
+    # This is critical because eigendecomposition can use all available CPU cores
+    # by default, making the system unresponsive.
+    from ..utils.threading import set_numerical_threads
+    set_numerical_threads(threads)
+    
     logger.info(f"Loading surface: {input_path}")
     vertices, faces, metadata = fs.read_geometry(input_path, read_metadata=True)
     mesh = TriaMesh(vertices, faces)

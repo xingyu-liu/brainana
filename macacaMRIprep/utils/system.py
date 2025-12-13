@@ -15,34 +15,90 @@ from .logger import get_logger
 # Get logger for this module
 logger = get_logger(__name__)
 
-def setup_itk_thread_env(num_threads: int, max_threads: int = 32) -> Dict[str, str]:
-    """Set up environment variables for ITK/OpenMP threading.
+def _get_numerical_thread_env_vars(threads: int, max_threads: int = 32, include_itk: bool = True) -> tuple[Dict[str, str], int]:
+    """
+    Get environment variables for numerical library threading.
     
-    Creates a dictionary of environment variables that limit thread usage
-    for ITK-based operations (ANTs, SimpleITK, etc.). This prevents
-    excessive thread usage when running multiple processes in parallel.
+    Core helper function that creates a dictionary of environment variables
+    for controlling thread usage in numerical computing libraries.
     
     Args:
-        num_threads: Number of threads to use (will be capped at max_threads)
+        threads: Number of threads to use (will be capped at max_threads)
         max_threads: Maximum allowed threads (default: 32)
+        include_itk: If True, include ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS (default: True)
         
     Returns:
-        Dictionary of environment variables to set for subprocess execution
+        Tuple of (environment variables dict, actual number of threads after capping)
     """
-    # Cap threads at maximum to prevent excessive resource usage
-    num_threads = min(num_threads, max_threads)
+    num_threads = min(threads, max_threads)
+    num_threads_str = str(num_threads)
     
-    # Set environment variables for ITK/OpenMP threading
-    # ITK binaries respect ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS
-    # OMP_NUM_THREADS is also needed for OpenMP-based operations
-    env = os.environ.copy()
-    env['ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS'] = str(num_threads)
-    env['OMP_NUM_THREADS'] = str(num_threads)
-    env['MKL_NUM_THREADS'] = str(num_threads)
-    env['NUMEXPR_NUM_THREADS'] = str(num_threads)
-    env['OPENBLAS_NUM_THREADS'] = str(num_threads)
+    env_vars = {
+        'OMP_NUM_THREADS': num_threads_str,
+        'MKL_NUM_THREADS': num_threads_str,
+        'NUMEXPR_NUM_THREADS': num_threads_str,
+        'OPENBLAS_NUM_THREADS': num_threads_str,
+    }
     
-    return env
+    if include_itk:
+        env_vars['ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS'] = num_threads_str
+    
+    return env_vars, num_threads
+
+
+def set_numerical_threads(
+    threads: int, 
+    max_threads: int = 32, 
+    include_itk: bool = False,
+    return_dict: bool = False
+) -> int | Dict[str, str]:
+    """
+    Set environment variables to limit threading for numerical computing libraries.
+    
+    This function sets environment variables that control thread usage in:
+    - OpenMP (OMP_NUM_THREADS) - used by many numerical libraries
+    - Intel MKL (MKL_NUM_THREADS) - linear algebra library
+    - NumExpr (NUMEXPR_NUM_THREADS) - numerical expression evaluator
+    - OpenBLAS (OPENBLAS_NUM_THREADS) - linear algebra library
+    - ITK (ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS, optional) - image processing
+    
+    This is critical because numerical operations can use all available CPU cores
+    by default, making the system unresponsive. Setting these environment variables
+    limits thread usage.
+    
+    Args:
+        threads: Number of threads to use (will be capped at max_threads)
+        max_threads: Maximum allowed threads to prevent excessive resource usage (default: 32)
+        include_itk: If True, also set ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS (default: False)
+        return_dict: If True, return dict for subprocess execution instead of setting os.environ (default: False)
+        
+    Returns:
+        If return_dict=False: The actual number of threads set (after capping)
+        If return_dict=True: Dictionary of environment variables (includes current os.environ)
+        
+    Examples:
+        >>> set_numerical_threads(8)  # Sets os.environ, returns 8
+        8
+        >>> set_numerical_threads(100)  # Will be capped at 32
+        32
+        >>> set_numerical_threads(4, include_itk=True)  # Also sets ITK threads
+        4
+        >>> env = set_numerical_threads(8, include_itk=True, return_dict=True)  # Returns dict for subprocess
+        >>> # env can be passed to subprocess.run(env=env)
+    """
+    env_vars, num_threads = _get_numerical_thread_env_vars(threads, max_threads, include_itk)
+    
+    if return_dict:
+        # Return dict for subprocess execution (includes current environment)
+        env = os.environ.copy()
+        env.update(env_vars)
+        return env
+    else:
+        # Set os.environ directly for in-process use
+        for key, value in env_vars.items():
+            os.environ[key] = value
+        logger.debug(f"Set numerical threads to {num_threads} (requested {threads})")
+        return num_threads
 
 
 def check_dependency(command: str, step_logger: Optional[logging.Logger] = None) -> bool:

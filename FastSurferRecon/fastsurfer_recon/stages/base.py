@@ -64,12 +64,20 @@ class PipelineStage(ABC):
         - Timing
         - Error handling
         """
-        stage_desc = f"{self.name}"
-        if self.hemi:
-            stage_desc += f" ({self.hemi})"
-        
         # Get stage identifier for command logging
         stage_id = self._get_stage_id()
+        
+        # Extract stage number prefix (e.g., "s01" from "s01_volume_prep")
+        stage_prefix = ""
+        if stage_id:
+            # Extract "s##" from stage_id like "s01_volume_prep"
+            parts = stage_id.split("_", 1)
+            if parts and parts[0].startswith("s") and len(parts[0]) >= 2:
+                stage_prefix = parts[0] + " "
+        
+        stage_desc = f"{stage_prefix}{self.name}" if stage_prefix else f"{self.name}"
+        if self.hemi:
+            stage_desc += f" ({self.hemi})"
         
         # Check if disabled
         if self.is_disabled():

@@ -90,10 +90,10 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
                 include=["img", "label", "weight"],
             )
 
-            # Rotation - randomly samples from (-30, +30) degrees for each sample
+            # Rotation - randomly samples from (-15, +15) degrees for each sample
             rot = tio.RandomAffine(
                 scales=(1.0, 1.0),
-                degrees=30,  # Random rotation between -30 and +30 degrees
+                degrees=15,  # Random rotation between -15 and +15 degrees
                 translation=(0, 0, 0),
                 isotropic=True,  # If True, scaling factor along all dimensions is the same
                 center="image",
@@ -115,24 +115,24 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
             )
 
             # Random Anisotropy (Downsample image along an axis, then upsample back to initial space
+            # Optimized: reduced downsampling range from (1.1, 1.5) to (1.1, 1.3) for better performance
             ra = tio.transforms.RandomAnisotropy(
                 axes=(0, 1),
-                downsampling=(1.1, 1.5),
+                downsampling=(1.1, 1.3),  # Reduced from (1.1, 1.5) - less aggressive = faster
                 image_interpolation="linear",
                 include=["img"],
             )
 
             # Bias Field - randomly samples coefficients from (0.3, 0.7) range for each sample
+            # Optimized: reduced order from 3 to 2 for better performance (order 2 is usually sufficient)
             bias_field = tio.transforms.RandomBiasField(
-                coefficients=(0.3, 0.7), order=3, include=["img"]
+                coefficients=(0.3, 0.7), order=2, include=["img"]  # Reduced from order=3 to order=2
             )
 
             # Gamma
             random_gamma = tio.transforms.RandomGamma(
                 log_gamma=(-0.1, 0.1), include=["img"]
             )
-
-            #
 
             all_augs = {
                 "Elastic": elastic,
@@ -176,6 +176,10 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
                     continue
                 
                 prob = aug_probs.get(aug, default_prob)
+                
+                # Skip transforms with 0.0 probability to avoid overhead
+                if prob <= 0.0:
+                    continue
                 
                 # Categorize by computational cost
                 if aug in cheap_geometric:

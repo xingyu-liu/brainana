@@ -106,7 +106,7 @@ def mris_remesh(
     desired_face_area : float, optional
         Target average face area (used if remesh=False)
     remesh : bool, default=False
-        Use --remesh --iters mode (pre-conversion style) instead of --desired-face-area
+        Use --remesh --iters mode
     iters : int, optional
         Number of remesh iterations (required if remesh=True)
     log_file : Path, optional
@@ -128,15 +128,16 @@ def mris_remesh(
     cmd = ["mris_remesh"]
     
     if remesh:
-        # Pre-conversion style: --remesh --iters 3
         if iters is None:
             raise ValueError("iters must be specified when remesh=True")
         cmd.extend(["--remesh", "--iters", str(iters)])
     else:
-        # Post-conversion style: --desired-face-area
         if desired_face_area is None:
             raise ValueError("desired_face_area must be specified when remesh=False")
         cmd.extend(["--desired-face-area", str(desired_face_area)])
+        # Add --iters if provided (optional flagged argument)
+        if iters is not None:
+            cmd.extend(["--iters", str(iters)])
     
     cmd.extend(["--input", str(input_surf), "--output", str(output_surf)])
     run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)

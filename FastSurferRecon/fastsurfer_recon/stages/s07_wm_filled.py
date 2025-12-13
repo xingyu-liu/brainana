@@ -57,12 +57,23 @@ class WMFilled(PipelineStage):
             aseg_auto = self.sd.mri("aseg.auto.mgz")
             shutil.copy(aseg_auto, aseg_presurf)
         
-        # Create filled volume using direct commands (replacing recon-all normalization2_maskbfs_fill)
+        # Create filled volume using direct commands
+        # This replaces recon-all's normalization2_maskbfs_fill step, which performs:
+        #   1. Intensity normalization (creates brain.mgz)
+        #   2. Masking with threshold (creates brain.finalsurfs.mgz)
+        #   3. Filling white matter (creates filled.mgz)
+        #
+        # Note: brain.mgz and brain.finalsurfs.mgz are created here as part of the
+        # filled.mgz creation process. They are only used within this stage and
+        # for surface placement in later stages, so creating them here is appropriate.
         if not filled.exists():
             logger.info("Creating filled.mgz...")
             
             # Step 1: Intensity Normalization2
-            # mri_normalize -seed 1234 -mprage -noconform -aseg aseg.presurf.mgz -mask brainmask.mgz norm.mgz brain.mgz
+            # Normalize norm.mgz to create brain.mgz with intensity normalization.
+            # This uses aseg.presurf.mgz and brainmask.mgz to guide normalization.
+            # The -mprage flag indicates MPRAGE sequence, and -noconform preserves
+            # the original voxel dimensions.
             if not brain.exists():
                 logger.info("Creating brain.mgz (normalized norm.mgz)...")
                 if not norm.exists():
@@ -76,57 +87,60 @@ class WMFilled(PipelineStage):
                         "This should be created in stage 05 (norm_t1)."
                     )
                 
-                # Pre-conversion: mri_normalize -seed 1234 -mprage -noconform -aseg aseg.presurf.mgz -mask brainmask.mgz norm.mgz brain.mgz
-                # Note: Pre does NOT use -g flag
                 mri_normalize(
                     input_vol=norm,
                     output_vol=brain,
                     aseg=aseg_presurf,
                     mask=brainmask,
-                    noconform=True,
-                    seed=1234,
-                    mprage=True,
-                    g=0,  # Explicitly disable -g flag to match pre-conversion (no -g flag)
+                    noconform=True,  # Preserve original voxel dimensions
+                    seed=1234,  # Fixed seed for reproducibility
+                    mprage=True,  # MPRAGE sequence
+                    g=0,  # No gradient correction
                     log_file=self.config.log_file,
                     subject_dir=self.sd.subject_dir,
                 )
             else:
                 logger.info("brain.mgz already exists")
             
-            # Step 2: Mask BFS
-            # mri_mask -T 5 brain.mgz brainmask.mgz brain.finalsurfs.mgz
+            # Step 2: Mask BFS (Brain Final Surfaces)
+            # Apply brainmask to brain.mgz with threshold=5 to create brain.finalsurfs.mgz.
+            # This volume is used for final surface placement (white and pial surfaces).
+            # The threshold removes low-intensity voxels outside the brain mask.
             if not brain_finalsurfs.exists():
                 logger.info("Creating brain.finalsurfs.mgz (masked brain.mgz)...")
-                # Pre-conversion: mri_mask -T 5 brain.mgz brainmask.mgz brain.finalsurfs.mgz
                 mri_mask(
                     input_vol=brain,
                     mask=brainmask,
                     output_vol=brain_finalsurfs,
-                    threshold=5,  # Pre uses 5, not 5.0
+                    threshold=5,  # Threshold for masking
                     log_file=self.config.log_file,
                     subject_dir=self.sd.subject_dir,
                 )
             else:
                 logger.info("brain.finalsurfs.mgz already exists")
             
-            # Step 3: Fill
-            # Pre-conversion: mri_fill -a ../scripts/ponscc.cut.log -segmentation aseg.presurf.mgz -ctab ... wm.mgz filled.mgz
+            # Step 3: Fill white matter
+            # Fill white matter segmentation to create a continuous volume for tessellation.
+            # This fills holes and gaps in the white matter segmentation, creating a
+            # filled volume that is used as input for surface tessellation (stage 08).
+            # The cut_log file (ponscc.cut.log) contains information about corpus
+            # callosum cuts, if available.
             logger.info("Creating filled.mgz from wm.mgz...")
             cut_log = self.sd.scripts_dir / "ponscc.cut.log"
-            # Pre-conversion always includes -a flag, so we should always pass it
             if not cut_log.exists():
-                logger.warning(f"ponscc.cut.log not found at {cut_log}, but pre-conversion always includes it")
+                logger.warning(f"ponscc.cut.log not found at {cut_log} (may not be available for non-human data)")
             mri_fill(
                 wm_vol=wm,
                 output_vol=filled,
                 aseg=aseg_presurf,
-                cut_log=cut_log,  # Always pass cut_log to match pre-conversion (even if it doesn't exist)
+                cut_log=cut_log,  # Optional: corpus callosum cut information
                 ctab=None,  # Use FreeSurfer default SubCorticalMassLUT.txt
                 log_file=self.config.log_file,
                 subject_dir=self.sd.subject_dir,
             )
             
             # Copy filled.mgz to filled.auto.mgz (as done by recon-all)
+            # This maintains compatibility with FreeSurfer naming conventions.
             filled_auto = self.sd.mri("filled.auto.mgz")
             if not filled_auto.exists():
                 logger.info("Copying filled.mgz to filled.auto.mgz")

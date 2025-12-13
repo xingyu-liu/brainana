@@ -38,7 +38,7 @@ TRAIN:
   FINE_TUNE: true
   PRETRAINED_MODEL: "/home/star/github/banana/FastSurferCNN/pretrained_model/EPI_seg-brainmask_axial.pkl"
   CHECKPOINT_PERIOD: 5
-  NUM_WORKERS: 12  # Optimized for system: 192 cores, 2 GPUs
+  NUM_WORKERS: 6  # Reduced for network storage I/O optimization
   EARLY_STOPPING: true
   EARLY_STOPPING_MODE: "min"
   EARLY_STOPPING_PATIENCE: 20
@@ -65,8 +65,6 @@ DATA:
     "Translation",
     "Rotation",
     "Gaussian",
-    "Elastic",
-    "RAnisotropy",
     "BiasField"
     ]
 
@@ -78,8 +76,8 @@ DATA:
     Translation: 0.7       # Safe geometric augmentation, helps with positioning
     Rotation: 0.7          # Safe geometric augmentation, helps with orientation
     Gaussian: 0.4          # Noise augmentation - lower for fine-tuning (handled separately)
-    Elastic: 0.4           # Aggressive deformation - lower to preserve anatomical structure
-    RAnisotropy: 0.4       # Simulates acquisition artifacts - moderate for realism
+    Elastic: 0.1          # Aggressive deformation - disabled to avoid slow samples (was 0.4)
+    RAnisotropy: 0.0       # Simulates acquisition artifacts - disabled to avoid slow samples (was 0.4)
     BiasField: 0.6         # Important for MRI - simulates real bias field artifacts
 
   # ==============================================================================
@@ -100,8 +98,9 @@ DATA:
     ORDER_LABEL: 0            # Interpolation order for labels (always 0=nearest)
 
 DATA_LOADER:
-  NUM_WORKERS: 12  # Optimized for 192 CPU cores, 2 GPUs, 4 training processes
+  NUM_WORKERS: 6  # Reduced for network storage: fewer workers = less I/O contention
   PIN_MEMORY: true
+  PREFETCH_FACTOR: 6  # Increased to hide network latency (workers * prefetch = buffer size)
 
 OPTIMIZER:
   BASE_LR: 0.002

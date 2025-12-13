@@ -29,10 +29,14 @@ class Inflation(HemisphereStage):
         use 20-50 or even 100 iterations to ensure sufficient inflation.
         """
         # Check for both inflated and inflated.nofix (depending on whether fix was run)
+        # Also check if s11 (spherical projection) has run, which indicates s10 has completed
+        # This handles the case where s12 deletes inflated.nofix after using it
         inflated = self.hemi_path("inflated")
         inflated_nofix = self.hemi_path("inflated.nofix")
-        if inflated.exists() or inflated_nofix.exists():
-            logger.info(f"{self.hemi}.inflated already exists, skipping")
+        sphere = self.hemi_path("sphere")
+        qsphere_nofix = self.hemi_path("qsphere.nofix")
+        if inflated.exists() or inflated_nofix.exists() or sphere.exists() or qsphere_nofix.exists():
+            logger.info(f"{self.hemi}.inflated already exists or spherical projection has run, skipping")
             return
         
         # Input is smoothwm.nofix (before topology fix)
@@ -54,7 +58,14 @@ class Inflation(HemisphereStage):
         )
     
     def should_skip(self) -> bool:
-        """Skip if inflated exists."""
+        """Skip if inflated exists or if spherical projection has run (sphere/qsphere.nofix exists)."""
         # Check for both inflated and inflated.nofix
-        return self.hemi_path("inflated").exists() or self.hemi_path("inflated.nofix").exists()
+        # Also check if s11 (spherical projection) has run, which indicates s10 has completed
+        # This handles the case where s12 deletes inflated.nofix after using it
+        return (
+            self.hemi_path("inflated").exists() 
+            or self.hemi_path("inflated.nofix").exists()
+            or self.hemi_path("sphere").exists()
+            or self.hemi_path("qsphere.nofix").exists()
+        )
 

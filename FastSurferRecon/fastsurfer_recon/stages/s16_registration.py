@@ -4,15 +4,12 @@ Stage 16: Surface Registration
 Registers surface to fsaverage (optional).
 """
 
-from pathlib import Path
 import logging
-import shutil
 
 from .base import HemisphereStage
-from ..wrappers.recon_all import recon_all_sphere, recon_all_jacobian_white_avgcurv
+from ..wrappers.base import run_recon_all, get_fs_home
 from ..wrappers.mris import mris_register, mris_ca_label
 from ..processing.spherical import compute_sphere_rotation
-from ..wrappers.base import get_fs_home
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +35,14 @@ class Registration(HemisphereStage):
         sphere = self.hemi_path("sphere")
         if not sphere.exists():
             logger.info(f"Creating {self.hemi}.sphere...")
-            recon_all_sphere(
+            flags = []
+            if self.config.hires:
+                flags.append("-hires")
+            run_recon_all(
                 subject=self.config.subject_id,
                 hemi=self.hemi,
-                hires=self.config.hires,
+                steps=["-sphere"],
+                flags=flags,
                 threads=self.threads,
                 log_file=self.config.log_file,
                 subjects_dir=self.config.subjects_dir,
@@ -103,10 +104,14 @@ class Registration(HemisphereStage):
         
         # Compute jacobian and avgcurv
         logger.info(f"Computing jacobian and avgcurv for {self.hemi}...")
-        recon_all_jacobian_white_avgcurv(
+        flags = []
+        if self.config.hires:
+            flags.append("-hires")
+        run_recon_all(
             subject=self.config.subject_id,
             hemi=self.hemi,
-            hires=self.config.hires,
+            steps=["-jacobian_white", "-avgcurv"],
+            flags=flags,
             threads=self.threads,
             log_file=self.config.log_file,
             subjects_dir=self.config.subjects_dir,

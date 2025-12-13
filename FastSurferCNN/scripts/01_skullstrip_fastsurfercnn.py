@@ -26,17 +26,17 @@ logger = logging.getLogger(__name__)
 # input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_anat_2pass_seg.nii.gz"
 # output_dir = input_image.split('.nii')[0]
 
-# # surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
+surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
 # # input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'
 # # output_dir = f'{surfrecon_dir}/NMT2Sym_fov_ras'
-# # input_image = f'{surfrecon_dir}/site-arcaro_sub-baby1_ses-anat_T1w.nii.gz'
-# # output_dir = f'{surfrecon_dir}/arcaro_baby1'
+input_image = f'{surfrecon_dir}/site-arcaro_sub-baby1_ses-anat_T1w.nii.gz'
+output_dir = f'{surfrecon_dir}/arcaro_baby1'
 # # # # input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w_brain.nii.gz'
 # # # # output_dir = f'{surfrecon_dir}/NMT2Sym_brain_v2'
 # # # input_image = f'{surfrecon_dir}/test_anat_2pass_seg.nii.gz'
 # # # output_dir = f'{surfrecon_dir}/test_anat_2pass_seg_skullstripping'
-input_image = "/mnt/DataDrive3/xliu/prep_test/banana_test/testing_inz/dataset_classic_preproc/sub-032309/ses-001/anat/sub-032309_ses-001_desc-preproc_T1w.nii.gz"
-output_dir = "/mnt/DataDrive3/xliu/prep_test/banana_test/testing_inz/test_skullstripping_anat"
+# input_image = "/mnt/DataDrive3/xliu/prep_test/banana_test/testing_inz/dataset_classic_preproc/sub-032309/ses-001/anat/sub-032309_ses-001_desc-preproc_T1w.nii.gz"
+# output_dir = "/mnt/DataDrive3/xliu/prep_test/banana_test/testing_inz/test_skullstripping_anat"
 
 modal = "anat"
 data_format = "nifti"
@@ -44,13 +44,15 @@ weight_axial, weight_coronal, weight_sagittal = 0.4, 0.4, 0.2
 use_mixed_model = False
 enable_crop_2round = True
 
-fix_roi_wm = False
+fix_roi_wm = True
 roi_name = "V1"  # Use "V1" for ARM2 atlas (primary_visual_cortex). For other atlases, check ColorLUT for correct ROI name.
 wm_thr = 0.5
+registration_threads = 16  # Number of threads for ANTs registration (default: 8, from config). Note: ANTs shows N+1 threads (N workers + 1 main)
 
 if fix_roi_wm:
     output_dir = output_dir + f"_fix{roi_name}"
 
+# ------------------------------------------------------------
 # # func
 # input_image = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_func.nii.gz"
 # output_dir = input_image.split('.nii')[0]
@@ -105,6 +107,7 @@ def main():
             roi_name=roi_name,
             wm_thr=wm_thr,
             save_debug_intermediates=save_debug_intermediates,
+            registration_threads=registration_threads,
         )
         
         logger.info("=" * 80)

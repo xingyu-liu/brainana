@@ -13,7 +13,7 @@ Based on original sample_parc.py and smooth_aparc.py from FastSurfer.
 # Licensed under the Apache License, Version 2.0
 
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 import logging
 
 import nibabel as nib
@@ -437,6 +437,7 @@ def sample_parcellation(
     surface_lut: Path,
     proj_mm: float = 0.6,
     search_radius: float = 2.0,
+    surface: Optional[SurfaceType] = None,
 ) -> None:
     """
     Sample volume parcellation onto surface and save annotation.
@@ -459,11 +460,14 @@ def sample_parcellation(
         Projection distance along normal
     search_radius : float, default=2.0
         Search radius for zero samples
+    surface : SurfaceType, optional
+        Pre-loaded surface tuple (vertices, faces). If provided, surface_path is not loaded.
     """
-    logger.info(f"Loading surface: {surface_path}")
-    surface_data = fs.read_geometry(surface_path, read_metadata=True)
-    # Extract only vertices and faces (ignore metadata)
-    surface = (surface_data[0], surface_data[1])
+    if surface is None:
+        logger.info(f"Loading surface: {surface_path}")
+        surface_data = fs.read_geometry(surface_path, read_metadata=True)
+        # Extract only vertices and faces (ignore metadata)
+        surface = (surface_data[0], surface_data[1])
     
     logger.info(f"Loading segmentation: {segmentation_path}")
     seg = nib.load(segmentation_path)
@@ -502,6 +506,7 @@ def smooth_aparc_files(
     incort: Path,
     outaparc: Path,
     iterations: int = 10,
+    surface: Optional[SurfaceType] = None,
 ) -> None:
     """
     Smooth surface parcellation from files.
@@ -520,10 +525,13 @@ def smooth_aparc_files(
         Output annotation file
     iterations : int, default=10
         Number of smoothing iterations
+    surface : SurfaceType, optional
+        Pre-loaded surface tuple (vertices, faces). If provided, insurf is not loaded.
     """
-    logger.info(f"Loading surface: {insurf}")
-    surface_data = fs.read_geometry(insurf, read_metadata=True)
-    surface = (surface_data[0], surface_data[1])
+    if surface is None:
+        logger.info(f"Loading surface: {insurf}")
+        surface_data = fs.read_geometry(insurf, read_metadata=True)
+        surface = (surface_data[0], surface_data[1])
     
     logger.info(f"Loading annotation: {inaparc}")
     aparc = fs.read_annot(inaparc)

@@ -39,8 +39,8 @@ anat:
     method: "fastSurferCNN" 
     fastSurferCNN:
       gpu_device: "auto"  # int (>= -1) or "auto": GPU device ID (-1 = CPU, "auto" = auto-select)
-      batch_size: 1  # int: batch size for inference (>= 1)
-      threads: 20  # int: number of CPU threads (>= 1)
+      batch_size: 8  # int: batch size for inference (>= 1)
+      threads: 8  # int: number of CPU threads (>= 1)
       use_mixed_model: false  # bool: use mixed precision model
       enable_crop_2round: true  # bool: enable two-round cropping for better accuracy
       plane_weight_coronal: 0.4  # float: weight for coronal plane (0.0-1.0)
@@ -49,7 +49,7 @@ anat:
       fix_V1_WM: true  # bool: fix missing thin WM in V1 by registering template V1 WM to individual space.
   surface_reconstruction:
     enabled: true  # bool: perform surface reconstruction
-    threads: 20  # int: number of threads for surface reconstruction (>= 1)
+    threads: 8  # int: number of threads for surface reconstruction (>= 1)
 
 func:
   registration_pipeline: "func2anat2template"  # str: "func2anat2template", "func2anat", or "func2template"
@@ -81,8 +81,8 @@ func:
     method: "fastSurferCNN"  # str: "bet", "fastSurferCNN", or "macacaMRINN"
     fastSurferCNN:
       gpu_device: "auto"  # int (>= -1) or "auto": GPU device ID (-1 = CPU, "auto" = auto-select)
-      batch_size: 1  # int: batch size for inference (>= 1)
-      threads: 1  # int: number of CPU threads (>= 1)
+      batch_size: 8  # int: batch size for inference (>= 1)
+      threads: 8  # int: number of CPU threads (>= 1)
       use_mixed_model: false  # bool: use mixed precision model
       enable_crop_2round: false  # bool: enable two-round cropping for better accuracy
       plane_weight_coronal: 0.1  # float: weight for coronal plane (0.0-1.0)

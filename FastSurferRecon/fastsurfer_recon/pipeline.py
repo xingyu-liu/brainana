@@ -82,6 +82,12 @@ class ReconSurfPipeline:
         2. Surface creation (per hemisphere)
         3. Statistics and finalization
         """
+        # Set environment variables EARLY to limit numerical library threading
+        # This must be done before any numpy/scipy/lapy operations to prevent
+        # the libraries from using all available CPU cores.
+        from .utils.threading import set_numerical_threads
+        set_numerical_threads(self.config.processing.threads)
+        
         self.start_time = datetime.now()
         logger.info(f"Starting recon-surf for {self.config.subject_id}")
         logger.info(f"Start time: {self.start_time}")

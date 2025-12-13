@@ -4,14 +4,13 @@ Stage 08: Surface Tessellation
 Creates initial surface using marching cubes or FreeSurfer tessellation.
 """
 
-from pathlib import Path
 import logging
 import re
 
 from .base import HemisphereStage
 from ..wrappers.mri import mri_pretess, mri_mc
 from ..wrappers.mris import mris_info, mris_extract_main_component, mris_remesh
-from ..wrappers.recon_all import recon_all_tessellate
+from ..wrappers.base import run_recon_all
 from ..processing.surface_fix import fix_mc_surface_header
 
 logger = logging.getLogger(__name__)
@@ -36,19 +35,22 @@ class Tessellation(HemisphereStage):
         if self.config.processing.fstess:
             # Use FreeSurfer tessellation
             logger.info(f"Using FreeSurfer tessellation for {self.hemi}")
-            recon_all_tessellate(
+            flags = []
+            if self.config.hires:
+                flags.append("-hires")
+            run_recon_all(
                 subject=self.config.subject_id,
                 hemi=self.hemi,
-                hires=self.config.hires,
+                steps=["-tessellate"],
+                flags=flags,
                 threads=self.threads,
                 log_file=self.config.log_file,
                 subjects_dir=self.config.subjects_dir,
             )
         else:
             # Use marching cubes
-            logger.info(f"Using marching cubes for {self.hemi}")
-            
             # Pretessellate
+            logger.info(f"Pretessellating {self.hemi}")
             pretess = self.sd.mri(f"filled-pretess{self.hemi_value}.mgz")
             if not pretess.exists():
                 mri_pretess(
@@ -61,6 +63,7 @@ class Tessellation(HemisphereStage):
                 )
             
             # Marching cubes
+            logger.info(f"Using marching cubes for {self.hemi}")
             hires_suffix = ".predec" if self.config.hires else ""
             orig_nofix = self.hemi_path(f"orig.nofix{hires_suffix}")
             mri_mc(
@@ -72,6 +75,7 @@ class Tessellation(HemisphereStage):
             )
             
             # Fix surface header (scannerRAS -> surfaceRAS)
+            logger.info(f"Fixing surface header for {self.hemi}")
             fix_mc_surface_header(
                 surface_path=orig_nofix,
                 pretess_path=pretess,
@@ -89,6 +93,7 @@ class Tessellation(HemisphereStage):
                 )
             
             # Extract main component
+            logger.info(f"Extracting main component for {self.hemi}")
             mris_extract_main_component(
                 input_surf=orig_nofix,
                 output_surf=orig_nofix,
@@ -97,6 +102,7 @@ class Tessellation(HemisphereStage):
             )
             
             # Re-fix header after extraction (mris_extract_main_component may reset it)
+            logger.info(f"Re-fixing surface header after extraction for {self.hemi}")
             fix_mc_surface_header(
                 surface_path=orig_nofix,
                 pretess_path=pretess,
@@ -115,13 +121,15 @@ class Tessellation(HemisphereStage):
             
             # Decimate for hires
             if self.config.hires:
+                logger.info(f"Decimating surface for {self.hemi}")
                 orig_nofix_final = self.hemi_path("orig.nofix")
                 mris_remesh(
                     input_surf=orig_nofix,
                     output_surf=orig_nofix_final,
-                    desired_face_area=0.5,
+                    desired_face_area=0.1,
                     log_file=self.config.log_file,
                     subject_dir=self.sd.subject_dir,
+                    iters=20,
                 )
                 orig_nofix = orig_nofix_final
     

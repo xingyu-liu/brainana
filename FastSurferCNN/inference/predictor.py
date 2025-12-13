@@ -513,26 +513,26 @@ class RunModelOnData:
         native_center_vox = np.array(self._input_native_img.shape[:3], dtype=float) / 2.0
         native_center_world = (self._input_native_img.affine @ np.hstack((native_center_vox, [1.0])))[:3]
         
-        LOGGER.info("=" * 80)
-        LOGGER.info("RESAMPLING DEBUG: Affine Information")
-        LOGGER.info("=" * 80)
-        LOGGER.info(f"Conformed image:")
-        LOGGER.info(f"  Shape: {self._conformed_img.shape[:3]}")
-        LOGGER.info(f"  Affine translation: {self._conformed_img.affine[:3, 3]}")
-        LOGGER.info(f"  Center (voxel): {conf_center_vox}")
-        LOGGER.info(f"  Center (world): {conf_center_world}")
-        LOGGER.info(f"Native image:")
-        LOGGER.info(f"  Shape: {self._input_native_img.shape[:3]}")
-        LOGGER.info(f"  Affine translation: {self._input_native_img.affine[:3, 3]}")
-        LOGGER.info(f"  Center (voxel): {native_center_vox}")
-        LOGGER.info(f"  Center (world): {native_center_world}")
-        LOGGER.info(f"Center shift (world): {conf_center_world - native_center_world}")
+        LOGGER.debug("=" * 80)
+        LOGGER.debug("RESAMPLING DEBUG: Affine Information")
+        LOGGER.debug("=" * 80)
+        LOGGER.debug(f"Conformed image:")
+        LOGGER.debug(f"  Shape: {self._conformed_img.shape[:3]}")
+        LOGGER.debug(f"  Affine translation: {self._conformed_img.affine[:3, 3]}")
+        LOGGER.debug(f"  Center (voxel): {conf_center_vox}")
+        LOGGER.debug(f"  Center (world): {conf_center_world}")
+        LOGGER.debug(f"Native image:")
+        LOGGER.debug(f"  Shape: {self._input_native_img.shape[:3]}")
+        LOGGER.debug(f"  Affine translation: {self._input_native_img.affine[:3, 3]}")
+        LOGGER.debug(f"  Center (voxel): {native_center_vox}")
+        LOGGER.debug(f"  Center (world): {native_center_world}")
+        LOGGER.debug(f"Center shift (world): {conf_center_world - native_center_world}")
         
         # Compute vox2vox transformation
         vox2vox = np.linalg.inv(self._input_native_img.affine) @ self._conformed_img.affine
-        LOGGER.info(f"Vox2vox transformation:")
-        LOGGER.info(f"  Translation: {vox2vox[:3, 3]}")
-        LOGGER.info("=" * 80)
+        LOGGER.debug(f"Vox2vox transformation:")
+        LOGGER.debug(f"  Translation: {vox2vox[:3, 3]}")
+        LOGGER.debug("=" * 80)
         
         conformed_data_img = nib.nifti1.Nifti1Image(
                 data,

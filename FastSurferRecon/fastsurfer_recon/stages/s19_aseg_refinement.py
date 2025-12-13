@@ -4,11 +4,10 @@ Stage 19: Aseg Refinement
 Creates aseg.mgz from aseg.presurf.hypos.mgz using surfaces and ribbon.
 """
 
-from pathlib import Path
 import logging
 
 from .base import PipelineStage
-from ..wrappers.recon_all import recon_all_hyporelabel, recon_all_apas2aseg
+from ..wrappers.base import run_recon_all
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +30,13 @@ class AsegRefinement(PipelineStage):
         # Create aseg.presurf.hypos.mgz if it doesn't exist
         if not aseg_presurf_hypos.exists():
             logger.info("Creating aseg.presurf.hypos.mgz...")
-            recon_all_hyporelabel(
+            flags = []
+            if self.config.hires:
+                flags.append("-hires")
+            run_recon_all(
                 subject=self.config.subject_id,
-                hires=self.config.hires,
+                steps=["-hyporelabel"],
+                flags=flags,
                 threads=self.threads,
                 log_file=self.config.log_file,
                 subjects_dir=self.config.subjects_dir,
@@ -41,9 +44,13 @@ class AsegRefinement(PipelineStage):
         
         # Create aseg.mgz from aseg.presurf.hypos using surfaces and ribbon
         logger.info("Creating aseg.mgz from aseg.presurf.hypos with surfaces...")
-        recon_all_apas2aseg(
+        flags = []
+        if self.config.hires:
+            flags.append("-hires")
+        run_recon_all(
             subject=self.config.subject_id,
-            hires=self.config.hires,
+            steps=["-apas2aseg"],
+            flags=flags,
             threads=self.threads,
             log_file=self.config.log_file,
             subjects_dir=self.config.subjects_dir,

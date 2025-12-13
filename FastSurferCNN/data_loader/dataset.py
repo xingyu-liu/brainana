@@ -144,8 +144,121 @@ class MultiScaleOrigDataThickSlices(Dataset):
         return self.count
 
 
+# Base class for HDF5-based datasets with shared file handling
+class HDF5DatasetBase(Dataset):
+    """
+    Base class for HDF5-based datasets with optimized file handling.
+    Provides shared methods for opening and managing HDF5 file handles.
+    """
+    
+    def _get_hdf5_file(self):
+        """
+        Get persistent HDF5 file handle (opened lazily on first access).
+        The file remains open for the lifetime of the dataset to avoid repeated open/close operations.
+        Each worker process gets its own dataset instance, so this is safe for multiprocessing.
+        """
+        if self._hdf5_file is None:
+            # Optimized cache settings for read-heavy workloads with slow network storage
+            # With single worker, we can use a very large cache to minimize I/O
+            # rdcc_nbytes: cache size in bytes (8GB for large datasets on network storage)
+            # rdcc_nslots: number of hash table slots (larger = less collisions)
+            # rdcc_w0: write policy (0.0 = no write caching, pure read cache)
+            # Note: Large cache helps when I/O is slow (network mounts)
+            self._hdf5_file = h5py.File(
+                self.dataset_path, 
+                "r", 
+                rdcc_nbytes=8*1024**3,  # Increased to 8GB cache for network storage
+                rdcc_nslots=100000,      # More slots for better cache hit rate
+                rdcc_w0=0.0               # Pure read cache (no write caching)
+            )
+        return self._hdf5_file
+    
+    def _open_hdf5_file(self):
+        """
+        Legacy method for backward compatibility.
+        Now returns the persistent file handle instead of creating a new one.
+        """
+        return self._get_hdf5_file()
+    
+    def get_subject_names(self):
+        """
+        Get subject names from the HDF5 dataset.
+
+        Returns
+        -------
+        list
+            List of subject names.
+        """
+        # Load subject names lazily when requested
+        subjects = []
+        hf = self._get_hdf5_file()
+        for size, idx in self.dataset_indices:
+            subject = hf[f"{size}"]["subject"][idx]
+            if isinstance(subject, bytes):
+                subject = subject.decode('utf-8')
+            subjects.append(subject)
+        return subjects
+    
+    def _scan_hdf5_indices(self, dataset_path: str, cfg: yacs.config.CfgNode):
+        """
+        Scan HDF5 file to build dataset indices without loading all data.
+        Shared initialization logic for both training and validation datasets.
+        
+        Parameters
+        ----------
+        dataset_path : str
+            Path to the HDF5 file
+        cfg : yacs.config.CfgNode
+            Configuration node with DATA.SIZES
+        """
+        self.dataset_indices = []  # List of (size, index) tuples
+        self.count = 0
+        
+        # Open file in reading mode to get metadata only
+        with h5py.File(dataset_path, "r") as hf:
+            for size in cfg.DATA.SIZES:
+                try:
+                    logger.info(f"Dataset: scanning size {size}...")
+                    # Only get the length, don't load data
+                    num_samples = len(hf[f"{size}"]["orig_dataset"])
+                    logger.info(f"Dataset: found {num_samples} slices for size {size}")
+                    
+                    # Store indices for lazy loading
+                    for idx in range(num_samples):
+                        self.dataset_indices.append((size, idx))
+                    
+                    self.count += num_samples
+
+                except KeyError:
+                    logger.warning(
+                        f"Dataset: key error, size {size} does not exist in HDF5 file"
+                    )
+                    continue
+
+        if self.count == 0:
+            logger.error(
+                f"WARNING: No samples found in HDF5 file!\n"
+                f"  File: {dataset_path}\n"
+                f"  Plane: {cfg.DATA.PLANE}\n"
+                f"  Expected sizes: {cfg.DATA.SIZES}\n"
+                f"  This will cause training to fail. Please check:\n"
+                f"    1. HDF5 file was created successfully\n"
+                f"    2. Subjects were processed during HDF5 creation\n"
+                f"    3. HDF5 file structure matches expected sizes\n"
+                f"    4. Data split file includes subjects for this split"
+            )
+    
+    def __del__(self):
+        """Cleanup: close HDF5 file if it was opened."""
+        if self._hdf5_file is not None:
+            try:
+                self._hdf5_file.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
+
+
 # Operator to load hdf5-file for training
-class MultiScaleDataset(Dataset):
+class MultiScaleDataset(HDF5DatasetBase):
     """
     Class for loading aseg file with augmentations (transforms).
     """
@@ -178,93 +291,12 @@ class MultiScaleDataset(Dataset):
         self.dataset_path = dataset_path
         self.transforms = transforms
 
-        # Store dataset metadata (indices and sizes) without loading all data
-        self.dataset_indices = []  # List of (size, index) tuples
-        self.count = 0
-        
         # Persistent HDF5 file handle (opened lazily, kept open for lifetime of dataset)
         # Each worker process gets its own dataset instance, so this is safe for multiprocessing
         self._hdf5_file = None
 
-        # Open file in reading mode to get metadata only
-        start = time.time()
-        with h5py.File(dataset_path, "r") as hf:
-            for size in cfg.DATA.SIZES:
-                try:
-                    logger.info(f"Dataset: scanning size {size}...")
-                    # Only get the length, don't load data
-                    num_samples = len(hf[f"{size}"]["orig_dataset"])
-                    logger.info(f"Dataset: found {num_samples} slices for size {size}")
-                    
-                    # Store indices for lazy loading
-                    for idx in range(num_samples):
-                        self.dataset_indices.append((size, idx))
-                    
-                    self.count += num_samples
-
-                except KeyError:
-                    logger.warning(
-                        f"Dataset: key error, size {size} does not exist in HDF5 file"
-                    )
-                    continue
-
-            if self.count == 0:
-                logger.error(
-                    f"WARNING: No samples found in HDF5 file!\n"
-                    f"  File: {dataset_path}\n"
-                    f"  Plane: {cfg.DATA.PLANE}\n"
-                    f"  Expected sizes: {cfg.DATA.SIZES}\n"
-                    f"  This will cause training to fail. Please check:\n"
-                    f"    1. HDF5 file was created successfully\n"
-                    f"    2. Subjects were processed during HDF5 creation\n"
-                    f"    3. HDF5 file structure matches expected sizes\n"
-                    f"    4. Data split file includes subjects for this split"
-                )
-
-    def _get_hdf5_file(self):
-        """
-        Get persistent HDF5 file handle (opened lazily on first access).
-        The file remains open for the lifetime of the dataset to avoid repeated open/close operations.
-        Each worker process gets its own dataset instance, so this is safe for multiprocessing.
-        """
-        if self._hdf5_file is None:
-            # Open with larger cache for better performance
-            self._hdf5_file = h5py.File(self.dataset_path, "r", rdcc_nbytes=2*1024**3, rdcc_nslots=20000)
-        return self._hdf5_file
-    
-    def _open_hdf5_file(self):
-        """
-        Legacy method for backward compatibility.
-        Now returns the persistent file handle instead of creating a new one.
-        """
-        return self._get_hdf5_file()
-    
-    def get_subject_names(self):
-        """
-        Get the subject name.
-
-        Returns
-        -------
-        list
-            List of subject names.
-        """
-        # Load subject names lazily when requested
-        subjects = []
-        hf = self._get_hdf5_file()
-        for size, idx in self.dataset_indices:
-            subject = hf[f"{size}"]["subject"][idx]
-            if isinstance(subject, bytes):
-                subject = subject.decode('utf-8')
-            subjects.append(subject)
-        return subjects
-    
-    def __del__(self):
-        """Cleanup: close HDF5 file if it was opened."""
-        if self._hdf5_file is not None:
-            try:
-                self._hdf5_file.close()
-            except Exception:
-                pass  # Ignore errors during cleanup
+        # Scan HDF5 file to build indices (shared method from base class)
+        self._scan_hdf5_indices(dataset_path, cfg)
 
     def _get_scale_factor(
             self,
@@ -374,19 +406,31 @@ class MultiScaleDataset(Dataset):
         dict
             Dictionary containing torch tensors for image, label, weight, and scale factor.
         """
+        import time
+        total_start = time.time()
+        
         # Lazy load data from HDF5 file using persistent handle
         size, idx = self.dataset_indices[index]
         
-        # Use persistent file handle (no context manager - file stays open)
+        # Time HDF5 loading
+        # Optimized: Access all datasets from same group to minimize file seeks
+        hdf5_start = time.time()
         hf = self._get_hdf5_file()
-        image = hf[f"{size}"]["orig_dataset"][idx]
-        label = hf[f"{size}"]["aseg_dataset"][idx]
-        weight = hf[f"{size}"]["weight_dataset"][idx]
-        zoom = hf[f"{size}"]["zoom_dataset"][idx]
+        size_group = hf[f"{size}"]
+        # Read all arrays in sequence to minimize I/O overhead
+        image = size_group["orig_dataset"][idx]
+        label = size_group["aseg_dataset"][idx]
+        weight = size_group["weight_dataset"][idx]
+        zoom = size_group["zoom_dataset"][idx]
+        hdf5_time = time.time() - hdf5_start
         
+        # Time padding
+        pad_start = time.time()
         padded_img, padded_label, padded_weight = self.unify_imgs(
             image, label, weight
         )
+        pad_time = time.time() - pad_start
+        
         img = np.expand_dims(padded_img.transpose((2, 0, 1)), axis=3)
         label = padded_label[np.newaxis, :, :, np.newaxis]
         weight = padded_weight[np.newaxis, :, :, np.newaxis]
@@ -402,19 +446,33 @@ class MultiScaleDataset(Dataset):
         zoom_aug = torch.as_tensor([0.0, 0.0])
 
         if self.transforms is not None:
-            # Profile augmentation time (only log slow augmentations to avoid spam)
-            import time
+            # Time augmentation
             aug_start = time.time()
             tx_sample = self.transforms(subject)  # this returns data as torch.tensors
             aug_time = time.time() - aug_start
-            
-            # Log slow augmentations (>100ms) for performance monitoring
-            if aug_time > 0.1:
-                logger.debug(
-                    f"Slow augmentation: {aug_time:.3f}s for sample {index} "
-                    f"(size={size}, idx={idx})"
-                )
+        else:
+            aug_time = 0.0
+            tx_sample = subject
 
+        total_time = time.time() - total_start
+        
+        # Log slow samples with detailed breakdown - these block the batch!
+        # Lowered threshold to 1.0s to catch moderately slow samples that still cause issues
+        if total_time > 5.0:
+            logger.warning(
+                f"⚠️  SLOW SAMPLE: {total_time:.2f}s total for sample {index} "
+                f"(size={size}, idx={idx})\n"
+                f"   Breakdown: HDF5={hdf5_time:.3f}s, Padding={pad_time:.3f}s, "
+                f"Augmentation={aug_time:.3f}s\n"
+            )
+        # Log moderately slow augmentations (lowered threshold)
+        elif aug_time > 2.0:
+            logger.info(
+                f"Slow augmentation: {aug_time:.3f}s for sample {index} "
+                f"(size={size}, idx={idx})"
+            )
+
+        if self.transforms is not None:
             img = torch.squeeze(tx_sample["img"].data).float()
             label = torch.squeeze(tx_sample["label"].data).byte()
             weight = torch.squeeze(tx_sample["weight"].data).float()
@@ -428,6 +486,12 @@ class MultiScaleDataset(Dataset):
 
             # Normalize HDF5 data from [0, rescale] to [0, 1] range
             # Uses RESCALE value from config (typically 255.0)
+            img = torch.clamp(img / self.rescale, min=0.0, max=1.0)
+        else:
+            # No transforms - convert directly
+            img = torch.from_numpy(img).float()
+            label = torch.from_numpy(label).byte()
+            weight = torch.from_numpy(weight).float()
             img = torch.clamp(img / self.rescale, min=0.0, max=1.0)
 
         scale_factor = self._get_scale_factor(
@@ -449,7 +513,7 @@ class MultiScaleDataset(Dataset):
 
 
 # Operator to load hdf5-file for validation
-class MultiScaleDatasetVal(Dataset):
+class MultiScaleDatasetVal(HDF5DatasetBase):
     """
     Class for loading aseg file with augmentations (transforms).
     """
@@ -460,88 +524,12 @@ class MultiScaleDatasetVal(Dataset):
         self.dataset_path = dataset_path
         self.transforms = transforms
 
-        # Store dataset metadata (indices and sizes) without loading all data
-        self.dataset_indices = []  # List of (size, index) tuples
-        self.count = 0
-        
         # Persistent HDF5 file handle (opened lazily, kept open for lifetime of dataset)
         # Each worker process gets its own dataset instance, so this is safe for multiprocessing
         self._hdf5_file = None
 
-        # Open file in reading mode to get metadata only
-        start = time.time()
-        with h5py.File(dataset_path, "r") as hf:
-            for size in cfg.DATA.SIZES:
-                try:
-                    logger.info(f"Dataset: scanning size {size}...")
-                    # Only get the length, don't load data
-                    num_samples = len(hf[f"{size}"]["orig_dataset"])
-                    logger.info(f"Dataset: found {num_samples} slices for size {size}")
-                    
-                    # Store indices for lazy loading
-                    for idx in range(num_samples):
-                        self.dataset_indices.append((size, idx))
-                    
-                    self.count += num_samples
-
-                except KeyError:
-                    logger.warning(
-                        f"Dataset: key error, size {size} does not exist in HDF5 file"
-                    )
-                    continue
-
-        if self.count == 0:
-            logger.error(
-                f"Dataset: no samples found in HDF5 file\n"
-                f"  file={dataset_path}\n"
-                f"  plane={cfg.DATA.PLANE}\n"
-                f"  expected_sizes={cfg.DATA.SIZES}\n"
-                f"  This will cause training to fail. Please check:\n"
-                f"    1. HDF5 file was created successfully\n"
-                f"    2. Subjects were processed during HDF5 creation\n"
-                f"    3. HDF5 file structure matches expected sizes\n"
-                f"    4. Data split file includes subjects for this split"
-            )
-
-    def _get_hdf5_file(self):
-        """
-        Get persistent HDF5 file handle (opened lazily on first access).
-        The file remains open for the lifetime of the dataset to avoid repeated open/close operations.
-        Each worker process gets its own dataset instance, so this is safe for multiprocessing.
-        """
-        if self._hdf5_file is None:
-            # Open with larger cache for better performance
-            self._hdf5_file = h5py.File(self.dataset_path, "r", rdcc_nbytes=2*1024**3, rdcc_nslots=20000)
-        return self._hdf5_file
-    
-    def _open_hdf5_file(self):
-        """
-        Legacy method for backward compatibility.
-        Now returns the persistent file handle instead of creating a new one.
-        """
-        return self._get_hdf5_file()
-    
-    def get_subject_names(self):
-        """
-        Get subject names.
-        """
-        # Load subject names lazily when requested
-        subjects = []
-        hf = self._get_hdf5_file()
-        for size, idx in self.dataset_indices:
-            subject = hf[f"{size}"]["subject"][idx]
-            if isinstance(subject, bytes):
-                subject = subject.decode('utf-8')
-            subjects.append(subject)
-        return subjects
-    
-    def __del__(self):
-        """Cleanup: close HDF5 file if it was opened."""
-        if self._hdf5_file is not None:
-            try:
-                self._hdf5_file.close()
-            except Exception:
-                pass  # Ignore errors during cleanup
+        # Scan HDF5 file to build indices (shared method from base class)
+        self._scan_hdf5_indices(dataset_path, cfg)
 
     def _get_scale_factor(self, img_zoom):
         """
@@ -574,11 +562,14 @@ class MultiScaleDatasetVal(Dataset):
         size, idx = self.dataset_indices[index]
         
         # Use persistent file handle (no context manager - file stays open)
+        # Optimized: Access all datasets from same group to minimize file seeks
         hf = self._get_hdf5_file()
-        img = hf[f"{size}"]["orig_dataset"][idx]
-        label = hf[f"{size}"]["aseg_dataset"][idx]
-        weight = hf[f"{size}"]["weight_dataset"][idx]
-        zoom = hf[f"{size}"]["zoom_dataset"][idx]
+        size_group = hf[f"{size}"]
+        # Read all arrays in sequence to minimize I/O overhead
+        img = size_group["orig_dataset"][idx]
+        label = size_group["aseg_dataset"][idx]
+        weight = size_group["weight_dataset"][idx]
+        zoom = size_group["zoom_dataset"][idx]
         
         scale_factor = self._get_scale_factor(zoom)
 

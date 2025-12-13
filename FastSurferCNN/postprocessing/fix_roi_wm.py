@@ -275,7 +275,8 @@ def fix_roi_wm(
     roi_name: str = DEFAULT_ROI_NAME,
     wm_thr: float = DEFAULT_WM_THRESHOLD,
     backup_original: bool = True,
-    verbose: bool = True
+    verbose: bool = True,
+    registration_threads: Optional[int] = None
 ) -> None:
     """
     Fix missing thin WM in V1 by registering template V1 WM to individual space.
@@ -306,6 +307,9 @@ def fix_roi_wm(
         Whether to backup original segmentation (default: True)
     verbose : bool, optional
         Print progress information (default: True)
+    registration_threads : int, optional
+        Number of threads to use for ANTs registration (default: None, uses config or 8)
+        Increasing this can speed up registration but uses more CPU/memory
     """
     try:
         from macacaMRIprep.operations.registration import ants_register, ants_apply_transforms
@@ -415,11 +419,47 @@ def fix_roi_wm(
     reg_working_dir = working_dir / 'registration'
     reg_working_dir.mkdir(exist_ok=True)
     
+    # Get config with proper thread settings for registration
+    # Try to get config from macacaMRIprep, or create minimal config with reasonable threads
+    try:
+        from macacaMRIprep.config import get_config
+        config = get_config().to_dict()
+        # Ensure registration.threads is set
+        if 'registration' not in config:
+            config['registration'] = {}
+        # Override with explicit registration_threads if provided, otherwise use config or default
+        if registration_threads is not None:
+            config['registration']['threads'] = registration_threads
+        elif 'threads' not in config.get('registration', {}):
+            # Default to 32 threads for faster processing
+            config['registration']['threads'] = 32
+        if 'general' not in config:
+            config['general'] = {}
+        if 'verbose' not in config.get('general', {}):
+            config['general']['verbose'] = 2 if verbose else 1
+    except Exception:
+        # Fallback: create minimal config with reasonable thread count
+        num_threads = registration_threads if registration_threads is not None else 32
+        config = {
+            'registration': {
+                'threads': num_threads,
+                'interpolation': 'LanczosWindowedSinc',
+            },
+            'general': {
+                'verbose': 2 if verbose else 1,
+            }
+        }
+    
+    if verbose:
+        num_threads = config.get('registration', {}).get('threads', 32)
+        print(f"  Using {num_threads} threads for registration")
+    
     reg_outputs = ants_register(
         fixedf=str(t1w_roi_f),
         movingf=str(tpl_t1w_roi_f),
         working_dir=str(reg_working_dir),
         output_prefix='template_to_individual',
+        config=config,
         xfm_type='syn'
     )
     

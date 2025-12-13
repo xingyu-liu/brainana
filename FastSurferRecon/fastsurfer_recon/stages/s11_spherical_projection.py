@@ -4,12 +4,11 @@ Stage 11: Spherical Projection
 Projects surface to sphere (qsphere or spectral projection).
 """
 
-from pathlib import Path
 import logging
 import shutil
 
 from .base import HemisphereStage
-from ..wrappers.recon_all import recon_all_qsphere
+from ..wrappers.base import run_recon_all
 from ..processing.spherical import spherically_project_surface
 
 logger = logging.getLogger(__name__)
@@ -23,6 +22,12 @@ class SphericalProjection(HemisphereStage):
     
     def _run(self) -> None:
         """Project to sphere."""
+        # Set environment variables EARLY to limit numerical library threading
+        # This must be done before any numpy/scipy/lapy operations to prevent
+        # the libraries from using all available CPU cores.
+        from ..utils.threading import set_numerical_threads
+        set_numerical_threads(self.threads)
+        
         sphere = self.hemi_path("sphere")
         qsphere_nofix = self.hemi_path("qsphere.nofix")
         # Skip if either file exists (they should both exist after creation)
@@ -33,10 +38,14 @@ class SphericalProjection(HemisphereStage):
         if self.config.processing.fsqsphere:
             # Use FreeSurfer qsphere
             logger.info(f"Using FreeSurfer qsphere for {self.hemi}")
-            recon_all_qsphere(
+            flags = []
+            if self.config.hires:
+                flags.append("-hires")
+            run_recon_all(
                 subject=self.config.subject_id,
                 hemi=self.hemi,
-                hires=self.config.hires,
+                steps=["-qsphere"],
+                flags=flags,
                 threads=self.threads,
                 log_file=self.config.log_file,
                 subjects_dir=self.config.subjects_dir,
@@ -59,6 +68,7 @@ class SphericalProjection(HemisphereStage):
             spherically_project_surface(
                 input_path=smoothwm_nofix,
                 output_path=qsphere_nofix,
+                threads=self.threads,
             )
             # Also create sphere as an alias (copy for compatibility)
             if not sphere.exists():

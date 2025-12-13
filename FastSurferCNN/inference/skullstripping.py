@@ -70,6 +70,7 @@ def skullstrip_fastsurfercnn(
     roi_name: str = 'V1',
     wm_thr: float = 0.5,
     save_debug_intermediates: bool = False,
+    registration_threads: Optional[int] = None,
 ) -> Dict[str, str]:
     """
     Perform skullstripping using FastSurferCNN segmentation model.
@@ -119,6 +120,10 @@ def skullstrip_fastsurfercnn(
             ROI name for WM fixing. Default is 'V1'.
         wm_thr: float, default=0.5
             Threshold for WM probability map in ROI WM fixing.
+        registration_threads: int, optional
+            Number of threads to use for ANTs registration when fix_roi_wm=True.
+            If None, uses config default (typically 8). Note: ANTs may show N+1 threads
+            (N worker threads + 1 main thread) in process monitors.
             
         Note: Preprocessing parameters (vox_size, orientation, image_size)
         are automatically read from checkpoint metadata (required), ensuring consistency
@@ -384,7 +389,8 @@ def skullstrip_fastsurfercnn(
                         roi_name=roi_name,
                         wm_thr=wm_thr,
                         backup_original=True,
-                        verbose=True
+                        verbose=True,
+                        registration_threads=registration_threads
                     )
                     logger.info(f"{roi_name} white matter fixing completed successfully")
                 except Exception as e:

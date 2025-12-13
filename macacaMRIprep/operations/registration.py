@@ -204,8 +204,8 @@ def ants_register(
     num_threads = reg_config.get('threads', 8)
     
     # Set up ITK thread environment variables
-    from ..utils.system import setup_itk_thread_env
-    env = setup_itk_thread_env(num_threads)
+    from ..utils.system import set_numerical_threads
+    env = set_numerical_threads(num_threads, include_itk=True, return_dict=True)
 
     # Build ANTs registration command
     command_ants = compose_ants_registration_cmd(
@@ -340,8 +340,8 @@ def ants_apply_transforms(
         pass  # Use default if config access fails
     
     # Set up ITK thread environment variables
-    from ..utils.system import setup_itk_thread_env
-    env = setup_itk_thread_env(num_threads)
+    from ..utils.system import set_numerical_threads
+    env = set_numerical_threads(num_threads, include_itk=True, return_dict=True)
     
     logger.debug(f"System: using {num_threads} threads for ITK operations (capped at 32)")
     

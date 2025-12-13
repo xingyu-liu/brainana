@@ -386,15 +386,8 @@ def bias_correct_and_normalize(
     # Also set environment variables to ensure ITK/OpenMP respects the thread limit
     # This is critical because ITK may check environment variables before API settings
     # and some operations may spawn subprocesses that don't inherit API settings
-    # Cap threads at 32 to prevent excessive resource usage
-    num_threads = min(threads, 32)
-    os.environ['ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS'] = str(num_threads)
-    os.environ['OMP_NUM_THREADS'] = str(num_threads)
-    os.environ['MKL_NUM_THREADS'] = str(num_threads)
-    os.environ['NUMEXPR_NUM_THREADS'] = str(num_threads)
-    os.environ['OPENBLAS_NUM_THREADS'] = str(num_threads)
-    
-    logger.debug(f"Set ITK/OpenMP threads to {num_threads} (requested {threads})")
+    from ..utils.threading import set_numerical_threads
+    set_numerical_threads(threads, include_itk=True)
 
     # Read input
     logger.info(f"Reading input: {input_path}")

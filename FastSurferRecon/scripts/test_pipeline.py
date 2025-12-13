@@ -5,8 +5,15 @@ Test script for FastSurfer surface reconstruction pipeline.
 Tests the pipeline with a real subject directory.
 """
 
+import os
 import sys
 from pathlib import Path
+
+# Set environment variables BEFORE importing any modules that use numpy/scipy/lapy
+# This is critical because these libraries check environment variables at import time
+# and may initialize their threading settings then. Setting them early ensures they
+# respect the thread limits.
+n_threads = 8
 
 # Add package to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -15,37 +22,31 @@ from fastsurfer_recon.config import ReconSurfConfig, AtlasConfig, ProcessingConf
 from fastsurfer_recon.pipeline import ReconSurfPipeline
 from fastsurfer_recon.utils.logging import setup_logging
 
+# %%
 # Test subject
 subject_root = Path("/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon")
-subject_dir = subject_root / "NMT2Sym_separate" / "sub-NMT2Sym_v2"
+# subject_dir = subject_root / "NMT2Sym_separate" / "sub-NMT2Sym_v2"
+subject_dir = subject_root / "arcaro_baby1_fixV1_separate" / "sub-baby1"
+
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
-
-skip_topology_fix = False
-if skip_topology_fix:
-    subject_id = f"{subject_id}_nofix"
-else:
-    subject_id = f"{subject_id}_fix"
-
-n_threads = 24
 
 # Setup logging
 setup_logging()
 
-# Create configuration
+# Create configuration - load defaults from default.yaml, then override specific values
 # t1_input and segmentation are optional - we just verify files exist in mri/
-config = ReconSurfConfig(
+config = ReconSurfConfig.with_defaults(
     subject_id=subject_id,
     subjects_dir=subjects_dir,
-    atlas=AtlasConfig(name="ARM2"),
-    processing=ProcessingConfig(
-        threads=n_threads,
-        parallel_hemis=True,
-        skip_cc=True,  # Non-human
-        skip_talairach=True,  # Non-human
-        skip_topology_fix=skip_topology_fix,
-        hires="auto",  # Auto-detect from voxel size
-    ),
+    atlas={"name": "ARM2"},
+    processing={
+        "parallel_hemis": True,
+        "skip_cc": True,  # Non-human
+        "skip_talairach": True,  # Non-human
+        "hires": "auto",  # Auto-detect from voxel size
+        "threads": n_threads,
+    },
     verbose=2,  # DEBUG
 )
 

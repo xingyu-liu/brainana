@@ -105,11 +105,6 @@ def run(
         "--no-talairach/--talairach", 
         help="Skip Talairach registration",
     ),
-    skip_topology_fix: bool = typer.Option(
-        False, 
-        "--nofix/--fix", 
-        help="Skip topology fix",
-    ),
     # Surface registration
     do_surf_reg: bool = typer.Option(
         False, 
@@ -186,7 +181,7 @@ def run(
         fastsurfer-recon run --sid sub-001 --sd /data/subjects \\
             --t1 /data/subjects/sub-001/mri/orig.mgz \\
             --seg /data/subjects/sub-001/mri/aparc.ARM2atlas+aseg.orig.mgz \\
-            --atlas ARM2 --threads 8
+            --atlas ARM2
     """
     setup_logging(verbose)
     logger = logging.getLogger(__name__)
@@ -205,25 +200,37 @@ def run(
                 segmentation=segmentation,
             )
         else:
-            config = ReconSurfConfig(
-                subject_id=subject_id,
-                subjects_dir=subjects_dir,
-                t1_input=t1,
-                segmentation=segmentation,
-                mask=mask,
-                atlas=AtlasConfig(name=atlas),
-                processing=ProcessingConfig(
-                    threads=threads,
-                    skip_cc=skip_cc,
-                    skip_talairach=skip_talairach,
-                    skip_topology_fix=skip_topology_fix,
-                    do_surf_reg=do_surf_reg,
-                    use_fs_tessellation=fs_tessellation,
-                    use_fs_qsphere=fs_qsphere,
-                    use_fs_aparc=fs_aparc,
-                ),
-                verbose=verbose,
-            )
+            # Try to load default config file with command-line overrides
+            # Build overrides dict with dot notation for nested keys
+            overrides = {
+                "subject_id": subject_id,
+                "subjects_dir": str(subjects_dir),
+                "t1_input": str(t1) if t1 else None,
+                "segmentation": str(segmentation) if segmentation else None,
+                "mask": str(mask) if mask else None,
+                "atlas.name": atlas,
+                "processing.threads": threads,
+                "processing.skip_cc": skip_cc,
+                "processing.skip_talairach": skip_talairach,
+                "processing.do_surf_reg": do_surf_reg,
+                "processing.use_fs_tessellation": fs_tessellation,
+                "processing.use_fs_qsphere": fs_qsphere,
+                "processing.use_fs_aparc": fs_aparc,
+                "verbose": verbose,
+            }
+            # Filter out None values (but keep False values)
+            overrides = {k: v for k, v in overrides.items() if v is not None}
+            
+            # Use with_defaults to load YAML if available, otherwise use code defaults
+            default_config = ReconSurfConfig.find_default_config()
+            if default_config:
+                logger.info(f"Loading default configuration from {default_config}")
+                config = ReconSurfConfig.from_yaml(default_config, overrides=overrides)
+            else:
+                logger.info("No default configuration file found, using code defaults")
+                # Convert dot notation overrides to nested dict structure for direct instantiation
+                nested_overrides = ReconSurfConfig._convert_dot_notation_to_nested(overrides)
+                config = ReconSurfConfig(**nested_overrides)
         
         # Print configuration summary
         console.print("[bold]Configuration:[/bold]")
@@ -233,7 +240,8 @@ def run(
         console.print(f"  Threads: {config.processing.threads}")
         console.print(f"  Skip CC: {config.processing.skip_cc}")
         console.print(f"  Skip Talairach: {config.processing.skip_talairach}")
-        console.print(f"  Skip Topology Fix: {config.processing.skip_topology_fix}")
+        console.print(f"  Smooth Iterations: {config.processing.smooth_iterations}")
+        console.print(f"  Inflate Iterations: {config.processing.inflate_iterations}")
         console.print()
         
         # Run pipeline

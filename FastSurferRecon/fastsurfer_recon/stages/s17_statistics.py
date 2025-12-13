@@ -4,11 +4,10 @@ Stage 17: Statistics
 Computes surface statistics and morphometry.
 """
 
-from pathlib import Path
 import logging
 
 from .base import HemisphereStage
-from ..wrappers.recon_all import recon_all_curvstats
+from ..wrappers.base import run_recon_all
 from ..wrappers.mris import mris_anatomical_stats
 
 logger = logging.getLogger(__name__)
@@ -24,10 +23,14 @@ class Statistics(HemisphereStage):
         """Compute statistics."""
         # Curvature statistics
         logger.info(f"Computing curvature statistics for {self.hemi}...")
-        recon_all_curvstats(
+        flags = []
+        if self.config.hires:
+            flags.append("-hires")
+        run_recon_all(
             subject=self.config.subject_id,
             hemi=self.hemi,
-            hires=self.config.hires,
+            steps=["-curvstats"],
+            flags=flags,
             threads=self.threads,
             log_file=self.config.log_file,
             subjects_dir=self.config.subjects_dir,

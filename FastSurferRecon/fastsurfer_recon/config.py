@@ -16,9 +16,9 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class AtlasConfig(BaseModel):
     """Atlas configuration."""
     
-    name: str = Field(default="ARM2", description="Atlas name (e.g., ARM2, DKT)")
+    name: str = Field(description="Atlas name (e.g., ARM2, DKT)")
     lut_dir: Optional[Path] = Field(
-        default=None, 
+        default=None,
         description="Custom LUT directory. If None, uses package default."
     )
     
@@ -87,92 +87,72 @@ class ProcessingConfig(BaseModel):
     """Processing options configuration."""
     
     # Threading
-    threads: int = Field(default=1, ge=1, description="Number of threads")
+    threads: int = Field(ge=1, description="Number of threads")
     parallel_hemis: bool = Field(
-        default=True, 
         description="Process hemispheres in parallel"
     )
     
     # Volume options
     hires_threshold: float = Field(
-        default=0.999,
         description="Voxel size threshold below which hires mode is used"
     )
     hires: bool | Literal["auto"] = Field(
-        default='auto',
         description="High-resolution mode. Use True/False to force, or 'auto' to detect from voxel size"
     )
     
     # Non-human options (default True for macaque)
     skip_cc: bool = Field(
-        default=True,
         description="Skip corpus callosum segmentation (for non-human)"
     )
     skip_talairach: bool = Field(
-        default=True,
         description="Skip Talairach registration (for non-human)"
-    )
-    skip_topology_fix: bool = Field(
-        default=False,
-        description="Skip topology fix (use orig.nofix directly)"
     )
     
     # Method choices
     use_fs_tessellation: bool = Field(
-        default=False,
         description="Use FreeSurfer mri_tesselate instead of marching cubes"
     )
     use_fs_qsphere: bool = Field(
-        default=False,
         description="Use FreeSurfer qsphere instead of spectral projection"
     )
     use_fs_aparc: bool = Field(
-        default=False,
         description="Use FreeSurfer aparc instead of mapped parcellation"
     )
     do_surf_reg: bool = Field(
-        default=False,
         description="Run surface registration to fsaverage"
     )
     
     # Additional options
     get_t1: bool = Field(
-        default=False,
         description="Create T1.mgz (for compatibility with downstream tools)"
     )
     atlas_3t: bool = Field(
-        default=True,
         description="Use 3T Talairach atlas instead of 1.5T"
     )
     
     # Bias correction
-    n4_shrink_factor: int = Field(default=4, ge=1, description="N4 shrink factor")
-    n4_num_iterations: int = Field(default=50, ge=1, description="N4 iterations per level")
-    n4_levels: int = Field(default=4, ge=1, description="N4 fitting levels")
+    n4_shrink_factor: int = Field(ge=1, description="N4 shrink factor")
+    n4_num_iterations: int = Field(ge=1, description="N4 iterations per level")
+    n4_levels: int = Field(ge=1, description="N4 fitting levels")
     
     # Surface smoothing and inflation (for monkey/non-human data)
     smooth_iterations: int = Field(
-        default=2, 
         ge=1, 
         description="Surface smoothing iterations for smooth1 (Stage 09, before topology fix). Creates smoothwm.nofix from orig.nofix."
     )
     smooth2_iterations: int = Field(
-        default=2, 
         ge=1, 
         description="Surface smoothing iterations for smooth2 (Stage 14, after topology fix, for visualization). Re-smooths smoothwm from white.preaparc. Use 3 for monkey data."
     )
     inflate_iterations: Optional[int] = Field(
-        default=None, 
         ge=1, 
         description="Surface inflation iterations for inflate1 (Stage 10, before topology fix). None = use FreeSurfer default ~15-20. For high-resolution data (0.75mm isotropic), use 20-50 or even 100 to ensure sufficient inflation for correct surface mapping onto sphere."
     )
     inflate2_iterations: Optional[int] = Field(
-        default=None, 
         ge=1, 
         description="Surface inflation iterations for inflate2 (Stage 14, after topology fix, for visualization). None = use FreeSurfer default. Use 3 for monkey data (less inflation for visualization)."
     )
     inflate_no_save_sulc: bool = Field(
-        default=True, 
         description="Skip saving sulc file during inflation"
     )
     
@@ -186,11 +166,6 @@ class ProcessingConfig(BaseModel):
     def no_talairach(self) -> bool:
         """Alias for skip_talairach."""
         return self.skip_talairach
-    
-    @property
-    def nofix(self) -> bool:
-        """Alias for skip_topology_fix."""
-        return self.skip_topology_fix
     
     @property
     def fstess(self) -> bool:
@@ -234,12 +209,12 @@ class ReconSurfConfig(BaseModel):
     mask: Optional[Path] = Field(default=None, description="Brain mask file")
     
     # Sub-configurations
-    atlas: AtlasConfig = Field(default_factory=AtlasConfig)
-    processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
+    atlas: AtlasConfig = Field()
+    processing: ProcessingConfig = Field()
     
     # Output control
     log_file: Optional[Path] = Field(default=None, description="Log file path")
-    verbose: int = Field(default=1, ge=0, le=2, description="Verbosity level (0-2)")
+    verbose: int = Field(ge=0, le=2, description="Verbosity level (0-2)")
     
     @property
     def cmd_log_file(self) -> Path:
@@ -354,7 +329,82 @@ class ReconSurfConfig(BaseModel):
         return bool(self.processing.hires)
     
     @classmethod
-    def from_yaml(cls, config_path: Path, **overrides) -> "ReconSurfConfig":
+    def find_default_config(cls) -> Optional[Path]:
+        """
+        Find the default configuration file.
+        
+        Looks for config/default.yaml relative to the package root.
+        
+        Returns
+        -------
+        Optional[Path]
+            Path to default config file if found, None otherwise
+        """
+        # Try to find config/default.yaml relative to this file
+        package_root = Path(__file__).parent.parent
+        default_config = package_root / "config" / "default.yaml"
+        if default_config.exists():
+            return default_config
+        return None
+    
+    @staticmethod
+    def _convert_dot_notation_to_nested(overrides: dict) -> dict:
+        """
+        Convert dot notation keys to nested dict structure.
+        
+        Example: {"processing.threads": 4} -> {"processing": {"threads": 4}}
+        
+        Parameters
+        ----------
+        overrides : dict
+            Dictionary with dot notation keys
+            
+        Returns
+        -------
+        dict
+            Nested dictionary structure
+        """
+        nested = {}
+        for key, value in overrides.items():
+            if "." in key:
+                parts = key.split(".")
+                d = nested
+                for part in parts[:-1]:
+                    d = d.setdefault(part, {})
+                d[parts[-1]] = value
+            else:
+                nested[key] = value
+        return nested
+    
+    @classmethod
+    def with_defaults(cls, **kwargs) -> "ReconSurfConfig":
+        """
+        Create configuration with defaults loaded from YAML if available.
+        
+        This method tries to load default.yaml first, then applies any
+        provided kwargs as overrides. If default.yaml doesn't exist,
+        falls back to code defaults.
+        
+        Parameters
+        ----------
+        **kwargs
+            Configuration values to override (will override YAML defaults)
+            
+        Returns
+        -------
+        ReconSurfConfig
+            Configuration with defaults loaded
+        """
+        default_config = cls.find_default_config()
+        if default_config:
+            # Load from YAML and apply overrides
+            return cls.from_yaml(default_config, **kwargs)
+        else:
+            # No YAML found, use code defaults
+            return cls(**kwargs)
+    
+    @classmethod
+    def from_yaml(cls, config_path: Path, overrides: Optional[dict] = None, **kwargs) -> "ReconSurfConfig":
         """
         Load configuration from YAML file.
         
@@ -362,8 +412,10 @@ class ReconSurfConfig(BaseModel):
         ----------
         config_path : Path
             Path to YAML configuration file
-        **overrides
-            Override values from command line
+        overrides : dict, optional
+            Dictionary of override values (supports dot notation for nested keys)
+        **kwargs
+            Additional override values from command line (alternative to overrides dict)
             
         Returns
         -------
@@ -373,19 +425,27 @@ class ReconSurfConfig(BaseModel):
         with open(config_path) as f:
             config_dict = yaml.safe_load(f) or {}
         
-        # Apply overrides
-        for key, value in overrides.items():
-            if value is not None:
-                if "." in key:
-                    # Handle nested keys like "processing.threads"
-                    parts = key.split(".")
-                    d = config_dict
-                    for part in parts[:-1]:
-                        d = d.setdefault(part, {})
-                    d[parts[-1]] = value
-                else:
-                    config_dict[key] = value
+        # Merge kwargs into overrides dict
+        if overrides is None:
+            overrides = {}
+        overrides.update(kwargs)
         
+        # Filter None values and convert dot notation to nested structure
+        filtered_overrides = {k: v for k, v in overrides.items() if v is not None}
+        nested_overrides = cls._convert_dot_notation_to_nested(filtered_overrides)
+        
+        # Merge nested overrides into config_dict (deep merge for nested dicts)
+        for key, value in nested_overrides.items():
+            if isinstance(value, dict) and key in config_dict and isinstance(config_dict[key], dict):
+                # Deep merge nested dicts
+                for subkey, subvalue in value.items():
+                    config_dict[key][subkey] = subvalue
+            else:
+                config_dict[key] = value
+        
+        # Pydantic will automatically create nested BaseModel objects from dicts
+        # So {"processing": {"inflate_iterations": 100}} will automatically
+        # create ProcessingConfig from the nested dict
         return cls(**config_dict)
     
     def to_yaml(self, path: Path) -> None:

@@ -1040,8 +1040,8 @@ def bias_correction(
     num_threads = bias_cfg.get('threads', 8)
     
     # Set up ITK thread environment variables
-    from ..utils.system import setup_itk_thread_env
-    env = setup_itk_thread_env(num_threads)
+    from ..utils.system import set_numerical_threads
+    env = set_numerical_threads(num_threads, include_itk=True, return_dict=True)
 
     # Build command
     if bias_cfg.get('algorithm') == 'N4BiasFieldCorrection':

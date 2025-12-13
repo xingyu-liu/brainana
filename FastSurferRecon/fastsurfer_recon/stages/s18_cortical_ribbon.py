@@ -4,11 +4,10 @@ Stage 18: Cortical Ribbon
 Creates cortical ribbon volume from white and pial surfaces.
 """
 
-from pathlib import Path
 import logging
 
 from .base import PipelineStage
-from ..wrappers.recon_all import recon_all_cortribbon
+from ..wrappers.base import run_recon_all
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +29,13 @@ class CorticalRibbon(PipelineStage):
             return
         
         logger.info("Creating cortical ribbon...")
-        recon_all_cortribbon(
+        flags = []
+        if self.config.hires:
+            flags.append("-hires")
+        run_recon_all(
             subject=self.config.subject_id,
-            hires=self.config.hires,
+            steps=["-cortribbon"],
+            flags=flags,
             threads=self.threads,
             log_file=self.config.log_file,
             subjects_dir=self.config.subjects_dir,
