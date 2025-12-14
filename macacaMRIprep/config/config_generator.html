@@ -311,6 +311,11 @@
                     </div>
                     <div class="help-text">(rescale image mean intensity to 100)</div>
                 </div>
+                <div class="form-group">
+                    <label for="anat_bias_correction_threads">threads</label>
+                    <input type="number" id="anat_bias_correction_threads" name="anat_bias_correction_threads" value="8" min="1">
+                    <div class="help-text">(number of CPU threads for ITK operations, >= 1. Default 8 to avoid oversubscription when running multiple processes in parallel)</div>
+                </div>
             </div>
             
             <div class="sub-section">
@@ -337,12 +342,12 @@
                     </div>
                     <div class="form-group">
                         <label for="anat_fastSurferCNN_batch_size">batch_size</label>
-                        <input type="number" id="anat_fastSurferCNN_batch_size" name="anat_fastSurferCNN_batch_size" value="1" min="1">
+                        <input type="number" id="anat_fastSurferCNN_batch_size" name="anat_fastSurferCNN_batch_size" value="8" min="1">
                         <div class="help-text">(batch size for inference, >= 1)</div>
                     </div>
                     <div class="form-group">
                         <label for="anat_fastSurferCNN_threads">threads</label>
-                        <input type="number" id="anat_fastSurferCNN_threads" name="anat_fastSurferCNN_threads" value="20" min="1">
+                        <input type="number" id="anat_fastSurferCNN_threads" name="anat_fastSurferCNN_threads" value="8" min="1">
                         <div class="help-text">(number of CPU threads, >= 1)</div>
                     </div>
                     <div class="form-group">
@@ -395,7 +400,7 @@
                 </div>
                 <div class="form-group">
                     <label for="anat_surface_reconstruction_threads">threads</label>
-                    <input type="number" id="anat_surface_reconstruction_threads" name="anat_surface_reconstruction_threads" value="20" min="1">
+                    <input type="number" id="anat_surface_reconstruction_threads" name="anat_surface_reconstruction_threads" value="8" min="1">
                     <div class="help-text">(number of threads for surface reconstruction, >= 1)</div>
                 </div>
             </div>
@@ -577,12 +582,12 @@
                     </div>
                     <div class="form-group">
                         <label for="func_fastSurferCNN_batch_size">batch_size</label>
-                        <input type="number" id="func_fastSurferCNN_batch_size" name="func_fastSurferCNN_batch_size" value="1" min="1">
+                        <input type="number" id="func_fastSurferCNN_batch_size" name="func_fastSurferCNN_batch_size" value="8" min="1">
                         <div class="help-text">(batch size for inference, >= 1)</div>
                     </div>
                     <div class="form-group">
                         <label for="func_fastSurferCNN_threads">threads</label>
-                        <input type="number" id="func_fastSurferCNN_threads" name="func_fastSurferCNN_threads" value="1" min="1">
+                        <input type="number" id="func_fastSurferCNN_threads" name="func_fastSurferCNN_threads" value="8" min="1">
                         <div class="help-text">(number of CPU threads, >= 1)</div>
                     </div>
                     <div class="form-group">
@@ -601,25 +606,18 @@
                     </div>
                     <div class="form-group">
                         <label for="func_fastSurferCNN_plane_weight_coronal">plane_weight_coronal</label>
-                        <input type="number" id="func_fastSurferCNN_plane_weight_coronal" name="func_fastSurferCNN_plane_weight_coronal" value="0" step="0.1" min="0" max="1">
+                        <input type="number" id="func_fastSurferCNN_plane_weight_coronal" name="func_fastSurferCNN_plane_weight_coronal" value="0.1" step="0.1" min="0" max="1">
                         <div class="help-text">(weight for coronal plane, 0.0-1.0)</div>
                     </div>
                     <div class="form-group">
                         <label for="func_fastSurferCNN_plane_weight_axial">plane_weight_axial</label>
-                        <input type="number" id="func_fastSurferCNN_plane_weight_axial" name="func_fastSurferCNN_plane_weight_axial" value="0.6" step="0.1" min="0" max="1">
+                        <input type="number" id="func_fastSurferCNN_plane_weight_axial" name="func_fastSurferCNN_plane_weight_axial" value="0.5" step="0.1" min="0" max="1">
                         <div class="help-text">(weight for axial plane, 0.0-1.0)</div>
                     </div>
                     <div class="form-group">
                         <label for="func_fastSurferCNN_plane_weight_sagittal">plane_weight_sagittal</label>
                         <input type="number" id="func_fastSurferCNN_plane_weight_sagittal" name="func_fastSurferCNN_plane_weight_sagittal" value="0.4" step="0.1" min="0" max="1">
                         <div class="help-text">(weight for sagittal plane, 0.0-1.0)</div>
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="func_fastSurferCNN_fix_V1_WM" name="func_fastSurferCNN_fix_V1_WM" checked>
-                            <label for="func_fastSurferCNN_fix_V1_WM">fix_V1_WM</label>
-                        </div>
-                        <div class="help-text">(when true, sets fix_roi_wm=True and roi_name='V1'; when false, sets fix_roi_wm=False)</div>
                     </div>
                 </div>
             </div>
@@ -647,7 +645,7 @@
                 </div>
                 <div class="form-group">
                     <label for="func_bias_correction_bspline_fitting">bspline_fitting</label>
-                    <input type="text" id="func_bias_correction_bspline_fitting" name="func_bias_correction_bspline_fitting" value="[ 100 ]">
+                    <input type="text" id="func_bias_correction_bspline_fitting" name="func_bias_correction_bspline_fitting" value="[ 200 ]">
                     <div class="help-text">(B-spline fitting parameters in ANTs format)</div>
                 </div>
                 <div class="form-group">
@@ -656,6 +654,11 @@
                         <label for="func_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
                     </div>
                     <div class="help-text">(rescale image mean intensity to 100)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_bias_correction_threads">threads</label>
+                    <input type="number" id="func_bias_correction_threads" name="func_bias_correction_threads" value="8" min="1">
+                    <div class="help-text">(number of CPU threads for ITK operations, >= 1. Default 8 to avoid oversubscription when running multiple processes in parallel)</div>
                 </div>
             </div>
         </div>
@@ -736,6 +739,11 @@
                     <label for="registration_output_inverse_registered_image">output_inverse_registered_image</label>
                 </div>
                 <div class="help-text">(output inverse registered image)</div>
+            </div>
+            <div class="form-group">
+                <label for="registration_threads">threads</label>
+                <input type="number" id="registration_threads" name="registration_threads" value="8" min="1">
+                <div class="help-text">(number of CPU threads for ITK operations, >= 1. Default 8 to avoid oversubscription when running multiple processes in parallel)</div>
             </div>
         </div>
 
@@ -841,15 +849,16 @@
                     algorithm: "N4BiasFieldCorrection",
                     shrink_factor: 2,
                     bspline_fitting: "[ 100 ]",
-                    rescale_mean_to_100: true
+                    rescale_mean_to_100: true,
+                    threads: 8
                 },
                 skullstripping: {
                     enabled: true,
                     method: "fastSurferCNN",
                     fastSurferCNN: {
                         gpu_device: "auto",
-                        batch_size: 1,
-                        threads: 20,
+                        batch_size: 8,
+                        threads: 8,
                         use_mixed_model: false,
                         enable_crop_2round: true,
                         plane_weight_coronal: 0.3,
@@ -860,7 +869,7 @@
                 },
                 surface_reconstruction: {
                     enabled: true,
-                    threads: 20
+                    threads: 8
                 }
             },
             func: {
@@ -895,23 +904,22 @@
                     method: "fastSurferCNN",
                     fastSurferCNN: {
                         gpu_device: "auto",
-                        batch_size: 1,
-                        threads: 1,
+                        batch_size: 8,
+                        threads: 8,
                         use_mixed_model: false,
                         enable_crop_2round: false,
-                        plane_weight_coronal: 0,
-                        plane_weight_axial: 0.6,
-                        plane_weight_sagittal: 0.4,
-                        fix_V1_WM: true
+                        plane_weight_coronal: 0.1,
+                        plane_weight_axial: 0.5,
+                        plane_weight_sagittal: 0.4
                     }
                 },
                 bias_correction: {
                     enabled: true,
                     algorithm: "N4BiasFieldCorrection",
-                    dimension: 3,
                     shrink_factor: 2,
-                    bspline_fitting: "[ 100 ]",
-                    rescale_mean_to_100: true
+                    bspline_fitting: "[ 200 ]",
+                    rescale_mean_to_100: true,
+                    threads: 8
                 }
             },
             registration: {
@@ -922,7 +930,8 @@
                 keep_original_func_resolution: true,
                 interpolation: "LanczosWindowedSinc",
                 output_registered_image: true,
-                output_inverse_registered_image: false
+                output_inverse_registered_image: false,
+                threads: 8
             },
             orientation_mismatch_correction: {
                 enabled: true,
@@ -1245,6 +1254,7 @@
             config.anat.bias_correction.shrink_factor = parseFloat(document.getElementById('anat_bias_correction_shrink_factor').value);
             config.anat.bias_correction.bspline_fitting = document.getElementById('anat_bias_correction_bspline_fitting').value;
             config.anat.bias_correction.rescale_mean_to_100 = document.getElementById('anat_bias_correction_rescale_mean_to_100').checked;
+            config.anat.bias_correction.threads = parseInt(document.getElementById('anat_bias_correction_threads').value);
             
             config.anat.skullstripping.enabled = document.getElementById('anat_skullstripping_enabled').checked;
             config.anat.skullstripping.method = document.getElementById('anat_skullstripping_method').value;
@@ -1306,7 +1316,6 @@
                 config.func.skullstripping.fastSurferCNN.plane_weight_coronal = parseFloat(document.getElementById('func_fastSurferCNN_plane_weight_coronal').value);
                 config.func.skullstripping.fastSurferCNN.plane_weight_axial = parseFloat(document.getElementById('func_fastSurferCNN_plane_weight_axial').value);
                 config.func.skullstripping.fastSurferCNN.plane_weight_sagittal = parseFloat(document.getElementById('func_fastSurferCNN_plane_weight_sagittal').value);
-                config.func.skullstripping.fastSurferCNN.fix_V1_WM = document.getElementById('func_fastSurferCNN_fix_V1_WM').checked;
             }
             
             config.func.bias_correction.enabled = document.getElementById('func_bias_correction_enabled').checked;
@@ -1314,6 +1323,7 @@
             config.func.bias_correction.shrink_factor = parseFloat(document.getElementById('func_bias_correction_shrink_factor').value);
             config.func.bias_correction.bspline_fitting = document.getElementById('func_bias_correction_bspline_fitting').value;
             config.func.bias_correction.rescale_mean_to_100 = document.getElementById('func_bias_correction_rescale_mean_to_100').checked;
+            config.func.bias_correction.threads = parseInt(document.getElementById('func_bias_correction_threads').value);
             
             // Registration
             config.registration.enabled = document.getElementById('registration_enabled').checked;
@@ -1324,6 +1334,7 @@
             config.registration.interpolation = document.getElementById('registration_interpolation').value;
             config.registration.output_registered_image = document.getElementById('registration_output_registered_image').checked;
             config.registration.output_inverse_registered_image = document.getElementById('registration_output_inverse_registered_image').checked;
+            config.registration.threads = parseInt(document.getElementById('registration_threads').value);
             
             // Orientation mismatch correction
             config.orientation_mismatch_correction = {

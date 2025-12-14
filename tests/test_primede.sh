@@ -386,3 +386,15 @@ config_f=${dataset_root}/config.yaml
 pipeline=func2anat2template
 python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
     --config ${config_f}
+
+# ================================================
+# test new livingstone
+# ================================================
+dataset_root=/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test
+dataset_dir=${dataset_root}/bids_reorient
+output_dir=${dataset_root}/bids_reorient_preproc
+config_f=${dataset_root}/config.yaml
+
+pipeline=func2anat2template
+python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
+    --config ${config_f}

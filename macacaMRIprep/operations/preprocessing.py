@@ -14,6 +14,7 @@ import time
 from typing import Dict, Any, Optional, Union, List
 from pathlib import Path
 import nibabel as nib
+from nibabel.orientations import aff2axcodes
 
 from .validation import validate_input_file, ensure_working_directory, validate_output_file
 from ..utils import run_command, calculate_func_tmean, reorient_image_to_target, reorient_image_to_orientation, get_image_shape
@@ -105,10 +106,18 @@ def correct_orientation_mismatch(
         img = nib.load(image_path)
         affine_cur = img.affine
         
+        # Get original orientation
+        orig_orientation = "".join(aff2axcodes(affine_cur))
+        logger.info(f"Data: original orientation - {orig_orientation}")
+        
         # Correct the affine matrix for orientation mismatch
         affine_corrected = correct_affine_for_mismatch_orientation(
             affine_cur, real_A_is_actually_labeled_as, real_S_is_actually_labeled_as
         )
+        
+        # Get corrected orientation
+        corrected_orientation = "".join(aff2axcodes(affine_corrected))
+        logger.info(f"Data: corrected orientation - {corrected_orientation}")
         
         # Save the corrected image with updated affine matrix
         output_path = work_dir / output_name

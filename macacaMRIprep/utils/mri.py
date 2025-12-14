@@ -368,6 +368,56 @@ def _get_n90_rotations_4x4() -> list[np.ndarray]:
     return rotations_4x4
 
 
+# Cross product coefficients: basis(type1) × basis(type2) = coeff * basis(type3)
+# In RAS space: RL=X, AP=Y, SI=Z
+# Standard cross products: X × Y = Z, Y × Z = X, Z × X = Y (positive)
+# Reverse order: Y × X = -Z, Z × Y = -X, X × Z = -Y (negative)
+_CROSS_COEFFS = {
+    ('RL', 'AP', 'SI'): 1,   # R × A = S
+    ('AP', 'SI', 'RL'): 1,   # A × S = R
+    ('SI', 'RL', 'AP'): 1,   # S × R = A
+    ('AP', 'RL', 'SI'): -1,  # A × R = I (=-S)
+    ('SI', 'AP', 'RL'): -1,  # S × A = L (=-R)
+    ('RL', 'SI', 'AP'): -1,  # R × S = P (=-A)
+}
+
+# Unit vectors for each direction
+_DIRECTION_VECTORS = {
+    'R': np.array([1, 0, 0]),
+    'L': np.array([-1, 0, 0]),
+    'A': np.array([0, 1, 0]),
+    'P': np.array([0, -1, 0]),
+    'S': np.array([0, 0, 1]),
+    'I': np.array([0, 0, -1]),
+}
+
+
+def _get_handedness(orientation: str) -> int:
+    """Determine if an orientation code is right-handed or left-handed.
+    
+    Right-handed: axis0 × axis1 = axis2 (e.g., RAS, PRS, LSA)
+    Left-handed: axis0 × axis1 = -axis2 (e.g., PSR, RAI)
+    
+    Args:
+        orientation: 3-letter orientation code (e.g., 'RAS', 'PSR')
+        
+    Returns:
+        +1 for right-handed, -1 for left-handed
+    """
+    v0 = _DIRECTION_VECTORS[orientation[0]]
+    v1 = _DIRECTION_VECTORS[orientation[1]]
+    v2 = _DIRECTION_VECTORS[orientation[2]]
+    
+    cross = np.cross(v0, v1)
+    
+    if np.allclose(cross, v2):
+        return 1  # right-handed
+    elif np.allclose(cross, -v2):
+        return -1  # left-handed
+    else:
+        raise ValueError(f"Invalid orientation code: {orientation}")
+
+
 def _determine_third_orientation(
     dir1_idx: int,
     dir2_idx: int,
@@ -400,13 +450,13 @@ def _determine_third_orientation(
         The third direction that satisfies right-hand rule
         
     Examples:
-        >>> # RAS: R(0) × A(1) = S(2) - right-handed
+        >>> # RAS: given A(1) and S(2), determine R at position 0
         >>> _determine_third_orientation(1, 2, 0, 'A', 'S', 'AP', 'SI')
         'R'
         
-        >>> # xSA → LSA: L(0) × A(2) = S(1) - left-handed
-        >>> _determine_third_orientation(2, 1, 0, 'A', 'S', 'AP', 'SI')
-        'L'
+        >>> # PRS: given R(1) and S(2), determine P at position 0
+        >>> _determine_third_orientation(1, 2, 0, 'R', 'S', 'RL', 'SI')
+        'P'
     """
     # Right-handed cycles follow the pattern: (0,1,2), (1,2,0), (2,0,1)
     # These have even parity (determinant = +1)
@@ -421,16 +471,18 @@ def _determine_third_orientation(
     dir1_sign = 1 if dir1 in ['A', 'S', 'R'] else -1
     dir2_sign = 1 if dir2 in ['A', 'S', 'R'] else -1
     
-    # Calculate third direction sign using the right-hand rule:
-    # For right-handed: dir3_sign × dir1_sign = dir2_sign  →  dir3_sign = dir2_sign × dir1_sign
-    # For left-handed: dir3_sign × dir1_sign = -dir2_sign  →  dir3_sign = -dir2_sign × dir1_sign
-    # Combined: dir3_sign = parity × dir2_sign × dir1_sign
-    dir3_sign = parity * dir2_sign * dir1_sign
-    
     # Determine which type of direction we need to return
-    # The three types are: AP (Anterior/Posterior), SI (Superior/Inferior), RL (Right/Left)
     all_types = {'AP', 'SI', 'RL'}
     dir3_type = (all_types - {dir1_type, dir2_type}).pop()
+    
+    # Get cross product coefficient for (type at dir3_idx, type at dir1_idx, type at dir2_idx)
+    # This accounts for the natural cross product direction between axis types
+    coeff = _CROSS_COEFFS.get((dir3_type, dir1_type, dir2_type), 1)
+    
+    # Calculate third direction sign using the right-hand rule:
+    # For a right-handed coordinate system: axis0 × axis1 = axis2
+    # Combined formula: dir3_sign = parity × coeff × dir2_sign × dir1_sign
+    dir3_sign = parity * coeff * dir2_sign * dir1_sign
     
     # Map sign to direction based on type
     if dir3_type == 'RL':
@@ -453,17 +505,23 @@ def correct_affine_for_mismatch_orientation(
 
     Args:
         affine: Affine matrix (4x4 numpy array) or nibabel image object
-        real_A_is_actually_labeled_as: What the axis currently labeled 'A' actually points to
-            (one of: 'P', 'S', 'I', 'R', 'L')
-        real_S_is_actually_labeled_as: What the axis currently labeled 'S' actually points to
-            (one of: 'A', 'P', 'I', 'R', 'L')
+        real_A_is_actually_labeled_as: Where the real/physical Anterior is currently 
+            labeled in the image. For example, 'L' means the brain's anterior appears 
+            at the L-labeled position.
+        real_S_is_actually_labeled_as: Where the real/physical Superior is currently 
+            labeled in the image. For example, 'A' means the brain's superior appears 
+            at the A-labeled position.
         
     Returns:
         Corrected affine matrix (4x4 numpy array)
     
-    Note:
-        The parameters are assumed to be validated by the config validation module.
-        Only A/P and S/I mismatches are corrected; R/L is determined by right-hand rule.
+    Example:
+        If original orientation is RAS but real A is at L and real S is at S:
+        1. RAS means x+=R, y+=A, z+=S
+        2. From parameters: real A at L → real P at R; real S at S → real I at I
+        3. Build target: x+ has real P → P; z+ has real S → S; y+ = ? (right-hand rule)
+        4. Right-hand rule: P × ? = S → ? = R
+        5. Result: PRS
     """
     # Extract affine matrix if input is a nibabel image
     if isinstance(affine, nib.spatialimages.SpatialImage):
@@ -471,104 +529,88 @@ def correct_affine_for_mismatch_orientation(
     else:
         affine_matrix = affine.copy()
     
-    # Step 1: Get current orientation code
-    current_axes = list(aff2axcodes(affine_matrix))
-    current_orientation = "".join(current_axes)
+    _OPPOSITES = {'R': 'L', 'L': 'R', 'A': 'P', 'P': 'A', 'S': 'I', 'I': 'S'}
     
-    # Find indices of A/P and S/I in current orientation
-    # We need to find which axis is labeled 'A' (or 'P') and which is labeled 'S' (or 'I')
-    try:
-        a_idx = current_axes.index('A')
-    except ValueError:
-        try:
-            a_idx = current_axes.index('P')
-        except ValueError:
-            raise ValueError(f"Current orientation {current_orientation} has neither 'A' nor 'P'")
-    
-    try:
-        s_idx = current_axes.index('S')
-    except ValueError:
-        try:
-            s_idx = current_axes.index('I')
-        except ValueError:
-            raise ValueError(f"Current orientation {current_orientation} has neither 'S' nor 'I'")
-    
-    # Step 2: Build target orientation code
-    # Normalize the mismatch parameters to uppercase
     real_A_dir = real_A_is_actually_labeled_as.upper()
     real_S_dir = real_S_is_actually_labeled_as.upper()
     
-    # Create target orientation code
-    # The axis at a_idx is currently labeled 'A' (or 'P') but actually points to real_A_dir
-    # After correction, it should be labeled with real_A_dir
-    target_axes = current_axes.copy()
-    target_axes[a_idx] = real_A_dir
-    target_axes[s_idx] = real_S_dir
+    # Step 1: Get current orientation code (e.g., RAS → ['R', 'A', 'S'])
+    current_axes = list(aff2axcodes(affine_matrix))
+    current_orientation = "".join(current_axes)
     
-    # Find R/L index (the one that's not A or S)
-    rl_idx = [i for i in range(3) if i not in [a_idx, s_idx]][0]
+    # Step 2: Build mapping of where each real direction is labeled
+    # From the two parameters, we can deduce all six directions:
+    #   real_A at X → real_P at opposite(X)
+    #   real_S at Y → real_I at opposite(Y)
+    #   real_R and real_L are determined by right-hand rule later
+    real_P_dir = _OPPOSITES[real_A_dir]
+    real_I_dir = _OPPOSITES[real_S_dir]
     
-    # Step 2b: Determine the third orientation using right-hand rule
-    # Find where A/P and S/I are in the target orientation
-    # They could be at a_idx, s_idx, or rl_idx depending on what real_A_dir and real_S_dir are
+    # Step 3: For each axis position, determine the correct label
+    # The rule: if real X is at position labeled Y, then position Y should become X
+    target_axes = [None, None, None]
     
-    ap_dir = None
-    si_dir = None
+    # Place A/P: real A is at real_A_dir, real P is at real_P_dir
+    for i, label in enumerate(current_axes):
+        if label == real_A_dir or label == _OPPOSITES[real_A_dir]:
+            # This position contains real A or real P
+            if label == real_A_dir:
+                target_axes[i] = 'A'
+            else:
+                target_axes[i] = 'P'
+    
+    # Place S/I: real S is at real_S_dir, real I is at real_I_dir
+    for i, label in enumerate(current_axes):
+        if label == real_S_dir or label == _OPPOSITES[real_S_dir]:
+            # This position contains real S or real I
+            if label == real_S_dir:
+                target_axes[i] = 'S'
+            else:
+                target_axes[i] = 'I'
+    
+    # Step 4: Determine handedness of original orientation
+    # We want to preserve the handedness after correction
+    handedness = _get_handedness(current_orientation)
+    
+    # Step 5: Use right/left-hand rule for the third axis (R/L)
+    # Find the position that's still None
+    third_pos = target_axes.index(None)
+    
+    # Find A/P and S/I positions and directions
     ap_pos = None
     si_pos = None
-    
-    # Check each position in target_axes to find A/P and S/I
-    for pos in [a_idx, s_idx, rl_idx]:
-        d = target_axes[pos]
+    ap_dir = None
+    si_dir = None
+    for i, d in enumerate(target_axes):
         if d in ['A', 'P']:
-            ap_dir = d
-            ap_pos = pos
+            ap_pos, ap_dir = i, d
         elif d in ['S', 'I']:
-            si_dir = d
-            si_pos = pos
+            si_pos, si_dir = i, d
     
-    # Determine the third orientation using right-hand rule
-    if ap_dir is not None and si_dir is not None:
-        # We have A/P and S/I, need to determine R/L
-        rl_dir = _determine_third_orientation(
-            ap_pos, si_pos, rl_idx, ap_dir, si_dir, 'AP', 'SI'
-        )
-        target_axes[rl_idx] = rl_dir
-    elif ap_dir is not None:
-        # We have A/P, need to determine S/I (real_S_dir must be R/L)
-        # Find where R/L is (it's at s_idx since real_S_dir is R/L)
-        rl_at_s = target_axes[s_idx]  # This is real_S_dir which is R/L
-        # Determine S/I based on A/P and R/L, S/I goes at s_idx
-        si_dir = _determine_third_orientation(
-            ap_pos, s_idx, s_idx, ap_dir, rl_at_s, 'AP', 'RL'
-        )
-        target_axes[s_idx] = si_dir
-    elif si_dir is not None:
-        # We have S/I, need to determine A/P (real_A_dir must be R/L)
-        # Find where R/L is (it's at a_idx since real_A_dir is R/L)
-        rl_at_a = target_axes[a_idx]  # This is real_A_dir which is R/L
-        # Determine A/P based on S/I and R/L, A/P goes at a_idx
-        ap_dir = _determine_third_orientation(
-            si_pos, a_idx, a_idx, si_dir, rl_at_a, 'SI', 'RL'
-        )
-        target_axes[a_idx] = ap_dir
+    # Determine R/L using right-hand rule first
+    rl_dir = _determine_third_orientation(
+        ap_pos, si_pos, third_pos, ap_dir, si_dir, 'AP', 'SI'
+    )
+    
+    # If original is left-handed, flip the result to preserve handedness
+    if handedness == -1:
+        rl_dir = _OPPOSITES[rl_dir]
+    
+    target_axes[third_pos] = rl_dir
     
     target_orientation = "".join(target_axes)
     
-    # Step 3: Test all n×90° rotations to find the one that matches target
+    # Step 6: Find the n×90° rotation that achieves target orientation
     rotations_4x4 = _get_n90_rotations_4x4()
     
-    # Test each rotation (left-multiply: R @ A)
     for rot_4x4 in rotations_4x4:
         test_affine = rot_4x4 @ affine_matrix
         test_axes = list(aff2axcodes(test_affine))
         test_orientation = "".join(test_axes)
         
         if test_orientation == target_orientation:
-            # Found the correct rotation!
             return test_affine
     
-    # If no rotation found, raise an error
     raise ValueError(
         f"Could not find n×90° rotation to transform orientation "
         f"{current_orientation} to {target_orientation}. "

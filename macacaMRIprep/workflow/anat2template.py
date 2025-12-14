@@ -17,6 +17,7 @@ from ..utils import run_command
 from ..utils import resolve_template, get_filename_stem
 from ..utils import log_workflow_start, log_workflow_end
 from ..utils.bids import parse_bids_entities
+from ..utils.system import set_numerical_threads
 from ..quality_control import create_skullstripping_qc
 from ..quality_control.snapshots import (
     create_bias_correction_qc,
@@ -539,35 +540,20 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                         try:
 
                             # Get thread count from config
-                            # Use surface_reconstruction.threads if set, otherwise use reasonable default
                             n_threads = self.config.get("anat.surface_reconstruction.threads")
-                            if n_threads is None:
-                                # Default: use min(8, cpu_count) for reasonable performance
-                                try:
-                                    cpu_count = len(os.sched_getaffinity(0))
-                                except (AttributeError, OSError):
-                                    cpu_count = multiprocessing.cpu_count()
-                                n_threads = min(8, max(1, cpu_count // 2))  # Use half of available CPUs, max 8
-                            
-                            self.logger.info(f"Surface Recon: Using {n_threads} threads")
+                            set_numerical_threads(n_threads, include_itk=False)
+                            self.logger.info(f"Surface Recon: Using {n_threads} threads for numerical libraries and hemisphere parallelism")
                             
                             # self.verbose is guaranteed to be int (0, 1, or 2) after normalization
                             # FastSurferRecon expects verbose: 0 or 1, so map >=2 to 1
                             recon_verbose = 1 if self.verbose >= 2 else 0
                             
-                            # Create configuration matching test_pipeline.py
-                            recon_config = ReconSurfConfig(
+                            # Create configuration using defaults from YAML, only override non-default values
+                            recon_config = ReconSurfConfig.with_defaults(
                                 subject_id=subject_id,
                                 subjects_dir=fs_subjects_dir,
-                                atlas=AtlasConfig(name=atlas_name),
-                                processing=ProcessingConfig(
-                                    threads=n_threads,
-                                    parallel_hemis=True,
-                                    skip_cc=True,  # Non-human
-                                    skip_talairach=True,  # Non-human
-                                    skip_topology_fix=False,
-                                    hires="auto",  # Auto-detect from voxel size
-                                ),
+                                atlas={"name": atlas_name},
+                                processing={"threads": n_threads},  # Only override threads (default is 1)
                                 verbose=recon_verbose,
                             )
                             

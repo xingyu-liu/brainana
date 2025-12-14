@@ -454,23 +454,23 @@ class MultiScaleDataset(HDF5DatasetBase):
             aug_time = 0.0
             tx_sample = subject
 
-        total_time = time.time() - total_start
+        # total_time = time.time() - total_start
         
-        # Log slow samples with detailed breakdown - these block the batch!
-        # Lowered threshold to 1.0s to catch moderately slow samples that still cause issues
-        if total_time > 5.0:
-            logger.warning(
-                f"⚠️  SLOW SAMPLE: {total_time:.2f}s total for sample {index} "
-                f"(size={size}, idx={idx})\n"
-                f"   Breakdown: HDF5={hdf5_time:.3f}s, Padding={pad_time:.3f}s, "
-                f"Augmentation={aug_time:.3f}s\n"
-            )
-        # Log moderately slow augmentations (lowered threshold)
-        elif aug_time > 2.0:
-            logger.info(
-                f"Slow augmentation: {aug_time:.3f}s for sample {index} "
-                f"(size={size}, idx={idx})"
-            )
+        # # Log slow samples with detailed breakdown - these block the batch!
+        # # Lowered threshold to 1.0s to catch moderately slow samples that still cause issues
+        # if total_time > 5.0:
+        #     logger.warning(
+        #         f"⚠️  SLOW SAMPLE: {total_time:.2f}s total for sample {index} "
+        #         f"(size={size}, idx={idx})\n"
+        #         f"   Breakdown: HDF5={hdf5_time:.3f}s, Padding={pad_time:.3f}s, "
+        #         f"Augmentation={aug_time:.3f}s\n"
+        #     )
+        # # Log moderately slow augmentations (lowered threshold)
+        # elif aug_time > 2.0:
+        #     logger.info(
+        #         f"Slow augmentation: {aug_time:.3f}s for sample {index} "
+        #         f"(size={size}, idx={idx})"
+        #     )
 
         if self.transforms is not None:
             img = torch.squeeze(tx_sample["img"].data).float()

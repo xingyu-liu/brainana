@@ -29,21 +29,21 @@ MODEL:
   CROP_POSITION: "top_left"
 
 TRAIN:
-  BATCH_SIZE: 16
-  LOG_INTERVAL: 10000
+  BATCH_SIZE: 16  # Consider increasing to 32 if GPU memory allows for better gradient estimates
+  LOG_INTERVAL: 50  # OPTIMIZED: Reduced from 10000 to see training progress more frequently
   RESUME: false
   RESUME_EXPR_NUM: "Default"
   NUM_EPOCHS: 100
-  NUM_STEPS: 10
+  NUM_STEPS: 10  # Auto-updated from dataloader length
   FINE_TUNE: true
   PRETRAINED_MODEL: "/home/star/github/banana/FastSurferCNN/pretrained_model/ras_aug/T1w_seg-ARM2_axial.pkl"
   CHECKPOINT_PERIOD: 5
   NUM_WORKERS: 6  # Reduced for network storage I/O optimization
   EARLY_STOPPING: true
   EARLY_STOPPING_MODE: "min"
-  EARLY_STOPPING_PATIENCE: 20
+  EARLY_STOPPING_PATIENCE: 15  # OPTIMIZED: Reduced from 20 to prevent overfitting, still allows sufficient exploration
   EARLY_STOPPING_WAIT: 10
-  EARLY_STOPPING_DELTA: 0.00001
+  EARLY_STOPPING_DELTA: 0.0001  # OPTIMIZED: Increased from 0.00001 to be more sensitive to meaningful improvements
 
 TEST:
   BATCH_SIZE: 8
@@ -75,7 +75,7 @@ DATA:
     Scaling: 0.8          # Safe geometric augmentation, helps with size variation
     Translation: 0.7       # Safe geometric augmentation, helps with positioning
     Rotation: 0.7          # Safe geometric augmentation, helps with orientation
-    Gaussian: 0.4          # Noise augmentation - lower for fine-tuning (handled separately)
+    Gaussian: 0.5          # OPTIMIZED: Slightly increased from 0.4 for better generalization
     Elastic: 0.0          # Aggressive deformation - disabled to avoid slow samples (was 0.4)
     RAnisotropy: 0.0       # Simulates acquisition artifacts - disabled to avoid slow samples (was 0.4)
     BiasField: 0.6         # Important for MRI - simulates real bias field artifacts
@@ -107,13 +107,13 @@ OPTIMIZER:
   LR_SCHEDULER: "cosineWarmRestarts"
   GAMMA: 0.3
   STEP_SIZE: 5
-  ETA_MIN: 0.00001
-  T_ZERO: 10
-  T_MULT: 2
+  ETA_MIN: 0.0001  # OPTIMIZED: Increased from 0.00001 to allow better exploration at minimum LR
+  T_ZERO: 500  # OPTIMIZED: Increased from 10 - should be ~5 epochs worth of iterations (adjust based on dataset size)
+  T_MULT: 2  # Good: Doubles restart period each cycle
   MOMENTUM: 0.9
   DAMPENING: 0.0
   NESTEROV: true
-  WEIGHT_DECAY: 0.0001
+  WEIGHT_DECAY: 0.0001  # Good: Appropriate for fine-tuning to prevent overfitting
   OPTIMIZING_METHOD: "adamW"
 
 NUM_GPUS: 1

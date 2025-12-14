@@ -31,7 +31,7 @@ anat:
     enabled: true  # bool: perform bias field correction
     algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
     shrink_factor: 2  # float: shrink factor for faster processing (> 0)
-    bspline_fitting: "[ 100 ]"  # str: B-spline fitting parameters in ANTs format
+    bspline_fitting: "[ 200 ]"  # str: B-spline fitting parameters in ANTs format
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
     threads: 8  # int: number of CPU threads for ITK operations (>= 1). Default 8 to avoid oversubscription when running multiple processes in parallel.
   skullstripping:
@@ -43,8 +43,8 @@ anat:
       threads: 8  # int: number of CPU threads (>= 1)
       use_mixed_model: false  # bool: use mixed precision model
       enable_crop_2round: true  # bool: enable two-round cropping for better accuracy
-      plane_weight_coronal: 0.4  # float: weight for coronal plane (0.0-1.0)
-      plane_weight_axial: 0.4  # float: weight for axial plane (0.0-1.0)
+      plane_weight_coronal: 0.3  # float: weight for coronal plane (0.0-1.0)
+      plane_weight_axial: 0.5  # float: weight for axial plane (0.0-1.0)
       plane_weight_sagittal: 0.2  # float: weight for sagittal plane (0.0-1.0)
       fix_V1_WM: true  # bool: fix missing thin WM in V1 by registering template V1 WM to individual space.
   surface_reconstruction:
@@ -92,7 +92,7 @@ func:
     enabled: true  # bool: perform bias field correction
     algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
     shrink_factor: 2  # float: shrink factor for faster processing (> 0)
-    bspline_fitting: "[ 100 ]"  # str: B-spline fitting parameters in ANTs format
+    bspline_fitting: "[ 200 ]"  # str: B-spline fitting parameters in ANTs format
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
     threads: 8  # int: number of CPU threads for ITK operations (>= 1). Default 8 to avoid oversubscription when running multiple processes in parallel.
 

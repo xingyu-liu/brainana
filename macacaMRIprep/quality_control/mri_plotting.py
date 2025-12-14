@@ -325,6 +325,9 @@ def create_grid_mri_image(
     has_file_path = False
     if isinstance(underlay_data, (str, Path)):
         underlay, voxel_sizes, orientation_code = _load_image(underlay_data)
+        # if 4d, get tmean image
+        if underlay.ndim == 4:
+            underlay = np.nanmean(underlay, axis=-1)
         has_file_path = True
     else:
         underlay = underlay_data
@@ -334,6 +337,9 @@ def create_grid_mri_image(
     if overlay_data is not None:
         if isinstance(overlay_data, (str, Path)):
             overlay, overlay_voxel_sizes, overlay_orientation_code = _load_image(overlay_data)
+            # if 4d, get tmean image
+            if overlay.ndim == 4:
+                overlay = np.nanmean(overlay, axis=-1)
             # Use overlay voxel sizes if underlay didn't provide them
             if voxel_sizes is None:
                 voxel_sizes = overlay_voxel_sizes

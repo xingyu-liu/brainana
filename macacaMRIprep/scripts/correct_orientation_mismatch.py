@@ -18,14 +18,27 @@ from macacaMRIprep.utils import get_logger, setup_logging
 
 # %%
 # Configuration
-input_f = "/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton/preproc/preproc_freddie/sub-freddie/anat/sub-freddie_space-T2w_desc-brain_atlasARM4.nii.gz"  # Input MRI image file path
-output_f = os.path.dirname(input_f) + "/test.nii.gz"
+# input_f = '/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_reorient/sub-baby31/ses-240710/anat/sub-baby31_ses-240710_run-5_T1w.nii.gz'
+# real_A_is_actually_labeled_as = "L"
+# real_P_is_actually_labeled_as = "R"
+# real_S_is_actually_labeled_as = "S"
+# real_I_is_actually_labeled_as = "I"
 
-# Orientation mismatch parameters
-real_A_is_actually_labeled_as = "S"
-real_P_is_actually_labeled_as = "I"
+input_f = '/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_reorient/sub-baby31/ses-240710/func/sub-baby31_ses-240710_run-2_bold.nii.gz'
+real_A_is_actually_labeled_as = "I"
+real_P_is_actually_labeled_as = "S"
 real_S_is_actually_labeled_as = "A"
 real_I_is_actually_labeled_as = "P"
+
+# # princeton
+# input_f = '/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/test_orient/sub-freddie_T1w.nii.gz'
+# real_A_is_actually_labeled_as = "S"
+# real_P_is_actually_labeled_as = "I"
+# real_S_is_actually_labeled_as = "A"
+# real_I_is_actually_labeled_as = "P"
+
+# 
+output_f = input_f.replace(".nii.gz", "_ortcorrected.nii.gz")
 
 # %%
 # Setup logging
@@ -88,3 +101,6 @@ else:
     logger.info(f"Copied input to output: {output_path}")
 
 logger.info("Orientation mismatch correction completed successfully")
+
+# %%
+output_f = input_f.replace(".nii.gz", "_ortcorrected.nii.gz")
