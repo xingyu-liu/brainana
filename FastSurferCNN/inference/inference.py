@@ -248,7 +248,8 @@ class Inference:
             if atlas_metadata:
                 logger.info(f"Checkpoint: loaded with atlas={atlas_metadata['atlas_name']}, "
                            f"classes={atlas_metadata['num_classes']}, plane={atlas_metadata['plane']}")
-                logger.info(f"Checkpoint: atlas metadata source={atlas_metadata['source']}")
+                if 'source' in atlas_metadata:
+                    logger.info(f"Checkpoint: atlas metadata source={atlas_metadata['source']}")
                 
                 # Store atlas metadata for later use
                 self.atlas_metadata = atlas_metadata
@@ -540,7 +541,6 @@ class Inference:
         orig_data_padded = orig_data
         
         # Disable padding for large images to avoid OOM
-        # Large images (>320 voxels in any dimension) can create huge padded tensors
         max_dim = max(orig_data.shape)
         if padding_percent > 0.0 and max_dim > LARGE_IMAGE_THRESHOLD:
             logger.warning(

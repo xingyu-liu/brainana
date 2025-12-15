@@ -66,6 +66,7 @@ def skullstrip_fastsurfercnn(
     plane_weight_axial: Optional[float] = None,
     plane_weight_sagittal: Optional[float] = None,
     use_mixed_model: bool = False,
+    fix_wm_islands: bool = True,
     fix_roi_wm: bool = False,
     roi_name: str = 'V1',
     wm_thr: float = 0.5,
@@ -111,6 +112,11 @@ def skullstrip_fastsurfercnn(
             {modal}_seg-{atlas}_mixed.pkl (e.g., EPI_seg-brainmask_mixed.pkl).
             When using mixed model, the same checkpoint is used for all 3 planes, and
             each plane is evaluated separately with the specified plane weights.
+        fix_wm_islands: bool, default=True
+            If True, apply WM island correction after segmentation. This fixes mislabeled
+            disconnected WM regions by flipping them to the correct hemisphere based on
+            spatial proximity. Only applies to multi-class models (ignored for binary models).
+            Requires extended ColorLUT with region and hemisphere columns.
         fix_roi_wm: bool, default=False
             If True, apply ROI white matter fixing using template registration after segmentation.
             This fixes missing thin WM in the specified ROI by registering template ROI WM to individual space.
@@ -285,6 +291,7 @@ def skullstrip_fastsurfercnn(
             plane_weight_coronal=plane_weight_coronal,
             plane_weight_axial=plane_weight_axial,
             plane_weight_sagittal=plane_weight_sagittal,
+            fix_wm_islands=fix_wm_islands,
             output_data_format=output_data_format,
             enable_crop_2round=enable_crop_2round,
             logger=logger,

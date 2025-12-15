@@ -620,6 +620,7 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
         - num_classes: int
         - plane: str
         - dense_to_sparse_mapping: np.ndarray or None (None for binary)
+        - source: str ("atlas_metadata" indicating metadata was extracted from checkpoint)
         Returns None if checkpoint has no atlas_metadata.
     
     Examples
@@ -653,6 +654,7 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
             "is_binary_task": is_binary,
             "num_classes": metadata["num_classes"],
             "plane": metadata["plane"],
+            "source": "atlas_metadata",  # Indicates metadata was extracted from checkpoint's atlas_metadata
         }
         
         if is_binary:

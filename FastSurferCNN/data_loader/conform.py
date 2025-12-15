@@ -497,7 +497,7 @@ def getscale(
         total_voxels = data.size
         pct_negative = 100.0 * num_negative_voxels / total_voxels
         LOGGER.warning(f"Input image has value(s) below 0.0 ! ({num_negative_voxels}/{total_voxels} voxels = {pct_negative:.2f}%)")
-    LOGGER.info(f"Input:    min: {data_min}  max: {data_max}")
+    LOGGER.info(f"Input:    min: {data_min:.2f}  max: {data_max:.2f}")
 
     if f_low == 0.0 and f_high == 1.0:
         return data_min, 1.0
@@ -549,7 +549,7 @@ def getscale(
     else:
         scale = (dst_max - dst_min) / (src_max - src_min)
     # logger.info
-    LOGGER.info(f"rescale:  min: {src_min:8.3f}  max: {src_max:8.3f}  scale: {scale:8.5f}")
+    LOGGER.info(f"rescale:  min: {src_min:8.2f}  max: {src_max:8.2f}  scale: {scale:8.5f}")
 
     return src_min, scale
 
@@ -586,7 +586,7 @@ def scalecrop(
 
     # clip
     data_new = np.clip(data_new, dst_min, dst_max)
-    LOGGER.info("Output:   min: " + format(data_new.min()) + "  max: " + format(data_new.max()))
+    LOGGER.info(f"Output:   min: {data_new.min():.2f}  max: {data_new.max():.2f}")
     return data_new
 
 
@@ -1061,7 +1061,7 @@ def is_conform(
         if kwargs["check_dtype"] is False:
             dtype = None
 
-    _vox_size, _img_size = conformed_vox_img_size(img, vox_size, img_size, vox_eps=vox_eps)
+    _vox_size, _img_size = conformed_vox_img_size(img, vox_size, img_size, vox_eps=vox_eps, log_capping=False)
 
     # check 3d
     if len(img.shape) > 3 and img.shape[3] != 1:
@@ -1073,13 +1073,13 @@ def is_conform(
 
     # check voxel size, drop voxel sizes of dimension 4 if available
     izoom = np.array(img.header.get_zooms())
-    vox_size_text = f"image {'x'.join(map(str, izoom))}"
+    vox_size_text = f"image {'x'.join(f'{v:.2f}' for v in izoom)}"
     if _vox_size is None:
         checks[f"Voxel Size {vox_size}"] = "IGNORED", vox_size_text
     else:
         if not isinstance(_vox_size, np.ndarray):
             raise TypeError("_vox_size should be numpy.ndarray here")
-        vox_size_criteria = f"Voxel Size {vox_size}={'x'.join(map(str, _vox_size))}"
+        vox_size_criteria = f"Voxel Size {vox_size}={'x'.join(f'{v:.2f}' for v in _vox_size)}"
         checks[vox_size_criteria] = np.allclose(izoom[:3], _vox_size, atol=vox_eps, rtol=0), vox_size_text
 
     # check dimensions
@@ -1123,8 +1123,7 @@ def is_conform(
             if np.allclose(_vox_size[0], _vox_size, atol=1e-2):
                 conform_str = f"{np.round(_vox_size[0], decimals=2):.2f}-"
             else:
-                with np.printoptions(precision=2, suppress=True):
-                    conform_str = str(_vox_size) + "-"
+                conform_str = 'x'.join(f'{v:.2f}' for v in _vox_size) + "-"
         logger.info(f"Preprocessing: {conform_str}conformed image criteria check:")
         for condition, (value, message) in checks.items():
             if isinstance(value, bool):
@@ -1200,6 +1199,7 @@ def conformed_vox_img_size(
         vox_size: VoxSizeOption | None,
         img_size: ImageSizeOption | None,
         vox_eps: float = 1e-4,
+        log_capping: bool = True,
         **kwargs,
 ) -> tuple[npt.NDArray[float] | None, npt.NDArray[int] | None]:
     """
@@ -1233,7 +1233,6 @@ def conformed_vox_img_size(
         vox_size = kwargs["conform_vox_size"]
 
     MAX_VOX_SIZE = 1.0
-    MAX_DIMENSION = 256
     # this is similar to mri_convert --conform_min
     if isinstance(vox_size, str) and (vox_size := vox_size.lower()) in ["min", "auto"]:
         # find minimal voxel side length
@@ -1283,13 +1282,75 @@ def conformed_vox_img_size(
     
     # Step 4: Cap image dimensions to prevent CUDA OOM errors
     # This is necessary for very high-resolution images with small voxel sizes
-    if target_img_size is not None:
-        if np.any(target_img_size > MAX_IMG_DIMENSION):
+    # Also handle the case when both img_size and vox_size are None (no conforming)
+    original_img_size = np.array(img.shape[:3])
+    original_vox_size = np.array(img.header.get_zooms()[:3])
+    
+    # Compute original FOV (physical field of view in mm) - this should be preserved when capping
+    original_fov = original_vox_size * original_img_size
+    
+    # Track if we started with both None (to preserve None state if no capping needed)
+    both_none = (target_img_size is None and target_vox_size is None)
+    
+    # If target_img_size is None (both None case), use original size for capping check
+    if target_img_size is None:
+        target_img_size = original_img_size
+    
+    # Compute intended FOV before any capping
+    # For "fov" and "cube" cases, target_img_size was computed to preserve original_fov
+    # For int case with vox_size specified, the intended FOV is target_vox_size * target_img_size
+    # For int case without vox_size, or when both are None, we preserve original_fov
+    if target_vox_size is not None:
+        intended_fov = target_vox_size * target_img_size
+    else:
+        intended_fov = original_fov
+    
+    # Cap image dimensions if they exceed maximum, and adjust voxel size to preserve FOV
+    if np.any(target_img_size > MAX_IMG_DIMENSION):
+        original_target_img_size = target_img_size.copy()
+        original_target_vox_size = target_vox_size.copy() if target_vox_size is not None else None
+        
+        # Find the largest dimension and calculate scale factor to preserve aspect ratio
+        max_dim = np.max(target_img_size)
+        scale_factor = MAX_IMG_DIMENSION / max_dim
+        
+        if log_capping:
             LOGGER.warning(
                 f"Image dimensions {target_img_size} exceed maximum {MAX_IMG_DIMENSION}. "
-                f"Capping to {MAX_IMG_DIMENSION} to prevent memory issues."
+                f"Capping largest dimension ({max_dim}) and scaling proportionally to prevent memory issues."
             )
-            target_img_size = np.minimum(target_img_size, MAX_IMG_DIMENSION)
+        
+        # Scale all dimensions proportionally to preserve aspect ratio
+        target_img_size = (target_img_size * scale_factor).astype(int)
+        
+        # Adjust voxel size to preserve FOV and make it isotropic
+        # Since we scaled proportionally, we can use a single isotropic voxel size
+        # Use the scale factor: new_vox_size = original_vox_size / scale_factor (for each dimension)
+        if target_vox_size is not None:
+            # For isotropic voxel size, use the average or maintain the relationship
+            # Since FOV is preserved per dimension: new_vox_size = intended_fov / new_img_size
+            # But we want isotropic, so use the maximum to ensure we don't lose information
+            new_vox_size_per_dim = intended_fov / target_img_size
+            # Make isotropic by using the maximum (to preserve all FOVs)
+            isotropic_vox_size = np.max(new_vox_size_per_dim)
+            target_vox_size = np.full((3,), isotropic_vox_size)
+        else:
+            # If vox_size was None, compute from original
+            new_vox_size_per_dim = original_fov / target_img_size
+            isotropic_vox_size = np.max(new_vox_size_per_dim)
+            target_vox_size = np.full((3,), isotropic_vox_size)
+        
+        if log_capping:
+            original_vox_str = 'x'.join(f'{v:.2f}' for v in original_target_vox_size) if original_target_vox_size is not None else 'None'
+            new_vox_str = 'x'.join(f'{v:.2f}' for v in target_vox_size)
+            LOGGER.info(
+                f"Adjusted image size: {original_target_img_size} -> {target_img_size}, "
+                f"voxel size: {original_vox_str} -> {new_vox_str}"
+            )
+    elif both_none:
+        # If both were None and no capping was needed, preserve None state
+        target_img_size = None
+        # target_vox_size is already None
     
     return target_vox_size, target_img_size
 
@@ -1345,11 +1406,13 @@ def check_affine_in_nifti(
         vox_size_affine = np.sqrt((img.affine[:3, :3] * img.affine[:3, :3]).sum(0))
 
         if not np.allclose(vox_size_affine, vox_size_header, atol=1e-3):
+            header_str = 'x'.join(f'{v:.2f}' for v in vox_size_header[:3])
+            affine_str = 'x'.join(f'{v:.2f}' for v in vox_size_affine)
             message = (
                 f"#############################################################\n"
                 f"ERROR: Invalid Nifti-header! Affine matrix is inconsistent with "
                 f"Voxel sizes. \nVoxel size (from header) vs. Voxel size in affine:\n"
-                f"{tuple(vox_size_header[:3])}, {tuple(vox_size_affine)}\n"
+                f"{header_str}, {affine_str}\n"
                 f"Input Affine----------------\n{img.affine}\n"
                 f"#############################################################"
             )

@@ -14,13 +14,6 @@ if str(_file_dir.parent.parent) not in sys.path:
 
 from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)-8s | %(message)s'
-)
-logger = logging.getLogger(__name__)
-
 # %%
 # # # anat 
 input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output"
@@ -43,7 +36,6 @@ output_dir = input_image.split('.nii')[0]
 # # output_dir = "/mnt/DataDrive3/xliu/prep_test/banana_test/testing_inz/test_skullstripping_anat"
 
 modal = "anat"
-data_format = "nifti"
 weight_axial, weight_coronal, weight_sagittal = 0.4, 0.4, 0.2
 use_mixed_model = False
 enable_crop_2round = True
@@ -79,6 +71,14 @@ else:
     output_dir = output_dir + "_separate"
 
 # %%
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)-8s | %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# %%
 def main():
     logger.info("=" * 80)
     logger.info("Test: testing skullstripping function")
@@ -101,7 +101,7 @@ def main():
             output_dir=output_dir,
             device_id='auto',
             logger=logger,
-            output_data_format=data_format,
+            output_data_format='nifti',
             enable_crop_2round=enable_crop_2round,
             plane_weight_coronal=weight_coronal,
             plane_weight_axial=weight_axial,
