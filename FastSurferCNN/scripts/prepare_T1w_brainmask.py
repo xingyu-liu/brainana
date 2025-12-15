@@ -29,6 +29,7 @@ use_mixed_model = False
 enable_crop_2round = False
 fix_roi_wm = False
 fix_wm_islands = False
+create_hemimask = False
 
 # %%
 # Setup logging
@@ -55,6 +56,7 @@ def main():
     # Get image list
     if 'images' in sample_list:
         image_paths = sample_list['images']
+        image_paths = sorted(image_paths)
     else:
         logger.error("Sample list JSON must contain 'images' key")
         return
@@ -105,6 +107,7 @@ def main():
                 use_mixed_model=use_mixed_model,
                 fix_roi_wm=fix_roi_wm,
                 fix_wm_islands=fix_wm_islands,
+                create_hemimask=create_hemimask,
             )
             
             # Get brain mask path from result

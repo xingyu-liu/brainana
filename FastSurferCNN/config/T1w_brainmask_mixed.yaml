@@ -36,7 +36,7 @@ TRAIN:
   NUM_EPOCHS: 100
   NUM_STEPS: 10
   FINE_TUNE: true
-  PRETRAINED_MODEL: "/home/star/github/banana/FastSurferCNN/pretrained_model/T1w_seg-ARM2_axial.pkl"
+  PRETRAINED_MODEL: "/home/star/github/banana/FastSurferCNN/pretrained_model/ras_aug/T1w_seg-ARM2_axial.pkl"
   CHECKPOINT_PERIOD: 5
   NUM_WORKERS: 6  # Reduced for network storage I/O optimization
   EARLY_STOPPING: true
@@ -65,6 +65,7 @@ DATA:
     "Translation",
     "Rotation",
     "Gaussian",
+    "RAnisotropy",
     "BiasField"
     ]
   
@@ -76,8 +77,8 @@ DATA:
     Translation: 0.7       # Safe geometric augmentation, helps with positioning
     Rotation: 0.7          # Safe geometric augmentation, helps with orientation
     Gaussian: 0.4          # Noise augmentation - lower for fine-tuning (handled separately)
-    Elastic: 0.1          # Aggressive deformation - disabled to avoid slow samples (was 0.4)
-    RAnisotropy: 0.0       # Simulates acquisition artifacts - disabled to avoid slow samples (was 0.4)
+    Elastic: 0.0          # Aggressive deformation - disabled to avoid slow samples (was 0.4)
+    RAnisotropy: 0.1       # Simulates acquisition artifacts - disabled to avoid slow samples (was 0.4)
     BiasField: 0.6         # Important for MRI - simulates real bias field artifacts
   
   # ==============================================================================

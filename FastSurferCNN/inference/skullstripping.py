@@ -67,6 +67,7 @@ def skullstrip_fastsurfercnn(
     plane_weight_sagittal: Optional[float] = None,
     use_mixed_model: bool = False,
     fix_wm_islands: bool = True,
+    create_hemimask: bool = True,
     fix_roi_wm: bool = False,
     roi_name: str = 'V1',
     wm_thr: float = 0.5,
@@ -117,6 +118,9 @@ def skullstrip_fastsurfercnn(
             disconnected WM regions by flipping them to the correct hemisphere based on
             spatial proximity. Only applies to multi-class models (ignored for binary models).
             Requires extended ColorLUT with region and hemisphere columns.
+        create_hemimask: bool, default=True
+            If True, create hemisphere mask from segmentation (multi-class only, requires LUT).
+            If False, skip hemimask creation to save processing time. Binary models always skip this.
         fix_roi_wm: bool, default=False
             If True, apply ROI white matter fixing using template registration after segmentation.
             This fixes missing thin WM in the specified ROI by registering template ROI WM to individual space.
@@ -292,6 +296,7 @@ def skullstrip_fastsurfercnn(
             plane_weight_axial=plane_weight_axial,
             plane_weight_sagittal=plane_weight_sagittal,
             fix_wm_islands=fix_wm_islands,
+            create_hemimask=create_hemimask,
             output_data_format=output_data_format,
             enable_crop_2round=enable_crop_2round,
             logger=logger,

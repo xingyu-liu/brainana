@@ -492,12 +492,12 @@ def getscale(
     data_min = np.min(data)
     data_max = np.max(data)
 
-    if data_min < 0.0:
-        num_negative_voxels = np.sum(data < 0.0)
-        total_voxels = data.size
-        pct_negative = 100.0 * num_negative_voxels / total_voxels
-        LOGGER.warning(f"Input image has value(s) below 0.0 ! ({num_negative_voxels}/{total_voxels} voxels = {pct_negative:.2f}%)")
-    LOGGER.info(f"Input:    min: {data_min:.2f}  max: {data_max:.2f}")
+    # if data_min < 0.0:
+    #     num_negative_voxels = np.sum(data < 0.0)
+    #     total_voxels = data.size
+    #     pct_negative = 100.0 * num_negative_voxels / total_voxels
+    #     LOGGER.warning(f"Input image has value(s) below 0.0 ! ({num_negative_voxels}/{total_voxels} voxels = {pct_negative:.2f}%)")
+    # LOGGER.debug(f"Input:    min: {data_min:.2f}  max: {data_max:.2f}")
 
     if f_low == 0.0 and f_high == 1.0:
         return data_min, 1.0

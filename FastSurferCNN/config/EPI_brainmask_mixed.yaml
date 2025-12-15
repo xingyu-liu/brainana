@@ -2,10 +2,10 @@
 # PATH CONFIGURATION - Direct Paths (Simpler Format)
 # ==============================================================================
 # Direct path to training data directory (contains HDF5 files)
-TRAINING_DATA_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_data/EPI_brainmask"
+TRAINING_DATA_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_data/EPI_seg-brainmask"
 
 # Direct path to output directory (for training logs, checkpoints, etc.)
-OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/EPI_seg-brainmask_mixed_fov_ras"
+OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/EPI_seg-brainmask_mixed_fov_ras_v2"
 
 # ==============================================================================
 # MODEL ARCHITECTURE
@@ -36,7 +36,7 @@ TRAIN:
   NUM_EPOCHS: 100
   NUM_STEPS: 10
   FINE_TUNE: true
-  PRETRAINED_MODEL: "/home/star/github/banana/FastSurferCNN/pretrained_model/EPI_seg-brainmask_mixed.pkl"
+  PRETRAINED_MODEL: "/home/star/github/banana/FastSurferCNN/pretrained_model/ras_aug/EPI_seg-brainmask_mixed.pkl"
   CHECKPOINT_PERIOD: 5
   NUM_WORKERS: 6  # Reduced for network storage I/O optimization
   EARLY_STOPPING: true
@@ -65,6 +65,8 @@ DATA:
     "Translation",
     "Rotation",
     "Gaussian",
+    "Elastic",
+    'RAnisotropy',
     "BiasField"
     ]
   
@@ -75,10 +77,10 @@ DATA:
     Scaling: 0.8          # Safe geometric augmentation, helps with size variation
     Translation: 0.7       # Safe geometric augmentation, helps with positioning
     Rotation: 0.7          # Safe geometric augmentation, helps with orientation
-    Gaussian: 0.4          # Noise augmentation - lower for fine-tuning (handled separately)
+    Gaussian: 0.2          # Noise augmentation - lower for fine-tuning (handled separately)
     Elastic: 0.1          # Aggressive deformation - disabled to avoid slow samples (was 0.4)
-    RAnisotropy: 0.0       # Simulates acquisition artifacts - disabled to avoid slow samples (was 0.4)
-    BiasField: 0.6         # Important for MRI - simulates real bias field artifacts
+    RAnisotropy: 0.1       # Simulates acquisition artifacts - disabled to avoid slow samples (was 0.4)
+    BiasField: 0.2         # Important for MRI - simulates real bias field artifacts
   
   # ==============================================================================
   # PREPROCESSING - Single Source of Truth for HDF5 Creation, Training & Inference

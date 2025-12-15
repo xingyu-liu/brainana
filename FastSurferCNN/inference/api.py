@@ -70,6 +70,7 @@ def _apply_two_pass_refinement(
     plane_weight_axial: float | None,
     plane_weight_sagittal: float | None,
     fix_wm_islands: bool,
+    create_hemimask: bool,
     output_data_format: Literal["mgz", "nifti"],
     logger: logging.Logger | None = None,
     save_debug_intermediates: bool = False,
@@ -188,6 +189,7 @@ def _apply_two_pass_refinement(
             plane_weight_axial=plane_weight_axial,
             plane_weight_sagittal=plane_weight_sagittal,
             fix_wm_islands=fix_wm_islands,
+            create_hemimask=create_hemimask,
             output_data_format=output_data_format,
             enable_crop_2round=False,  # Don't recurse!
             logger=log,
@@ -233,6 +235,7 @@ def run_segmentation(
     plane_weight_axial: float | None = None,
     plane_weight_sagittal: float | None = None,
     fix_wm_islands: bool = True,
+    create_hemimask: bool = True,
     output_data_format: Literal["mgz", "nifti"] = "nifti",
     enable_crop_2round: bool = False,
     logger: logging.Logger | None = None,
@@ -283,6 +286,9 @@ def run_segmentation(
         Weights for multi-view prediction
     fix_wm_islands : bool, default=True
         Whether to apply WM island correction (multi-class only, ignored for binary models)
+    create_hemimask : bool, default=True
+        If True, create hemisphere mask from segmentation (multi-class only, requires LUT).
+        If False, skip hemimask creation to save processing time. Binary models always skip this.
     output_data_format : {"mgz", "nifti"}, default="nifti"
         Output file format. "mgz" saves as .mgz (MGH format), "nifti" saves as .nii.gz (NIfTI format).
         Resampling uses pure Python (in-memory), no external tools needed.
@@ -350,8 +356,10 @@ def run_segmentation(
         fix_wm_islands = False
         create_hemi_mask = False  # Binary models don't have hemisphere labels
     else:
-        # Multi-class models: enable all features
-        create_hemi_mask = True
+        # Multi-class models: use user-provided create_hemimask setting
+        create_hemi_mask = create_hemimask
+        if not create_hemimask:
+            log.info("  (create_hemimask=False: skipping hemisphere mask creation to save processing time)")
 
     # Create debug directory if needed
     debug_dir = None
@@ -559,6 +567,7 @@ def run_segmentation(
                 plane_weight_axial=plane_weight_axial,
                 plane_weight_sagittal=plane_weight_sagittal,
                 fix_wm_islands=fix_wm_islands,
+                create_hemimask=create_hemimask,
                 output_data_format=output_data_format,
                 logger=log,
                 save_debug_intermediates=save_debug_intermediates,

@@ -131,6 +131,68 @@ def _get_plane_transform(plane, orientation="lia"):
     return transform_func, zoom_extract
 
 
+def _delete_samples_not_in_filter(datasets, subject_filter):
+    """Delete samples from HDF5 datasets that are not in subject_filter."""
+    if subject_filter is None:
+        return 0
+    
+    images_ds, labels_ds, weights_ds, zooms_ds, subjects_ds = datasets
+    
+    # Read all subject names
+    subjects_array = subjects_ds[:]
+    subjects_list = [
+        str(s.decode('utf-8') if isinstance(s, bytes) else s).strip()
+        for s in subjects_array
+    ]
+    
+    # Create mask for samples to keep (subjects in filter)
+    keep_mask = np.array([subject in subject_filter for subject in subjects_list])
+    num_to_delete = np.sum(~keep_mask)
+    
+    if num_to_delete == 0:
+        return 0
+    
+    print(f"  Removing {num_to_delete} samples from subjects not in filter...")
+    
+    # Get indices to keep
+    keep_indices = np.where(keep_mask)[0]
+    
+    if len(keep_indices) == 0:
+        # Delete everything
+        images_ds.resize(0, axis=0)
+        labels_ds.resize(0, axis=0)
+        weights_ds.resize(0, axis=0)
+        zooms_ds.resize(0, axis=0)
+        subjects_ds.resize(0, axis=0)
+        print(f"  ✓ Deleted all {len(subjects_list)} samples (none in filter)")
+        return num_to_delete
+    
+    # Read data for samples to keep
+    images_keep = images_ds[keep_indices]
+    labels_keep = labels_ds[keep_indices]
+    weights_keep = weights_ds[keep_indices]
+    zooms_keep = zooms_ds[keep_indices]
+    subjects_keep = subjects_ds[keep_indices]
+    
+    # Resize datasets to new size
+    new_size = len(keep_indices)
+    images_ds.resize(new_size, axis=0)
+    labels_ds.resize(new_size, axis=0)
+    weights_ds.resize(new_size, axis=0)
+    zooms_ds.resize(new_size, axis=0)
+    subjects_ds.resize(new_size, axis=0)
+    
+    # Write back kept data
+    images_ds[:] = images_keep
+    labels_ds[:] = labels_keep
+    weights_ds[:] = weights_keep
+    zooms_ds[:] = zooms_keep
+    subjects_ds[:] = subjects_keep
+    
+    print(f"  ✓ Deleted {num_to_delete} samples, kept {new_size} samples")
+    return num_to_delete
+
+
 def _append_to_datasets(datasets, result, subject_name):
     """Append processed subject data to HDF5 datasets."""
     images_ds, labels_ds, weights_ds, zooms_ds, subjects_ds = datasets
@@ -482,6 +544,12 @@ def create_hdf5_dataset(
             print(f"✓ Appending to existing datasets (current size: {images_ds.shape[0]} slices)")
         
         datasets = (images_ds, labels_ds, weights_ds, zooms_ds, subjects_ds)
+        
+        # Delete samples not in subject_filter if filter is provided and file exists
+        if file_mode == 'a' and subject_filter is not None and images_ds.shape[0] > 0:
+            num_deleted = _delete_samples_not_in_filter(datasets, subject_filter)
+            if num_deleted > 0:
+                print(f"✓ Cleaned up {num_deleted} samples not in subject_filter")
         
         # Build process args: for mixed mode, process each subject for all planes
         process_args = []
