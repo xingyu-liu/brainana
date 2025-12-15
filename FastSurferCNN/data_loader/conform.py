@@ -54,6 +54,7 @@ from FastSurferCNN.utils.arg_types import img_size as __img_size
 from FastSurferCNN.utils.arg_types import orientation as __orientation
 from FastSurferCNN.utils.arg_types import target_dtype as __target_dtype
 from FastSurferCNN.utils.arg_types import vox_size as __vox_size
+from FastSurferCNN.utils.constants import MAX_IMG_DIMENSION
 
 HELPTEXT = """
 Script to conform an MRI brain image to UCHAR, RAS orientation, 
@@ -1279,6 +1280,17 @@ def conformed_vox_img_size(
         # Note: For "cube", we don't expand here - padding happens in conform() after resampling
     else:
         raise ValueError("Invalid value for img_size passed.")
+    
+    # Step 4: Cap image dimensions to prevent CUDA OOM errors
+    # This is necessary for very high-resolution images with small voxel sizes
+    if target_img_size is not None:
+        if np.any(target_img_size > MAX_IMG_DIMENSION):
+            LOGGER.warning(
+                f"Image dimensions {target_img_size} exceed maximum {MAX_IMG_DIMENSION}. "
+                f"Capping to {MAX_IMG_DIMENSION} to prevent memory issues."
+            )
+            target_img_size = np.minimum(target_img_size, MAX_IMG_DIMENSION)
+    
     return target_vox_size, target_img_size
 
 

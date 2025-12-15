@@ -5,23 +5,15 @@ import sys
 from pathlib import Path
 
 # Add the macacaMRIprep package to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 try:
     from macacaMRIprep.quality_control.mri_plotting import create_grid_mri_image
 except ImportError:
-    # Fallback: direct import if package structure is different
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "mri_plotting", 
-        Path(__file__).parent / "macacaMRIprep" / "quality_control" / "mri_plotting.py"
-    )
-    mri_plotting = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mri_plotting)
-    create_grid_mri_image = mri_plotting.create_grid_mri_image
+    raise ImportError("Failed to import create_grid_mri_image from macacaMRIprep.quality_control.mri_plotting")
 
+# %%
 # Input and output paths
-input_nii = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_2pass/sub-1006/anat/sub-1006_desc-preproc_T1w.nii.gz'
+input_nii = '/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_reorient_rotated/sub-baby31/ses-240710/anat/sub-baby31_ses-240710_run-2_T1w_v2.nii.gz'
 # input_nii = '/mnt/DataDrive3/xliu/prep_test/banana_test/princeton_newdata/bids/sub-freddie/ses-anat/anat/sub-freddie_ses-anat_run-1_T1w.nii.gz'
 # input_nii = "/mnt/DataDrive3/xliu/prep_test/banana_test/princeton_newdata/raw/freddie/freddie_112525-1113-251125_NHP_T1_MPRAGE_0.5mm3_20251125111330_2.nii"
 output_png = input_nii.replace(".nii.gz", ".png").replace(".nii", ".png")

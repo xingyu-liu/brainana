@@ -72,6 +72,7 @@ def _apply_two_pass_refinement(
     fix_wm_islands: bool,
     output_data_format: Literal["mgz", "nifti"],
     logger: logging.Logger | None = None,
+    save_debug_intermediates: bool = False,
 ) -> bool:
     """
     Apply two-pass refinement: crop image and run fresh segmentation.
@@ -109,6 +110,10 @@ def _apply_two_pass_refinement(
         Whether to apply WM island correction
     output_data_format : {"mgz", "nifti"}
         Output file format
+    logger : logging.Logger, optional
+        Logger instance to use for logging. If not provided, uses the module-level logger.
+    save_debug_intermediates : bool, default=False
+        If True, save intermediate files for debugging in the second pass.
         
     Returns
     -------
@@ -186,6 +191,7 @@ def _apply_two_pass_refinement(
             output_data_format=output_data_format,
             enable_crop_2round=False,  # Don't recurse!
             logger=log,
+            save_debug_intermediates=save_debug_intermediates,
         )
         
         log.info("  ✓ Two-pass refinement completed successfully")
@@ -554,6 +560,8 @@ def run_segmentation(
                 plane_weight_sagittal=plane_weight_sagittal,
                 fix_wm_islands=fix_wm_islands,
                 output_data_format=output_data_format,
+                logger=log,
+                save_debug_intermediates=save_debug_intermediates,
             )
             
             # If refinement succeeded, update result paths to reflect second-pass outputs

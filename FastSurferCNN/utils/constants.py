@@ -36,3 +36,6 @@ TWO_PASS_CROP_MARGIN = 0.08  # 8% margin around brain bounding box
 # Large image threshold for memory optimization
 LARGE_IMAGE_THRESHOLD = 384  # Disable padding for images larger than this to avoid OOM
 
+# Maximum image dimension for conforming (prevents CUDA OOM errors)
+MAX_IMG_DIMENSION = 512  # Cap conformed image dimensions to this size to prevent memory issues
+
