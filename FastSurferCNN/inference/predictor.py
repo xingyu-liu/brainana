@@ -305,46 +305,82 @@ class RunModelOnData:
                 if plane_weight is not None and plane_weight == 0:
                     LOGGER.info(f"Skipping {plane} plane (weight is 0)")
                     continue
+                else:
+                    # Prepare config with plane weights
+                    cfg = view["cfg"]
+                    
+                    # For mixed-plane models: override DATA.PLANE to the specific plane
+                    if all_ckpts_same and cfg.DATA.PLANE == "mixed":
+                        LOGGER.info(
+                            f"Mixed-plane model detected: setting {plane} config plane to '{plane}'"
+                        )
+                        cfg.DATA.PLANE = plane
+                    
+                    # Apply plane weights
+                    if self.plane_weights["coronal"] is not None:
+                        cfg.MULTIVIEW.PLANE_WEIGHTS.CORONAL = self.plane_weights["coronal"]
+                    if self.plane_weights["axial"] is not None:
+                        cfg.MULTIVIEW.PLANE_WEIGHTS.AXIAL = self.plane_weights["axial"]
+                    if self.plane_weights["sagittal"] is not None:
+                        cfg.MULTIVIEW.PLANE_WEIGHTS.SAGITTAL = self.plane_weights["sagittal"]
 
-                # Prepare config with plane weights
-                cfg = view["cfg"]
-                
-                # For mixed-plane models: override DATA.PLANE to the specific plane
-                if all_ckpts_same and cfg.DATA.PLANE == "mixed":
-                    LOGGER.info(
-                        f"Mixed-plane model detected: setting {plane} config plane to '{plane}'"
-                    )
-                    cfg.DATA.PLANE = plane
-                
-                # Apply plane weights
-                if self.plane_weights["coronal"] is not None:
-                    cfg.MULTIVIEW.PLANE_WEIGHTS.CORONAL = self.plane_weights["coronal"]
-                if self.plane_weights["axial"] is not None:
-                    cfg.MULTIVIEW.PLANE_WEIGHTS.AXIAL = self.plane_weights["axial"]
-                if self.plane_weights["sagittal"] is not None:
-                    cfg.MULTIVIEW.PLANE_WEIGHTS.SAGITTAL = self.plane_weights["sagittal"]
-                
-                self._prepared_configs[plane] = {
-                    "cfg": cfg,
-                    "ckpt": view["ckpt"],
-                }
-        
+                    self._prepared_configs[plane] = {
+                        "cfg": cfg,
+                        "ckpt": view["ckpt"],
+                    }
+                    
         LOGGER.info(
             f"Lazy loading enabled: {len(self._prepared_configs)} plane(s) will be loaded on-demand "
             f"(saves ~16 GB GPU memory vs loading all at once)"
         )
 
-        # Load preprocessing parameters from checkpoint (required)
-        preprocess_from_ckpt = self._extract_preprocessing_params(
-            ckpt_cor or ckpt_sag or ckpt_ax
-        )
-
-        if not preprocess_from_ckpt:
+        # Load preprocessing parameters from checkpoints with non-zero weight (required)
+        # Only extract from checkpoints that will actually be used
+        if not self._prepared_configs:
             raise RuntimeError(
-                "Preprocessing parameters not found in checkpoint metadata. "
-                "Please ensure your checkpoint file contains preprocessing configuration "
+                "No checkpoints with non-zero weight found. "
+                "At least one checkpoint must have a non-zero plane weight."
+            )
+        
+        # Extract preprocessing parameters from all checkpoints that will be used
+        all_preprocess_params = {}
+        for plane, plane_config in self._prepared_configs.items():
+            ckpt_path = plane_config["ckpt"]
+            preprocess_params = self._extract_preprocessing_params(ckpt_path)
+            if preprocess_params:
+                all_preprocess_params[plane] = preprocess_params
+            else:
+                LOGGER.warning(
+                    f"Could not extract preprocessing parameters from {plane} checkpoint: {ckpt_path}"
+                )
+        
+        if not all_preprocess_params:
+            raise RuntimeError(
+                "Preprocessing parameters not found in any checkpoint metadata. "
+                "Please ensure your checkpoint files contain preprocessing configuration "
                 "in DATA.PREPROCESSING section."
             )
+        
+        # Validate that all checkpoints have the same preprocessing parameters
+        # (they should, since all planes use the same preprocessing during training)
+        first_plane = list(all_preprocess_params.keys())[0]
+        reference_params = all_preprocess_params[first_plane]
+        
+        for plane_name, params in all_preprocess_params.items():
+            if plane_name == first_plane:
+                continue
+            # Check key parameters match
+            for key in ["VOX_SIZE", "IMG_SIZE", "ORIENTATION"]:
+                if params.get(key) != reference_params.get(key):
+                    raise RuntimeError(
+                        f"Inconsistent preprocessing parameters across checkpoints:\n"
+                        f"  {first_plane} checkpoint: {key}={reference_params.get(key)}\n"
+                        f"  {plane_name} checkpoint: {key}={params.get(key)}\n"
+                        f"All checkpoints with non-zero weight must have identical preprocessing parameters."
+                    )
+        
+        # Use validated preprocessing parameters (same across all checkpoints)
+        preprocess_from_ckpt = reference_params
 
         # Extract required preprocessing parameters
         self.vox_size = preprocess_from_ckpt.get("VOX_SIZE")
@@ -404,9 +440,20 @@ class RunModelOnData:
                 f"(value: {self.image_size}). Must be 'fov', 'cube', an integer > 0, or None."
             )
 
+        # Log which checkpoints were validated
+        validated_planes = list(all_preprocess_params.keys())
+        if len(validated_planes) > 1:
+            LOGGER.info(
+                f"  Preprocessing: validated from {len(validated_planes)} checkpoint(s) "
+                f"({', '.join(validated_planes)}) - all parameters match"
+            )
+        else:
+            LOGGER.info(
+                f"  Preprocessing: from {validated_planes[0]} checkpoint"
+            )
         LOGGER.info(
-            f"  Preprocessing: from checkpoint "
-            f"(vox_size={self.vox_size}, orientation={self.orientation}, img_size={self.image_size})"
+            f"  Preprocessing parameters: vox_size={self.vox_size}, "
+            f"orientation={self.orientation}, img_size={self.image_size}"
         )
 
     def _extract_preprocessing_params(

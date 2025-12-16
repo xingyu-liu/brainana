@@ -5,7 +5,7 @@
 TRAINING_DATA_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_data/T1w_seg-ARM2"
 
 # Direct path to output directory (for training logs, checkpoints, etc.)
-OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/T1w_seg-ARM2_axial_fov_ras_v2"
+OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/T1w_seg-ARM2_axial_fov_ras_v3"
 
 # ==============================================================================
 # MODEL ARCHITECTURE
@@ -63,7 +63,6 @@ DATA:
   AUG: [
     "Scaling",
     "Translation",
-    "Rotation",
     "Gaussian",
     "BiasField"
     ]
@@ -73,12 +72,51 @@ DATA:
   # Recommended for fine-tuning: moderate geometric augs, conservative aggressive augs
   AUG_PROBABILITIES:
     Scaling: 0.8          # Safe geometric augmentation, helps with size variation
-    Translation: 0.7       # Safe geometric augmentation, helps with positioning
-    Rotation: 0.7          # Safe geometric augmentation, helps with orientation
+    Translation: 0.8       # Safe geometric augmentation, helps with positioning
+    Rotation: 0.0          # Safe geometric augmentation, helps with orientation
     Gaussian: 0.5          # OPTIMIZED: Slightly increased from 0.4 for better generalization
-    Elastic: 0.0          # Aggressive deformation - disabled to avoid slow samples (was 0.4)
-    RAnisotropy: 0.0       # Simulates acquisition artifacts - disabled to avoid slow samples (was 0.4)
+    Elastic: 0.0          # Aggressive deformation
+    RAnisotropy: 0.0       # Simulates acquisition artifacts
     BiasField: 0.6         # Important for MRI - simulates real bias field artifacts
+
+  # ==============================================================================
+  # AUGMENTATION PARAMETERS - Configure key parameters for each augmentation
+  # ==============================================================================
+  # These parameters control the strength/magnitude of each augmentation type
+  # If not specified, defaults from defaults.py are used
+  
+  # Scaling augmentation parameters
+  AUG_SCALING:
+    SCALES: [0.8, 1.15]  # Scaling range (min, max) - isotropic scaling factor
+  
+  # Rotation augmentation parameters
+  AUG_ROTATION:
+    DEGREES: 5  # Random rotation range: ±degrees (e.g., 5 means -5 to +5 degrees)
+  
+  # Translation augmentation parameters
+  AUG_TRANSLATION:
+    TRANSLATION: [15.0, 15.0, 0]  # Translation range in pixels (x, y, z)
+  
+  # Elastic deformation parameters (for performance tuning)
+  # Reducing NUM_CONTROL_POINTS from 7 to 5 significantly speeds up Elastic transform
+  # Note: With locked_borders=2, torchio requires at least 5 control points
+  AUG_ELASTIC:
+    NUM_CONTROL_POINTS: 5  # Minimum: 5 with locked_borders=2
+    MAX_DISPLACEMENT: [20, 20, 0]  # Max displacement in pixels (x, y, z)
+  
+  # Random Anisotropy augmentation parameters
+  AUG_RANISOTROPY:
+    AXES: [0, 1]  # Axes along which to apply anisotropy
+    DOWNSAMPLING: [1.1, 1.3]  # Downsampling range (min, max) - reduced from (1.1, 1.5) for better performance
+  
+  # Bias Field augmentation parameters
+  AUG_BIASFIELD:
+    COEFFICIENTS: [0.3, 0.7]  # Bias field coefficient range (min, max)
+    ORDER: 2  # Polynomial order for bias field (reduced from 3 to 2 for better performance)
+  
+  # Random Gamma augmentation parameters
+  AUG_RGAMMA:
+    LOG_GAMMA: [-0.1, 0.1]  # Log gamma range (min, max) for gamma correction
 
   # ==============================================================================
   # PREPROCESSING - Single Source of Truth for HDF5 Creation, Training & Inference

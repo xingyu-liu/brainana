@@ -189,6 +189,32 @@ _C.DATA.AUG_ELASTIC = CN()
 _C.DATA.AUG_ELASTIC.NUM_CONTROL_POINTS = 5  # Reduced from 7 for better performance (minimum: 5 with locked_borders=2)
 _C.DATA.AUG_ELASTIC.MAX_DISPLACEMENT = (20, 20, 0)  # Max displacement in pixels
 
+# Scaling augmentation parameters
+_C.DATA.AUG_SCALING = CN()
+_C.DATA.AUG_SCALING.SCALES = (0.8, 1.15)  # Scaling range (min, max) - isotropic scaling factor
+
+# Rotation augmentation parameters
+_C.DATA.AUG_ROTATION = CN()
+_C.DATA.AUG_ROTATION.DEGREES = 5  # Random rotation range: ±degrees (e.g., 5 means -5 to +5 degrees)
+
+# Translation augmentation parameters
+_C.DATA.AUG_TRANSLATION = CN()
+_C.DATA.AUG_TRANSLATION.TRANSLATION = (15.0, 15.0, 0)  # Translation range in pixels (x, y, z)
+
+# Random Anisotropy augmentation parameters
+_C.DATA.AUG_RANISOTROPY = CN()
+_C.DATA.AUG_RANISOTROPY.AXES = (0, 1)  # Axes along which to apply anisotropy
+_C.DATA.AUG_RANISOTROPY.DOWNSAMPLING = (1.1, 1.3)  # Downsampling range (min, max) - reduced from (1.1, 1.5) for better performance
+
+# Bias Field augmentation parameters
+_C.DATA.AUG_BIASFIELD = CN()
+_C.DATA.AUG_BIASFIELD.COEFFICIENTS = (0.3, 0.7)  # Bias field coefficient range (min, max)
+_C.DATA.AUG_BIASFIELD.ORDER = 2  # Polynomial order for bias field (reduced from 3 to 2 for better performance)
+
+# Random Gamma augmentation parameters
+_C.DATA.AUG_RGAMMA = CN()
+_C.DATA.AUG_RGAMMA.LOG_GAMMA = (-0.1, 0.1)  # Log gamma range (min, max) for gamma correction
+
 # ---------------------------------------------------------------------------- #
 # Preprocessing options - Single Source of Truth for HDF5, Training & Inference
 # ---------------------------------------------------------------------------- #

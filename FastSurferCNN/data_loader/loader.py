@@ -78,9 +78,13 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
                 image_interpolation="linear",
                 include=["img", "label", "weight"],
             )
-            # Scales
+            # Scales - Can be configured via cfg.DATA.AUG_SCALING if needed
+            if hasattr(cfg.DATA, 'AUG_SCALING'):
+                scaling_scales = getattr(cfg.DATA.AUG_SCALING, 'SCALES', (0.8, 1.15))
+            else:
+                scaling_scales = (0.8, 1.15)
             scaling = tio.RandomAffine(
-                scales=(0.8, 1.15),
+                scales=scaling_scales,
                 degrees=0,
                 translation=(0, 0, 0),
                 isotropic=True,  # If True, scaling factor along all dimensions is the same
@@ -90,10 +94,15 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
                 include=["img", "label", "weight"],
             )
 
-            # Rotation - randomly samples from (-15, +15) degrees for each sample
+            # Rotation - randomly samples from +- x degrees for each sample
+            # Can be configured via cfg.DATA.AUG_ROTATION if needed
+            if hasattr(cfg.DATA, 'AUG_ROTATION'):
+                rotation_degrees = getattr(cfg.DATA.AUG_ROTATION, 'DEGREES', 5)
+            else:
+                rotation_degrees = 5  # Random rotation between +-5 degrees
             rot = tio.RandomAffine(
                 scales=(1.0, 1.0),
-                degrees=15,  # Random rotation between -15 and +15 degrees
+                degrees=rotation_degrees,
                 translation=(0, 0, 0),
                 isotropic=True,  # If True, scaling factor along all dimensions is the same
                 center="image",
@@ -102,11 +111,15 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
                 include=["img", "label", "weight"],
             )
 
-            # Translation
+            # Translation - Can be configured via cfg.DATA.AUG_TRANSLATION if needed
+            if hasattr(cfg.DATA, 'AUG_TRANSLATION'):
+                translation_values = getattr(cfg.DATA.AUG_TRANSLATION, 'TRANSLATION', (15.0, 15.0, 0))
+            else:
+                translation_values = (15.0, 15.0, 0)
             tl = tio.RandomAffine(
                 scales=(1.0, 1.0),
                 degrees=0,
-                translation=(15.0, 15.0, 0),
+                translation=translation_values,
                 isotropic=True,  # If True, scaling factor along all dimensions is the same
                 center="image",
                 default_pad_value="minimum",
@@ -116,22 +129,40 @@ def get_dataloader(cfg: yacs.config.CfgNode, mode: str):
 
             # Random Anisotropy (Downsample image along an axis, then upsample back to initial space
             # Optimized: reduced downsampling range from (1.1, 1.5) to (1.1, 1.3) for better performance
+            # Can be configured via cfg.DATA.AUG_RANISOTROPY if needed
+            if hasattr(cfg.DATA, 'AUG_RANISOTROPY'):
+                ranisotropy_downsampling = getattr(cfg.DATA.AUG_RANISOTROPY, 'DOWNSAMPLING', (1.1, 1.3))
+                ranisotropy_axes = getattr(cfg.DATA.AUG_RANISOTROPY, 'AXES', (0, 1))
+            else:
+                ranisotropy_downsampling = (1.1, 1.3)  # Reduced from (1.1, 1.5) - less aggressive = faster
+                ranisotropy_axes = (0, 1)
             ra = tio.transforms.RandomAnisotropy(
-                axes=(0, 1),
-                downsampling=(1.1, 1.3),  # Reduced from (1.1, 1.5) - less aggressive = faster
+                axes=ranisotropy_axes,
+                downsampling=ranisotropy_downsampling,
                 image_interpolation="linear",
                 include=["img"],
             )
 
             # Bias Field - randomly samples coefficients from (0.3, 0.7) range for each sample
             # Optimized: reduced order from 3 to 2 for better performance (order 2 is usually sufficient)
+            # Can be configured via cfg.DATA.AUG_BIASFIELD if needed
+            if hasattr(cfg.DATA, 'AUG_BIASFIELD'):
+                biasfield_coefficients = getattr(cfg.DATA.AUG_BIASFIELD, 'COEFFICIENTS', (0.3, 0.7))
+                biasfield_order = getattr(cfg.DATA.AUG_BIASFIELD, 'ORDER', 2)
+            else:
+                biasfield_coefficients = (0.3, 0.7)
+                biasfield_order = 2  # Reduced from order=3 to order=2
             bias_field = tio.transforms.RandomBiasField(
-                coefficients=(0.3, 0.7), order=2, include=["img"]  # Reduced from order=3 to order=2
+                coefficients=biasfield_coefficients, order=biasfield_order, include=["img"]
             )
 
-            # Gamma
+            # Gamma - Can be configured via cfg.DATA.AUG_RGAMMA if needed
+            if hasattr(cfg.DATA, 'AUG_RGAMMA'):
+                rgamma_log_gamma = getattr(cfg.DATA.AUG_RGAMMA, 'LOG_GAMMA', (-0.1, 0.1))
+            else:
+                rgamma_log_gamma = (-0.1, 0.1)
             random_gamma = tio.transforms.RandomGamma(
-                log_gamma=(-0.1, 0.1), include=["img"]
+                log_gamma=rgamma_log_gamma, include=["img"]
             )
 
             all_augs = {
