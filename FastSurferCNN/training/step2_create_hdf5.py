@@ -11,6 +11,7 @@ import nibabel as nib
 import numpy as np
 import os
 import sys
+import signal
 from pathlib import Path
 from multiprocessing import Pool
 from scipy import ndimage
@@ -30,6 +31,19 @@ from FastSurferCNN.data_loader.data_utils import (
     transform_for_plane,
 )
 from FastSurferCNN.data_loader.conform import conform
+
+
+# Global flag for graceful shutdown
+_shutdown_requested = False
+
+
+def _signal_handler(signum, frame):
+    """Handle shutdown signals gracefully."""
+    global _shutdown_requested
+    signal_name = signal.Signals(signum).name
+    print(f"\n⚠️  Received {signal_name} signal. Initiating graceful shutdown...")
+    print("  → Finishing current operations and closing HDF5 file properly...")
+    _shutdown_requested = True
 
 
 def resize_volume_proportional(volume, target_size=256, order=1):
@@ -400,6 +414,9 @@ def _check_resume_capability(output_hdf5, target_size, preprocess_params):
     file_mode = 'w'
     
     if output_hdf5.exists():
+        file_size = output_hdf5.stat().st_size
+        print(f"Found existing HDF5 file: {output_hdf5.name} ({file_size / (1024**2):.1f} MB)")
+        
         try:
             with h5py.File(output_hdf5, 'r') as hf_check:
                 if str(target_size) in hf_check and 'subject' in hf_check[str(target_size)]:
@@ -415,10 +432,20 @@ def _check_resume_capability(output_hdf5, target_size, preprocess_params):
                         for key, expected_value in preprocess_params.items():
                             if key in meta.attrs and meta.attrs[key] != expected_value:
                                 print(f"  ⚠️  Warning: Preprocessing parameter '{key}' differs!")
+                                print(f"      Existing: {meta.attrs[key]}, Expected: {expected_value}")
                     
                     file_mode = 'a'
+                else:
+                    print(f"  ⚠️  Existing file doesn't contain size {target_size}, will append/overwrite")
+        except (OSError, IOError, RuntimeError) as e:
+            error_msg = str(e)
+            if "address of object past end of allocation" in error_msg or "corrupt" in error_msg.lower():
+                print(f"  ⚠️  HDF5 file appears corrupted: {error_msg}")
+                print(f"  → Will overwrite with a new file")
+            else:
+                print(f"  ⚠️  Could not read existing file ({error_msg}), will overwrite")
         except Exception as e:
-            print(f"  ⚠️  Could not read existing file ({e}), will overwrite")
+            print(f"  ⚠️  Unexpected error reading file ({type(e).__name__}: {e}), will overwrite")
     
     return already_processed, file_mode
 
@@ -563,9 +590,28 @@ def create_hdf5_dataset(
         subjects_processed = 0
         subjects_processed_set = set()  # Track unique subjects processed
         
-        if num_workers > 1:
-            with Pool(processes=num_workers) as pool:
-                for result_data, msg in pool.imap_unordered(_process_single_subject_wrapper, process_args):
+        try:
+            if num_workers > 1:
+                with Pool(processes=num_workers) as pool:
+                    for result_data, msg in pool.imap_unordered(_process_single_subject_wrapper, process_args):
+                        if _shutdown_requested:
+                            print("\n⚠️  Shutdown requested. Stopping processing...")
+                            pool.terminate()
+                            pool.join()
+                            break
+                        print(msg)
+                        if result_data is not None:
+                            result, subject_name = result_data
+                            num_samples_written += _append_to_datasets(datasets, result, subject_name)
+                            subjects_processed_set.add(subject_name)
+                            if len(subjects_processed_set) % 10 == 0:
+                                check_memory_and_warn()
+            else:
+                for args in process_args:
+                    if _shutdown_requested:
+                        print("\n⚠️  Shutdown requested. Stopping processing...")
+                        break
+                    result_data, msg = _process_single_subject_wrapper(args)
                     print(msg)
                     if result_data is not None:
                         result, subject_name = result_data
@@ -573,18 +619,16 @@ def create_hdf5_dataset(
                         subjects_processed_set.add(subject_name)
                         if len(subjects_processed_set) % 10 == 0:
                             check_memory_and_warn()
-        else:
-            for args in process_args:
-                result_data, msg = _process_single_subject_wrapper(args)
-                print(msg)
-                if result_data is not None:
-                    result, subject_name = result_data
-                    num_samples_written += _append_to_datasets(datasets, result, subject_name)
-                    subjects_processed_set.add(subject_name)
-                    if len(subjects_processed_set) % 10 == 0:
-                        check_memory_and_warn()
+        except KeyboardInterrupt:
+            print("\n⚠️  Keyboard interrupt received. Closing HDF5 file properly...")
+            _shutdown_requested = True
         
         subjects_processed = len(subjects_processed_set)
+        
+        if _shutdown_requested:
+            print(f"\n⚠️  Processing interrupted. Saved {num_samples_written} slices from {subjects_processed} subjects before shutdown.")
+            print(f"  → HDF5 file has been properly closed and is safe to resume later.")
+            return
     
     # Final summary
     with h5py.File(output_hdf5, 'r') as hf:
@@ -672,6 +716,10 @@ def _process_single_subject_wrapper(args):
 
 
 def main():
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, _signal_handler)   # Ctrl+C
+    signal.signal(signal.SIGTERM, _signal_handler)  # kill command
+    
     parser = argparse.ArgumentParser(description="Generate HDF5 dataset with proportional resizing")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
     parser.add_argument("--split_type", type=str, required=True, choices=["train", "val"], help="train or val")

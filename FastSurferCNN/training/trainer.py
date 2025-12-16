@@ -158,7 +158,24 @@ class Trainer:
         
         # Preprocessing info
         logger.info(f"Orientation:        {cfg.DATA.PREPROCESSING.ORIENTATION}")
+        logger.info(f"Image Size Mode:    {cfg.DATA.PREPROCESSING.IMG_SIZE}")
         logger.info(f"Voxel Size:         {cfg.DATA.PREPROCESSING.VOX_SIZE}")
+        
+        # Augmentation summary
+        if not cfg.DATA.AUG or "None" in cfg.DATA.AUG:
+            aug_summary = "None"
+        else:
+            aug_list = []
+            aug_probs = getattr(cfg.DATA, 'AUG_PROBABILITIES', None)
+            for aug in cfg.DATA.AUG:
+                if aug != "None":
+                    if aug_probs and hasattr(aug_probs, aug):
+                        prob = getattr(aug_probs, aug)
+                        aug_list.append(f"{aug} ({prob:.1f})")
+                    else:
+                        aug_list.append(aug)
+            aug_summary = ", ".join(aug_list) if aug_list else "None"
+        logger.info(f"Augmentations:      {aug_summary}")
         
         # Training info
         logger.info(f"Batch Size:         {cfg.TRAIN.BATCH_SIZE}")

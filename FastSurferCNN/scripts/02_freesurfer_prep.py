@@ -18,8 +18,8 @@ from FastSurferCNN.utils.constants import FASTSURFER_ROOT
 # %%
 # Test paths
 common_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
-skullstripped_dir = f'{common_dir}/NMT2Sym_res-025'
-output_dir = f'{skullstripped_dir}/sub-NMT2Sym025'
+skullstripped_dir = f'{common_dir}/NMT2Sym_res-05'
+output_dir = f'{skullstripped_dir}/sub-NMT2Sym05'
 
 t1w_f = f'{skullstripped_dir}/input.nii.gz'
 seg_f = f'{skullstripped_dir}/segmentation.nii.gz'

@@ -16,16 +16,16 @@ from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
 
 # %%
 # # # anat 
-# input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output"
-# # input_image = f"{input_dir}/test_anat_2pass_seg.nii.gz"
+input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output"
+input_image = f"{input_dir}/site-arcaro_sub-baby10_ses-anat_T1w.nii.gz"
 # # input_image = f"{input_dir}/test_02weeks.nii.gz"
 # # input_image = f"{input_dir}/test_1month.nii.gz"
 # input_image = f"{input_dir}/test_marge.nii.gz"
-# output_dir = input_image.split('.nii')[0]
+output_dir = input_image.split('.nii')[0]
 
-surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
-input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'
-output_dir = f'{surfrecon_dir}/NMT2Sym_ras'
+# surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
+# input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'
+# output_dir = f'{surfrecon_dir}/NMT2Sym_ras'
 # input_image = f'{surfrecon_dir}/site-arcaro_sub-baby1_ses-anat_T1w.nii.gz'
 # output_dir = f'{surfrecon_dir}/arcaro_baby1'
 # # # # # input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w_brain.nii.gz'
@@ -36,7 +36,7 @@ output_dir = f'{surfrecon_dir}/NMT2Sym_ras'
 # # output_dir = "/mnt/DataDrive3/xliu/prep_test/banana_test/testing_inz/test_skullstripping_anat"
 
 modal = "anat"
-weight_axial, weight_coronal, weight_sagittal = 1, 0, 0
+weight_axial, weight_coronal, weight_sagittal = 0.4, 0.4, 0.2
 use_mixed_model = False
 enable_crop_2round = True
 
@@ -65,7 +65,7 @@ if fix_roi_wm:
 
 # other parameters
 registration_threads = 8  # Number of threads for ANTs registration (default: 8, from config). Note: ANTs shows N+1 threads (N workers + 1 main)
-save_debug_intermediates = True
+save_debug_intermediates = False
 if use_mixed_model:
     output_dir = output_dir + "_mixed"
 else:

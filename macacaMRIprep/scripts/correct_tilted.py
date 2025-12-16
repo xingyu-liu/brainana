@@ -9,7 +9,7 @@ from scipy.ndimage import affine_transform
 
 # %%
 input_f = '/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_reorient_upright/sub-baby31/ses-240710/anat/sub-baby31_ses-240710_run-2_T1w_v2.nii.gz'
-output_f = input_f.replace('.nii.gz', '_upright.nii.gz')
+output_f = input_f.replace('.nii.gz', '_v3.nii.gz')
 order = 3
 
 # %%
@@ -54,8 +54,11 @@ print(f"Voxel-to-voxel transformation:\n{vox2vox}")
 
 # %%
 # Calculate target shape based on the bounding box of the original image
-# Get corners of original image in world space
+# We need to ensure full coverage after rotation, so we'll transform all corners
+# and add padding to account for interpolation and rotation effects
 shape = data.shape[:3]
+
+# Get all 8 corners of the original image in voxel space (homogeneous coordinates)
 corners_vox = np.array([
     [0, 0, 0, 1],
     [shape[0], 0, 0, 1],
@@ -67,15 +70,26 @@ corners_vox = np.array([
     [shape[0], shape[1], shape[2], 1],
 ]).T
 
+# Transform corners to world space, then to target voxel space
 corners_world = affine @ corners_vox
 corners_target_vox = np.linalg.inv(upright_affine) @ corners_world
 
+# Find bounding box in target space
+# The 8 corners already give us the exact bounding box of the rotated image
 min_corner = np.min(corners_target_vox[:3], axis=1)
 max_corner = np.max(corners_target_vox[:3], axis=1)
 
-# Calculate target shape (add some padding)
+# Add minimal padding only for interpolation edge cases and rounding errors
+# The rotation effects are already accounted for by the corner transformation
+voxel_padding = 2  # Small fixed padding (2 voxels) for interpolation safety
+
+min_corner = min_corner - voxel_padding
+max_corner = max_corner + voxel_padding
+
+# Calculate target shape - this is the minimum size needed to cover all rotated data
 target_shape = np.ceil(max_corner - min_corner).astype(int)
-print(f"Target shape: {target_shape}")
+print(f"Target shape: {target_shape} (original: {shape})")
+print(f"Size change: {target_shape / shape}")
 
 # Adjust affine translation to account for the new origin
 upright_affine[:3, 3] = upright_affine[:3, :3] @ min_corner

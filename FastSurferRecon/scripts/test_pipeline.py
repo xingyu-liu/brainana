@@ -25,7 +25,7 @@ from fastsurfer_recon.utils.logging import setup_logging
 # %%
 # Test subject
 subject_root = Path("/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon")
-subject_dir = subject_root / "NMT2Sym_res-025" / "sub-NMT2Sym025"
+subject_dir = subject_root / "NMT2Sym_res-05" / "sub-NMT2Sym05"
 # subject_dir = subject_root / "arcaro_baby1_fixV1_separate" / "sub-baby1"
 
 subjects_dir = subject_dir.parent
