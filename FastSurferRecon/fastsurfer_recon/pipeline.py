@@ -128,7 +128,7 @@ class ReconSurfPipeline:
         # Add file handler
         file_handler = logging.FileHandler(log_path, mode="a")
         file_handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt='%Y-%m-%d %H:%M:%S')
         )
         logging.getLogger("fastsurfer_recon").addHandler(file_handler)
         

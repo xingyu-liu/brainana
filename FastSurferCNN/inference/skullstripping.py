@@ -157,7 +157,7 @@ def skullstrip_fastsurfercnn(
         logger = logging.getLogger(__name__)
         if not logger.handlers:
             handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s')
+            formatter = logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
             handler.setFormatter(formatter)
             handler.setLevel(logging.INFO)
             logger.addHandler(handler)
@@ -185,7 +185,7 @@ def skullstrip_fastsurfercnn(
     # Hardcoded checkpoint mapping: {modality}_seg-{atlas}_planexxx.pkl
     # Replace 'planexxx' with actual plane name (axial, coronal, sagittal) or 'mixed'
     checkpoint_map = {
-        'anat': 'T1w_seg-ARM2_planexxx.pkl',
+        'anat': 'T1w_seg-brainmask_planexxx.pkl',
         'func': 'EPI_seg-brainmask_planexxx.pkl'
     }
     ckpt_template = checkpoint_map[modal]

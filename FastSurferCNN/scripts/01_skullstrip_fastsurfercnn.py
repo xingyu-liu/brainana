@@ -17,27 +17,27 @@ from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
 # %%
 # # # anat 
 input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output"
-input_image = f"{input_dir}/site-arcaro_sub-baby10_ses-anat_T1w.nii.gz"
-# # input_image = f"{input_dir}/test_02weeks.nii.gz"
-# # input_image = f"{input_dir}/test_1month.nii.gz"
-# input_image = f"{input_dir}/test_marge.nii.gz"
-output_dir = input_image.split('.nii')[0]
+# # input_image = f"{input_dir}/site-arcaro_sub-baby10_ses-anat_T1w.nii.gz"
+input_image = f"{input_dir}/test_02weeks.nii.gz"
+# # # # input_image = f"{input_dir}/test_1month.nii.gz"
+# input_image = f"{input_dir}/test_freddie.nii.gz"
 
 # surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
 # input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'
 # output_dir = f'{surfrecon_dir}/NMT2Sym_ras'
 # input_image = f'{surfrecon_dir}/site-arcaro_sub-baby1_ses-anat_T1w.nii.gz'
 # output_dir = f'{surfrecon_dir}/arcaro_baby1'
-# # # # # input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w_brain.nii.gz'
-# # # # # output_dir = f'{surfrecon_dir}/NMT2Sym_brain_v2'
-# # # # input_image = f'{surfrecon_dir}/test_anat_2pass_seg.nii.gz'
-# # # # output_dir = f'{surfrecon_dir}/test_anat_2pass_seg_skullstripping'
-# # input_image = "/mnt/DataDrive3/xliu/prep_test/banana_test/testing_inz/dataset_classic_preproc/sub-032309/ses-001/anat/sub-032309_ses-001_desc-preproc_T1w.nii.gz"
-# # output_dir = "/mnt/DataDrive3/xliu/prep_test/banana_test/testing_inz/test_skullstripping_anat"
+# input_image = f'{surfrecon_dir}/tpl-NMT2Sym_res-05_T1w_brain.nii.gz'
+# output_dir = f'{surfrecon_dir}/NMT2Sym_brain_v2'
+# input_image = f'{surfrecon_dir}/test_anat_2pass_seg.nii.gz'
+
+output_dir = input_image.split('.nii')[0]
 
 modal = "anat"
 weight_axial, weight_coronal, weight_sagittal = 0.4, 0.4, 0.2
-use_mixed_model = False
+use_mixed_model = True
+if use_mixed_model:
+    weight_axial, weight_coronal, weight_sagittal = 1/3, 1/3, 1/3
 enable_crop_2round = True
 
 fix_roi_wm = False
@@ -75,7 +75,8 @@ else:
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s | %(levelname)-8s | %(message)s'
+    format='%(asctime)s | %(levelname)-8s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
 

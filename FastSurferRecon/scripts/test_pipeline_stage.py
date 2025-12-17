@@ -97,7 +97,7 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
     logger = logging.getLogger("fastsurfer_recon")
     file_handler = logging.FileHandler(log_path, mode="a")
     file_handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt='%Y-%m-%d %H:%M:%S')
     )
     logger.addHandler(file_handler)
     
