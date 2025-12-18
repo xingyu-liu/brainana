@@ -31,7 +31,8 @@ fi
 export PYTHONPATH="$PROJECT_ROOT:$PYTHONPATH"
 
 # YAML config file (SINGLE SOURCE OF TRUTH)
-YAML_CONFIG="$PROJECT_ROOT/NHPskullstripNN/config_example/T1w_brainmask.yaml"
+# YAML_CONFIG="$PROJECT_ROOT/NHPskullstripNN/config_example/T1w_brainmask.yaml"
+YAML_CONFIG="$PROJECT_ROOT/NHPskullstripNN/config_example/EPI_brainmask.yaml"
 
 # # ============================================================================
 # # STEP 1: Split Data into Train/Val/Test

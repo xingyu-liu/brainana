@@ -5,7 +5,7 @@
 TRAINING_DATA_DIR: /mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_data/T1w_seg-brainmask
 
 # Direct path to output directory (for training logs, checkpoints, HDF5 files, etc.)
-OUTPUT_DIR: /mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_output/T1w_seg-brainmask_v1
+OUTPUT_DIR: /mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_output/T1w_seg-brainmask_v2
 
 # ============================================================================
 # REQUIRED PARAMETERS (no defaults - must be provided)
@@ -28,10 +28,10 @@ pretrained_model_path: /home/star/github/banana/NHPskullstripNN/pretrained_model
 # ============================================================================
 training_mode: fine_tuning  # Training mode: 'scratch', 'fine_tuning', 'continual_learning'
 
-num_epochs: 200
+num_epochs: 20
 batch_size: 64
 enable_dynamic_batch_sizing: true
-learning_rate: 0.002  # Increased from 1.0e-05 (10x) for faster fine-tuning convergence
+learning_rate: 1.0e-04  # Increased from 1.0e-05 (10x) for faster fine-tuning convergence
                         # FastSurferCNN uses 0.002, but for fine-tuning 1.0e-04 to 5.0e-04 is more appropriate
 weight_decay: 0.0001  # Increased from 0.00001 (10x) to match FastSurferCNN and improve regularization
 
@@ -50,7 +50,7 @@ early_stopping_min_delta: 0.001  # Less sensitive than continual learning
 early_stopping_restore_best_weights: true
 dropout_rate: 0.2
 gradient_clip_norm: 0.5
-checkpoint_frequency: 5  # Save checkpoint every N epochs (default: 5)
+checkpoint_frequency: 1  # Save checkpoint every N epochs (default: 5)
 
 # Advanced training features
 mixed_precision: true
@@ -86,12 +86,29 @@ log_level: INFO  # DEBUG, INFO, WARNING, ERROR
 # AUGMENTATION CONFIGURATION
 # ============================================================================
 augmentation_config:
+  enable_scale: true
+  enable_translation: true
   enable_flips: true
   enable_rotation: true
   enable_noise: true
   enable_brightness: true
   enable_field_bias: true
   
+  # Probability of applying each augmentation (0.0 to 1.0)
+  prob_scale: 0.5
+  prob_translation: 0.5
+  prob_flips: 0.3
+  prob_rotation: 0.7
+  prob_noise: 0.5
+  prob_brightness: 0.5
+  prob_field_bias: 0.5
+  
+  scale_range:
+  - 0.8
+  - 1.15
+  translation_range:
+  - 15.0
+  - 15.0
   rotation_angle: 180
   noise_std: 0.02
   brightness_range:
@@ -113,7 +130,6 @@ augmentation_config:
 # ============================================================================
 # TRAINING LOGGING CONFIGURATION
 # ============================================================================
-log_level: INFO  # DEBUG, INFO, WARNING, ERROR
 enable_progress_bars: true
 track_training_metrics: true
 track_validation_metrics: true

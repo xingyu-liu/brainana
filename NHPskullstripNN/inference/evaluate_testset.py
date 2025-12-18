@@ -501,6 +501,15 @@ def load_config_from_checkpoint(model_path: str, logger = None) -> Optional[Trai
             from dataclasses import fields
             valid_params = {field.name for field in fields(TrainingConfig)}
             filtered_config = {k: v for k, v in checkpoint_config.items() if k in valid_params}
+            # Ensure required fields are present (can be empty for inference)
+            if 'TRAINING_DATA_DIR' not in filtered_config:
+                filtered_config['TRAINING_DATA_DIR'] = ""
+            if 'OUTPUT_DIR' not in filtered_config:
+                filtered_config['OUTPUT_DIR'] = ""
+            if 'modal' not in filtered_config:
+                filtered_config['modal'] = ""
+            if 'label' not in filtered_config:
+                filtered_config['label'] = ""
             config = TrainingConfig(**filtered_config)
             
             if logger:

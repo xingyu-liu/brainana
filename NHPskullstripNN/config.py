@@ -20,14 +20,14 @@ class TrainingConfig:
     # ============================================================================
     # PATH CONFIGURATION
     # ============================================================================
-    TRAINING_DATA_DIR: str                 # Training data directory (contains images/ and labels/ subdirectories, or JSON file)
-    OUTPUT_DIR: str                        # Output directory (for logs, checkpoints, HDF5 files)
+    TRAINING_DATA_DIR: str = ""            # Training data directory (contains images/ and labels/ subdirectories, or JSON file)
+    OUTPUT_DIR: str = ""                   # Output directory (for logs, checkpoints, HDF5 files)
     
     # ============================================================================
-    # REQUIRED PARAMETERS (no defaults - must be provided)
+    # REQUIRED PARAMETERS (optional for inference, required for training)
     # ============================================================================
-    modal: str                             # Modality: T1w, T2w, EPI
-    label: str                             # label type: brainmask, brainhemimask, segmentation, atlas-ARM6
+    modal: str = ""                        # Modality: T1w, T2w, EPI
+    label: str = ""                        # label type: brainmask, brainhemimask, segmentation, atlas-ARM6
     experiment_name: str = ""              # Experiment name for output directory (optional, used in output path if provided)
        
     # ============================================================================
@@ -158,22 +158,23 @@ class TrainingConfig:
     
     def __post_init__(self):
         """Validate configuration."""
-        if not self.TRAINING_DATA_DIR:
-            raise ValueError("TRAINING_DATA_DIR must be specified")
+        # Only validate paths if they are provided (needed for training, optional for inference)
+        if self.TRAINING_DATA_DIR:
+            if not os.path.exists(self.TRAINING_DATA_DIR):
+                raise FileNotFoundError(f"Training data directory not found: {self.TRAINING_DATA_DIR}")
+            # HDF5 directory is in TRAINING_DATA_DIR (same location as source data, like FastSurferCNN)
+            self.hdf5_dir = self.TRAINING_DATA_DIR
+        else:
+            # For inference, set empty hdf5_dir
+            self.hdf5_dir = ""
         
-        if not os.path.exists(self.TRAINING_DATA_DIR):
-            raise FileNotFoundError(f"Training data directory not found: {self.TRAINING_DATA_DIR}")
-        
-        if not self.OUTPUT_DIR:
-            raise ValueError("OUTPUT_DIR must be specified")
-        
-        # Set output_dir for compatibility with existing code
-        self.output_dir = self.OUTPUT_DIR
-        
-        # HDF5 directory is in TRAINING_DATA_DIR (same location as source data, like FastSurferCNN)
-        self.hdf5_dir = self.TRAINING_DATA_DIR
-        
-        self.create_output_directories()
+        if self.OUTPUT_DIR:
+            # Set output_dir for compatibility with existing code
+            self.output_dir = self.OUTPUT_DIR
+            self.create_output_directories()
+        else:
+            # For inference, set empty output_dir
+            self.output_dir = ""
     
     def create_output_directories(self):
         """Create necessary output directories."""
@@ -187,6 +188,11 @@ class TrainingConfig:
         Returns:
             Tuple of (image_files, label_files) lists
         """
+        if not self.TRAINING_DATA_DIR:
+            raise ValueError("TRAINING_DATA_DIR must be specified to get data paths")
+        if not self.label:
+            raise ValueError("label must be specified to get data paths")
+        
         if self.TRAINING_DATA_DIR.endswith('.json'):
             # JSON file format - directly use paths provided in the JSON
             with open(self.TRAINING_DATA_DIR, 'r') as f:

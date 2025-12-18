@@ -245,6 +245,227 @@ class RandomRotation:
         return f"RandomRotation(max_angle={self.max_angle}, axes={self.axes}, prob={self.prob})"
 
 
+class RandomScale:
+    """
+    Apply random scaling to images and labels.
+    
+    Args:
+        scale_range: Range for scaling factor (min, max) - e.g., (0.8, 1.15)
+        prob: Probability of applying scaling
+        mode: Interpolation mode ('bilinear' or 'nearest')
+    """
+    
+    def __init__(
+        self, 
+        scale_range: Tuple[float, float] = (0.8, 1.15), 
+        prob: float = 0.5,
+        mode: str = 'bilinear'
+    ):
+        self.scale_range = scale_range
+        self.prob = prob
+        self.mode = mode
+    
+    def __call__(self, data: Union[torch.Tensor, List[torch.Tensor]]) -> Union[torch.Tensor, List[torch.Tensor]]:
+        """Apply random scaling."""
+        if random.random() > self.prob:
+            return data
+        
+        # Sample scale factor (isotropic scaling)
+        scale = random.uniform(*self.scale_range)
+        
+        if isinstance(data, list):
+            result = []
+            for i, item in enumerate(data):
+                # Use nearest interpolation for labels (typically last item)
+                interp_mode = 'nearest' if i == len(data) - 1 else self.mode
+                result.append(self._scale_tensor(item, scale, interp_mode))
+            return result
+        else:
+            return self._scale_tensor(data, scale, self.mode)
+    
+    def _scale_tensor(self, tensor: torch.Tensor, scale: float, mode: str) -> torch.Tensor:
+        """Scale tensor by specified factor."""
+        if tensor.ndim < 2:
+            return tensor
+        
+        # Handle dtype conversion for grid_sample compatibility
+        original_dtype = tensor.dtype
+        needs_dtype_conversion = original_dtype in [torch.long, torch.int, torch.int64, torch.int32]
+        
+        if needs_dtype_conversion:
+            tensor = tensor.float()
+        
+        # Create scaling matrix (isotropic scaling)
+        scale_matrix = torch.tensor([
+            [scale, 0, 0],
+            [0, scale, 0]
+        ], dtype=torch.float32)
+        
+        # Add batch dimension if needed
+        if tensor.ndim == 2:
+            tensor = tensor.unsqueeze(0).unsqueeze(0)
+            squeeze_dims = True
+        elif tensor.ndim == 3:
+            tensor = tensor.unsqueeze(0)
+            squeeze_dims = False
+        else:
+            squeeze_dims = False
+        
+        # Create grid and apply scaling
+        grid = F.affine_grid(
+            scale_matrix.unsqueeze(0), 
+            tensor.size(),
+            align_corners=False
+        )
+        
+        scaled = F.grid_sample(
+            tensor, 
+            grid, 
+            mode=mode, 
+            align_corners=False,
+            padding_mode='border'
+        )
+        
+        # Remove added dimensions
+        if squeeze_dims:
+            scaled = scaled.squeeze(0).squeeze(0)
+        elif tensor.ndim == 4:
+            scaled = scaled.squeeze(0)
+        
+        # Convert back to original dtype if needed
+        if needs_dtype_conversion:
+            if mode == 'nearest':
+                # For nearest interpolation, round and convert back
+                scaled = scaled.round().to(original_dtype)
+            else:
+                # For other interpolation modes, threshold at 0.5 for binary labels
+                scaled = (scaled > 0.5).to(original_dtype)
+        
+        return scaled
+    
+    def __repr__(self) -> str:
+        return f"RandomScale(scale_range={self.scale_range}, prob={self.prob})"
+
+
+class RandomTranslation:
+    """
+    Apply random translation to images and labels.
+    
+    Args:
+        translation_range: Range for translation in pixels (x, y) - e.g., (15.0, 15.0)
+        prob: Probability of applying translation
+        mode: Interpolation mode ('bilinear' or 'nearest')
+    """
+    
+    def __init__(
+        self, 
+        translation_range: Tuple[float, float] = (15.0, 15.0), 
+        prob: float = 0.5,
+        mode: str = 'bilinear'
+    ):
+        self.translation_range = translation_range
+        self.prob = prob
+        self.mode = mode
+    
+    def __call__(self, data: Union[torch.Tensor, List[torch.Tensor]]) -> Union[torch.Tensor, List[torch.Tensor]]:
+        """Apply random translation."""
+        if random.random() > self.prob:
+            return data
+        
+        # Sample translation values
+        tx = random.uniform(-self.translation_range[0], self.translation_range[0])
+        ty = random.uniform(-self.translation_range[1], self.translation_range[1])
+        
+        if isinstance(data, list):
+            result = []
+            for i, item in enumerate(data):
+                # Use nearest interpolation for labels (typically last item)
+                interp_mode = 'nearest' if i == len(data) - 1 else self.mode
+                result.append(self._translate_tensor(item, tx, ty, interp_mode))
+            return result
+        else:
+            return self._translate_tensor(data, tx, ty, self.mode)
+    
+    def _translate_tensor(self, tensor: torch.Tensor, tx: float, ty: float, mode: str) -> torch.Tensor:
+        """Translate tensor by specified amounts."""
+        if tensor.ndim < 2:
+            return tensor
+        
+        # Handle dtype conversion for grid_sample compatibility
+        original_dtype = tensor.dtype
+        needs_dtype_conversion = original_dtype in [torch.long, torch.int, torch.int64, torch.int32]
+        
+        if needs_dtype_conversion:
+            tensor = tensor.float()
+        
+        # Normalize translation to [-1, 1] range based on tensor size
+        # For 2D: use last two dimensions; for 3D: use middle two dimensions
+        if tensor.ndim == 2:
+            height, width = tensor.shape
+            norm_tx = 2.0 * tx / width
+            norm_ty = 2.0 * ty / height
+        elif tensor.ndim == 3:
+            _, height, width = tensor.shape
+            norm_tx = 2.0 * tx / width
+            norm_ty = 2.0 * ty / height
+        else:
+            # For higher dimensions, use last two spatial dimensions
+            height, width = tensor.shape[-2:]
+            norm_tx = 2.0 * tx / width
+            norm_ty = 2.0 * ty / height
+        
+        # Create translation matrix
+        translation_matrix = torch.tensor([
+            [1, 0, norm_tx],
+            [0, 1, norm_ty]
+        ], dtype=torch.float32)
+        
+        # Add batch dimension if needed
+        if tensor.ndim == 2:
+            tensor = tensor.unsqueeze(0).unsqueeze(0)
+            squeeze_dims = True
+        elif tensor.ndim == 3:
+            tensor = tensor.unsqueeze(0)
+            squeeze_dims = False
+        else:
+            squeeze_dims = False
+        
+        # Create grid and apply translation
+        grid = F.affine_grid(
+            translation_matrix.unsqueeze(0), 
+            tensor.size(),
+            align_corners=False
+        )
+        
+        translated = F.grid_sample(
+            tensor, 
+            grid, 
+            mode=mode, 
+            align_corners=False,
+            padding_mode='border'
+        )
+        
+        # Remove added dimensions
+        if squeeze_dims:
+            translated = translated.squeeze(0).squeeze(0)
+        elif tensor.ndim == 4:
+            translated = translated.squeeze(0)
+        
+        # Convert back to original dtype if needed
+        if needs_dtype_conversion:
+            if mode == 'nearest':
+                # For nearest interpolation, round and convert back
+                translated = translated.round().to(original_dtype)
+            else:
+                # For other interpolation modes, threshold at 0.5 for binary labels
+                translated = (translated > 0.5).to(original_dtype)
+        
+        return translated
+    
+    def __repr__(self) -> str:
+        return f"RandomTranslation(translation_range={self.translation_range}, prob={self.prob})"
+
+
 class RandomNoise:
     """
     Add random Gaussian noise to images.
@@ -452,16 +673,27 @@ class RandomFieldBias:
 def create_training_transforms(
     enable_flips: bool = True,
     enable_rotation: bool = True,
+    enable_scale: bool = True,
+    enable_translation: bool = True,
     enable_noise: bool = True,
     enable_brightness: bool = True,
     enable_field_bias: bool = True,
     rotation_angle: float = 10.0,
+    scale_range: Tuple[float, float] = (0.8, 1.15),
+    translation_range: Tuple[float, float] = (15.0, 15.0),
     noise_std: float = 0.01,
     brightness_range: List[float] = None,
     contrast_range: List[float] = None,
     bias_strength_range: Tuple[float, float] = (0.1, 0.4),
     spatial_freq_range: Tuple[float, float] = (0.3, 0.8),
-    num_peaks_range: Tuple[int, int] = (1, 3)
+    num_peaks_range: Tuple[int, int] = (1, 3),
+    prob_flips: float = 0.5,
+    prob_rotation: float = 0.3,
+    prob_scale: float = 0.3,
+    prob_translation: float = 0.3,
+    prob_noise: float = 0.3,
+    prob_brightness: float = 0.3,
+    prob_field_bias: float = 0.3
 ) -> Compose:
     """
     Create a standard set of training transforms.
@@ -469,16 +701,27 @@ def create_training_transforms(
     Args:
         enable_flips: Whether to include random flips
         enable_rotation: Whether to include random rotation
+        enable_scale: Whether to include random scaling
+        enable_translation: Whether to include random translation
         enable_noise: Whether to include random noise
         enable_brightness: Whether to include brightness/contrast adjustment
         enable_field_bias: Whether to include field bias simulation
         rotation_angle: Maximum rotation angle in degrees
+        scale_range: Range for scaling factor (min, max)
+        translation_range: Range for translation in pixels (x, y)
         noise_std: Standard deviation for Gaussian noise
         brightness_range: Range for brightness adjustment
         contrast_range: Range for contrast adjustment
         bias_strength_range: Range for field bias strength (min, max)
         spatial_freq_range: Range for spatial frequency (min, max)
         num_peaks_range: Range for number of peaks (min, max)
+        prob_flips: Probability of applying flips (0.0 to 1.0)
+        prob_rotation: Probability of applying rotation (0.0 to 1.0)
+        prob_scale: Probability of applying scaling (0.0 to 1.0)
+        prob_translation: Probability of applying translation (0.0 to 1.0)
+        prob_noise: Probability of applying noise (0.0 to 1.0)
+        prob_brightness: Probability of applying brightness/contrast (0.0 to 1.0)
+        prob_field_bias: Probability of applying field bias (0.0 to 1.0)
         
     Returns:
         Composed transforms for training
@@ -492,19 +735,25 @@ def create_training_transforms(
         contrast_range = [0.9, 1.1]
     
     if enable_flips:
-        transforms.append(RandomFlip(axes=[1, 2], prob=0.5))
+        transforms.append(RandomFlip(axes=[1, 2], prob=prob_flips))
     
     if enable_rotation:
-        transforms.append(RandomRotation(max_angle=rotation_angle, prob=0.3))
+        transforms.append(RandomRotation(max_angle=rotation_angle, prob=prob_rotation))
+    
+    if enable_scale:
+        transforms.append(RandomScale(scale_range=scale_range, prob=prob_scale))
+    
+    if enable_translation:
+        transforms.append(RandomTranslation(translation_range=translation_range, prob=prob_translation))
     
     if enable_noise:
-        transforms.append(RandomNoise(noise_std=noise_std, prob=0.3))
+        transforms.append(RandomNoise(noise_std=noise_std, prob=prob_noise))
     
     if enable_brightness:
         transforms.append(RandomBrightnessContrast(
             brightness_range=brightness_range,
             contrast_range=contrast_range,
-            prob=0.3
+            prob=prob_brightness
         ))
     
     if enable_field_bias:
@@ -512,7 +761,7 @@ def create_training_transforms(
             bias_strength_range=bias_strength_range,
             spatial_freq_range=spatial_freq_range,
             num_peaks_range=num_peaks_range,
-            prob=0.3
+            prob=prob_field_bias
         ))
     
     return Compose(transforms)
@@ -528,19 +777,38 @@ def create_transforms_from_config(augmentation_config: dict) -> Compose:
     Returns:
         Composed transforms for training
     """
+    # Helper function to convert lists to tuples for range parameters
+    def to_tuple(value, default):
+        if value is None:
+            return default
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+    
     return create_training_transforms(
         enable_flips=augmentation_config.get('enable_flips', True),
         enable_rotation=augmentation_config.get('enable_rotation', True),
+        enable_scale=augmentation_config.get('enable_scale', True),
+        enable_translation=augmentation_config.get('enable_translation', True),
         enable_noise=augmentation_config.get('enable_noise', True),
         enable_brightness=augmentation_config.get('enable_brightness', True),
         enable_field_bias=augmentation_config.get('enable_field_bias', True),
         rotation_angle=augmentation_config.get('rotation_angle', 10.0),
+        scale_range=to_tuple(augmentation_config.get('scale_range'), (0.8, 1.15)),
+        translation_range=to_tuple(augmentation_config.get('translation_range'), (15.0, 15.0)),
         noise_std=augmentation_config.get('noise_std', 0.01),
         brightness_range=augmentation_config.get('brightness_range', [-0.1, 0.1]),
         contrast_range=augmentation_config.get('contrast_range', [0.9, 1.1]),
-        bias_strength_range=augmentation_config.get('bias_strength_range', (0.1, 0.4)),
-        spatial_freq_range=augmentation_config.get('spatial_freq_range', (0.3, 0.8)),
-        num_peaks_range=augmentation_config.get('num_peaks_range', (1, 3))
+        bias_strength_range=to_tuple(augmentation_config.get('bias_strength_range'), (0.1, 0.4)),
+        spatial_freq_range=to_tuple(augmentation_config.get('spatial_freq_range'), (0.3, 0.8)),
+        num_peaks_range=to_tuple(augmentation_config.get('num_peaks_range'), (1, 3)),
+        prob_flips=augmentation_config.get('prob_flips', 0.5),
+        prob_rotation=augmentation_config.get('prob_rotation', 0.3),
+        prob_scale=augmentation_config.get('prob_scale', 0.3),
+        prob_translation=augmentation_config.get('prob_translation', 0.3),
+        prob_noise=augmentation_config.get('prob_noise', 0.3),
+        prob_brightness=augmentation_config.get('prob_brightness', 0.3),
+        prob_field_bias=augmentation_config.get('prob_field_bias', 0.3)
     )
 
 

@@ -22,17 +22,14 @@ python -m macacaMRINN.scripts.run_prediction \
     --no-save-prob-map
 
 # EPI brainmask
-input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/training_output/test/EPI/site-caltech_sub-032184_ses-001_task-movie_run-3_EPI.nii.gz
-input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/training_output/test/EPI/site-iscmj_sub-032314_ses-003_rec-warped_task-rest_run-1_EPI.nii.gz
-input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/training_output/test/EPI/site-newcastle_sub-032102_ses-002_task-resting_run-2_EPI.nii.gz
-model=/mnt/DataDrive3/xliu/monkey_training_groundtruth/unet_models/orig/EPI_brainmask.pth
-python -m macacaMRINN.scripts.run_prediction \
+input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/func_iscmj.nii.gz
+# model=/mnt/DataDrive3/xliu/monkey_training_groundtruth/unet_models/orig/EPI_brainmask.pth
+model=/mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_output/EPI_seg-brainmask_v1/checkpoints/best_model.pth
+python -m NHPskullstripNN.scripts.run_prediction \
     --model $model \
     --input $input \
-    --output ${input/.nii.gz/_pred.nii.gz} \
-    --input-label ${input/.nii.gz/_brainmask.nii.gz} \
-    --device cuda:0 --compute-metrics --plot-QC
-
+    --output ${input/.nii.gz/_oldCNNmask_v2.nii.gz} \
+    --no-save-prob-map
 
 # test t2w
 input=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/UNC-Wisconsin_res-05/sub-034/ses-02weeks/anat/sub-034_ses-02weeks_space-T1w_desc-preproc_T2w.nii.gz
@@ -64,12 +61,13 @@ python -m macacaMRINN.scripts.run_prediction \
 
 # test marge neonate brainmask
 # input=/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_reorient/sub-baby31/ses-240710/anat/sub-baby31_ses-240710_T1w.nii.gz
-model=/home/star/github/banana/NHPskullstripNN/pretrained_model/T1w_brainmask.pth
-# input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_freddie_mixed/input.nii.gz
-input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output/test_02weeks.nii.gz
+# model=/home/star/github/banana/NHPskullstripNN/pretrained_model/T1w_brainmask.pth
+model=/mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_output/T1w_seg-brainmask_v2/checkpoints/best_model.pth
+# input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/test_freddie_mixed/input.nii.gz
+input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/test_mebrain.nii.gz
 
 python -m NHPskullstripNN.scripts.run_prediction \
     --model $model \
     --input $input \
-    --output ${input/.nii.gz/_oldCNNmask.nii.gz} \
+    --output ${input/.nii.gz/_oldCNNmask_v2.nii.gz} \
     --no-save-prob-map

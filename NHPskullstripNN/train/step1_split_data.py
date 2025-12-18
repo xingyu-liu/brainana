@@ -101,9 +101,9 @@ def split_data(
     
     # Save split info
     split_info = {
-        'train': train_subjects,
-        'val': val_subjects,
-        'test': test_subjects if test_split > 0 else [],
+        'train': sorted(train_subjects),
+        'val': sorted(val_subjects),
+        'test': sorted(test_subjects) if test_split > 0 else [],
         'total': total_subjects,
         'seed': seed,
         'val_split': val_split,

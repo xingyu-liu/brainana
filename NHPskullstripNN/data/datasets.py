@@ -162,6 +162,11 @@ class VolumeDataset(data.Dataset):
             # Extract the actual image data as numpy array
             image = np.array(image_nifti.get_fdata(), dtype=np.float32)
             
+            # Handle 4D images: if image has 4 dimensions, average the last dimension
+            if image.ndim == 4:
+                print(f"Warning: 4D image detected. Averaging the last dimension.")
+                image = np.mean(image, axis=-1)
+            
             # Normalize image data to range [0, 1] for better training stability
             image = (image - image.min()) / (image.max() - image.min())
             
@@ -182,6 +187,11 @@ class VolumeDataset(data.Dataset):
             # Extract the actual label data as numpy array
             # Convert to int64 for classification labels
             label = np.array(label_nifti.get_fdata(), dtype=np.int64)
+            
+            # Handle 4D labels: if label has 4 dimensions, take the first slice of the last dimension
+            if label.ndim == 4:
+                print(f"Warning: 4D label detected. Taking the first slice of the last dimension.")
+                label = label[..., 0]  # Take first channel/slice
             
             # Convert numpy array to PyTorch tensor
             label = torch.from_numpy(label)

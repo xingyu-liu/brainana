@@ -409,6 +409,14 @@ def predict_volumes(
         if save_label or save_prob_map:
             input_nifti = volume_dataset.get_current_image_nifti()
             
+            # Adjust shape if original was 4D but data is now 3D
+            original_shape = input_nifti.shape
+            if len(original_shape) == 4 and len(binary_prediction.shape) == 3:
+                # Use first 3 dimensions if original was 4D
+                output_shape = original_shape[:3]
+            else:
+                output_shape = original_shape
+            
             # Ensure output directory exists
             output_dir = os.path.dirname(output_path)
             if output_dir and not os.path.exists(output_dir):
@@ -421,7 +429,7 @@ def predict_volumes(
                     input_nifti.affine,
                     input_nifti.header,
                     output_path,
-                    shape=input_nifti.shape,
+                    shape=output_shape,
                 )
                 if verbose:
                     print(f"Binary label saved to: {output_path}")
@@ -438,7 +446,7 @@ def predict_volumes(
                         input_nifti.affine,
                         input_nifti.header,
                         probability_output_path,
-                        shape=input_nifti.shape,
+                        shape=output_shape,
                     )
                     if verbose:
                         print(f"Probability map saved to: {probability_output_path}")
@@ -461,7 +469,7 @@ def predict_volumes(
                             input_nifti.affine,
                             input_nifti.header,
                             probability_output_path,
-                            shape=input_nifti.shape,
+                            shape=output_shape,
                         )
                         if verbose:
                             print(f"Class {class_name} probability map saved to: {probability_output_path}")
@@ -478,7 +486,7 @@ def predict_volumes(
                         input_nifti.affine,
                         input_nifti.header,
                         argmax_prob_path,
-                        shape=input_nifti.shape,
+                        shape=output_shape,
                     )
                     if verbose:
                         print(f"Argmax probability map saved to: {argmax_prob_path}")

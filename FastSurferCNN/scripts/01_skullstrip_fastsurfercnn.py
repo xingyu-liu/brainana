@@ -16,9 +16,9 @@ from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
 
 # %%
 # # # anat 
-input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_prediction_output"
+input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction"
 # # input_image = f"{input_dir}/site-arcaro_sub-baby10_ses-anat_T1w.nii.gz"
-input_image = f"{input_dir}/test_02weeks.nii.gz"
+input_image = f"{input_dir}/test_marge_upright.nii.gz"
 # # # # input_image = f"{input_dir}/test_1month.nii.gz"
 # input_image = f"{input_dir}/test_freddie.nii.gz"
 
