@@ -63,9 +63,18 @@ class Trainer:
         self.best_val_loss = float('inf')
         self.training_history = []
         
-        # Metrics
-        self.train_metrics = MetricsTracker()
-        self.val_metrics = MetricsTracker()
+        # Metrics - initialize with num_classes and device for accumulated dice computation
+        num_classes = getattr(self.config, 'num_classes', 2)
+        self.train_metrics = MetricsTracker(
+            num_classes=num_classes,
+            device=self.device,
+            use_argmax=True  # Use argmax like FastSurferCNN (can be changed to False for threshold-based)
+        )
+        self.val_metrics = MetricsTracker(
+            num_classes=num_classes,
+            device=self.device,
+            use_argmax=True
+        )
     
     def _setup_loss_function(self):
         """Setup loss function."""
@@ -95,13 +104,15 @@ class Trainer:
                 restore_best_weights=getattr(self.config, 'early_stopping_restore_best_weights', True)
             ))
         
-        # Model checkpoint
+        # Model checkpoint (best model)
         checkpoint_path = os.path.join(
             self.config.output_dir, 'checkpoints', 'best_model.pth'
         )
+        checkpoint_frequency = getattr(self.config, 'checkpoint_frequency', 5)
         callbacks.append(ModelCheckpoint(
             filepath=checkpoint_path,
-            monitor='val_loss'
+            monitor='val_loss',
+            checkpoint_frequency=checkpoint_frequency
         ))
         
         # Add plotting callback for live training visualization
@@ -135,18 +146,53 @@ class Trainer:
                 train_loss, train_dice = self._train_epoch()
                 val_loss, val_dice = self._validate_epoch()
                 
-                # Scheduler step
-                if hasattr(self.scheduler, 'step'):
-                    if getattr(self.config, 'use_cosine_scheduler', False):
-                        self.scheduler.step()
-                    else:
-                        self.scheduler.step(val_loss)
+                # Learning rate warmup and scheduler step
+                if epoch < self.warmup_epochs:
+                    # Linear warmup: gradually increase LR from warmup_start_lr to base_lr
+                    warmup_factor = (epoch + 1) / self.warmup_epochs
+                    current_lr = self.warmup_start_lr + (self.base_lr - self.warmup_start_lr) * warmup_factor
+                    for param_group in self.optimizer.param_groups:
+                        param_group['lr'] = current_lr
+                    self.logger.debug(f"Warmup epoch {epoch+1}/{self.warmup_epochs}: LR = {current_lr:.2e}")
+                else:
+                    # After warmup: scheduler takes over
+                    if epoch == self.warmup_epochs:
+                        # First epoch after warmup: ensure LR is at base_lr
+                        for param_group in self.optimizer.param_groups:
+                            param_group['lr'] = self.base_lr
+                        
+                        # Reinitialize cosine scheduler with base_lr as starting point
+                        # (CosineAnnealingLR uses the optimizer's current LR as the initial LR)
+                        if getattr(self.config, 'use_cosine_scheduler', False):
+                            effective_epochs = self.config.num_epochs - self.warmup_epochs
+                            self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
+                                self.optimizer, 
+                                T_max=max(effective_epochs, 1), 
+                                eta_min=getattr(self.config, 'min_lr', 1e-7)
+                            )
+                            self.logger.info(f"Warmup complete: LR = {self.base_lr:.2e}, cosine scheduler reinitialized")
+                        else:
+                            self.logger.info(f"Warmup complete: LR = {self.base_lr:.2e}, scheduler starting")
+                    
+                    # Normal scheduler step after warmup
+                    if hasattr(self.scheduler, 'step'):
+                        if getattr(self.config, 'use_cosine_scheduler', False):
+                            # For cosine scheduler, step it
+                            self.scheduler.step()
+                        else:
+                            # For ReduceLROnPlateau, step with validation loss
+                            self.scheduler.step(val_loss)
+                
+                # Get current learning rate for logging
+                current_lr = self.optimizer.param_groups[0]['lr']
                 
                 # Log results with consistent format
+                warmup_status = f" [warmup {epoch+1}/{self.warmup_epochs}]" if epoch < self.warmup_epochs else ""
                 self.logger.info(
                     f"Epoch {epoch+1:3d}/{self.config.num_epochs} | "
                     f"Train: loss={train_loss:.4f}, dice={train_dice:.4f} | "
-                    f"Val: loss={val_loss:.4f}, dice={val_dice:.4f}"
+                    f"Val: loss={val_loss:.4f}, dice={val_dice:.4f} | "
+                    f"LR: {current_lr:.2e}{warmup_status}"
                 )
                 
                 # Update history and best metric
@@ -316,10 +362,18 @@ class Trainer:
         else:
             raise ValueError(f"Invalid training_mode '{training_mode}'. Use: scratch, continual_learning, or fine_tuning")
         
+        # Store base learning rate for warmup
+        self.base_lr = learning_rate
+        self.warmup_epochs = getattr(self.config, 'warmup_epochs', 0)
+        self.warmup_start_lr = learning_rate / 100.0  # Start at 1% of base LR
+        
         # Setup scheduler
         if getattr(self.config, 'use_cosine_scheduler', False):
+            # For cosine scheduler, adjust T_max to account for warmup
+            # T_max should be total epochs minus warmup epochs
+            effective_epochs = self.config.num_epochs - self.warmup_epochs
             self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
-                self.optimizer, T_max=self.config.num_epochs
+                self.optimizer, T_max=max(effective_epochs, 1), eta_min=getattr(self.config, 'min_lr', 1e-7)
             )
         else:
             # Use ReduceLROnPlateau with config parameters
@@ -329,6 +383,12 @@ class Trainer:
             self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
                 self.optimizer, mode='min', factor=scheduler_factor, patience=scheduler_patience
             )
+        
+        # Initialize warmup: set LR to warmup_start_lr if warmup is enabled
+        if self.warmup_epochs > 0:
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = self.warmup_start_lr
+            self.logger.info(f"Training: warmup enabled for {self.warmup_epochs} epochs (LR: {self.warmup_start_lr:.2e} → {self.base_lr:.2e})")
         
         # Setup mixed precision - temporarily disabled to prevent NaN issues
         # if getattr(self.config, 'mixed_precision', False) and torch.cuda.is_available():
@@ -382,16 +442,22 @@ class Trainer:
                 if num_slices > 0:
                     avg_loss = batch_loss / num_slices
                     
-                    # Compute batch-level dice
+                    # Update metrics with accumulated approach (FastSurferCNN style)
+                    # Pass pred_logits and targets - dice will be computed at epoch end
                     if batch_predictions and batch_targets:
                         stacked_predictions = torch.stack(batch_predictions, dim=0)
                         stacked_targets = torch.stack(batch_targets, dim=0)
-                        batch_dice = compute_foreground_dice(stacked_predictions, stacked_targets)
+                        self.train_metrics.update(
+                            loss=avg_loss,
+                            pred_logits=stacked_predictions,
+                            target_classes=stacked_targets
+                        )
+                        # Get current accumulated dice for progress bar
+                        current_dice = self.train_metrics.get_dice()
+                        pbar.set_postfix({'dice': f'{current_dice:.4f}'})
                     else:
-                        batch_dice = 0.0
-                    
-                    self.val_metrics.update(loss=avg_loss, dice=batch_dice)
-                    pbar.set_postfix({'dice': f'{batch_dice:.4f}'})
+                        self.train_metrics.update(loss=avg_loss)
+                        pbar.set_postfix({'dice': '0.0000'})
             
             # Handle batch of BlockDataset objects (file-based mode)
             elif isinstance(batch, list):
@@ -419,25 +485,25 @@ class Trainer:
                     if num_slices > 0:
                         avg_vol_loss = volume_loss / num_slices
                         
-                        # Compute volume-level dice (like in prediction)
+                        # Update metrics with accumulated approach (FastSurferCNN style)
                         if volume_predictions and volume_targets:
                             # Stack all slice predictions and targets
                             stacked_predictions = torch.stack(volume_predictions, dim=0)  # [num_slices, 2, H, W]
                             stacked_targets = torch.stack(volume_targets, dim=0)  # [num_slices, H, W]
                             
-                            # Compute volume-level dice using the same method as prediction
-                            volume_dice = compute_foreground_dice(stacked_predictions, stacked_targets)
+                            # Pass to metrics tracker - dice computed from accumulated stats
+                            self.train_metrics.update(
+                                loss=avg_vol_loss,
+                                pred_logits=stacked_predictions,
+                                target_classes=stacked_targets
+                            )
                         else:
-                            volume_dice = 0.0
+                            self.train_metrics.update(loss=avg_vol_loss)
                         
-                        self.train_metrics.update(loss=avg_vol_loss, dice=volume_dice)
-                        
-                        # Update progress bar with current volume metrics
-                        avg_metrics = self.train_metrics.get_averages()
-                        current_avg_loss = avg_metrics['loss']
-                        current_avg_dice = avg_metrics['dice']
+                        # Update progress bar with current accumulated dice
+                        current_dice = self.train_metrics.get_dice()
                         pbar.set_postfix({
-                            'dice': f'{volume_dice:.4f}',
+                            'dice': f'{current_dice:.4f}',
                         })
             else:
                 # Single BlockDataset (shouldn't happen with current setup, but handle it)
@@ -462,25 +528,25 @@ class Trainer:
                 if num_slices > 0:
                     avg_vol_loss = volume_loss / num_slices
                     
-                    # Compute volume-level dice (like in prediction)
+                    # Update metrics with accumulated approach (FastSurferCNN style)
                     if volume_predictions and volume_targets:
                         # Stack all slice predictions and targets
                         stacked_predictions = torch.stack(volume_predictions, dim=0)  # [num_slices, 2, H, W]
                         stacked_targets = torch.stack(volume_targets, dim=0)  # [num_slices, H, W]
                         
-                        # Compute volume-level dice using the same method as prediction
-                        volume_dice = compute_foreground_dice(stacked_predictions, stacked_targets)
+                        # Pass to metrics tracker - dice computed from accumulated stats
+                        self.train_metrics.update(
+                            loss=avg_vol_loss,
+                            pred_logits=stacked_predictions,
+                            target_classes=stacked_targets
+                        )
                     else:
-                        volume_dice = 0.0
+                        self.train_metrics.update(loss=avg_vol_loss)
                     
-                    self.train_metrics.update(loss=avg_vol_loss, dice=volume_dice)
-                    
-                    # Update progress bar with current volume metrics
-                    avg_metrics = self.train_metrics.get_averages()
-                    current_avg_loss = avg_metrics['loss']
-                    current_avg_dice = avg_metrics['dice']
+                    # Update progress bar with current accumulated dice
+                    current_dice = self.train_metrics.get_dice()
                     pbar.set_postfix({
-                        'dice': f'{volume_dice:.2f}',
+                        'dice': f'{current_dice:.4f}',
                     })
         
         avg_metrics = self.train_metrics.get_averages()
@@ -524,16 +590,21 @@ class Trainer:
                     if num_slices > 0:
                         avg_loss = batch_loss / num_slices
                         
-                        # Compute batch-level dice
+                        # Update metrics with accumulated approach (FastSurferCNN style)
                         if batch_predictions and batch_targets:
                             stacked_predictions = torch.stack(batch_predictions, dim=0)
                             stacked_targets = torch.stack(batch_targets, dim=0)
-                            batch_dice = compute_foreground_dice(stacked_predictions, stacked_targets)
+                            self.val_metrics.update(
+                                loss=avg_loss,
+                                pred_logits=stacked_predictions,
+                                target_classes=stacked_targets
+                            )
+                            # Get current accumulated dice for progress bar
+                            current_dice = self.val_metrics.get_dice()
+                            pbar.set_postfix({'dice': f'{current_dice:.4f}'})
                         else:
-                            batch_dice = 0.0
-                        
-                        self.val_metrics.update(loss=avg_loss, dice=batch_dice)
-                        pbar.set_postfix({'dice': f'{batch_dice:.4f}'})
+                            self.val_metrics.update(loss=avg_loss)
+                            pbar.set_postfix({'dice': '0.0000'})
                 
                 # Handle batch of BlockDataset objects (file-based mode)
                 elif isinstance(batch, list):
@@ -561,28 +632,29 @@ class Trainer:
                         if num_slices > 0:
                             avg_vol_loss = volume_loss / num_slices
                             
-                            # Compute volume-level dice (like in prediction)
+                            # Update metrics with accumulated approach (FastSurferCNN style)
                             if volume_predictions and volume_targets:
                                 # Stack all slice predictions and targets
                                 stacked_predictions = torch.stack(volume_predictions, dim=0)  # [num_slices, 2, H, W]
                                 stacked_targets = torch.stack(volume_targets, dim=0)  # [num_slices, H, W]
                                 
-                                # Compute volume-level dice using the same method as prediction
-                                volume_dice = compute_foreground_dice(stacked_predictions, stacked_targets)
+                                # Pass to metrics tracker - dice computed from accumulated stats
+                                self.val_metrics.update(
+                                    loss=avg_vol_loss,
+                                    pred_logits=stacked_predictions,
+                                    target_classes=stacked_targets
+                                )
                             else:
-                                volume_dice = 0.0
+                                self.val_metrics.update(loss=avg_vol_loss)
                             
-                            self.val_metrics.update(loss=avg_vol_loss, dice=volume_dice)
-                            
-                            # Update progress bar with current volume metrics
+                            # Update progress bar with current accumulated dice
+                            current_dice = self.val_metrics.get_dice()
                             avg_metrics = self.val_metrics.get_averages()
-                            current_avg_loss = avg_metrics['loss']
-                            current_avg_dice = avg_metrics['dice']
                             pbar.set_postfix({
                                 'vol_loss': f'{avg_vol_loss:.4f}',
-                                'vol_dice': f'{volume_dice:.4f}',
-                                'avg_loss': f'{current_avg_loss:.4f}',
-                                'avg_dice': f'{current_avg_dice:.4f}'
+                                'dice': f'{current_dice:.4f}',
+                                'avg_loss': f'{avg_metrics["loss"]:.4f}',
+                                'avg_dice': f'{current_dice:.4f}'
                             })
                 else:
                     # Single BlockDataset (shouldn't happen with current setup, but handle it)
@@ -607,25 +679,25 @@ class Trainer:
                     if num_slices > 0:
                         avg_vol_loss = volume_loss / num_slices
                         
-                        # Compute volume-level dice (like in prediction)
+                        # Update metrics with accumulated approach (FastSurferCNN style)
                         if volume_predictions and volume_targets:
                             # Stack all slice predictions and targets
                             stacked_predictions = torch.stack(volume_predictions, dim=0)  # [num_slices, 2, H, W]
                             stacked_targets = torch.stack(volume_targets, dim=0)  # [num_slices, H, W]
                             
-                            # Compute volume-level dice using the same method as prediction
-                            volume_dice = compute_foreground_dice(stacked_predictions, stacked_targets)
+                            # Pass to metrics tracker - dice computed from accumulated stats
+                            self.val_metrics.update(
+                                loss=avg_vol_loss,
+                                pred_logits=stacked_predictions,
+                                target_classes=stacked_targets
+                            )
                         else:
-                            volume_dice = 0.0
+                            self.val_metrics.update(loss=avg_vol_loss)
                         
-                        self.val_metrics.update(loss=avg_vol_loss, dice=volume_dice)
-                        
-                        # Update progress bar with current volume metrics
-                        avg_metrics = self.val_metrics.get_averages()
-                        current_avg_loss = avg_metrics['loss']
-                        current_avg_dice = avg_metrics['dice']
+                        # Update progress bar with current accumulated dice
+                        current_dice = self.val_metrics.get_dice()
                         pbar.set_postfix({
-                            'dice': f'{volume_dice:.4f}',
+                            'dice': f'{current_dice:.4f}',
                         })
         
         avg_metrics = self.val_metrics.get_averages()
@@ -724,10 +796,11 @@ class Trainer:
             self.logger.warning("Data: NaN/Inf detected in target")
             return 0.0, None, None
         
-        # Normalize input to prevent extreme values
-        img_min, img_max = img_block.min(), img_block.max()
-        if img_max > img_min:
-            img_block = (img_block - img_min) / (img_max - img_min)
+        # NOTE: Image normalization is already done during data preparation:
+        # - HDF5 data: normalized per-volume in step2_create_hdf5.py
+        # - File-based data: normalized per-volume in FileListDataset
+        # Re-normalizing per-slice would change intensity distribution and break pretrained model compatibility
+        # Removed per-slice normalization to match pretrained model expectations
         
         # Check if target has valid values
         if target.max() == 0 and target.min() == 0:

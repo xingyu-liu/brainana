@@ -41,6 +41,7 @@ def setup_logging(output_dir: str, log_level: str = None) -> logging.Logger:
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),
         format='%(asctime)s | %(levelname)-8s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
         handlers=[
             logging.FileHandler(log_file),
             logging.StreamHandler(sys.stdout)
@@ -163,7 +164,7 @@ def prepare_data_loaders(config, logger: Optional[logging.Logger] = None):
     
     # Data loader settings
     batch_size = getattr(config, 'batch_size', 4)
-    num_workers = min(4, os.cpu_count()) if getattr(config, 'num_workers', 4) else 0
+    num_workers = getattr(config, 'num_workers', 8) if getattr(config, 'num_workers', 8) else 0
     
     loader_kwargs = {
         'batch_size': batch_size,
@@ -221,7 +222,7 @@ def _prepare_hdf5_data_loaders(config, train_hdf5, val_hdf5, logger: Optional[lo
     
     # Data loader settings
     batch_size = getattr(config, 'batch_size', 4)
-    num_workers = min(4, os.cpu_count()) if getattr(config, 'num_workers', 4) else 0
+    num_workers = getattr(config, 'num_workers', 8) if getattr(config, 'num_workers', 8) else 0
     
     # Standard collate function for HDF5 (returns tuples directly)
     def collate_fn(batch):

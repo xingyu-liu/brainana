@@ -104,18 +104,21 @@ class ModelCheckpoint(Callback):
     """Model checkpoint callback to save model weights."""
     
     def __init__(self, filepath: str, monitor: str = 'val_loss', 
-                 mode: str = 'min', save_best_only: bool = True):
+                 mode: str = 'min', save_best_only: bool = True,
+                 checkpoint_frequency: int = None):
         """
         Args:
-            filepath: Path to save the model file
+            filepath: Path to save the model file (or directory for periodic checkpoints)
             monitor: Metric to monitor for best model
             mode: 'min' for metrics that should decrease, 'max' for increase
             save_best_only: If True, only save when the model improves
+            checkpoint_frequency: If set, save checkpoint every N epochs (in addition to best model)
         """
         self.filepath = filepath
         self.monitor = monitor
         self.mode = mode
         self.save_best_only = save_best_only
+        self.checkpoint_frequency = checkpoint_frequency
         
         if mode == 'min':
             self.monitor_op = lambda a, b: a < b
@@ -129,42 +132,52 @@ class ModelCheckpoint(Callback):
     def on_train_begin(self, trainer):
         """Initialize checkpoint state."""
         # Ensure directory exists
-        os.makedirs(os.path.dirname(self.filepath), exist_ok=True)
+        checkpoint_dir = os.path.dirname(self.filepath)
+        os.makedirs(checkpoint_dir, exist_ok=True)
         
         if self.mode == 'min':
             self.best = float('inf')
         else:
             self.best = float('-inf')
     
+    def _save_checkpoint(self, epoch: int, trainer, filepath: str = None):
+        """Save checkpoint to file."""
+        if filepath is None:
+            filepath = self.filepath
+        
+        # Prepare checkpoint data
+        checkpoint = {
+            'epoch': epoch,
+            'model_state_dict': trainer.model.state_dict(),
+            'optimizer_state_dict': trainer.optimizer.state_dict(),
+            'scheduler_state_dict': trainer.scheduler.state_dict() if trainer.scheduler else None,
+            'best_metric': self.best,
+            'config': trainer.config.__dict__
+        }
+        
+        # Save checkpoint
+        torch.save(checkpoint, filepath)
+        trainer.logger.info(f"Model checkpoint saved: {filepath}")
+    
     def on_epoch_end(self, epoch: int, logs: Dict[str, float], trainer):
         """Save model checkpoint if conditions are met."""
         current = logs.get(self.monitor)
         
-        if current is None:
-            trainer.logger.warning(f"Checkpoint metric '{self.monitor}' not found")
-            return
+        # Save periodic checkpoint if frequency is set
+        if self.checkpoint_frequency and (epoch + 1) % self.checkpoint_frequency == 0:
+            checkpoint_dir = os.path.dirname(self.filepath)
+            periodic_path = os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch + 1}.pth")
+            self._save_checkpoint(epoch + 1, trainer, filepath=periodic_path)
         
-        # Check if we should save
-        should_save = not self.save_best_only or self.monitor_op(current, self.best)
-        
-        if should_save:
+        # Save best model if enabled
+        if self.save_best_only and current is not None:
             if self.monitor_op(current, self.best):
                 self.best = current
-                trainer.logger.info(f"Model improved ({self.monitor}: {current:.2f}), saving to {self.filepath}")
-            
-            # Prepare checkpoint data
-            checkpoint = {
-                'epoch': epoch,
-                'model_state_dict': trainer.model.state_dict(),
-                'optimizer_state_dict': trainer.optimizer.state_dict(),
-                'scheduler_state_dict': trainer.scheduler.state_dict() if trainer.scheduler else None,
-                'best_metric': self.best,
-                'config': trainer.config.__dict__
-            }
-            
-            # Save checkpoint
-            torch.save(checkpoint, self.filepath)
-            trainer.logger.info(f"Model checkpoint saved: {self.filepath}")
+                trainer.logger.info(f"Model improved ({self.monitor}: {current:.4f}), saving best model")
+                self._save_checkpoint(epoch + 1, trainer, filepath=self.filepath)
+        elif not self.save_best_only:
+            # Save every epoch if save_best_only is False
+            self._save_checkpoint(epoch + 1, trainer, filepath=self.filepath)
 
 
 class CallbackList:

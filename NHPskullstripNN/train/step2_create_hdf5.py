@@ -14,6 +14,7 @@ import numpy as np
 import os
 import sys
 import signal
+import threading
 from pathlib import Path
 from multiprocessing import Pool
 import json
@@ -29,15 +30,32 @@ from NHPskullstripNN.config import TrainingConfig
 
 # Global flag for graceful shutdown
 _shutdown_requested = False
+_shutdown_message_printed = False
+_shutdown_count = 0
+_signal_handler_lock = threading.Lock()
 
 
 def _signal_handler(signum, frame):
     """Handle shutdown signals gracefully."""
-    global _shutdown_requested
-    signal_name = signal.Signals(signum).name
-    print(f"\n⚠️  Received {signal_name} signal. Initiating graceful shutdown...")
-    print("  → Finishing current operations and closing HDF5 file properly...")
-    _shutdown_requested = True
+    global _shutdown_requested, _shutdown_message_printed, _shutdown_count
+    
+    # Use lock to prevent concurrent execution
+    with _signal_handler_lock:
+        _shutdown_count += 1
+        
+        # Only print message once
+        if not _shutdown_message_printed:
+            signal_name = signal.Signals(signum).name
+            print(f"\n⚠️  Received {signal_name} signal. Initiating graceful shutdown...")
+            print("  → Finishing current operations and closing HDF5 file properly...")
+            _shutdown_message_printed = True
+        
+        _shutdown_requested = True
+        
+        # Force exit on second interrupt (Ctrl+C twice) - use os._exit for immediate termination
+        if _shutdown_count >= 2:
+            print("\n⚠️  Force exit requested. Terminating immediately...")
+            os._exit(130)  # Use os._exit for immediate termination (bypasses cleanup)
 
 
 def resize_volume_proportional(volume, target_size=256, order=1):
@@ -385,6 +403,7 @@ def create_hdf5_dataset(
     num_workers=1,
 ):
     """Create HDF5 dataset from image and label files."""
+    global _shutdown_requested, _shutdown_message_printed, _shutdown_count
     print(f"Processing {len(image_files)} subjects")
     print(f"  Target size: {rescale_dim}×{rescale_dim}, Slice thickness: {num_slices}")
     print(f"  Output: {output_hdf5}")
@@ -462,6 +481,7 @@ def create_hdf5_dataset(
         subjects_processed = 0
         subjects_processed_set = set()
         
+        pool = None
         try:
             if num_workers > 1:
                 process_args = [
@@ -469,22 +489,54 @@ def create_hdf5_dataset(
                     for idx, (img_file, label_file) in enumerate(zip(image_files, label_files), 1)
                 ]
                 
-                with Pool(processes=num_workers) as pool:
-                    for result_data, msg in pool.imap_unordered(_process_single_subject_wrapper, process_args):
+                pool = Pool(processes=num_workers)
+                try:
+                    iterator = pool.imap_unordered(_process_single_subject_wrapper, process_args)
+                    for result_data, msg in iterator:
+                        # Check shutdown flag - if set, terminate immediately
                         if _shutdown_requested:
-                            print("\n⚠️  Shutdown requested. Stopping processing...")
-                            pool.terminate()
-                            pool.join()
-                            break
+                            # Flush HDF5 datasets to ensure data is saved
+                            try:
+                                images_ds.flush()
+                                labels_ds.flush()
+                                subjects_ds.flush()
+                            except:
+                                pass
+                            # Force terminate pool immediately - don't wait
+                            try:
+                                pool.terminate()
+                            except:
+                                pass
+                            # Exit immediately - don't wait for anything
+                            os._exit(130)
                         print(msg)
                         if result_data is not None:
                             result, subject_name = result_data
                             num_samples_written += _append_to_datasets(datasets, result, subject_name)
                             subjects_processed_set.add(subject_name)
+                finally:
+                    if pool is not None:
+                        if _shutdown_requested:
+                            # On shutdown, don't wait - just terminate and exit
+                            try:
+                                pool.terminate()
+                            except:
+                                pass
+                        else:
+                            pool.close()
+                            pool.join()
             else:
                 for idx, (img_file, label_file) in enumerate(zip(image_files, label_files), 1):
                     if _shutdown_requested:
-                        print("\n⚠️  Shutdown requested. Stopping processing...")
+                        if not _shutdown_message_printed:
+                            print("\n⚠️  Shutdown requested. Stopping processing...")
+                        # Flush HDF5 datasets to ensure data is saved
+                        try:
+                            images_ds.flush()
+                            labels_ds.flush()
+                            subjects_ds.flush()
+                        except:
+                            pass
                         break
                     
                     subject_name = Path(img_file).stem.replace('.nii', '').replace('.gz', '')
@@ -500,15 +552,35 @@ def create_hdf5_dataset(
                     subjects_processed_set.add(subject_name)
                     print(f"Processing ({idx}/{total_subjects}): {subject_name} → {result['num_slices']} slices")
         except KeyboardInterrupt:
-            print("\n⚠️  Keyboard interrupt received. Closing HDF5 file properly...")
+            if not _shutdown_message_printed:
+                print("\n⚠️  Keyboard interrupt received. Closing HDF5 file properly...")
             _shutdown_requested = True
+        except Exception as e:
+            if not _shutdown_requested:
+                print(f"\n⚠️  Unexpected error: {e}")
+                import traceback
+                traceback.print_exc()
+            _shutdown_requested = True
+        finally:
+            # Ensure pool is properly closed
+            if pool is not None:
+                try:
+                    if _shutdown_requested:
+                        # Force terminate on shutdown - don't wait
+                        pool.terminate()
+                        # Don't wait for join - exit immediately
+                    else:
+                        pool.close()
+                        pool.join(timeout=10)
+                except:
+                    pass
         
         subjects_processed = len(subjects_processed_set)
         
         if _shutdown_requested:
             print(f"\n⚠️  Processing interrupted. Saved {num_samples_written} slices from {subjects_processed} subjects before shutdown.")
             print(f"  → HDF5 file has been properly closed and is safe to resume later.")
-            return
+            os._exit(130)  # Use os._exit for immediate termination
     
     # Final summary
     with h5py.File(output_hdf5, 'r') as hf:
@@ -560,12 +632,15 @@ def main():
     parser = argparse.ArgumentParser(description="Generate HDF5 dataset for NHPskullstripNN")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
     parser.add_argument("--split_type", type=str, required=True, choices=["train", "val"], help="train or val")
-    parser.add_argument("--num_workers", type=int, default=4, help="Number of parallel workers")
+    parser.add_argument("--num_workers", type=int, default=None, help="Number of parallel workers (overrides config)")
     
     args = parser.parse_args()
     
     # Load config
     config = TrainingConfig.from_yaml(args.config)
+    
+    # Use num_workers from command line if provided, otherwise from config
+    num_workers = args.num_workers if args.num_workers is not None else getattr(config, 'num_workers', 8)
     
     # Get data paths
     image_files, label_files = config.get_data_paths()
@@ -591,7 +666,7 @@ def main():
     print(f"  Config: {args.config}")
     print(f"  Split type: {args.split_type}")
     print(f"  Num slices: {config.num_input_slices}, Rescale dim: {config.rescale_dim}")
-    print(f"  Workers: {args.num_workers}")
+    print(f"  Workers: {num_workers}")
     print(f"  Output HDF5: {output_hdf5}\n")
     
     create_hdf5_dataset(
@@ -601,7 +676,7 @@ def main():
         num_slices=config.num_input_slices,
         rescale_dim=config.rescale_dim,
         subject_filter=subject_filter,
-        num_workers=args.num_workers
+        num_workers=num_workers
     )
 
 

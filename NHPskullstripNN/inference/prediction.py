@@ -545,7 +545,7 @@ def skullstripping(
         # Ensure the logger has a handler and is configured
         if not logger.handlers:
             handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s')
+            formatter = logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
             handler.setFormatter(formatter)
             handler.setLevel(logging.INFO)
             logger.addHandler(handler)

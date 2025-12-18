@@ -2,7 +2,7 @@
 # PATH CONFIGURATION - Direct Paths (Simpler Format)
 # ============================================================================
 # Direct path to training data directory (contains images/ and labels/ subdirectories, or JSON file)
-TRAINING_DATA_DIR: /mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_data
+TRAINING_DATA_DIR: /mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_data/T1w_seg-brainmask
 
 # Direct path to output directory (for training logs, checkpoints, HDF5 files, etc.)
 OUTPUT_DIR: /mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_output/T1w_seg-brainmask_v1
@@ -12,7 +12,6 @@ OUTPUT_DIR: /mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_tra
 # ============================================================================
 modal: T1w
 label: brainmask
-experiment_name: finetune_v2
 
 # ============================================================================
 # MODEL CONFIGURATION
@@ -22,7 +21,7 @@ num_conv_block: 5
 kernel_root: 16
 use_inst_norm: true
 num_classes: 2  # 0:non-brain, 1:CSF, 2:gray matter, 3:subcortex, 4:white matter 5:others
-pretrained_model_path: /mnt/DataDrive3/xliu/monkey_training_groundtruth/unet_models/orig/T1w_brainmask.pth
+pretrained_model_path: /home/star/github/banana/NHPskullstripNN/pretrained_model/T1w_brainmask.pth
 
 # ============================================================================
 # TRAINING CONFIGURATION
@@ -30,18 +29,19 @@ pretrained_model_path: /mnt/DataDrive3/xliu/monkey_training_groundtruth/unet_mod
 training_mode: fine_tuning  # Training mode: 'scratch', 'fine_tuning', 'continual_learning'
 
 num_epochs: 200
-batch_size: 4
+batch_size: 64
 enable_dynamic_batch_sizing: true
-learning_rate: 1.0e-05
-weight_decay: 0.00001
+learning_rate: 0.002  # Increased from 1.0e-05 (10x) for faster fine-tuning convergence
+                        # FastSurferCNN uses 0.002, but for fine-tuning 1.0e-04 to 5.0e-04 is more appropriate
+weight_decay: 0.0001  # Increased from 0.00001 (10x) to match FastSurferCNN and improve regularization
 
 # Loss function
 loss_type: combined
 
 # Learning rate scheduling
-use_cosine_scheduler: false
+use_cosine_scheduler: true  # Changed to true for better convergence (matches FastSurferCNN approach)
 scheduler_factor: 0.5
-min_lr: 1e-07
+min_lr: 1.0e-06  # Increased from 1e-07 for better minimum learning rate
 warmup_epochs: 5
 
 # Training control
@@ -50,6 +50,7 @@ early_stopping_min_delta: 0.001  # Less sensitive than continual learning
 early_stopping_restore_best_weights: true
 dropout_rate: 0.2
 gradient_clip_norm: 0.5
+checkpoint_frequency: 5  # Save checkpoint every N epochs (default: 5)
 
 # Advanced training features
 mixed_precision: true
@@ -59,8 +60,8 @@ enable_augmentation: true
 # DATA CONFIGURATION
 # ============================================================================
 rescale_dim: 256
-validation_split: 0.15
-test_split: 0.15
+validation_split: 0.2
+test_split: 0.0
 validation_frequency: 1
 validation_metrics:
   dice: true
@@ -78,6 +79,7 @@ validation_metrics:
 # ============================================================================
 device: auto
 random_seed: 42
+num_workers: 8  # Number of data loader workers (default: 8)
 log_level: INFO  # DEBUG, INFO, WARNING, ERROR
 
 # ============================================================================
@@ -115,43 +117,3 @@ log_level: INFO  # DEBUG, INFO, WARNING, ERROR
 enable_progress_bars: true
 track_training_metrics: true
 track_validation_metrics: true
-
-# ============================================================================
-# MULTI-CLASS SEGMENTATION NOTES
-# ============================================================================
-# Class mapping for brain segmentation:
-# 0: Non-brain (background)
-# 1: Cerebrospinal fluid (CSF)
-# 2: Gray matter
-# 3: Subcortical structures
-# 4: White matter
-#
-# Training recommendations:
-# - Use CrossEntropy or Combined loss for better multi-class performance
-# - Consider longer training (150+ epochs) for convergence
-# - Smaller batch sizes to fit larger models in memory
-# - Be careful with data augmentation to preserve anatomical relationships
-# - Monitor per-class metrics during validation
-#
-# Expected dataset format:
-# Option 1 - Directory structure:
-# dataset/
-#   images/
-#     subject001.nii.gz
-#     subject002.nii.gz
-#     ...
-#   labels/
-#     subject001_segmentation.nii.gz  # Contains integer labels 0-5
-#     subject002_segmentation.nii.gz
-#     ...
-# 
-# Option 2 - JSON file with file lists (recommended for custom paths):
-# dataset: /path/to/sample_balanced.json
-# JSON format:
-# {
-#   "images": ["/absolute/path/to/image1.nii.gz", "/absolute/path/to/image2.nii.gz", ...],
-#   "labels": ["/absolute/path/to/label1.nii.gz", "/absolute/path/to/label2.nii.gz", ...],
-#   "count": 123
-# }
-# Note: The JSON format directly uses the provided paths without any assumptions about
-# directory structure, allowing complete flexibility in data organization.

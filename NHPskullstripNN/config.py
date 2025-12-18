@@ -68,6 +68,7 @@ class TrainingConfig:
     early_stopping_restore_best_weights: bool = True  # Restore best weights on early stopping
     dropout_rate: float = 0.2              # Dropout rate
     gradient_clip_norm: float = 0.5        # Gradient clipping norm
+    checkpoint_frequency: int = 5          # Save checkpoint every N epochs (default: 5)
     
     # Advanced training features
     mixed_precision: bool = True           # Enable mixed precision training
@@ -97,7 +98,7 @@ class TrainingConfig:
     # ============================================================================
     device: str = "auto"                   # Device selection
     random_seed: int = 42                  # Random seed for reproducibility
-    num_workers: int = 4                   # Data loader workers
+    num_workers: int = 8                   # Data loader workers
     pin_memory: bool = True                # Pin memory for faster data transfer
     log_level: str = "DEBUG"               # Logging level, 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
      
@@ -141,7 +142,7 @@ class TrainingConfig:
                     except ValueError:
                         pass  # Keep as string if conversion fails
                 # Try to convert to int if it looks like an integer
-                elif key in ['num_epochs', 'batch_size', 'num_input_slices', 'num_conv_block', 'kernel_root', 'num_classes', 'patience', 'rescale_dim', 'validation_frequency', 'warmup_epochs', 'num_workers', 'random_seed', 'plot_interval', 'max_batch_size']:
+                elif key in ['num_epochs', 'batch_size', 'num_input_slices', 'num_conv_block', 'kernel_root', 'num_classes', 'patience', 'rescale_dim', 'validation_frequency', 'warmup_epochs', 'num_workers', 'random_seed', 'plot_interval', 'max_batch_size', 'checkpoint_frequency']:
                     try:
                         config_dict[key] = int(value)
                     except ValueError:
@@ -169,8 +170,8 @@ class TrainingConfig:
         # Set output_dir for compatibility with existing code
         self.output_dir = self.OUTPUT_DIR
         
-        # HDF5 directory is always {OUTPUT_DIR}/hdf5/ (auto-detected, no config needed)
-        self.hdf5_dir = os.path.join(self.OUTPUT_DIR, "hdf5")
+        # HDF5 directory is in TRAINING_DATA_DIR (same location as source data, like FastSurferCNN)
+        self.hdf5_dir = self.TRAINING_DATA_DIR
         
         self.create_output_directories()
     

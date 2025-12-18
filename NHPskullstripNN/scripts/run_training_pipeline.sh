@@ -16,19 +16,26 @@
 # CONFIGURATION - Source centralized config
 # ============================================================================
 
+# Get script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# If running from the project root directory, use it directly
+# This handles cases where script is run from /home/star/github/banana
+CURRENT_DIR="$(pwd)"
+if [ -d "$CURRENT_DIR/NHPskullstripNN" ] && [ -f "$CURRENT_DIR/NHPskullstripNN/scripts/run_training_pipeline.sh" ]; then
+    PROJECT_ROOT="$CURRENT_DIR"
+fi
+
 # Set PYTHONPATH to include the project root
-export PYTHONPATH="/home/star/github/banana:$PYTHONPATH"
+export PYTHONPATH="$PROJECT_ROOT:$PYTHONPATH"
 
 # YAML config file (SINGLE SOURCE OF TRUTH)
-YAML_CONFIG=/home/star/github/banana/NHPskullstripNN/config_example/T1w_brainmask.yaml
+YAML_CONFIG="$PROJECT_ROOT/NHPskullstripNN/config_example/T1w_brainmask.yaml"
 
-# Data directories (can be overridden in YAML)
-TRAINING_DATA_DIR=/mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_data
-OUTPUT_DIR=/mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_output/T1w_seg-brainmask_v1
-
-# ============================================================================
-# STEP 1: Split Data into Train/Val/Test
-# ============================================================================
+# # ============================================================================
+# # STEP 1: Split Data into Train/Val/Test
+# # ============================================================================
 
 echo ""
 echo "================================================================================"
@@ -37,7 +44,7 @@ echo "==========================================================================
 echo ""
 
 # Note: Split script will read data path and seed from YAML
-python3 NHPskullstripNN/train/step1_split_data.py \
+python3 "$PROJECT_ROOT/NHPskullstripNN/train/step1_split_data.py" \
     --config "$YAML_CONFIG"
 
 if [ $? -eq 0 ]; then
@@ -61,7 +68,7 @@ echo ""
 
 # All parameters read from YAML!
 echo "Generating training HDF5..."
-python3 NHPskullstripNN/train/step2_create_hdf5.py \
+python3 "$PROJECT_ROOT/NHPskullstripNN/train/step2_create_hdf5.py" \
     --config "$YAML_CONFIG" \
     --split_type train
 
@@ -73,7 +80,7 @@ fi
 
 echo ""
 echo "Generating validation HDF5..."
-python3 NHPskullstripNN/train/step2_create_hdf5.py \
+python3 "$PROJECT_ROOT/NHPskullstripNN/train/step2_create_hdf5.py" \
     --config "$YAML_CONFIG" \
     --split_type val
 
@@ -98,27 +105,5 @@ echo ""
 
 # Use the NHPskullstripNN training script
 # All parameters are already in the YAML!
-python3 NHPskullstripNN/train/step3_train_model.py \
+python3 "$PROJECT_ROOT/NHPskullstripNN/train/step3_train_model.py" \
     --config "$YAML_CONFIG"
-
-if [ $? -eq 0 ]; then
-    echo ""
-    echo "================================================================================"
-    echo "✓ Training completed successfully!"
-    echo "================================================================================"
-    echo ""
-    echo "Output directory: $OUTPUT_DIR"
-    echo "Checkpoints: $OUTPUT_DIR/checkpoints/"
-    echo "Logs: $OUTPUT_DIR/logs/"
-    echo "HDF5 datasets: $OUTPUT_DIR/hdf5/"
-else
-    echo ""
-    echo "⚠️  Training had errors or was interrupted"
-    echo "    You can resume training by running step3_train_model.py directly"
-fi
-
-echo ""
-echo "================================================================================"
-echo "Pipeline Complete"
-echo "================================================================================"
-
