@@ -29,7 +29,7 @@ from ..utils import get_logger, setup_logging
 from ..utils.templates import resolve_template
 from ..utils.bids import parse_bids_entities, get_filename_stem, find_bids_metadata
 from ..operations.registration import ants_register
-from ..config import get_config, update_config_from_bids_metadata, load_config
+from ..config import get_config, update_config_from_bids_metadata, load_config, get_output_space
 from ..config.config_io import save_config
 from ..quality_control import generate_qc_report
 from ..quality_control.snapshots import create_registration_qc
@@ -634,13 +634,7 @@ def _process_functional_job(job: FunctionalJob, sub_qc_dir: Path, logger: loggin
             registration_pipeline = func_dict.get("registration_pipeline", "func2anat2template")
     
     # Check if output_space is native - if so, disable template registration
-    # Use dot notation for Config class compatibility
-    output_space = job.config.get("template.output_space", "")
-    if not output_space:
-        # Fallback: try accessing via nested dict (for dict configs)
-        template_dict = job.config.get("template", {})
-        if isinstance(template_dict, dict):
-            output_space = template_dict.get("output_space", "")
+    output_space = get_output_space(job.config)
     is_native_space = (output_space and output_space.lower() == "native")
     
     if registration_pipeline == "func2anat":
@@ -748,9 +742,17 @@ def _process_functional_job(job: FunctionalJob, sub_qc_dir: Path, logger: loggin
             # Find target2template transform file
             target2template_transform = None
             if target2template:
+                if not job.template_spec or job.template_spec.lower() == "native":
+                    logger.error("target2template is True but template_spec is None or 'native'")
+                    continue
+                    
                 try:
                     target_dir = Path(target_file).parent
                     template_name = job.template_spec.split(':')[0]
+                    
+                    if not template_name:
+                        logger.error(f"System: failed to extract template name from template_spec: {job.template_spec}")
+                        continue
                     
                     # Look for transform files with various naming patterns
                     transform_patterns = [
@@ -774,8 +776,15 @@ def _process_functional_job(job: FunctionalJob, sub_qc_dir: Path, logger: loggin
                     continue
                 
         elif target_type == "template":
-            target_file = resolve_template(job.template_spec)
-            target2template_transform = None
+            if not job.template_spec or job.template_spec.lower() == "native":
+                logger.error(f"target_type is 'template' but template_spec is None or 'native'")
+                continue
+            try:
+                target_file = resolve_template(job.template_spec)
+                target2template_transform = None
+            except Exception as e:
+                logger.error(f"System: failed to resolve template {job.template_spec} - {e}")
+                continue
 
         # if none or path not exists, raise an error
         if target_file is None or not Path(target_file).exists():
@@ -1345,7 +1354,7 @@ class BIDSDatasetProcessor:
         else:
             self.config = config_dict
 
-        self.template_spec = self.config.get("template", {}).get("output_space", {})
+        self.template_spec = get_output_space(self.config)
         self.kwargs = kwargs
         
         # Ensure output directory exists

@@ -279,6 +279,17 @@
             </div>
             
             <div class="sub-section">
+                <h3>conform</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="anat_conform_enabled" name="anat_conform_enabled" checked>
+                        <label for="anat_conform_enabled">enabled</label>
+                    </div>
+                    <div class="help-text">(conform input image to template space using FLIRT rigid registration, padding is hardcoded to 0.2)</div>
+                </div>
+            </div>
+            
+            <div class="sub-section">
                 <h3>bias_correction</h3>
                 <div class="form-group">
                     <div class="checkbox-group">
@@ -301,7 +312,7 @@
                 </div>
                 <div class="form-group">
                     <label for="anat_bias_correction_bspline_fitting">bspline_fitting</label>
-                    <input type="text" id="anat_bias_correction_bspline_fitting" name="anat_bias_correction_bspline_fitting" value="[ 100 ]">
+                    <input type="text" id="anat_bias_correction_bspline_fitting" name="anat_bias_correction_bspline_fitting" value="[ 200 ]">
                     <div class="help-text">(B-spline fitting parameters in ANTs format)</div>
                 </div>
                 <div class="form-group">
@@ -844,11 +855,12 @@
             },
             anat: {
                 reorient: { enabled: true },
+                conform: { enabled: true },
                 bias_correction: {
                     enabled: true,
                     algorithm: "N4BiasFieldCorrection",
                     shrink_factor: 2,
-                    bspline_fitting: "[ 100 ]",
+                    bspline_fitting: "[ 200 ]",
                     rescale_mean_to_100: true,
                     threads: 8
                 },
@@ -1249,6 +1261,7 @@
             
             // Anatomical
             config.anat.reorient.enabled = document.getElementById('anat_reorient_enabled').checked;
+            config.anat.conform.enabled = document.getElementById('anat_conform_enabled').checked;
             config.anat.bias_correction.enabled = document.getElementById('anat_bias_correction_enabled').checked;
             config.anat.bias_correction.algorithm = document.getElementById('anat_bias_correction_algorithm').value;
             config.anat.bias_correction.shrink_factor = parseFloat(document.getElementById('anat_bias_correction_shrink_factor').value);

@@ -23,6 +23,70 @@ from .mri_plotting import (
 )
 
 # %%
+
+def create_conform_qc(
+    conformed_file: str,
+    template_file: str,
+    save_f: Union[str, Path],
+    modality: str = "anat",
+    num_slices: int = 7,
+    logger: Optional[logging.Logger] = None,
+    **kwargs
+) -> Dict[str, str]:
+    """
+    Generate conform quality control overlays.
+    
+    Args:
+        conformed_file: Path to conformed image (underlay)
+        template_file: Path to resampled template image (overlay/contours)
+        save_f: Full path for output file (e.g., 'figures/sub-01_desc-conform_T1w.png')
+        modality: Imaging modality ("anat" or "func")
+        num_slices: Number of slices per orientation
+        logger: Logger instance
+        
+    Returns:
+        Dictionary with snapshot file paths
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
+    output_path = Path(save_f)
+    logger.info(f"QC: creating {modality} conform overlay")
+    
+    try:
+        # Validate inputs
+        for file_path, name in [(conformed_file, "conformed"), (template_file, "template")]:
+            if not os.path.exists(file_path):
+                logger.error(f"QC: {name} file not found - {os.path.basename(file_path)}")
+                return {}
+        
+        # Create conform overlay (conformed image as underlay, template as contours with 2 levels)
+        # Pass file paths directly - let visualization function handle loading and value scaling
+        fig = create_overlay_grid_3xN(
+            conformed_file, 
+            template_file,
+            num_cols=num_slices,
+            title="",
+            alpha=0.7,
+            underlay_cmap='gray',
+            overlay_cmap='summer',
+            num_contour_levels=3,
+            show_title=False
+        )
+        
+        # Ensure the parent directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='black')
+        plt.close(fig)
+        
+        logger.info(f"QC: conform overlay saved - {os.path.basename(output_path)}")
+        return {f"{modality}_conform_overlay": str(output_path)}
+        
+    except Exception as e:
+        logger.error(f"QC: failed to generate conform overlay - {e}")
+        return {}
+
+
 def create_motion_correction_qc(
     motion_params: str,
     save_f: Union[str, Path],

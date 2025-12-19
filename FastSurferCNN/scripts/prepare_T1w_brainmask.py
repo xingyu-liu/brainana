@@ -10,7 +10,7 @@ import shutil
 from pathlib import Path
 from tempfile import mkdtemp
 
-from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
+from FastSurferCNN.inference.segmentation import run_segmentation
 
 # %%
 dataset_root = Path('/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_data/T1w_seg-brainmask')
@@ -89,12 +89,12 @@ def main():
         
         logger.info(f"[{i}/{len(image_paths)}] Processing: {image_path.name}")
         
-        # Create temporary output directory for skullstrip_fastsurfercnn
-        temp_output_dir = Path(mkdtemp(prefix='skullstrip_'))
+        # Create temporary output directory for run_segmentation
+        temp_output_dir = Path(mkdtemp(prefix='segment_'))
         
         try:
-            # Run skullstripping
-            result = skullstrip_fastsurfercnn(
+            # Run segmentation
+            result = run_segmentation(
                 input_image=str(image_path),
                 modal=modal,
                 output_dir=str(temp_output_dir),

@@ -12,7 +12,7 @@ _file_dir = Path(__file__).resolve().parent
 if str(_file_dir.parent.parent) not in sys.path:
     sys.path.insert(0, str(_file_dir.parent.parent))
 
-from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
+from FastSurferCNN.inference.segmentation import run_segmentation
 
 # %%
 # # # anat 
@@ -97,7 +97,7 @@ def main():
         return
     
     try:
-        result = skullstrip_fastsurfercnn(
+        result = run_segmentation(
             input_image=input_image,
             modal=modal,
             output_dir=output_dir,

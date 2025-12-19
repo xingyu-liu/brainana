@@ -18,6 +18,7 @@ from ..utils.bids import parse_bids_entities, BIDS_ENTITY_ORDER
 
 # Configuration constants
 SNAPSHOT_MAPPINGS = {
+    'conform': {'key': 'conform_overlay', 'description': 'Conform to template space'},
     'biasCorrection': {'key': 'bias_correction_comparison', 'description': 'Bias field correction'},
     'skullStripping': {'key': 'skullstripping_overlay', 'description': 'Skullstripping'},
     'anat2template': {'key': 'anat2template_registration_overlay', 'description': 'Structural to template registration'},
@@ -28,7 +29,7 @@ SNAPSHOT_MAPPINGS = {
 }
 
 SNAPSHOT_ORDER = [
-    'bias_correction_comparison', 'skullstripping_overlay', 'anat2template_registration_overlay', 
+    'conform_overlay', 'bias_correction_comparison', 'skullstripping_overlay', 'anat2template_registration_overlay', 
     'T2w2T1w_registration_overlay', 'func2anat_registration_overlay', 'func2template_registration_overlay', 'motion_parameters'
 ]
 

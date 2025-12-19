@@ -173,7 +173,7 @@ def _apply_two_pass_refinement(
         log.info("  Running 2nd pass with fresh predictor on cropped image...")
         log.info("  (This runs the full pipeline from scratch - no state reuse)")
         
-        run_segmentation(
+        segmentation(
             input_image=cropped_input_path,
             output_dir=output_dir,  # Outputs go back to main directory
             atlas_name=atlas_name,
@@ -219,7 +219,7 @@ def _apply_two_pass_refinement(
         return False
 
 
-def run_segmentation(
+def segmentation(
     input_image: str | Path,
     output_dir: str | Path,
     atlas_name: str | None = None,
@@ -580,7 +580,7 @@ def run_segmentation(
             )
             
             # If refinement succeeded, update result paths to reflect second-pass outputs
-            # (which are already saved by the fresh run_segmentation call)
+            # (which are already saved by the fresh segmentation call)
             if refinement_applied:
                 log.info("  ✓ Second-pass outputs are now in main directory")
                 # Update result dict to include cropped input

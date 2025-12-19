@@ -219,3 +219,25 @@ def save_config(config: Dict[str, Any], output_path: Union[str, Path]) -> None:
                 yaml.dump(config, f, default_flow_style=False, sort_keys=False, indent=2, allow_unicode=True)
     except Exception as e:
         raise ValueError(f"Failed to save config to {output_file}: {e}")
+
+
+def get_output_space(config: Union[Dict[str, Any], Any]) -> str:
+    """
+    Get output_space from config with fallback logic.
+    
+    Works with both Config objects (with .get() method) and plain dictionaries.
+    
+    Args:
+        config: Configuration object (Config instance or dictionary)
+        
+    Returns:
+        Output space string, or empty string if not found
+    """
+    # Try dot notation first (works for Config objects and dicts with dot notation support)
+    output_space = config.get("template.output_space", "")
+    if not output_space:
+        # Fallback: try accessing via nested dict (for dict configs)
+        template_dict = config.get("template", {})
+        if isinstance(template_dict, dict):
+            output_space = template_dict.get("output_space", "")
+    return output_space or ""

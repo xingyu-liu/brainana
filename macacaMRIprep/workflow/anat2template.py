@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional, List
 import json
 
 from .base import BasePreprocessingWorkflow
-from ..operations import bias_correction, apply_skullstripping, ants_register, reorient, correct_orientation_mismatch
+from ..operations import bias_correction, apply_segmentation, ants_register, reorient, correct_orientation_mismatch, conform_to_template
 from ..utils import run_command
 from ..utils import resolve_template, get_filename_stem
 from ..utils import log_workflow_start, log_workflow_end
@@ -21,8 +21,10 @@ from ..utils.system import set_numerical_threads
 from ..quality_control import create_skullstripping_qc
 from ..quality_control.snapshots import (
     create_bias_correction_qc,
-    create_registration_qc
+    create_registration_qc,
+    create_conform_qc
 )
+from ..config import get_output_space
 
 # Add the project root to sys.path to enable FastSurferRecon imports
 # Similar to how FastSurferCNN is handled in preprocessing.py
@@ -33,6 +35,9 @@ if str(_project_root) not in sys.path:
 # %%
 class AnatomicalProcessor(BasePreprocessingWorkflow):
     """Simplified anatomical processor with serial step execution."""
+    
+    # Default template for conform step (used when output_space is native or template_file is None)
+    DEFAULT_CONFORM_TEMPLATE = "NMT2Sym:res-025"
     
     def __init__(
         self,
@@ -60,6 +65,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
         else:
             raise ValueError("output_root is required")
         # Template resolution with override logic
+        # Priority: 1) template_file+template_name (direct), 2) template_spec (resolve), 3) native (skip)
         self.template_file = None
         self.template_name = None
         
@@ -74,6 +80,8 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
             try:
                 self.template_file = resolve_template(template_spec)
                 self.template_name = template_spec.split(":")[0]
+                if not self.template_name:
+                    raise ValueError(f"Failed to extract template name from template_spec: {template_spec}")
                 self.logger.info(f"Template: resolved {template_spec} -> {os.path.basename(self.template_file)}")
             except Exception as e:
                 self.logger.error(f"Template: failed to resolve {template_spec} - {e}")
@@ -149,6 +157,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     }
                 )
                 # Get target_file, or default to RAS orientation if no template
+                # Use template_file if available, otherwise default to RAS
                 target_file = str(self.template_file) if self.template_file is not None else None
                 target_orientation = "RAS" if target_file is None else None
                 
@@ -166,6 +175,79 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     self.logger.info(f"Step: {step_name} skipped - no reorientation performed")
             else:
                 self.logger.info("Step: reorient skipped (disabled in configuration)")
+
+
+            # ANAT CONFORM TO TEMPLATE
+            # ------------------------------------------------------------
+            if self.config.get("anat.conform.enabled", True):
+                # Determine conform template file
+                # Priority: 1) template_file (already resolved), 2) template_spec (resolve now), 3) default
+                if self.template_file is not None:
+                    conform_template_file = str(self.template_file)
+                    self.logger.info(f"Conform: using specified template: {os.path.basename(self.template_file)}")
+                elif self.template_spec and self.template_spec.lower() != "native":
+                    # Resolve template_spec if it wasn't resolved in __init__ (shouldn't happen, but safe fallback)
+                    try:
+                        conform_template_file = resolve_template(self.template_spec)
+                        self.logger.info(f"Conform: resolved template_spec: {self.template_spec} -> {os.path.basename(conform_template_file)}")
+                    except Exception as e:
+                        self.logger.error(f"Conform: failed to resolve template_spec {self.template_spec} - {e}")
+                        raise
+                else:
+                    # Use default template for conform (when output_space is native or no template specified)
+                    try:
+                        conform_template_file = resolve_template(self.DEFAULT_CONFORM_TEMPLATE)
+                        self.logger.info(f"Conform: using default template: {self.DEFAULT_CONFORM_TEMPLATE} -> {os.path.basename(conform_template_file)}")
+                    except Exception as e:
+                        self.logger.error(f"Conform: failed to resolve default template {self.DEFAULT_CONFORM_TEMPLATE} - {e}")
+                        raise
+                
+                # run conform to template
+                step_name = self.pipeline.add_step(
+                    name="anat_conform",
+                    func=conform_to_template,
+                    inputs={
+                        "imagef": anatf_cur,
+                        "template_file": conform_template_file,
+                        "output_name": "anat_conformed.nii.gz"
+                    }
+                )
+                result = self.pipeline.run_step(
+                    step_name,
+                    logger=self.logger
+                )
+                
+                if result.output_files["imagef_conformed"] is not None:
+                    anatf_conformed = result.output_files["imagef_conformed"]
+                    conform_template_f = result.output_files["template_f"]
+                    self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_conformed)}")
+                    
+                    # Update anatf_cur to conformed image
+                    anatf_cur = anatf_conformed
+                    
+                    # Generate QC
+                    if self.config.get("quality_control.enabled", True):
+                        try:
+                            # Generate BIDS-compliant filename for conform QC
+                            filename_stem = get_filename_stem(self.anat_file)
+                            filename_stem = filename_stem.replace(f"_{self.modality}", "")
+                            conform_qc_filename = f"{filename_stem}_desc-conform_{self.modality}.png"
+                            conform_qc_path = self.qc_dir / conform_qc_filename
+                            
+                            create_conform_qc(
+                                conformed_file=anatf_conformed,
+                                template_file=conform_template_f,
+                                save_f=str(conform_qc_path),
+                                modality="anat",
+                                logger=self.logger
+                            )
+                            self.logger.info("QC: anatomical conform overlay created")
+                        except Exception as e:
+                            self.logger.warning(f"QC: anatomical conform failed - {e}")
+                else:
+                    self.logger.warning(f"Step: {step_name} returned None - conform may have been skipped")
+            else:
+                self.logger.info("Step: conform skipped (disabled in configuration)")
 
             # ANAT BIAS CORRECTION
             # ------------------------------------------------------------
@@ -215,7 +297,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
 
             # Still save anatomical file even if bias correction was skipped
             outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-preproc_{self.modality}.nii.gz"
-            cmd_output = ["cp", anatf_cur, str(outputf)]
+            cmd_output = ["cp", str(anatf_cur), str(outputf)]
             run_command(cmd_output)
             self.generated_files.append(str(outputf))
             self.logger.info(f"Output: preprocessed anatomical file saved")
@@ -240,8 +322,8 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                 outpuf_f_for_surfrecon["t1w_image"] = anatf_with_skull
 
                 step_name = self.pipeline.add_step(
-                    name="anat_skullstripping", 
-                    func=apply_skullstripping,
+                    name="anat_segmentation", 
+                    func=apply_segmentation,
                     inputs={
                         "imagef": anatf_cur,
                         "modal": "anat",
@@ -291,14 +373,14 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
 
                 # output to output_dir
                 outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-preproc_{self.modality}_brain.nii.gz"
-                cmd_output = ["cp", anatf_cur, str(outputf)]
+                cmd_output = ["cp", str(anatf_cur), str(outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(outputf))
                 self.logger.info(f"Output: skull stripped anatomical file saved")
 
                 # save the brain mask
                 outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-brain_mask.nii.gz"
-                cmd_output = ["cp", anat_brain_mask, str(outputf)]
+                cmd_output = ["cp", str(anat_brain_mask), str(outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(outputf))
                 self.logger.info(f"Output: brain mask file saved")
@@ -313,7 +395,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                         outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-brain_atlas{atlas_name}.nii.gz"
                     else:
                         outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-brain_atlas.nii.gz"
-                    cmd_output = ["cp", result.output_files["segmentation"], str(outputf)]
+                    cmd_output = ["cp", str(result.output_files["segmentation"]), str(outputf)]
                     run_command(cmd_output)
                     self.generated_files.append(str(outputf))
                     self.logger.info(f"Output: atlas file saved")
@@ -323,7 +405,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
 
                 if result.output_files.get("hemimask") is not None:
                     outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-brain_hemimask.nii.gz"
-                    cmd_output = ["cp", result.output_files["hemimask"], str(outputf)]
+                    cmd_output = ["cp", str(result.output_files["hemimask"]), str(outputf)]
                     run_command(cmd_output)
                     self.generated_files.append(str(outputf))
                     self.logger.info(f"Output: hemimask file saved")
@@ -355,21 +437,19 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
 
             # ANAT REGISTRATION TO TEMPLATE
             # ------------------------------------------------------------
-            # Skip template registration if output_space is native
-            # Use dot notation for Config class compatibility
-            output_space = self.config.get("template.output_space", "")
-            if not output_space:
-                # Fallback: try accessing via nested dict (for dict configs)
-                template_dict = self.config.get("template", {})
-                if isinstance(template_dict, dict):
-                    output_space = template_dict.get("output_space", "")
-            skip_template_registration = (output_space and output_space.lower() == "native")
+            # Skip template registration if output_space is native or template_file is not available
+            output_space = get_output_space(self.config)
+            skip_template_registration = (
+                (output_space and output_space.lower() == "native") or 
+                self.template_file is None
+            )
             
-            # Also skip if template_file is not available (should be None when output_space is native)
-            if skip_template_registration or self.template_file is None:
-                skip_template_registration = True
-            
-            if self.config.get("registration.enabled", True) and not skip_template_registration and self.template_file is not None:
+            if self.config.get("registration.enabled", True) and not skip_template_registration:
+                # Validate template_file and template_name exist before use
+                if self.template_file is None:
+                    raise ValueError("Template registration enabled but template_file is None")
+                if self.template_name is None:
+                    raise ValueError("Template registration enabled but template_name is None")
                 qc_modality = "anat2template"
                 step_name = self.pipeline.add_step(
                     name="anat2template_registration",
@@ -389,7 +469,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
 
                 # output to output_dir
                 outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_space-{self.template_name}_desc-preproc_{self.modality}.nii.gz"
-                cmd_output = ["cp", result.output_files["imagef_registered"], str(outputf)]
+                cmd_output = ["cp", str(result.output_files["imagef_registered"]), str(outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(outputf))
                 self.logger.info(f"Output: registered anatomical file saved")
@@ -407,13 +487,13 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
 
                 # save the xfm files
                 outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_from-{self.modality}_to-{self.template_name}_mode-image_xfm.h5"
-                cmd_output = ["cp", result.output_files["forward_transform"], str(outputf)]
+                cmd_output = ["cp", str(result.output_files["forward_transform"]), str(outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(outputf))
                 self.logger.info(f"Output: forward transform saved")
 
                 outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_from-{self.template_name}_to-{self.modality}_mode-image_xfm.h5"
-                cmd_output = ["cp", result.output_files["inverse_transform"], str(outputf)]
+                cmd_output = ["cp", str(result.output_files["inverse_transform"]), str(outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(outputf))
                 self.logger.info(f"Output: inverse transform saved")

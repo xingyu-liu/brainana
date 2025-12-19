@@ -12,13 +12,7 @@ input_f = os.path.join(data_dir, 'input.nii.gz')
 template_f = os.path.join(data_dir, 'template_padded.nii.gz')
 xfm_f = os.path.join(data_dir, 'scanner2T1w.mat')
 
-interpolation_order = 3
-force_isotropic = True
-
-if force_isotropic:
-    output_f = input_f.replace('.nii.gz', '_registered_iso.nii.gz')
-else:
-    output_f = input_f.replace('.nii.gz', '_registered_aniso.nii.gz')
+output_f = input_f.replace('.nii.gz', '_registered.nii.gz')
 
 # %%
 # Validate input file exists
@@ -43,14 +37,11 @@ original_affine = img.affine
 original_voxel_sizes = np.sqrt(np.sum(original_affine[:3, :3] ** 2, axis=0))
 print(f"Original voxel sizes: {np.array2string(original_voxel_sizes, precision=4, suppress_small=True)} mm")
 
-if force_isotropic:
-    # Resample to isotropic using minimum voxel size to ensure uniform resolution
-    # This prevents loss of resolution in some areas and gain in others after transformation
-    # Round to 2 decimals for target voxel size (small uniform scale change is acceptable)
-    target_voxel_size = np.round(np.min(original_voxel_sizes), 2)
-    target_voxel_sizes = np.full((3,), target_voxel_size)
-else:
-    target_voxel_sizes = np.round(original_voxel_sizes, 2)
+# Resample to isotropic using minimum voxel size to ensure uniform resolution
+# This prevents loss of resolution in some areas and gain in others after transformation
+# Round to 2 decimals for target voxel size (small uniform scale change is acceptable)
+target_voxel_size = np.round(np.min(original_voxel_sizes), 2)
+target_voxel_sizes = np.full((3,), target_voxel_size)
 
 print(f"Target voxel sizes: {target_voxel_sizes} mm")
 

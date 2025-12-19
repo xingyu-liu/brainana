@@ -12,7 +12,7 @@ _file_dir = Path(__file__).resolve().parent
 if str(_file_dir.parent) not in sys.path:
     sys.path.insert(0, str(_file_dir.parent))
 
-from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
+from FastSurferCNN.inference.segmentation import run_segmentation
 
 # Setup logging
 logging.basicConfig(
@@ -36,7 +36,7 @@ def main():
     }
     
     logger.info("=" * 80)
-    logger.info("Test: testing FastSurferCNN skullstripping function")
+    logger.info("Test: testing FastSurferCNN segmentation function")
     logger.info("=" * 80)
     logger.info(f"Test: input_image={input_image}")
     logger.info(f"Test: modal={modal}")
@@ -49,13 +49,12 @@ def main():
         return
     
     try:
-        result = skullstrip_fastsurfercnn(
+        result = run_segmentation(
             input_image=input_image,
             modal=modal,
             output_dir=output_dir,
             device_id='auto',
             logger=logger,
-            config=config,
             output_data_format='nifti',
             enable_crop_2round=True,
             plane_weight_coronal=0,
@@ -65,7 +64,7 @@ def main():
         )
         
         logger.info("=" * 80)
-        logger.info("Test: skullstripping completed successfully!")
+        logger.info("Test: segmentation completed successfully!")
         logger.info(f"Test: result={result}")
         logger.info("=" * 80)
         

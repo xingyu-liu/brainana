@@ -19,8 +19,10 @@ from .preprocessing import (
     slice_timing_correction,
     motion_correction,
     despike,
+    apply_segmentation,
     apply_skullstripping,
-    bias_correction
+    bias_correction,
+    conform_to_template
 )
 
 # Import registration functions
@@ -48,8 +50,10 @@ __all__ = [
     'slice_timing_correction',
     'motion_correction',
     'despike',
+    'apply_segmentation',
     'apply_skullstripping',
     'bias_correction',
+    'conform_to_template',
     
     # Registration
     'ants_register',

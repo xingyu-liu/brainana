@@ -27,6 +27,8 @@ template:
 anat:
   reorient:
     enabled: true  # bool: reorient anatomical images to template orientation when given, otherwise to RAS
+  conform:
+    enabled: true  # bool: conform input image to template space using FLIRT rigid registration (padding is hardcoded to 0.2)
   bias_correction:
     enabled: true  # bool: perform bias field correction
     algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")

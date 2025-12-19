@@ -12,10 +12,10 @@ from pathlib import Path
 import json
 
 def validate_input_file(imagef: Union[str, Path], logger: logging.Logger) -> Path:
-    """Validate input neuroimaging file.
+    """Validate input neuroimaging file or transformation matrix.
     
     Args:
-        imagef: Path to input file
+        imagef: Path to input file (NIFTI image or transformation matrix)
         logger: Logger instance
         
     Returns:
@@ -23,15 +23,16 @@ def validate_input_file(imagef: Union[str, Path], logger: logging.Logger) -> Pat
         
     Raises:
         FileNotFoundError: If file doesn't exist
-        ValueError: If file is not a valid neuroimaging file
+        ValueError: If file is not a valid neuroimaging file or transformation matrix
     """
     image_path = Path(imagef)
     if not image_path.exists():
         raise FileNotFoundError(f"Input file not found: {image_path}")
     
-    # Validate it's a neuroimaging file
-    if not str(image_path).endswith(('.nii', '.nii.gz')):
-        raise ValueError(f"Input file must be a NIFTI file: {image_path}")
+    # Validate it's a neuroimaging file or transformation matrix
+    valid_extensions = ('.nii', '.nii.gz', '.mat')
+    if not str(image_path).endswith(valid_extensions):
+        raise ValueError(f"Input file must be a NIFTI file (.nii, .nii.gz) or transformation matrix (.mat): {image_path}")
     
     logger.debug(f"Data: input file validated - {image_path}")
     return image_path
@@ -125,9 +126,10 @@ def validate_output_file(output_path: Union[str, Path], logger: logging.Logger) 
     if not output_file.exists():
         raise FileNotFoundError(f"Expected output file not created: {output_file}")
     
-    # Validate it's a valid neuroimaging file
-    if not str(output_file).endswith(('.nii', '.nii.gz')):
-        raise ValueError(f"Output file must be a NIFTI file: {output_file}")
+    # Validate it's a valid neuroimaging file or transformation matrix
+    valid_extensions = ('.nii', '.nii.gz', '.mat')
+    if not str(output_file).endswith(valid_extensions):
+        raise ValueError(f"Output file must be a NIFTI file (.nii, .nii.gz) or transformation matrix (.mat): {output_file}")
     
     logger.debug(f"Data: output file validated - {output_file}")
     return output_file

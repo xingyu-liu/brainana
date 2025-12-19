@@ -63,7 +63,7 @@ logger = logging.getLogger(__name__)
 def _improve_mask(mask_data: np.ndarray, zooms: tuple[float, float, float]) -> np.ndarray:
     """Apply the same morphological pipeline as `create_mask` with its parameters.
 
-    We compute the dilation/erosion/rounds exactly as in `FastSurferCNN.inference.api.run_segmentation`,
+    We compute the dilation/erosion/rounds exactly as in `FastSurferCNN.inference.api.segmentation`,
     i.e. based on `MASK_DILATION_SIZE_MM`, `ROUNDS_OF_MORPHOLOGICAL_OPERATIONS`, and the voxel size.
     """
     # Compute voxel-wise dilation/erosion parameters exactly like in the main API

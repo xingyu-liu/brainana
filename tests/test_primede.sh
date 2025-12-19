@@ -376,18 +376,6 @@ python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
     --config ${config_f} --n-procs 3
 
 # ================================================
-# test banana
-# ================================================
-dataset_root=/mnt/DataDrive3/xliu/prep_test/banana_test/testing_inz
-dataset_dir=${dataset_root}/dataset_classic
-output_dir=${dataset_root}/dataset_classic_preproc
-config_f=${dataset_root}/config.yaml
-
-pipeline=func2anat2template
-python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
-    --config ${config_f}
-
-# ================================================
 # test new livingstone
 # ================================================
 dataset_root=/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test
@@ -398,5 +386,18 @@ output_dir=${dataset_root}/preproc/${dataset_name}
 config_f=${dataset_root}/config.yaml
 
 pipeline=func2anat2template
+python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
+    --config ${config_f}
+
+# ================================================
+# test banana
+# ================================================
+dataset_root=/mnt/DataDrive3/xliu/prep_test/banana_test
+dataset_name=dataset_misorient
+dataset_dir=${dataset_root}/${dataset_name}
+output_dir=${dataset_root}/preproc/${dataset_name}_v2
+# config_f=${dataset_root}/preproc/config.yaml
+config_f=${dataset_root}/preproc/config_nosurfrecon.yaml
+
 python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
     --config ${config_f}

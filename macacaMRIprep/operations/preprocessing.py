@@ -17,20 +17,23 @@ import nibabel as nib
 from nibabel.orientations import aff2axcodes
 
 from .validation import validate_input_file, ensure_working_directory, validate_output_file
+from .registration import flirt_register, flirt_apply_transforms
 from ..utils import run_command, calculate_func_tmean, reorient_image_to_target, reorient_image_to_orientation, get_image_shape
 from ..config import validate_slice_timing_config
 from ..utils.mri import correct_affine_for_mismatch_orientation, get_opposite_orientation
 
 # Import skullstripping from FastSurferCNN package
 import sys
-from pathlib import Path
 
 # Add the project root to sys.path to enable FastSurferCNN imports
 project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from FastSurferCNN.inference.skullstripping import skullstrip_fastsurfercnn
+from FastSurferCNN.inference.segmentation import run_segmentation
+
+# Import NHPskullstripNN for conform step
+from NHPskullstripNN.inference.prediction import skullstripping
 
 # %%
 
@@ -38,8 +41,8 @@ def correct_orientation_mismatch(
     imagef: Union[str, Path],
     working_dir: Union[str, Path],
     output_name: str,
-    logger: logging.Logger,
     config: Dict[str, Any],
+    logger: Optional[logging.Logger] = None,
     generate_tmean: bool = False,
 ) -> Dict[str, str]:
     """Correct orientation mismatch for the input image.
@@ -67,6 +70,9 @@ def correct_orientation_mismatch(
         RuntimeError: If orientation correction fails
         ValueError: If configuration parameters are invalid or correction cannot be performed
     """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
     # Validate inputs
     image_path = validate_input_file(imagef, logger)
     work_dir = ensure_working_directory(working_dir, logger)
@@ -142,14 +148,14 @@ def correct_orientation_mismatch(
         
     except Exception as e:
         logger.error(f"Workflow: orientation mismatch correction failed: {str(e)}")
-        raise
+        raise RuntimeError(f"Orientation mismatch correction failed: {e}") from e
         
 
 def reorient(
     imagef: Union[str, Path],
     working_dir: Union[str, Path],
     output_name: str,
-    logger: logging.Logger,
+    logger: Optional[logging.Logger] = None,
     target_file: Optional[Union[str, Path]] = None,
     target_orientation: Optional[str] = None,
     generate_tmean: bool = False,
@@ -173,6 +179,9 @@ def reorient(
         RuntimeError: If reorient fails
         ValueError: If configuration parameters are invalid
     """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
     # Validate inputs
     image_path = validate_input_file(imagef, logger)
     work_dir = ensure_working_directory(working_dir, logger)
@@ -238,6 +247,270 @@ def reorient(
     
     logger.info(f"Workflow: reorient completed - {len([v for v in outputs.values() if v is not None])} outputs generated")
     return outputs
+
+
+def conform_to_template(
+    imagef: Union[str, Path],
+    template_file: Union[str, Path],
+    working_dir: Union[str, Path],
+    output_name: str,
+    logger: Optional[logging.Logger] = None,
+) -> Dict[str, str]:
+    """Conform input image to template space using FLIRT rigid registration.
+    
+    This function performs the following steps:
+    1. Pads the template to ensure input image is fully contained
+    2. Skullstrips the input image using NHPskullstripNN
+    3. Performs FLIRT rigid registration (brain-extracted input to padded template)
+    4. Resamples template to input resolution (isotropic, min voxel size)
+    5. Applies transformation to conform input to resampled template space
+    
+    Args:
+        imagef: Input anatomical image file
+        template_file: Template file path
+        working_dir: Working directory for intermediate and output files
+        output_name: Name of output conformed image file
+        logger: Logger instance (optional, will create one if not provided)
+        
+    Returns:
+        Dictionary with output file paths:
+        - 'imagef_conformed': Path to conformed image
+        - 'template_f': Path to resampled template file (for QC)
+        
+    Raises:
+        FileNotFoundError: If input or template file doesn't exist
+        RuntimeError: If any step fails (with suggestion to disable conform if needed)
+        ValueError: If invalid parameters are provided
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
+    # Validate inputs
+    image_path = validate_input_file(imagef, logger)
+    template_path = validate_input_file(template_file, logger)
+    work_dir = ensure_working_directory(working_dir, logger)
+    
+    # Hardcoded padding percentage
+    padding_percentage = 0.2
+    
+    logger.info(f"Workflow: starting conform to template")
+    logger.info(f"Data: input image - {os.path.basename(image_path)}")
+    logger.info(f"Data: template - {os.path.basename(template_path)}")
+    logger.info(f"System: working directory - {work_dir}")
+    
+    try:
+        # Step 1: Pad the template to ensure input image is fully contained
+        logger.info(f"Step: padding template (padding_percentage={padding_percentage})")
+        img = nib.load(template_path)
+        data = img.get_fdata()
+        affine = img.affine.copy()
+        header = img.header.copy()
+        
+        # Handle 4D images: if image has 4 dimensions, average the last dimension
+        if data.ndim == 4:
+            logger.warning(f"4D image detected (shape: {data.shape}). Averaging the last dimension.")
+            data = np.mean(data, axis=-1)
+            logger.info(f"Converted to 3D shape: {data.shape}")
+        
+        original_shape = data.shape[:3]
+        logger.info(f"Template original shape: {original_shape}")
+        
+        # Calculate padding amounts for each dimension
+        pad_amounts = (np.array(original_shape) * padding_percentage).astype(int)
+        logger.info(f"Padding amounts (per side): {pad_amounts}")
+        
+        # Calculate new shape
+        new_shape = original_shape + 2 * pad_amounts
+        logger.info(f"Template new shape: {new_shape}")
+        
+        # Pad the data with zeros
+        pad_width = tuple((pad, pad) for pad in pad_amounts)
+        if len(data.shape) > 3:
+            pad_width = pad_width + ((0, 0),) * (len(data.shape) - 3)
+        
+        padded_data = np.pad(data, pad_width, mode='constant', constant_values=0)
+        logger.info(f"Padded data shape: {padded_data.shape}")
+        
+        # Update the affine matrix to account for padding
+        pad_shift_voxel = -pad_amounts.astype(float)
+        pad_shift_world = affine[:3, :3] @ pad_shift_voxel
+        
+        logger.debug(f"Padding shift in voxel space: {pad_shift_voxel}")
+        logger.debug(f"Padding shift in world space: {pad_shift_world}")
+        
+        # Update the affine translation
+        new_affine = affine.copy()
+        new_affine[:3, 3] = affine[:3, 3] + pad_shift_world
+        
+        logger.debug(f"Original affine translation: {affine[:3, 3]}")
+        logger.debug(f"New affine translation: {new_affine[:3, 3]}")
+        
+        # Create new image with padded data and updated affine
+        new_img = nib.Nifti1Image(padded_data.astype(data.dtype), new_affine, header)
+        new_img.header.set_xyzt_units('mm', 'sec')
+        
+        # Save the padded template
+        zeropadded_f = work_dir / 'template_padded.nii.gz'
+        logger.info(f"Saving zero-padded template: {zeropadded_f}")
+        nib.save(new_img, zeropadded_f)
+        
+        # Validate the saved file exists
+        validate_output_file(zeropadded_f, logger)
+        logger.info(f"Step: template padding completed")
+        
+        # Update template path for next steps
+        template_f = str(zeropadded_f)
+        
+        # Step 2: Skullstrip the input image using NHPskullstripNN
+        logger.info(f"Step: skullstripping input image for registration")
+        brain_f = work_dir / 'conform_brain.nii.gz'
+        
+        # Create a minimal config for skullstripping
+        # NHPskullstripNN doesn't need much config, but we need to provide the structure
+        conform_skull_config = {
+            'anat': {
+                'skullstripping': {
+                    'gpu_device': 'auto'
+                }
+            }
+        }
+        
+        try:
+            skull_result = apply_skullstripping(
+                imagef=str(image_path),
+                modal='anat',
+                working_dir=str(work_dir),
+                output_name='conform_brain.nii.gz',
+                config=conform_skull_config,
+                logger=logger
+            )
+            
+            # Get the brain mask and brain-extracted image paths
+            mask_output = skull_result.get('brain_mask')
+            brain_extracted = skull_result.get('imagef_skullstripped')
+            
+            if not mask_output or not os.path.exists(mask_output):
+                raise RuntimeError(f"Skullstripping failed: mask file not found at {mask_output}")
+            if not brain_extracted or not os.path.exists(brain_extracted):
+                raise RuntimeError(f"Skullstripping failed: brain-extracted image not found at {brain_extracted}")
+            
+            # Move brain-extracted image to expected location
+            if brain_extracted != str(brain_f):
+                shutil.move(brain_extracted, str(brain_f))
+            
+            logger.info(f"Brain-extracted image saved to: {brain_f}")
+        except Exception as e:
+            logger.error(f"Error during skullstripping: {e}")
+            raise RuntimeError(
+                f"Conform step failed during skullstripping: {e}. "
+                f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
+            )
+        
+        # Step 3: FLIRT rigid registration from brain-extracted input to padded template
+        try:
+            registration_result = flirt_register(
+                fixedf=template_f,
+                movingf=str(brain_f),
+                working_dir=str(work_dir),
+                output_prefix='conform_scanner2T1w',
+                config=None,  # Will use default config
+                logger=logger,
+                dof=6
+            )
+            xfm_f = Path(registration_result['forward_transform'])
+        except Exception as e:
+            logger.error(f"Error during FLIRT registration: {e}")
+            raise RuntimeError(
+                f"Conform step failed during FLIRT registration: {e}. "
+                f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
+            )
+        
+        # Step 4.1: Resample template to the same resolution as the input
+        logger.info(f"Step: resampling template to input resolution")
+        
+        # Load the input image to determine target voxel sizes
+        img_input = nib.load(image_path)
+        original_affine = img_input.affine
+        
+        original_voxel_sizes = np.sqrt(np.sum(original_affine[:3, :3] ** 2, axis=0))
+        logger.info(f"Input voxel sizes: {np.array2string(original_voxel_sizes, precision=4, suppress_small=True)} mm")
+        
+        # Resample to isotropic using minimum voxel size
+        target_voxel_size = np.round(np.min(original_voxel_sizes), 2)
+        if target_voxel_size <= 0:
+            raise ValueError(f"Invalid target voxel size: {target_voxel_size} mm")
+        target_voxel_sizes = np.full((3,), target_voxel_size)
+        
+        logger.info(f"Target voxel sizes: {target_voxel_sizes} mm")
+        
+        # Resample template using 3dresample
+        template_resampled_f = work_dir / 'template_res-input.nii.gz'
+        
+        if template_resampled_f.exists():
+            template_resampled_f.unlink()
+            logger.debug(f"Removed existing template resampled file: {template_resampled_f}")
+        
+        cmd = [
+            '3dresample',
+            '-dxyz', str(target_voxel_sizes[0]), str(target_voxel_sizes[1]), str(target_voxel_sizes[2]),
+            '-input', template_f,
+            '-prefix', str(template_resampled_f)
+        ]
+        logger.debug(f"Command: {' '.join(cmd)}")
+        try:
+            returncode, stdout, stderr = run_command(cmd, step_logger=logger)
+            if returncode != 0:
+                raise RuntimeError(f"3dresample failed (exit code {returncode}): {stderr}")
+            
+            # Validate resampled template exists
+            validate_output_file(template_resampled_f, logger)
+            logger.info(f"Template resampled to: {template_resampled_f}")
+        except Exception as e:
+            logger.error(f"Error during template resampling: {e}")
+            raise RuntimeError(
+                f"Conform step failed during template resampling: {e}. "
+                f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
+            )
+        
+        # Update template path for final step
+        template_f = str(template_resampled_f)
+        
+        # Step 4.2: Apply the affine transformation to the input image
+        try:
+            apply_result = flirt_apply_transforms(
+                movingf=str(image_path),
+                outputf_name=output_name,
+                reff=template_f,
+                working_dir=str(work_dir),
+                transformf=str(xfm_f),
+                logger=logger,
+                interpolation='trilinear',
+                generate_tmean=False  # Not needed for anatomical conform
+            )
+            conformed_f = Path(apply_result['imagef_registered'])
+        except Exception as e:
+            logger.error(f"Error during affine transformation application: {e}")
+            raise RuntimeError(
+                f"Conform step failed when applying transformation: {e}. "
+                f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
+            )
+        
+        logger.info(f"Workflow: conform to template completed successfully")
+        
+        return {
+            "imagef_conformed": str(conformed_f),
+            "template_f": template_f
+        }
+        
+    except (FileNotFoundError, ValueError) as e:
+        # Re-raise these without modification
+        raise
+    except Exception as e:
+        logger.error(f"Workflow: conform to template failed: {str(e)}")
+        raise RuntimeError(
+            f"Conform step failed: {str(e)}. "
+            f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
+        )
 
 
 def _determine_tpattern(slice_timings: List[Union[float, int]], direction: str = "z") -> str:
@@ -316,7 +589,7 @@ def slice_timing_correction(
     working_dir: Union[str, Path],
     output_name: str,
     config: Dict[str, Any],
-    logger: logging.Logger,
+    logger: Optional[logging.Logger] = None,
     generate_tmean: bool = True
 ) -> Dict[str, str]:
     """Perform slice timing correction using AFNI's 3dTshift.
@@ -336,6 +609,9 @@ def slice_timing_correction(
         RuntimeError: If slice timing correction fails or AFNI is not available
         ValueError: If configuration parameters are invalid
     """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
     # Validate inputs
     image_path = validate_input_file(imagef, logger)
     work_dir = ensure_working_directory(working_dir, logger)
@@ -459,15 +735,15 @@ def slice_timing_correction(
         
     except Exception as e:
         logger.error(f"Workflow: slice timing correction failed: {str(e)}")
-        raise
+        raise RuntimeError(f"Slice timing correction failed: {e}") from e
 
 # 
 def motion_correction(
     imagef: Union[str, Path],
     working_dir: Union[str, Path],
     output_name: str,
-    logger: logging.Logger,
     config: Dict[str, Any],
+    logger: Optional[logging.Logger] = None,
     generate_tmean: bool = True
 ) -> Dict[str, str]:
     """Perform motion correction using FSL's mcflirt.
@@ -488,6 +764,9 @@ def motion_correction(
         RuntimeError: If motion correction fails
         ValueError: If configuration parameters are invalid
     """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
     # Validate inputs
     image_path = validate_input_file(imagef, logger)
     work_dir = ensure_working_directory(working_dir, logger)
@@ -497,7 +776,7 @@ def motion_correction(
     if not motion_cfg:
         raise ValueError("func.motion_correction configuration not found")
     
-    output_path = os.path.join(str(work_dir), output_name)
+    output_path = work_dir / output_name
     
     logger.info(f"Workflow: starting motion correction")
     logger.info(f"Data: input image - {os.path.basename(image_path)}")
@@ -526,21 +805,21 @@ def motion_correction(
         return outputs
 
     # Generate reference volume
-    ref_file_path = os.path.join(str(work_dir), 'func_mc_ref.nii.gz')
+    ref_file_path = work_dir / 'func_mc_ref.nii.gz'
 
     ref_vol = motion_cfg.get('ref_vol')
     if isinstance(ref_vol, int):
-        command_ref = ['fslroi', str(image_path), ref_file_path, str(ref_vol), '1']
+        command_ref = ['fslroi', str(image_path), str(ref_file_path), str(ref_vol), '1']
         logger.info(f"Step: using reference timepoint")
         logger.info(f"Data: reference timepoint - {ref_vol}")
     elif ref_vol == 'Tmean':
-        command_ref = ['fslmaths', str(image_path), '-Tmean', ref_file_path]
+        command_ref = ['fslmaths', str(image_path), '-Tmean', str(ref_file_path)]
         logger.info(f"Step: using temporal mean as reference")
         logger.info(f"Data: reference type - Tmean")
     elif ref_vol == 'mid':
         # We already have nvols from above
         mid_vol = nvols // 2
-        command_ref = ['fslroi', str(image_path), ref_file_path, str(mid_vol), '1']
+        command_ref = ['fslroi', str(image_path), str(ref_file_path), str(mid_vol), '1']
         logger.info(f"Step: using middle timepoint as reference")
         logger.info(f"Data: reference timepoint - {mid_vol}")
     else:
@@ -557,17 +836,17 @@ def motion_correction(
         
     except Exception as e:
         logger.error(f"Workflow: reference volume generation failed: {str(e)}")
-        raise
+        raise RuntimeError(f"Reference volume generation failed: {e}") from e
 
 
     # Build motion correction command
-    output_prefix = output_path.split('.nii')[0]
+    output_prefix = str(output_path).split('.nii')[0]
     command_mcflirt = [
         'mcflirt',
         '-in', str(image_path),
         '-out', output_prefix,
         '-dof', str(motion_cfg.get('dof')),
-        '-reffile', ref_file_path,
+        '-reffile', str(ref_file_path),
         '-mats',
         '-plots'
     ]
@@ -602,7 +881,8 @@ def motion_correction(
         
         # Generate Tmean of the func_all
         if generate_tmean:
-            tmean_path = str(Path(work_dir) / Path(outputs["imagef_motion_corrected"].split('.nii')[0] + "_tmean.nii.gz"))
+            output_path_str = str(outputs["imagef_motion_corrected"])
+            tmean_path = str(Path(work_dir) / Path(output_path_str.split('.nii')[0] + "_tmean.nii.gz"))
             calculate_func_tmean(outputs["imagef_motion_corrected"], tmean_path, logger)
             outputs["imagef_motion_corrected_tmean"] = tmean_path
             logger.info(f"Output: Tmean of motion corrected func_all - {os.path.basename(tmean_path)}")
@@ -611,14 +891,14 @@ def motion_correction(
         
     except Exception as e:
         logger.error(f"Workflow: motion correction failed: {str(e)}")
-        raise
+        raise RuntimeError(f"Motion correction failed: {e}") from e
 
 def despike(
     imagef: Union[str, Path], 
     working_dir: Union[str, Path], 
     output_name: str, 
-    logger: logging.Logger,
     config: Dict[str, Any],
+    logger: Optional[logging.Logger] = None,
     generate_tmean: bool = True
 ) -> Dict[str, str]:
     """Perform despiking using AFNI's 3dDespike.
@@ -638,6 +918,9 @@ def despike(
         RuntimeError: If despiking fails
         ValueError: If configuration parameters are invalid
     """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
     # Validate inputs
     image_path = validate_input_file(imagef, logger)
     work_dir = ensure_working_directory(working_dir, logger)
@@ -661,8 +944,8 @@ def despike(
         raise ValueError("despike configuration not found")
     
     # set the output path
-    output_path = os.path.join(str(work_dir), output_name)
-    spikiness_path = os.path.join(str(work_dir), output_name.replace('.nii.gz', '_spikiness.nii.gz'))
+    output_path = work_dir / output_name
+    spikiness_path = work_dir / output_name.replace('.nii.gz', '_spikiness.nii.gz')
     
     logger.info(f"Workflow: starting despiking")
     logger.info(f"Data: input image - {os.path.basename(image_path)}")
@@ -671,8 +954,8 @@ def despike(
     # Build command
     command_despike = [
         '3dDespike',
-        '-prefix', output_path,
-        '-ssave', spikiness_path,
+        '-prefix', str(output_path),
+        '-ssave', str(spikiness_path),
         '-cut', str(despike_cfg.get('c1')), str(despike_cfg.get('c2')),
         str(image_path)
     ]
@@ -695,7 +978,8 @@ def despike(
         
         # Generate Tmean of the func_all
         if generate_tmean:
-            tmean_path = str(Path(work_dir) / Path(outputs["imagef_despiked"].split('.nii')[0] + "_tmean.nii.gz"))
+            output_path_str = str(outputs["imagef_despiked"])
+            tmean_path = str(Path(work_dir) / Path(output_path_str.split('.nii')[0] + "_tmean.nii.gz"))
             calculate_func_tmean(outputs["imagef_despiked"], tmean_path, logger)
             outputs["imagef_despiked_tmean"] = tmean_path
             logger.info(f"Output: Tmean of despiked func_all - {os.path.basename(tmean_path)}")
@@ -704,38 +988,45 @@ def despike(
         
     except Exception as e:
         logger.error(f"Workflow: despiking failed: {str(e)}")
-        raise
+        raise RuntimeError(f"Despiking failed: {e}") from e
 
-def apply_skullstripping(
+def apply_segmentation(
     imagef: Union[str, Path],
     modal: str,
     working_dir: Union[str, Path],
     output_name: str,
-    logger: logging.Logger,
     config: Dict[str, Any],
+    logger: Optional[logging.Logger] = None,
 ) -> Dict[str, str]:
-    """Perform skullstripping using various methods (BET, FastSurferCNN, or macacaMRINN).
+    """Perform brain segmentation using FastSurferCNN.
+    
+    This function performs multi-class atlas segmentation using FastSurferCNN,
+    which produces a brain mask, segmentation, and optionally a hemimask.
     
     Args:
         imagef: Input file (functional or anatomical)
         modal: Modality ('func' or 'anat')
         working_dir: Working directory for this step
         output_name: Name of output file
-        logger: Logger instance
         config: Configuration dictionary
+        logger: Logger instance (optional)
         
     Returns:
         Dictionary with output file paths:
         - 'imagef_skullstripped': Path to skull-stripped image
         - 'brain_mask': Path to brain mask file
+        - 'segmentation': Path to segmentation file (optional, if generated)
+        - 'hemimask': Path to hemisphere mask file (optional, if generated)
+        - 'atlas_name': Name of atlas used (optional)
+        - 'input_cropped': Path to cropped input (optional, if two-pass refinement used)
         
     Raises:
         FileNotFoundError: If input file or model doesn't exist
-        RuntimeError: If skull stripping fails
+        RuntimeError: If segmentation fails
         ValueError: If configuration or modal parameters are invalid
     """
-    # Import the streamlined skull stripping API
-    # from .skullstripping import skull_strip
+    if logger is None:
+        logger = logging.getLogger(__name__)
     
     # Validate inputs
     image_path = validate_input_file(imagef, logger)
@@ -749,12 +1040,9 @@ def apply_skullstripping(
     skull_cfg = config.get(modal, {}).get('skullstripping')
     if not skull_cfg:
         raise ValueError("skullstripping configuration not found")
-    method = skull_cfg.get('method')
-    if method not in ['bet', 'fastSurferCNN', 'macacaMRINN']:
-        raise ValueError(f"Invalid skull stripping method: {method}. Must be 'bet', 'fastSurferCNN', or 'macacaMRINN'")
-
+    
     # Define output paths at the beginning
-    brain_mask_path = os.path.join(str(work_dir), 'brain_mask.nii.gz')
+    brain_mask_path = work_dir / 'brain_mask.nii.gz'
     
     # Initialize optional output paths (for FastSurferCNN)
     brain_segmentation_path = None
@@ -762,163 +1050,94 @@ def apply_skullstripping(
     brain_input_cropped_path = None
     atlas_name = None
 
-    if method == 'bet':
-        logger.info(f"Workflow: starting skullstripping using FSL BET method")
-        logger.info(f"Data: input image - {os.path.basename(image_path)}")
-        logger.info(f"System: output path - {brain_mask_path}")
-        command_bet = [
-            'bet2', str(image_path), str(brain_mask_path.replace('_mask.nii.gz', '')),
-            '-f', str(skull_cfg.get('bet', {}).get('fractional_intensity')),
-            '-m', '-n'
-        ]
-        returncode, stdout, stderr = run_command(command_bet, step_logger=logger)
-        if returncode != 0:
-            raise RuntimeError(f"bet2 failed (exit code {returncode}): {stderr}")
-        logger.info("Workflow: FSL BET completed successfully")
-
-    elif method == 'fastSurferCNN':
-        logger.info(f"Workflow: starting skullstripping using FastSurferCNN method")
-        logger.info(f"Data: input image - {os.path.basename(image_path)}")
-        logger.info(f"System: output path - {brain_mask_path}")
+    # FastSurferCNN segmentation
+    logger.info(f"Workflow: starting segmentation using FastSurferCNN")
+    logger.info(f"Data: input image - {os.path.basename(image_path)}")
+    logger.info(f"System: output path - {brain_mask_path}")
+    
+    # Get FastSurferCNN configuration parameters
+    fscnn_cfg = skull_cfg.get('fastSurferCNN', {})
         
-        # Get FastSurferCNN configuration parameters
-        fscnn_cfg = skull_cfg.get('fastSurferCNN', {})
+    # Create temporary output directory for FastSurferCNN
+    # FastSurferCNN needs a directory, not a file path
+    temp_output_dir = work_dir / 'fastsurfercnn_output'
+    os.makedirs(temp_output_dir, exist_ok=True)
+    
+    try:
+        # Get fix_roi_wm and roi_name settings from config
+        # Support legacy 'fix_V1_WM' config key for backward compatibility
+        if 'fix_V1_WM' in fscnn_cfg:
+            fix_roi_wm = fscnn_cfg.get('fix_V1_WM', False)
+            roi_name = 'V1' if fix_roi_wm else fscnn_cfg.get('roi_name', 'V1')
+        else:
+            # Use explicit fix_roi_wm and roi_name settings
+            # For anatomical data, default to True (models typically generate hemimasks)
+            # For functional data, default to False (may use binary mask models without hemimasks)
+            fix_roi_wm_default = True if modal == 'anat' else False
+            fix_roi_wm = fscnn_cfg.get('fix_roi_wm', fix_roi_wm_default)
+            roi_name = fscnn_cfg.get('roi_name', 'V1')
         
-        # Create temporary output directory for FastSurferCNN
-        # FastSurferCNN needs a directory, not a file path
-        temp_output_dir = os.path.join(str(work_dir), 'fastsurfercnn_output')
-        os.makedirs(temp_output_dir, exist_ok=True)
+        # Call FastSurferCNN segmentation function
+        # Note: This is the FastSurferCNN.inference.run_segmentation function imported at the top
+        # Build kwargs, only include roi_name and wm_thr if fix_roi_wm is True
+        segmentation_kwargs = {
+            "input_image": image_path,
+            "modal": modal,
+            "output_dir": temp_output_dir,
+            "device_id": fscnn_cfg.get('gpu_device', 'auto'),
+            "logger": logger,
+            "output_data_format": 'nifti',
+            "enable_crop_2round": fscnn_cfg.get('enable_crop_2round', False),
+            "plane_weight_coronal": fscnn_cfg.get('plane_weight_coronal'),
+            "plane_weight_axial": fscnn_cfg.get('plane_weight_axial'),
+            "plane_weight_sagittal": fscnn_cfg.get('plane_weight_sagittal'),
+            "use_mixed_model": fscnn_cfg.get('use_mixed_model', False),
+            "fix_roi_wm": fix_roi_wm,
+        }
+        # Only pass roi_name and wm_thr if fix_roi_wm is True
+        if fix_roi_wm:
+            segmentation_kwargs["roi_name"] = roi_name
+            segmentation_kwargs["wm_thr"] = fscnn_cfg.get('wm_thr', 0.5)
+
+        result = run_segmentation(**segmentation_kwargs)
         
-        try:
-            # Get fix_roi_wm and roi_name settings from config
-            if 'fix_V1_WM' in fscnn_cfg:
-                fix_V1_WM = fscnn_cfg.get('fix_V1_WM', False)
-                if fix_V1_WM:
-                    fix_roi_wm = True
-                    roi_name = 'V1'
-                else:
-                    fix_roi_wm = False
-            else:
-                # Fall back to explicit fix_roi_wm and roi_name settings
-                # For anatomical data, default to True (models typically generate hemimasks)
-                # For functional data, default to False (may use binary mask models without hemimasks)
-                fix_roi_wm_default = True if modal == 'anat' else False
-                fix_roi_wm = fscnn_cfg.get('fix_roi_wm', fix_roi_wm_default)
-                roi_name = fscnn_cfg.get('roi_name', 'V1')
-            
-            # Call FastSurferCNN skullstripping function
-            # Note: This is the FastSurferCNN.inference.skullstrip_fastsurfercnn function imported at the top
-            # Build kwargs, only include roi_name if it's not None (when fix_roi_wm is False, roi_name is None)
-            skullstrip_kwargs = {
-                "input_image": image_path,
-                "modal": modal,
-                "output_dir": temp_output_dir,
-                "device_id": fscnn_cfg.get('gpu_device', 'auto'),
-                "logger": logger,
-                "output_data_format": 'nifti',
-                "enable_crop_2round": fscnn_cfg.get('enable_crop_2round', False),
-                "plane_weight_coronal": fscnn_cfg.get('plane_weight_coronal'),
-                "plane_weight_axial": fscnn_cfg.get('plane_weight_axial'),
-                "plane_weight_sagittal": fscnn_cfg.get('plane_weight_sagittal'),
-                "use_mixed_model": fscnn_cfg.get('use_mixed_model', False),
-                "fix_roi_wm": fix_roi_wm,
-            }
-            # Only pass roi_name and wm_thr if fix_roi_wm is True
-            if fix_roi_wm:
-                skullstrip_kwargs["roi_name"] = roi_name
-                skullstrip_kwargs["wm_thr"] = fscnn_cfg.get('wm_thr', 0.5)
-
-            result = skullstrip_fastsurfercnn(**skullstrip_kwargs)
-            
-            # Extract brain mask path and atlas_name from result
-            fastsurfercnn_mask_path = result.get('brain_mask')
-            if not fastsurfercnn_mask_path or not os.path.exists(fastsurfercnn_mask_path):
-                raise FileNotFoundError(f"FastSurferCNN did not generate brain mask at expected location: {fastsurfercnn_mask_path}")
-            
-            # Extract atlas_name if available
-            atlas_name = result.get('atlas_name')
-            
-            # Move the brain mask to the expected location
-            shutil.move(fastsurfercnn_mask_path, brain_mask_path)
-            logger.info("Workflow: FastSurferCNN completed successfully")
-            logger.info(f"Output: brain mask moved from {fastsurfercnn_mask_path} to {brain_mask_path}")
-            
-            # Move segmentation if it exists
-            fastsurfercnn_seg_path = result.get('segmentation')
-            if fastsurfercnn_seg_path and os.path.exists(fastsurfercnn_seg_path):
-                brain_segmentation_path = os.path.join(str(work_dir), 'brain_segmentation.nii.gz')
-                shutil.move(fastsurfercnn_seg_path, brain_segmentation_path)
-                logger.info(f"Output: brain segmentation moved from {fastsurfercnn_seg_path} to {brain_segmentation_path}")
-            
-            # Move hemimask if it exists
-            fastsurfercnn_hemimask_path = result.get('hemimask')
-            if fastsurfercnn_hemimask_path and os.path.exists(fastsurfercnn_hemimask_path):
-                brain_hemimask_path = os.path.join(str(work_dir), 'brain_hemimask.nii.gz')
-                shutil.move(fastsurfercnn_hemimask_path, brain_hemimask_path)
-                logger.info(f"Output: brain hemimask moved from {fastsurfercnn_hemimask_path} to {brain_hemimask_path}")
-            
-            # Move input cropped if it exists
-            fastsurfercnn_input_cropped_path = result.get('input_cropped')
-            if fastsurfercnn_input_cropped_path and os.path.exists(fastsurfercnn_input_cropped_path):
-                brain_input_cropped_path = os.path.join(str(work_dir), 'brain_input_cropped.nii.gz')
-                shutil.move(fastsurfercnn_input_cropped_path, brain_input_cropped_path)
-                logger.info(f"Output: brain input cropped moved from {fastsurfercnn_input_cropped_path} to {brain_input_cropped_path}")
-
-
-        except Exception as e:
-            logger.error(f"Workflow: FastSurferCNN failed - {str(e)}")
-            raise
-
-    # elif method == 'macacaMRINN':
-    #     logger.info(f"Workflow: starting skullstripping using macacaMRINN method")
-    #     logger.info(f"Data: input image - {os.path.basename(image_path)}")
-    #     logger.info(f"System: output path - {brain_mask_path}")
+        # Extract brain mask path and atlas_name from result
+        fastsurfercnn_mask_path = result.get('brain_mask')
+        if not fastsurfercnn_mask_path or not os.path.exists(fastsurfercnn_mask_path):
+            raise FileNotFoundError(f"FastSurferCNN did not generate brain mask at expected location: {fastsurfercnn_mask_path}")
         
-    #     # Import macacaMRINN skullstripping function
-    #     try:
-    #         from macacaMRINN.inference.prediction import skullstripping as macacaMRINN_skullstripping
-    #     except ImportError as e:
-    #         raise ImportError(f"Failed to import macacaMRINN: {e}. Make sure macacaMRINN is installed and available.")
+        # Extract atlas_name if available
+        atlas_name = result.get('atlas_name')
         
-    #     # Get macacaMRINN configuration parameters
-    #     mrin_cfg = skull_cfg.get('macacaMRINN', {})
+        # Move the brain mask to the expected location
+        shutil.move(fastsurfercnn_mask_path, brain_mask_path)
+        logger.info("Workflow: FastSurferCNN segmentation completed successfully")
+        logger.info(f"Output: brain mask moved from {fastsurfercnn_mask_path} to {brain_mask_path}")
         
-    #     # Don't pass config - let macacaMRINN use parameters from checkpoint
-    #     # Only pass gpu_device as it's a runtime parameter, not a model parameter
-    #     try:
-    #         # Call macacaMRINN skullstripping function
-    #         # Parameters like rescale_dim, num_input_slices, morph_iterations 
-    #         # will be loaded from the model checkpoint automatically
-    #         result = macacaMRINN_skullstripping(
-    #             input_image=image_path,
-    #             modal=modal,
-    #             output_path=brain_mask_path,
-    #             device_id=mrin_cfg.get('gpu_device', 'auto'),
-    #             logger=logger,
-    #             config=None  # Use checkpoint parameters instead
-    #         )
-            
-    #         # Extract brain mask path and atlas_name from result
-    #         mrin_mask_path = result.get('brain_mask')
-    #         if not mrin_mask_path or not os.path.exists(mrin_mask_path):
-    #             raise FileNotFoundError(f"macacaMRINN did not generate brain mask at expected location: {mrin_mask_path}")
-            
-    #         # Extract atlas_name if available
-    #         atlas_name = result.get('atlas_name')
-            
-    #         # The mask should already be at brain_mask_path, but verify
-    #         if mrin_mask_path != brain_mask_path:
-    #             # Move the brain mask to the expected location if needed
-    #             if os.path.exists(mrin_mask_path):
-    #                 shutil.move(mrin_mask_path, brain_mask_path)
-    #                 logger.info(f"Output: brain mask moved from {mrin_mask_path} to {brain_mask_path}")
-            
-    #         logger.info("Workflow: macacaMRINN completed successfully")
-            
-    #     except Exception as e:
-    #         logger.error(f"Workflow: macacaMRINN failed - {str(e)}")
-    #         raise
+        # Move segmentation if it exists
+        fastsurfercnn_seg_path = result.get('segmentation')
+        if fastsurfercnn_seg_path and os.path.exists(fastsurfercnn_seg_path):
+            brain_segmentation_path = work_dir / 'brain_segmentation.nii.gz'
+            shutil.move(fastsurfercnn_seg_path, brain_segmentation_path)
+            logger.info(f"Output: brain segmentation moved from {fastsurfercnn_seg_path} to {brain_segmentation_path}")
+        
+        # Move hemimask if it exists
+        fastsurfercnn_hemimask_path = result.get('hemimask')
+        if fastsurfercnn_hemimask_path and os.path.exists(fastsurfercnn_hemimask_path):
+            brain_hemimask_path = work_dir / 'brain_hemimask.nii.gz'
+            shutil.move(fastsurfercnn_hemimask_path, brain_hemimask_path)
+            logger.info(f"Output: brain hemimask moved from {fastsurfercnn_hemimask_path} to {brain_hemimask_path}")
+        
+        # Move input cropped if it exists
+        fastsurfercnn_input_cropped_path = result.get('input_cropped')
+        if fastsurfercnn_input_cropped_path and os.path.exists(fastsurfercnn_input_cropped_path):
+            brain_input_cropped_path = work_dir / 'brain_input_cropped.nii.gz'
+            shutil.move(fastsurfercnn_input_cropped_path, brain_input_cropped_path)
+            logger.info(f"Output: brain input cropped moved from {fastsurfercnn_input_cropped_path} to {brain_input_cropped_path}")
 
+    except Exception as e:
+        logger.error(f"Workflow: FastSurferCNN segmentation failed - {str(e)}")
+        raise RuntimeError(f"FastSurferCNN segmentation failed: {e}") from e
     # Validate brain mask
     validate_output_file(brain_mask_path, logger)
     logger.info(f"Output: brain mask generated - {os.path.basename(brain_mask_path)}")
@@ -938,7 +1157,7 @@ def apply_skullstripping(
         image_to_mask = brain_input_cropped_path
         logger.info(f"Step: using cropped input for mask application (two-pass refinement detected)")
     
-    output_path = os.path.join(str(work_dir), output_name)
+    output_path = work_dir / output_name
     command_apply = [
         'fslmaths', str(image_to_mask),
         '-mul', str(brain_mask_path),
@@ -969,13 +1188,123 @@ def apply_skullstripping(
 
     return return_dict
 
+
+def apply_skullstripping(
+    imagef: Union[str, Path],
+    modal: str,
+    working_dir: Union[str, Path],
+    output_name: str,
+    config: Dict[str, Any],
+    logger: Optional[logging.Logger] = None,
+) -> Dict[str, str]:
+    """Perform skullstripping using NHPskullstripNN.
+    
+    This function performs binary brain mask generation using NHPskullstripNN.
+    It is used for functional data and conform step where only a brain mask is needed.
+    
+    Args:
+        imagef: Input file (functional or anatomical)
+        modal: Modality ('func' or 'anat')
+        working_dir: Working directory for this step
+        output_name: Name of output file
+        config: Configuration dictionary
+        logger: Logger instance (optional)
+        
+    Returns:
+        Dictionary with output file paths:
+        - 'imagef_skullstripped': Path to skull-stripped image
+        - 'brain_mask': Path to brain mask file
+        
+    Raises:
+        FileNotFoundError: If input file or model doesn't exist
+        RuntimeError: If skull stripping fails
+        ValueError: If configuration or modal parameters are invalid
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
+    # Validate inputs
+    image_path = validate_input_file(imagef, logger)
+    work_dir = ensure_working_directory(working_dir, logger)
+    
+    # Validate modal parameter
+    if modal not in ['func', 'anat']:
+        raise ValueError(f"Invalid modality: {modal}. Must be 'func' or 'anat'")
+    
+    # Get configuration
+    skull_cfg = config.get(modal, {}).get('skullstripping')
+    if not skull_cfg:
+        raise ValueError("skullstripping configuration not found")
+    
+    # Define output paths
+    brain_mask_path = work_dir / 'brain_mask.nii.gz'
+    
+    # Use NHPskullstripNN for skullstripping
+    logger.info(f"Workflow: starting skullstripping using NHPskullstripNN")
+    logger.info(f"Data: input image - {os.path.basename(image_path)}")
+    logger.info(f"System: output path - {brain_mask_path}")
+    
+    try:
+        # Get device_id from config if available
+        device_id = skull_cfg.get('gpu_device', 'auto')
+        
+        result = skullstripping(
+            input_image=str(image_path),
+            modal=modal,
+            output_path=str(brain_mask_path),
+            device_id=device_id
+        )
+        
+        # Extract brain mask path from result
+        nhp_mask_path = result.get('brain_mask')
+        if not nhp_mask_path or not os.path.exists(nhp_mask_path):
+            raise FileNotFoundError(f"NHPskullstripNN did not generate brain mask at expected location: {nhp_mask_path}")
+        
+        # Move mask to expected location if needed
+        if nhp_mask_path != brain_mask_path:
+            shutil.move(nhp_mask_path, brain_mask_path)
+            logger.info(f"Output: brain mask moved from {nhp_mask_path} to {brain_mask_path}")
+        
+        logger.info("Workflow: NHPskullstripNN completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Workflow: NHPskullstripNN failed - {str(e)}")
+        raise RuntimeError(
+            f"Skullstripping failed: {e}. "
+            f"If this issue persists, consider disabling skullstripping in your configuration."
+        )
+    
+    # Validate brain mask
+    validate_output_file(brain_mask_path, logger)
+    logger.info(f"Output: brain mask generated - {os.path.basename(brain_mask_path)}")
+    
+    # Apply brain mask to input image
+    output_path = work_dir / output_name
+    command_apply = [
+        'fslmaths', str(image_path),
+        '-mas', str(brain_mask_path),
+        str(output_path)
+    ]
+    returncode, stdout, stderr = run_command(command_apply, step_logger=logger)
+    if returncode != 0:
+        raise RuntimeError(f"fslmaths failed (exit code {returncode}): {stderr}")
+    
+    # Validate final output
+    validate_output_file(output_path, logger)
+    logger.info(f"Output: skull stripped image generated - {os.path.basename(output_path)}")
+    
+    return {
+        "imagef_skullstripped": output_path,
+        "brain_mask": brain_mask_path
+    }
+
 def bias_correction(
     imagef: Union[str, Path],
     working_dir: Union[str, Path],
     modal: str,
     output_name: str,
-    logger: logging.Logger,
     config: Dict[str, Any],
+    logger: Optional[logging.Logger] = None,
 ) -> Dict[str, str]:
     """Perform bias field correction using ANTs N4BiasFieldCorrection.
     
@@ -995,6 +1324,9 @@ def bias_correction(
         RuntimeError: If bias correction fails
         ValueError: If configuration parameters are invalid
     """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
     # Validate inputs
     image_path = validate_input_file(imagef, logger)
     work_dir = ensure_working_directory(working_dir, logger)
@@ -1023,7 +1355,7 @@ def bias_correction(
     # Rescale image mean to 100 if configured
     rescale_mean_to_100 = bias_cfg.get('rescale_mean_to_100')
     if rescale_mean_to_100:
-        image_path_rescaled = os.path.join(str(work_dir), "input_rescaled.nii.gz")
+        image_path_rescaled = work_dir / "input_rescaled.nii.gz"
         
         # Get mean value using fslstats
         returncode, stdout, stderr = run_command(['fslstats', str(image_path), '-M'], step_logger=logger)
@@ -1042,8 +1374,8 @@ def bias_correction(
         logger.info(f"Workflow: image rescaled to mean intensity of 100")
         image_path = image_path_rescaled
 
-    output_path = os.path.join(str(work_dir), output_name)
-    bias_field_path = os.path.join(str(work_dir), output_name.split('.nii')[0] + '_bias_field.nii.gz')
+    output_path = work_dir / output_name
+    bias_field_path = work_dir / (output_name.split('.nii')[0] + '_bias_field.nii.gz')
 
     # Get thread count from config, default to 8 to avoid oversubscription when running multiple processes
     num_threads = bias_cfg.get('threads', 8)
@@ -1089,4 +1421,4 @@ def bias_correction(
         
     except Exception as e:
         logger.error(f"Workflow: bias field correction failed: {str(e)}")
-        raise
+        raise RuntimeError(f"Bias field correction failed: {e}") from e

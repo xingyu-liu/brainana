@@ -20,8 +20,8 @@ Post-processes skullstripping outputs for FreeSurfer surface reconstruction by:
 - Resampling images to conformed space
 - Creating FreeSurfer-compatible output files (aseg, masks, etc.)
 
-Note: Skullstripping (including V1 white matter fixing) should be done
-before calling this function using skullstrip_fastsurfercnn().
+Note: Segmentation (including V1 white matter fixing) should be done
+before calling this function using run_segmentation().
 """
 
 import shutil
@@ -127,9 +127,9 @@ def postprocess_for_freesurfer(
     orientation: OrientationType = "lia",
 ) -> Literal[0] | str:
     """
-    Post-process skullstripping outputs for FreeSurfer surface reconstruction.
+    Post-process segmentation outputs for FreeSurfer surface reconstruction.
     
-    This function takes the outputs from skullstrip_fastsurfercnn and:
+    This function takes the outputs from run_segmentation and:
     1. Creates FreeSurfer directory structure
     2. Conforms T1w, mask, and aseg to FreeSurfer format
     3. Saves all files in the correct FreeSurfer locations

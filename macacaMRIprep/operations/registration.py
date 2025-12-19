@@ -1,7 +1,7 @@
 """
 Registration functions for macacaMRIprep.
 
-This module contains functions for image registration using ANTs,
+This module contains functions for image registration using ANTs and FLIRT,
 including command composition and transformation application.
 """
 
@@ -259,6 +259,235 @@ def ants_register(
     logger.info(f"Step: registration completed with {len(outputs)} output files - {list(outputs.keys())}")
     return outputs
 
+def flirt_register(
+    fixedf: Union[str, Path],
+    movingf: Union[str, Path],
+    working_dir: Union[str, Path],
+    output_prefix: str,
+    config: Optional[Dict[str, Any]] = None,
+    logger: Optional[logging.Logger] = None,
+    dof: Optional[int] = 6
+) -> Dict[str, str]:
+    """Run FLIRT rigid registration.
+    
+    Args:
+        fixedf: Fixed (reference) image path
+        movingf: Moving image path
+        working_dir: Working directory
+        output_prefix: Prefix for output files
+        config: Configuration dictionary (optional, will use default if not provided)
+        logger: Logger instance (optional, will create if not provided)
+        dof: Degrees of freedom for registration (default: 6 for rigid)
+        
+    Returns:
+        Dictionary containing paths to output files:
+        - 'forward_transform': Forward transformation matrix (.mat file)
+        - 'inverse_transform': Inverse transformation matrix (.mat file)
+        
+    Raises:
+        FileNotFoundError: If input files don't exist
+        RuntimeError: If registration fails
+        ValueError: If configuration is invalid
+    """
+    # Use provided config/logger or get defaults
+    if config is None:
+        config = get_config().to_dict()
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
+    # Validate inputs and setup
+    work_dir = ensure_working_directory(working_dir, logger)
+    
+    # Validate input files
+    fixed_path = validate_input_file(fixedf, logger)
+    moving_path = validate_input_file(movingf, logger)
+    
+    # Build output file paths
+    forward_transform = work_dir / f"{output_prefix}.mat"
+    inverse_transform = work_dir / f"{output_prefix}_inverse.mat"
+    
+    # Get optional FLIRT parameters from config
+    reg_config = config.get("registration", {})
+    flirt_config = reg_config.get('flirt', {})
+    
+    # Set default search ranges (matching preprocessing.py pattern)
+    searchrx_min, searchrx_max = '-180', '180'
+    searchry_min, searchry_max = '-180', '180'
+    searchrz_min, searchrz_max = '-180', '180'
+    
+    # Override search ranges if specified in config
+    if flirt_config.get('searchrx'):
+        searchrx = flirt_config['searchrx']
+        if isinstance(searchrx, (list, tuple)) and len(searchrx) == 2:
+            searchrx_min, searchrx_max = str(searchrx[0]), str(searchrx[1])
+        elif isinstance(searchrx, dict):
+            searchrx_min = str(searchrx.get('min', -180))
+            searchrx_max = str(searchrx.get('max', 180))
+    
+    if flirt_config.get('searchry'):
+        searchry = flirt_config['searchry']
+        if isinstance(searchry, (list, tuple)) and len(searchry) == 2:
+            searchry_min, searchry_max = str(searchry[0]), str(searchry[1])
+        elif isinstance(searchry, dict):
+            searchry_min = str(searchry.get('min', -180))
+            searchry_max = str(searchry.get('max', 180))
+    
+    if flirt_config.get('searchrz'):
+        searchrz = flirt_config['searchrz']
+        if isinstance(searchrz, (list, tuple)) and len(searchrz) == 2:
+            searchrz_min, searchrz_max = str(searchrz[0]), str(searchrz[1])
+        elif isinstance(searchrz, dict):
+            searchrz_min = str(searchrz.get('min', -180))
+            searchrz_max = str(searchrz.get('max', 180))
+    
+    # Build FLIRT registration command (matching preprocessing.py pattern)
+    cmd = [
+        'flirt',
+        '-in', str(moving_path),
+        '-ref', str(fixed_path),
+        '-dof', str(dof),
+        '-searchrx', searchrx_min, searchrx_max,
+        '-searchry', searchry_min, searchry_max,
+        '-searchrz', searchrz_min, searchrz_max,
+        '-omat', str(forward_transform)
+    ]
+    
+    # Add optional FLIRT parameters from config if available
+    if flirt_config.get('cost'):
+        cmd.extend(['-cost', flirt_config['cost']])
+    
+    if flirt_config.get('bins'):
+        cmd.extend(['-bins', str(flirt_config['bins'])])
+    
+    logger.debug(f"Command: {' '.join(cmd)}")
+    
+    # Execute FLIRT registration (matching preprocessing.py pattern)
+    try:
+        logger.info(f"Step: FLIRT rigid registration")
+        returncode, stdout, stderr = run_command(cmd, step_logger=logger)
+        if returncode != 0:
+            raise RuntimeError(f"flirt registration failed (exit code {returncode}): {stderr}")
+        
+        # Validate transformation matrix exists
+        validate_output_file(forward_transform, logger)
+        logger.info(f"Transformation matrix saved to: {forward_transform}")
+        
+    except Exception as e:
+        logger.error(f"Error during FLIRT registration: {e}")
+        raise RuntimeError(f"FLIRT registration failed: {e}")
+    
+    # Initialize outputs dictionary
+    outputs = {
+        'forward_transform': str(forward_transform),
+    }
+    
+    # Compute inverse transform using convert_xfm
+    try:
+        logger.info("Step: computing inverse transformation matrix")
+        cmd_inverse = [
+            'convert_xfm',
+            '-omat', str(inverse_transform),
+            '-inverse', str(forward_transform)
+        ]
+        logger.debug(f"Command: {' '.join(cmd_inverse)}")
+        returncode, stdout, stderr = run_command(cmd_inverse, step_logger=logger)
+        
+        if returncode != 0:
+            raise RuntimeError(f"convert_xfm failed (exit code {returncode}): {stderr}")
+        
+        if os.path.exists(inverse_transform):
+            outputs["inverse_transform"] = str(inverse_transform)
+            logger.info(f"Output: inverse transform created - {inverse_transform}")
+        else:
+            logger.warning(f"Data: expected inverse transform not found - {inverse_transform}")
+            
+    except Exception as e:
+        logger.warning(f"Step: inverse transform computation failed - {str(e)}")
+        # Don't raise - inverse transform is optional
+    
+    return outputs
+
+
+def flirt_apply_transforms(
+    movingf: Union[str, Path],
+    outputf_name: Union[str, Path],
+    reff: Union[str, Path],
+    working_dir: Union[str, Path],
+    transformf: Union[str, Path],
+    logger: Optional[logging.Logger] = None,
+    interpolation: Optional[str] = 'trilinear',
+    generate_tmean: Optional[bool] = True
+) -> Dict[str, str]:
+    """Apply FLIRT transformation to an image.
+    
+    Args:
+        movingf: Moving (source) image to transform
+        outputf_name: Name for output file
+        reff: Reference image for output space
+        working_dir: Working directory for outputs
+        transformf: FLIRT transformation matrix file (.mat)
+        logger: Logger instance
+        interpolation: Interpolation method (default: 'trilinear')
+        generate_tmean: Whether to generate temporal mean (for functional data)
+        
+    Returns:
+        Dictionary with output file paths:
+        - 'imagef_registered': Transformed output image
+        - 'imagef_registered_tmean': Temporal mean (if generate_tmean=True and applicable)
+        
+    Raises:
+        FileNotFoundError: If input files don't exist
+        RuntimeError: If transformation application fails
+    """
+    # Validate inputs
+    if logger is None:
+        logger = logging.getLogger(__name__)
+        
+    movingf = validate_input_file(movingf, logger)
+    reff = validate_input_file(reff, logger)
+    transformf = validate_input_file(transformf, logger)
+    work_dir = ensure_working_directory(working_dir, logger)
+
+    outputf_name = work_dir / outputf_name
+
+    # Build FLIRT apply transform command (matching preprocessing.py pattern)
+    cmd = [
+        'flirt',
+        '-in', str(movingf),
+        '-ref', str(reff),
+        '-out', str(outputf_name),
+        '-applyxfm',
+        '-init', str(transformf),
+        '-interp', interpolation
+    ]
+    
+    logger.debug(f"Command: {' '.join(cmd)}")
+    
+    try:
+        logger.info(f"Step: applying affine transformation")
+        returncode, stdout, stderr = run_command(cmd, step_logger=logger)
+        if returncode != 0:
+            raise RuntimeError(f"flirt applyxfm failed (exit code {returncode}): {stderr}")
+        
+        validate_output_file(outputf_name, logger)
+        logger.info(f"Transformed image saved to: {outputf_name}")
+        
+        outputs = {"imagef_registered": str(outputf_name)}
+        
+        # Generate temporal mean if requested
+        if generate_tmean:
+            tmean_file = work_dir / Path(str(outputf_name).replace('.nii.gz', '_tmean.nii.gz'))
+            calculate_func_tmean(str(outputf_name), str(tmean_file), logger)
+            outputs["imagef_registered_tmean"] = str(tmean_file)
+            logger.info(f"Output: tmean generated - {tmean_file}")
+        
+        return outputs
+        
+    except Exception as e:
+        logger.error(f"Error during affine transformation application: {e}")
+        raise RuntimeError(f"Transform application failed: {e}")
+        
+
 def ants_apply_transforms(
     movingf: Union[str, Path],
     moving_type: int,
@@ -366,5 +595,6 @@ def ants_apply_transforms(
     except Exception as e:
         logger.error(f"Step: transform application failed - {e}")
         raise RuntimeError(f"Transform application failed: {e}")
+
 
 # %%

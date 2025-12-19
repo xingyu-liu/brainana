@@ -21,7 +21,9 @@ from ..operations.preprocessing import (
 )
 from ..operations.registration import (
     ants_register,
-    ants_apply_transforms
+    ants_apply_transforms,
+    flirt_register,
+    flirt_apply_transforms
 )
 from ..quality_control import (
     create_motion_correction_qc,
@@ -33,7 +35,6 @@ from ..utils import (
     log_workflow_end, 
     resolve_template, 
     run_command, 
-    calculate_func_tmean, 
     get_image_resolution,
     get_filename_stem
 )
@@ -83,12 +84,15 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
         self.target2template_transform = target2template_transform
 
         # set up template file
+        # Always resolve template_spec if provided (not "native") - needed for target2template transforms
         self.template_file = None
         self.template_name = None
-        if (self.target_type == 'template' or self.target2template) and template_spec and template_spec.lower() != "native":
+        if template_spec and template_spec.lower() != "native":
             try:
                 self.template_file = resolve_template(template_spec)
                 self.template_name = template_spec.split(':')[0]
+                if not self.template_name:
+                    raise ValueError(f"Failed to extract template name from template_spec: {template_spec}")
                 self.logger.info(f"Template: resolved {template_spec} -> {os.path.basename(self.template_file)}")
             except Exception as e:
                 self.logger.error(f"Template: failed to resolve {template_spec} - {e}")
@@ -99,12 +103,20 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
         # set up target file
         self.target_file = Path(target_file) if target_file else None
         if self.target_type == 'template':
+            if self.template_file is None:
+                raise ValueError(f"target_type is 'template' but template_file is None. template_spec: {template_spec}")
             self.target_file = self.template_file
 
         # if target2template is True, then target2template_transform is required (except for native space)
         if self.target2template:
-            if target2template_transform is None and (not template_spec or template_spec.lower() != "native"):
+            if template_spec and template_spec.lower() == "native":
+                # Native space: disable target2template
+                self.logger.warning("target2template is True but output_space is native - disabling target2template")
+                self.target2template = False
+            elif target2template_transform is None:
                 raise ValueError("target2template_transform is required when target2template is True")
+            elif self.template_file is None:
+                raise ValueError("target2template is True but template_file is None. template_spec may be invalid.")
 
         # Set up QC directory
         if qc_dir:
@@ -183,7 +195,11 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                     }
                 )
                 # Get target_file, or default to RAS orientation if no template
-                target_file = self.target_file
+                # For template target_type, use template_file if available
+                if self.target_type == 'template' and self.template_file is not None:
+                    target_file = str(self.template_file)
+                else:
+                    target_file = str(self.target_file) if self.target_file is not None else None
                 target_orientation = "RAS" if target_file is None else None
                 
                 result = self.pipeline.run_step(
@@ -268,7 +284,7 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                     
                     # Save motion parameters as confounds timeseries immediately
                     confounds_outputf = self.output_dir / f"{self.bids_prefix_wobold}_desc-confounds_timeseries.tsv"
-                    cmd_output = ["cp", motion_params, str(confounds_outputf)]
+                    cmd_output = ["cp", str(motion_params), str(confounds_outputf)]
                     run_command(cmd_output)
                     self.generated_files.append(str(confounds_outputf))
                     self.logger.info(f"Output: motion confounds saved")
@@ -355,10 +371,13 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
             # Still save boldref even if bias correction was skipped
             if funcf_tmean:
                 boldref_outputf = self.output_dir / f"{self.bids_prefix_wobold}_boldref.nii.gz"
-                cmd_output = ["cp", funcf_tmean, str(boldref_outputf)]
+                cmd_output = ["cp", str(funcf_tmean), str(boldref_outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(boldref_outputf))
                 self.logger.info(f"Output: BOLD reference saved")
+
+            # Initialize brain mask variable (will be set if skullstripping is enabled)
+            funcf_brain_mask = None
 
             # FUNC SKULL STRIPPING (optional)
             # ------------------------------------------------------------
@@ -373,18 +392,12 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                         "imagef": funcf_tmean,
                         "modal": "func",
                         "output_name": "func_brain.nii.gz",
-
                     }
                 )
 
-                # set the enable_crop_2round to False for func skull stripping
-                config_cur = self.config.to_dict()
-                config_cur["func"]["skullstripping"]["fastSurferCNN"]["enable_crop_2round"] = False
-                config_cur["func"]["skullstripping"]["fastSurferCNN"]["fix_V1_WM"] = False
-
                 result = self.pipeline.run_step(
                     step_name,
-                    config=config_cur
+                    config=self.config.to_dict()
                 )
                 funcf_tmean = result.output_files["imagef_skullstripped"]
                 funcf_brain_mask = result.output_files["brain_mask"]
@@ -393,7 +406,7 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
 
                 # Save brain mask 
                 brainmask_outputf = self.output_dir / f"{self.bids_prefix_wobold}_desc-brain_mask.nii.gz"
-                cmd_output = ["cp", funcf_brain_mask, str(brainmask_outputf)]
+                cmd_output = ["cp", str(funcf_brain_mask), str(brainmask_outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(brainmask_outputf))
                 self.logger.info(f"Output: functional brain mask saved")
@@ -418,22 +431,37 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                     except Exception as e:
                         self.logger.warning(f"QC: functional skull stripping failed - {e}")
 
+
             # FUNC REGISTRATION TO TARGET
             # ------------------------------------------------------------
             if self.config.get("registration.enabled", True):
+                # Validate target_file exists
+                if self.target_file is None:
+                    raise ValueError(f"Registration enabled but target_file is None (target_type: {self.target_type})")
+                if not self.target_file.exists():
+                    raise FileNotFoundError(f"Target file does not exist: {self.target_file}")
+                
                 # if target_type is template, then the moving image is the target file and the fixed image is the functional tmean
                 # otherwise, the moving image is the functional tmean and the fixed image is the target file
 
                 # resample the target to the functional resolution if requested (before registration)
                 fixedf = str(self.target_file)
+
+                # resample the target to the functional res, for initial rigid registration
+                reff = self.working_dir / "target_res-func_for_registration.nii.gz"
+                func_res = np.round(get_image_resolution(funcf_all, logger=self.logger), 1)
+                cmd_resample = ['3dresample', 
+                                '-input', str(self.target_file), '-prefix', str(reff), 
+                                '-rmode', 'Cu',
+                                '-dxyz', str(func_res[0]), str(func_res[1]), str(func_res[2])]
+                run_command(cmd_resample)
+                self.logger.info(f"Output: target resampled to func resolution for registration")
+                
+                # TODO
+                # do an initial rigid registration between the resampled target and the functional data using flirt_register
+
+                # use the resampled target for registration if requested
                 if self.config.get("registration.keep_original_func_resolution", True):
-                    reff = self.working_dir / "target_res-func_for_registration.nii.gz"
-                    func_res = np.round(get_image_resolution(funcf_all, logger=self.logger), 1)
-                    cmd_resample = ['3dresample', 
-                                    '-input', str(self.target_file), '-prefix', str(reff), 
-                                    '-rmode', 'Cu',
-                                    '-dxyz', str(func_res[0]), str(func_res[1]), str(func_res[2])]
-                    run_command(cmd_resample)
                     self.logger.info(f"Output: target resampled to func resolution for registration")
                     fixedf = str(reff)
 
@@ -462,11 +490,13 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                 if self.target_type == "anat":
                     target_name = "T1w"
                 elif self.target_type == "template":
-                    target_name = self.template_name or "native"  # fallback for safety
+                    if self.template_name is None:
+                        raise ValueError("target_type is 'template' but template_name is None")
+                    target_name = self.template_name
                 
                 # Save space-{target} boldref
                 space_boldref_outputf = self.output_dir / f"{self.bids_prefix_wobold}_space-{target_name}_boldref.nii.gz"
-                cmd_output = ["cp", funcf_tmean, str(space_boldref_outputf)]
+                cmd_output = ["cp", str(funcf_tmean), str(space_boldref_outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(space_boldref_outputf))
                 self.logger.info(f"Output: registered BOLD reference saved")
@@ -484,14 +514,14 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                 
                 # Save forward transform
                 forward_xfm_outputf = self.output_dir / f"{self.bids_prefix_wobold}_from-scanner_to-{target_name}_mode-image_xfm.h5"
-                cmd_output = ["cp", forward_transform, str(forward_xfm_outputf)]
+                cmd_output = ["cp", str(forward_transform), str(forward_xfm_outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(forward_xfm_outputf))
                 self.logger.info(f"Output: forward transform saved")
                 
                 # Save inverse transform
                 inverse_xfm_outputf = self.output_dir / f"{self.bids_prefix_wobold}_from-{target_name}_to-scanner_mode-image_xfm.h5"
-                cmd_output = ["cp", inverse_transform, str(inverse_xfm_outputf)]
+                cmd_output = ["cp", str(inverse_transform), str(inverse_xfm_outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(inverse_xfm_outputf))
                 self.logger.info(f"Output: inverse transform saved")
@@ -526,16 +556,29 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
             # APPLY FUNC2TARGET REGISTRATION TO TARGET TO FUNC_ALL
             # ------------------------------------------------------------
             if self.config.get("registration.enabled", True):
+                # forward_xfm_outputf should be defined from the registration step above
+                # If registration was skipped or failed, this block wouldn't execute
                 if self.target2template:
+                    if self.template_file is None:
+                        raise ValueError("target2template is True but template_file is None")
+                    if self.template_name is None:
+                        raise ValueError("target2template is True but template_name is None")
                     fixedf = self.template_file
                     transform_files = [forward_xfm_outputf, self.target2template_transform]
 
                     qc_modality = f'func2template'
-                    target_name = self.template_name or "native"  # fallback for safety
+                    target_name = self.template_name
                 else:
                     fixedf = self.target_file
                     transform_files = [forward_xfm_outputf]
                     qc_modality = f"func2{self.target_type}"
+                    # Use the same target_name from registration block
+                    if self.target_type == "anat":
+                        target_name = "T1w"
+                    elif self.target_type == "template":
+                        if self.template_name is None:
+                            raise ValueError("target_type is 'template' but template_name is None")
+                        target_name = self.template_name
 
                 # use the same resampled target that was used for registration
                 if self.config.get("registration.keep_original_func_resolution", True):
@@ -583,13 +626,13 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                 
                 # Save functional data
                 funcf_outputf = self.output_dir / f"{self.bids_prefix_wobold}_space-{target_name}_desc-preproc_bold.nii.gz"
-                cmd_output = ["cp", funcf_all, str(funcf_outputf)]
+                cmd_output = ["cp", str(funcf_all), str(funcf_outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(funcf_outputf))
                 self.logger.info(f"Output: registered functional data saved")
 
                 # run ants_apply_transforms for the brain mask if provided
-                if self.config.get("func.skullstripping.enabled", True):
+                if funcf_brain_mask is not None:
                     
                     result = self.pipeline.run_step(
                         step_name,
@@ -605,7 +648,7 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
 
                     funcf_brain_mask_registered = result.output_files["imagef_registered"]
                     brainmask_registered_outputf = self.output_dir / f"{self.bids_prefix_wobold}_space-{target_name}_desc-brain_mask.nii.gz"
-                    cmd_output = ["cp", funcf_brain_mask_registered, str(brainmask_registered_outputf)]
+                    cmd_output = ["cp", str(funcf_brain_mask_registered), str(brainmask_registered_outputf)]
                     run_command(cmd_output)
                     self.generated_files.append(str(brainmask_registered_outputf))
                     self.logger.info(f"Output: registered brain mask saved")

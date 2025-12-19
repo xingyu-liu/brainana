@@ -44,6 +44,7 @@ from .operations import (
     slice_timing_correction,
     motion_correction,
     despike,
+    apply_segmentation,
     apply_skullstripping,
     bias_correction,
     ants_register,
@@ -102,6 +103,7 @@ __all__ = [
     'slice_timing_correction',
     'motion_correction',
     'despike',
+    'apply_segmentation',
     'apply_skullstripping',
     # Shared preprocessing
     'bias_correction',

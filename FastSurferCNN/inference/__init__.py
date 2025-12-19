@@ -23,13 +23,13 @@ from . import api
 from . import inference
 from . import predictor
 from . import predictor_utils
-from . import skullstripping
+from . import segmentation
 
 __all__ = [
     "api",
     "inference",
     "predictor",
     "predictor_utils",
-    "skullstripping",  # Module name kept for backward compatibility
+    "segmentation",
 ]
 
