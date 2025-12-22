@@ -12,6 +12,8 @@ import numpy as np
 import os
 import sys
 import signal
+import time
+import threading
 from pathlib import Path
 from multiprocessing import Pool
 from scipy import ndimage
@@ -35,15 +37,32 @@ from FastSurferCNN.data_loader.conform import conform
 
 # Global flag for graceful shutdown
 _shutdown_requested = False
+_shutdown_message_printed = False
+_shutdown_count = 0
+_signal_handler_lock = threading.Lock()
 
 
 def _signal_handler(signum, frame):
     """Handle shutdown signals gracefully."""
-    global _shutdown_requested
-    signal_name = signal.Signals(signum).name
-    print(f"\n⚠️  Received {signal_name} signal. Initiating graceful shutdown...")
-    print("  → Finishing current operations and closing HDF5 file properly...")
-    _shutdown_requested = True
+    global _shutdown_requested, _shutdown_message_printed, _shutdown_count
+    
+    # Use lock to prevent concurrent execution
+    with _signal_handler_lock:
+        _shutdown_count += 1
+        
+        # Only print message once
+        if not _shutdown_message_printed:
+            signal_name = signal.Signals(signum).name
+            print(f"\n⚠️  Received {signal_name} signal. Initiating graceful shutdown...")
+            print("  → Finishing current operations and closing HDF5 file properly...")
+            _shutdown_message_printed = True
+        
+        _shutdown_requested = True
+        
+        # Force exit on second interrupt (Ctrl+C twice) - use os._exit for immediate termination
+        if _shutdown_count >= 2:
+            print("\n⚠️  Force exit requested. Terminating immediately...")
+            os._exit(130)  # Use os._exit for immediate termination (bypasses cleanup)
 
 
 def resize_volume_proportional(volume, target_size=256, order=1):
@@ -408,6 +427,108 @@ def _find_image_label_pairs(image_dir, label_dir):
     return [pair[0] for pair in matched_pairs], [pair[1] for pair in matched_pairs]
 
 
+def _safe_open_hdf5(file_path, mode, max_retries=5, retry_delay=1.0):
+    """Safely open HDF5 file with retry logic for handling locked files.
+    
+    Args:
+        file_path: Path to HDF5 file
+        mode: File mode ('r', 'w', 'a', etc.)
+        max_retries: Maximum number of retry attempts
+        retry_delay: Initial delay between retries (exponential backoff)
+    
+    Returns:
+        h5py.File object (context manager)
+    
+    Raises:
+        OSError: If file cannot be opened after all retries
+        KeyboardInterrupt: If shutdown is requested during retries
+    """
+    file_path = Path(file_path)
+    last_error = None
+    
+    # Check if file is very small (likely corrupted/incomplete) - remove immediately if in write mode
+    if mode == 'w' and file_path.exists():
+        try:
+            file_size = file_path.stat().st_size
+            # If file is 0 or very small (< 1KB), it's likely corrupted/incomplete - remove it
+            if file_size < 1024:
+                try:
+                    file_path.unlink()
+                    print(f"  → Removed small/corrupted file ({file_size} bytes)")
+                    time.sleep(0.1)
+                except (OSError, PermissionError) as e:
+                    print(f"  ⚠️  Could not remove small file: {e}")
+        except OSError:
+            pass  # File might have been removed
+    
+    for attempt in range(max_retries):
+        # Check for shutdown request
+        if _shutdown_requested:
+            raise KeyboardInterrupt("Shutdown requested during HDF5 file open")
+        
+        try:
+            # If in write mode and file exists but is locked, try to remove it
+            if mode == 'w' and file_path.exists() and attempt > 0:
+                try:
+                    # Try to remove the locked file
+                    file_path.unlink()
+                    print(f"  → Removed locked file (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(0.5)  # Brief pause after removal
+                except (OSError, PermissionError) as e:
+                    print(f"  ⚠️  Could not remove locked file: {e}")
+            
+            # Try to open the file
+            return h5py.File(file_path, mode)
+            
+        except (OSError, IOError, BlockingIOError) as e:
+            last_error = e
+            error_msg = str(e)
+            
+            # Check if it's a locking error
+            if "lock" in error_msg.lower() or "errno 11" in error_msg or "Resource temporarily unavailable" in error_msg:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                    print(f"  ⚠️  File is locked (attempt {attempt + 1}/{max_retries}), retrying in {wait_time:.1f}s...")
+                    
+                    # Sleep in small increments to allow interruption
+                    elapsed = 0.0
+                    while elapsed < wait_time and not _shutdown_requested:
+                        sleep_interval = min(0.5, wait_time - elapsed)
+                        time.sleep(sleep_interval)
+                        elapsed += sleep_interval
+                    
+                    if _shutdown_requested:
+                        raise KeyboardInterrupt("Shutdown requested during retry wait")
+                    
+                    # Try to remove locked file before next attempt (more aggressive)
+                    if mode == 'w' and file_path.exists():
+                        try:
+                            file_path.unlink()
+                            print(f"  → Removed locked file before retry")
+                            time.sleep(0.2)
+                        except (OSError, PermissionError):
+                            pass  # Ignore if we can't remove it
+                    
+                    continue
+                else:
+                    # Last attempt failed - try to remove if in write mode
+                    if mode == 'w' and file_path.exists():
+                        try:
+                            file_path.unlink()
+                            print(f"  → Force removed locked file, retrying...")
+                            time.sleep(0.5)
+                            return h5py.File(file_path, mode)
+                        except Exception as remove_error:
+                            raise OSError(f"Could not open or remove locked file after {max_retries} attempts. "
+                                        f"Last error: {error_msg}. Remove error: {remove_error}")
+            else:
+                # Not a locking error, re-raise immediately
+                raise
+    
+    # If we get here, all retries failed
+    raise OSError(f"Could not open HDF5 file after {max_retries} attempts: {last_error}")
+
+
 def _check_resume_capability(output_hdf5, target_size, preprocess_params):
     """Check if HDF5 file exists and can be resumed."""
     already_processed = set()
@@ -417,8 +538,17 @@ def _check_resume_capability(output_hdf5, target_size, preprocess_params):
         file_size = output_hdf5.stat().st_size
         print(f"Found existing HDF5 file: {output_hdf5.name} ({file_size / (1024**2):.1f} MB)")
         
+        # If file is very small (< 1KB), it's likely corrupted/incomplete - remove it immediately
+        if file_size < 1024:
+            try:
+                output_hdf5.unlink()
+                print(f"  → Removed small/corrupted file ({file_size} bytes), will create new file")
+                return already_processed, file_mode
+            except (OSError, PermissionError) as e:
+                print(f"  ⚠️  Could not remove small file: {e}, will try to overwrite")
+        
         try:
-            with h5py.File(output_hdf5, 'r') as hf_check:
+            with _safe_open_hdf5(output_hdf5, 'r') as hf_check:
                 if str(target_size) in hf_check and 'subject' in hf_check[str(target_size)]:
                     subjects_in_hdf5 = hf_check[str(target_size)]['subject'][:]
                     already_processed = set(
@@ -442,6 +572,8 @@ def _check_resume_capability(output_hdf5, target_size, preprocess_params):
             if "address of object past end of allocation" in error_msg or "corrupt" in error_msg.lower():
                 print(f"  ⚠️  HDF5 file appears corrupted: {error_msg}")
                 print(f"  → Will overwrite with a new file")
+            elif "lock" in error_msg.lower() or "errno 11" in error_msg:
+                print(f"  ⚠️  File is locked ({error_msg}), will try to overwrite")
             else:
                 print(f"  ⚠️  Could not read existing file ({error_msg}), will overwrite")
         except Exception as e:
@@ -467,6 +599,7 @@ def create_hdf5_dataset(
     When plane="mixed", processes each subject for all three planes (axial, coronal, sagittal)
     and stores all slices in a single HDF5 file for plane-agnostic training.
     """
+    global _shutdown_requested, _shutdown_message_printed
     image_dir = Path(data_dir) / "images"
     label_dir = Path(data_dir) / "labels"
     
@@ -508,7 +641,7 @@ def create_hdf5_dataset(
     # For mixed mode, track which (subject, plane) combinations are already processed
     if plane == "mixed" and already_processed:
         # Load existing subject-plane pairs from HDF5
-        with h5py.File(output_hdf5, 'r') as hf_check:
+        with _safe_open_hdf5(output_hdf5, 'r') as hf_check:
             if str(target_size) in hf_check and 'subject' in hf_check[str(target_size)]:
                 # For mixed mode, we can't easily track which planes are done per subject
                 # So we'll just check if subject exists (conservative approach)
@@ -539,7 +672,8 @@ def create_hdf5_dataset(
     total_subjects = len(image_files)
     num_samples_written = 0
     
-    with h5py.File(output_hdf5, file_mode) as hf:
+    # Use safe file opening with retry logic
+    with _safe_open_hdf5(output_hdf5, file_mode) as hf:
         if 'preprocessing_metadata' not in hf:
             preprocess_metadata = hf.create_group('preprocessing_metadata')
             for key, value in preprocess_params.items():
@@ -590,15 +724,31 @@ def create_hdf5_dataset(
         subjects_processed = 0
         subjects_processed_set = set()  # Track unique subjects processed
         
+        pool = None
         try:
             if num_workers > 1:
-                with Pool(processes=num_workers) as pool:
-                    for result_data, msg in pool.imap_unordered(_process_single_subject_wrapper, process_args):
+                pool = Pool(processes=num_workers)
+                try:
+                    iterator = pool.imap_unordered(_process_single_subject_wrapper, process_args)
+                    for result_data, msg in iterator:
+                        # Check shutdown flag - if set, terminate immediately
                         if _shutdown_requested:
-                            print("\n⚠️  Shutdown requested. Stopping processing...")
-                            pool.terminate()
-                            pool.join()
-                            break
+                            # Flush HDF5 datasets to ensure data is saved
+                            try:
+                                images_ds.flush()
+                                labels_ds.flush()
+                                weights_ds.flush()
+                                zooms_ds.flush()
+                                subjects_ds.flush()
+                            except:
+                                pass
+                            # Force terminate pool immediately - don't wait
+                            try:
+                                pool.terminate()
+                            except:
+                                pass
+                            # Exit immediately - don't wait for anything
+                            os._exit(130)
                         print(msg)
                         if result_data is not None:
                             result, subject_name = result_data
@@ -606,11 +756,33 @@ def create_hdf5_dataset(
                             subjects_processed_set.add(subject_name)
                             if len(subjects_processed_set) % 10 == 0:
                                 check_memory_and_warn()
+                finally:
+                    if pool is not None:
+                        if _shutdown_requested:
+                            # On shutdown, don't wait - just terminate and exit
+                            try:
+                                pool.terminate()
+                            except:
+                                pass
+                        else:
+                            pool.close()
+                            pool.join()
             else:
                 for args in process_args:
                     if _shutdown_requested:
-                        print("\n⚠️  Shutdown requested. Stopping processing...")
-                        break
+                        if not _shutdown_message_printed:
+                            print("\n⚠️  Shutdown requested. Stopping processing...")
+                        # Flush HDF5 datasets to ensure data is saved
+                        try:
+                            images_ds.flush()
+                            labels_ds.flush()
+                            weights_ds.flush()
+                            zooms_ds.flush()
+                            subjects_ds.flush()
+                        except:
+                            pass
+                        # Exit immediately for consistency with multiprocessing path
+                        os._exit(130)
                     result_data, msg = _process_single_subject_wrapper(args)
                     print(msg)
                     if result_data is not None:
@@ -620,18 +792,38 @@ def create_hdf5_dataset(
                         if len(subjects_processed_set) % 10 == 0:
                             check_memory_and_warn()
         except KeyboardInterrupt:
-            print("\n⚠️  Keyboard interrupt received. Closing HDF5 file properly...")
+            if not _shutdown_message_printed:
+                print("\n⚠️  Keyboard interrupt received. Closing HDF5 file properly...")
             _shutdown_requested = True
+        except Exception as e:
+            if not _shutdown_requested:
+                print(f"\n⚠️  Unexpected error: {e}")
+                import traceback
+                traceback.print_exc()
+            _shutdown_requested = True
+        finally:
+            # Ensure pool is properly closed
+            if pool is not None:
+                try:
+                    if _shutdown_requested:
+                        # Force terminate on shutdown - don't wait
+                        pool.terminate()
+                        # Don't wait for join - exit immediately
+                    else:
+                        pool.close()
+                        pool.join(timeout=10)
+                except:
+                    pass
         
         subjects_processed = len(subjects_processed_set)
         
         if _shutdown_requested:
             print(f"\n⚠️  Processing interrupted. Saved {num_samples_written} slices from {subjects_processed} subjects before shutdown.")
             print(f"  → HDF5 file has been properly closed and is safe to resume later.")
-            return
+            os._exit(130)  # Use os._exit for immediate termination
     
     # Final summary
-    with h5py.File(output_hdf5, 'r') as hf:
+    with _safe_open_hdf5(output_hdf5, 'r') as hf:
         grp = hf[str(target_size)]
         unique_subjects = len(set(grp['subject'][:]))
         total_slices_in_file = grp['orig_dataset'].shape[0]

@@ -357,7 +357,7 @@ class DiceScore:
             self.intersection += intersection
             self.union += union
     
-    def compute(self, per_class: bool = False, exclude_background: bool = True):
+    def compute(self, per_class: bool = False, exclude_background: bool = False):
         """
         Compute dice score from accumulated statistics.
         

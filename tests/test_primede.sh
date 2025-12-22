@@ -395,7 +395,7 @@ python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
 dataset_root=/mnt/DataDrive3/xliu/prep_test/banana_test
 dataset_name=dataset_misorient
 dataset_dir=${dataset_root}/${dataset_name}
-output_dir=${dataset_root}/preproc/${dataset_name}_v2
+output_dir=${dataset_root}/preproc/${dataset_name}_v3
 # config_f=${dataset_root}/preproc/config.yaml
 config_f=${dataset_root}/preproc/config_nosurfrecon.yaml
 

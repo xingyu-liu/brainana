@@ -78,6 +78,15 @@ func:
     c2: 10  # float: second cutoff parameter (> 0, must be > c1)
     localedit: true  # bool: use local editing for despiking
     ignore_first_volumes: 0  # int: number of initial volumes to ignore (>= 0)
+  bias_correction:  # only done on tmean image for better registration, not on the functional images directly
+    enabled: true  # bool: perform bias field correction
+    algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
+    shrink_factor: 2  # float: shrink factor for faster processing (> 0)
+    bspline_fitting: "[ 200 ]"  # str: B-spline fitting parameters in ANTs format
+    rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
+    threads: 8  # int: number of CPU threads for ITK operations (>= 1). Default 8 to avoid oversubscription when running multiple processes in parallel.
+  conform:
+    enabled: true  # bool: conform functional tmean image to target space using FLIRT rigid registration
   skullstripping:
     enabled: true  # bool: perform brain extraction
     method: "fastSurferCNN"  # str: "bet", "fastSurferCNN", or "macacaMRINN"
@@ -90,13 +99,6 @@ func:
       plane_weight_coronal: 0.1  # float: weight for coronal plane (0.0-1.0)
       plane_weight_axial: 0.5  # float: weight for axial plane (0.0-1.0)
       plane_weight_sagittal: 0.4  # float: weight for sagittal plane (0.0-1.0)
-  bias_correction:  # only done on tmean image for better registration, not on the functional images directly
-    enabled: true  # bool: perform bias field correction
-    algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
-    shrink_factor: 2  # float: shrink factor for faster processing (> 0)
-    bspline_fitting: "[ 200 ]"  # str: B-spline fitting parameters in ANTs format
-    rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
-    threads: 8  # int: number of CPU threads for ITK operations (>= 1). Default 8 to avoid oversubscription when running multiple processes in parallel.
 
 registration:
   enabled: true  # bool: perform image registration

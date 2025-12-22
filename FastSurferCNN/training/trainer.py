@@ -244,6 +244,9 @@ class Trainer:
         epoch_start = time.time()
         loss_batch = np.zeros(1)
 
+        # Reset meter at the start of each training epoch to ensure fresh accumulation
+        train_meter.reset()
+
         # Start background dice tracking
         train_meter.start_background_tracking()
         
@@ -347,6 +350,10 @@ class Trainer:
             median miou [value].
         """
         self.model.eval()
+
+        # Reset meter at the start of each validation epoch to ensure fresh accumulation
+        # This ensures dice is computed correctly across all validation batches, not accumulated across epochs
+        val_meter.reset()
 
         # Aggregate statistics across all batches (not per scale factor)
         ints_ = np.zeros(self.num_classes - 1)

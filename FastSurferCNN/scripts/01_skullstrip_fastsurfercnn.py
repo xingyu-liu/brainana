@@ -16,9 +16,9 @@ from FastSurferCNN.inference.segmentation import run_segmentation
 
 # %%
 # # # anat 
-input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction"
+input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/anat"
 # # input_image = f"{input_dir}/site-arcaro_sub-baby10_ses-anat_T1w.nii.gz"
-input_image = f"{input_dir}/test_marge_upright.nii.gz"
+input_image = f"{input_dir}/anat_marge_upright.nii.gz"
 # # # # input_image = f"{input_dir}/test_1month.nii.gz"
 # input_image = f"{input_dir}/test_freddie.nii.gz"
 
@@ -35,7 +35,7 @@ output_dir = input_image.split('.nii')[0]
 
 modal = "anat"
 weight_axial, weight_coronal, weight_sagittal = 0.4, 0.4, 0.2
-use_mixed_model = True
+use_mixed_model = False
 if use_mixed_model:
     weight_axial, weight_coronal, weight_sagittal = 1/3, 1/3, 1/3
 enable_crop_2round = True

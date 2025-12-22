@@ -9,7 +9,7 @@ It implements a direct paths approach using training_data_dir and output_dir.
 
 Key Features:
 - Automatic path derivation based on conventions
-- HDF5 file naming: {PLANE}_{train|val}.hdf5
+- HDF5 file naming: {train|val}_{PLANE}_{ORIENTATION}.hdf5 (e.g., train_axial_RAS.hdf5)
 - Clear error messages
 
 Usage:
@@ -58,9 +58,10 @@ def get_paths_from_config(cfg):
     >>> cfg = yaml.safe_load(open('config.yaml'))
     >>> paths = get_paths_from_config(cfg)
     >>> print(paths['train_hdf5'])
-    /path/to/training_data/coronal_train.hdf5
+    /path/to/training_data/train_coronal_RAS.hdf5
     
-    Note: HDF5 files are named as {PLANE}_{train|val}.hdf5
+    Note: HDF5 files are named as {train|val}_{PLANE}_{ORIENTATION}.hdf5
+    If ORIENTATION is not specified in DATA.PREPROCESSING, falls back to {split}_{PLANE}.hdf5
     """
     
     if 'TRAINING_DATA_DIR' not in cfg or 'OUTPUT_DIR' not in cfg:
@@ -78,10 +79,24 @@ def get_paths_from_config(cfg):
     data_dir = Path(cfg['TRAINING_DATA_DIR'])
     log_dir = Path(cfg['OUTPUT_DIR'])
     
-    # HDF5 files follow naming convention: {split}_{plane}.hdf5
-    # Example: train_axial.hdf5, val_coronal.hdf5, train_mixed.hdf5
-    train_hdf5 = data_dir / f"train_{plane}.hdf5"
-    val_hdf5 = data_dir / f"val_{plane}.hdf5"
+    # Get orientation from preprocessing config if available
+    orientation = None
+    if 'PREPROCESSING' in cfg.get('DATA', {}):
+        orientation = cfg['DATA']['PREPROCESSING'].get('ORIENTATION')
+    
+    # HDF5 files follow naming convention: {split}_{plane}_{ORIENTATION}.hdf5
+    # Example: train_axial_RAS.hdf5, val_coronal_RAS.hdf5, train_mixed_RAS.hdf5
+    # Orientation is always saved in uppercase (e.g., RAS) but recognized case-insensitively
+    # If orientation is not specified, fall back to old format: {split}_{plane}.hdf5
+    if orientation:
+        # Convert to uppercase for consistent file naming (always save as RAS, not ras)
+        # This ensures files are saved with uppercase and found regardless of config case
+        orientation_upper = orientation.upper()
+        train_hdf5 = data_dir / f"train_{plane}_{orientation_upper}.hdf5"
+        val_hdf5 = data_dir / f"val_{plane}_{orientation_upper}.hdf5"
+    else:
+        train_hdf5 = data_dir / f"train_{plane}.hdf5"
+        val_hdf5 = data_dir / f"val_{plane}.hdf5"
     
     return {
         'data_dir': data_dir,

@@ -37,7 +37,7 @@ TRAIN:
   NUM_STEPS: 10
   FINE_TUNE: true
   PRETRAINED_MODEL: "/home/star/github/banana/FastSurferCNN/pretrained_model/ras_aug/T1w_seg-ARM2_axial.pkl"
-  CHECKPOINT_PERIOD: 5
+  CHECKPOINT_PERIOD: 1
   NUM_WORKERS: 6  # Reduced for network storage I/O optimization
   EARLY_STOPPING: true
   EARLY_STOPPING_MODE: "min"

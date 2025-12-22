@@ -97,15 +97,24 @@ def _resolve_paths(cfg: yacs.config.CfgNode, cfg_file: str) -> yacs.config.CfgNo
     
     try:
         # Convert YACS config to dict for path resolution
+        # Include PREPROCESSING section so orientation can be used for HDF5 file naming
+        data_dict = {
+            'PLANE': cfg.DATA.PLANE,
+            'PATH_HDF5_TRAIN': cfg.DATA.PATH_HDF5_TRAIN if cfg.DATA.PATH_HDF5_TRAIN else "",
+            'PATH_HDF5_VAL': cfg.DATA.PATH_HDF5_VAL if cfg.DATA.PATH_HDF5_VAL else "",
+            'CLASS_OPTIONS': cfg.DATA.CLASS_OPTIONS if hasattr(cfg.DATA, 'CLASS_OPTIONS') else [],
+        }
+        
+        # Add PREPROCESSING section if it exists (needed for orientation-based HDF5 file naming)
+        if hasattr(cfg.DATA, 'PREPROCESSING') and hasattr(cfg.DATA.PREPROCESSING, 'ORIENTATION'):
+            data_dict['PREPROCESSING'] = {
+                'ORIENTATION': cfg.DATA.PREPROCESSING.ORIENTATION,
+            }
+        
         cfg_dict = {
             'TRAINING_DATA_DIR': cfg.TRAINING_DATA_DIR,
             'OUTPUT_DIR': cfg.OUTPUT_DIR,
-            'DATA': {
-                'PLANE': cfg.DATA.PLANE,
-                'PATH_HDF5_TRAIN': cfg.DATA.PATH_HDF5_TRAIN if cfg.DATA.PATH_HDF5_TRAIN else "",
-                'PATH_HDF5_VAL': cfg.DATA.PATH_HDF5_VAL if cfg.DATA.PATH_HDF5_VAL else "",
-                'CLASS_OPTIONS': cfg.DATA.CLASS_OPTIONS if hasattr(cfg.DATA, 'CLASS_OPTIONS') else [],
-            }
+            'DATA': data_dict,
         }
         
         # Get resolved paths

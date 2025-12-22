@@ -112,11 +112,19 @@ class SnapshotProcessor:
             mapping = SNAPSHOT_MAPPINGS.get(desc, {})
             snapshot_type = mapping.get('key', desc)
             
+            # Determine modality first
+            modality = SnapshotProcessor._determine_modality(path.name)
+            
+            # Customize description based on modality for conform snapshots
+            description = mapping.get('description', '')
+            if desc == 'conform' and modality == 'functional':
+                description = 'Conform to target space'
+            
             snapshots[name] = {
                 'path': str(path),
                 'entities': entities,
-                'modality': SnapshotProcessor._determine_modality(path.name),
-                'description': mapping.get('description', ''),
+                'modality': modality,
+                'description': description,
                 'snapshot_type': snapshot_type
             }
         

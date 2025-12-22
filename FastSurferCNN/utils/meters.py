@@ -145,20 +145,9 @@ class Meter:
     
     def get_dice_without_background(self):
         """Get dice score excluding background (class 0)."""
-        dice_score, dice_matrix = self.dice_score.compute(per_class=True)
-        
-        # Exclude background (class 0) from the calculation
-        if len(dice_score) > 1:
-            # Only consider classes 1 and above (exclude background)
-            region_dice = dice_score[1:]
-            # Only average over classes that have non-zero union
-            valid_regions = region_dice[region_dice > 0]
-            if len(valid_regions) > 0:
-                return valid_regions.mean()
-            else:
-                return torch.tensor(0.0, device=dice_score.device)
-        else:
-            return dice_score[0] if len(dice_score) > 0 else torch.tensor(0.0)
+        # Use the exclude_background parameter for consistency
+        dice_score, dice_matrix = self.dice_score.compute(per_class=False, exclude_background=True)
+        return dice_score
 
     def reset(self):
         """
@@ -213,6 +202,11 @@ class Meter:
         loss_dice : default = None
             Dice loss (Default value = None).
         """
+        if self.writer is None:
+            # Skip writing if no writer is provided (e.g., for validation-only runs)
+            self.global_iter += 1
+            return
+        
         self.writer.add_scalar(
             f"{self.mode}/total_loss", loss_total.item(), self.global_iter
         )
@@ -257,8 +251,9 @@ class Meter:
             Current epoch.
         """
         dice_score, dice_cm_mat = self.dice_score.compute()
-        self.writer.add_scalar(f"{self.mode}/mean_dice_score", dice_score, cur_epoch)
-        if self.confusion_mat:
-            fig = plot_confusion_matrix(dice_cm_mat, self.class_names)
-            self.writer.add_figure(f"{self.mode}/confusion_mat", fig, cur_epoch)
-            plt.close("all")
+        if self.writer is not None:
+            self.writer.add_scalar(f"{self.mode}/mean_dice_score", dice_score, cur_epoch)
+            if self.confusion_mat:
+                fig = plot_confusion_matrix(dice_cm_mat, self.class_names)
+                self.writer.add_figure(f"{self.mode}/confusion_mat", fig, cur_epoch)
+                plt.close("all")

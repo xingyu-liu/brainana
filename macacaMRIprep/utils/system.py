@@ -169,9 +169,9 @@ def run_command(
     # Log additional execution context
     if cwd:
         cmd_logger.info(f"System: working directory - {cwd}")
-    if env:
-        # Only log non-standard environment variables (avoid logging entire environment)
-        cmd_logger.debug(f"System: environment variables - {env}")
+    # if env:
+    #     # Only log non-standard environment variables (avoid logging entire environment)
+    #     cmd_logger.debug(f"System: environment variables - {env}")
     
     # Record start time
     start_time = time.time()

@@ -7,12 +7,14 @@ import sys
 import time
 import logging
 import multiprocessing
+import shutil
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import json
 
 from .base import BasePreprocessingWorkflow
-from ..operations import bias_correction, apply_segmentation, ants_register, reorient, correct_orientation_mismatch, conform_to_template
+from ..operations import bias_correction, apply_segmentation, reorient, correct_orientation_mismatch, conform_to_template
+from ..operations.registration import ants_register, ants_apply_transforms
 from ..utils import run_command
 from ..utils import resolve_template, get_filename_stem
 from ..utils import log_workflow_start, log_workflow_end
@@ -116,8 +118,9 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
         if self.config.get("quality_control.enabled", True):
             self.qc_dir.mkdir(parents=True, exist_ok=True)
         
-        # Start with original anatomical file
-        anatf_cur = str(self.anat_file)
+        # Maintain two versions of anatomical file: with skull (full-brain) and without skull (brain-only)
+        anatf_w_skull = str(self.anat_file)  # Full-brain version (always maintained)
+        anatf_wo_skull = None  # Skull-stripped version (None until skull stripping)
         
         try:
             # ANAT ORIENTATION CORRECTION
@@ -127,7 +130,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     name="anat_orientation_correction",
                     func=correct_orientation_mismatch,
                     inputs={
-                        "imagef": anatf_cur,
+                        "imagef": anatf_w_skull,
                         "output_name": "anat_orientation_corrected.nii.gz"
                     }
                 )
@@ -138,8 +141,8 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     generate_tmean=False
                 )
                 if result.output_files["imagef_orientation_corrected"] is not None:
-                    anatf_cur = result.output_files["imagef_orientation_corrected"]
-                    self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_cur)}")
+                    anatf_w_skull = result.output_files["imagef_orientation_corrected"]
+                    self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_w_skull)}")
                 else:
                     self.logger.info(f"Step: {step_name} skipped - no orientation correction performed")
             else:
@@ -152,7 +155,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     name="anat_reorient",
                     func=reorient,
                     inputs={
-                        "imagef": anatf_cur,
+                        "imagef": anatf_w_skull,
                         "output_name": "anat_reoriented.nii.gz"
                     }
                 )
@@ -168,8 +171,8 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     generate_tmean=False
                 )
                 if result.output_files["imagef_reoriented"] is not None:
-                    anatf_cur = result.output_files["imagef_reoriented"]
-                    self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_cur)}")
+                    anatf_w_skull = result.output_files["imagef_reoriented"]
+                    self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_w_skull)}")
                 else:
                     # This should rarely happen since we default to RAS, but kept for defensive programming
                     self.logger.info(f"Step: {step_name} skipped - no reorientation performed")
@@ -207,7 +210,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     name="anat_conform",
                     func=conform_to_template,
                     inputs={
-                        "imagef": anatf_cur,
+                        "imagef": anatf_w_skull,
                         "template_file": conform_template_file,
                         "output_name": "anat_conformed.nii.gz"
                     }
@@ -222,8 +225,34 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     conform_template_f = result.output_files["template_f"]
                     self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_conformed)}")
                     
-                    # Update anatf_cur to conformed image
-                    anatf_cur = anatf_conformed
+                    # Update anatf_w_skull to conformed image
+                    anatf_w_skull = anatf_conformed
+
+                    # save the xfm files with from-scanner_to-{self.modality}
+                    forward_xfm = result.output_files.get("forward_xfm")
+                    inverse_xfm = result.output_files.get("inverse_xfm")
+                    
+                    if forward_xfm:
+                        # Generate BIDS-compliant filename for forward transform
+                        filename_stem = get_filename_stem(self.anat_file)
+                        filename_stem = filename_stem.replace(f"_{self.modality}", "")
+                        forward_xfm_outputf = self.output_dir / f"{filename_stem}_from-scanner_to-{self.modality}_mode-image_xfm.mat"
+                        
+                        # Copy the transform file to output directory
+                        shutil.copy2(forward_xfm, str(forward_xfm_outputf))
+                        self.generated_files.append(str(forward_xfm_outputf))
+                        self.logger.info(f"Output: forward transform saved - {os.path.basename(forward_xfm_outputf)}")
+                    
+                    if inverse_xfm:
+                        # Generate BIDS-compliant filename for inverse transform
+                        filename_stem = get_filename_stem(self.anat_file)
+                        filename_stem = filename_stem.replace(f"_{self.modality}", "")
+                        inverse_xfm_outputf = self.output_dir / f"{filename_stem}_from-{self.modality}_to-scanner_mode-image_xfm.mat"
+                        
+                        # Copy the transform file to output directory
+                        shutil.copy2(inverse_xfm, str(inverse_xfm_outputf))
+                        self.generated_files.append(str(inverse_xfm_outputf))
+                        self.logger.info(f"Output: inverse transform saved - {os.path.basename(inverse_xfm_outputf)}")
                     
                     # Generate QC
                     if self.config.get("quality_control.enabled", True):
@@ -256,7 +285,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     name="anat_bias_correction",
                     func=bias_correction,
                     inputs={
-                        "imagef": str(anatf_cur),
+                        "imagef": str(anatf_w_skull),
                         "output_name": "anat_bias_corrected.nii.gz"
                     }
                 )
@@ -280,7 +309,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                         bias_qc_path = self.qc_dir / bias_qc_filename
                         
                         create_bias_correction_qc(
-                            image_original=anatf_cur,
+                            image_original=anatf_w_skull,
                             image_corrected=anatf_corrected,
                             save_f=str(bias_qc_path),
                             modality="anat",
@@ -290,14 +319,14 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     except Exception as e:
                         self.logger.warning(f"QC: anatomical bias correction failed - {e}")
                 
-                # update anatf_cur
-                anatf_cur = anatf_corrected
+                # update anatf_w_skull
+                anatf_w_skull = anatf_corrected
             else:
                 self.logger.info("Step: bias correction skipped (disabled in configuration)")
 
-            # Still save anatomical file even if bias correction was skipped
+            # Still save anatomical file even if bias correction was skipped (full-brain version)
             outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-preproc_{self.modality}.nii.gz"
-            cmd_output = ["cp", str(anatf_cur), str(outputf)]
+            cmd_output = ["cp", str(anatf_w_skull), str(outputf)]
             run_command(cmd_output)
             self.generated_files.append(str(outputf))
             self.logger.info(f"Output: preprocessed anatomical file saved")
@@ -315,17 +344,14 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
             # ------------------------------------------------------------
             # if config.get(anat.surface_reconstruction.enabled) is True, force to run skullstripping
             if self.config.get("anat.skullstripping.enabled", True):
-                # Store the image before skull stripping for QC
-                anatf_with_skull = anatf_cur
-                
-                # Store T1w image for surface reconstruction
-                outpuf_f_for_surfrecon["t1w_image"] = anatf_with_skull
+                # Store T1w image for surface reconstruction (full-brain version)
+                outpuf_f_for_surfrecon["t1w_image"] = anatf_w_skull
 
                 step_name = self.pipeline.add_step(
                     name="anat_segmentation", 
                     func=apply_segmentation,
                     inputs={
-                        "imagef": anatf_cur,
+                        "imagef": anatf_w_skull,
                         "modal": "anat",
                         "output_name": "anat_brain.nii.gz"
                     }
@@ -356,24 +382,24 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     self.generated_files.append(str(outputf_pre))
                     self.logger.info(f"Output: cropped input saved as {outputf_pre.name}")
                     
-                    # Update anatf_with_skull to use cropped version for QC consistency
+                    # Update anatf_w_skull to use cropped version (for QC consistency and surface recon)
                     # (mask is in cropped space, so underlay should also be in cropped space)
-                    anatf_with_skull = str(input_cropped_path)
-                    self.logger.info(f"QC: updated underlay to cropped version for spatial consistency")
+                    anatf_w_skull = str(input_cropped_path)
+                    self.logger.info(f"QC: updated full-brain version to cropped version for spatial consistency")
 
                     # Update T1w image for surface reconstruction to cropped version
-                    outpuf_f_for_surfrecon["t1w_image"] = anatf_with_skull
+                    outpuf_f_for_surfrecon["t1w_image"] = anatf_w_skull
 
-                # Update the anatomical file to skull-stripped version
+                # After skull stripping: wo_skull gets the skull-stripped version, w_skull remains unchanged
                 # Note: If two-pass refinement was used, the skull-stripped image is already in cropped space
-                anatf_cur = result.output_files["imagef_skullstripped"]
+                anatf_wo_skull = result.output_files["imagef_skullstripped"]
                 anat_brain_mask = result.output_files["brain_mask"]
-                self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_cur)}")
+                self.logger.info(f"Step: {step_name} completed - {os.path.basename(anatf_wo_skull)}")
                 self.logger.info(f"Output: brain mask generated - {os.path.basename(anat_brain_mask)}")
 
                 # output to output_dir
                 outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-preproc_{self.modality}_brain.nii.gz"
-                cmd_output = ["cp", str(anatf_cur), str(outputf)]
+                cmd_output = ["cp", str(anatf_wo_skull), str(outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(outputf))
                 self.logger.info(f"Output: skull stripped anatomical file saved")
@@ -420,7 +446,7 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                         skull_qc_path = self.qc_dir / skull_qc_filename
                         
                         create_skullstripping_qc(
-                            underlay_file=anatf_with_skull,
+                            underlay_file=anatf_w_skull,
                             mask_file=anat_brain_mask,
                             save_f=str(skull_qc_path),
                             modality="anat",
@@ -451,11 +477,18 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                 if self.template_name is None:
                     raise ValueError("Template registration enabled but template_name is None")
                 qc_modality = "anat2template"
+                
+                # Save original full-brain version before registration (needed for registered full-brain output)
+                anatf_w_skull_original = anatf_w_skull
+                
+                # Use skull-stripped version for registration if available (better alignment), otherwise use full-brain
+                anatf_for_registration = anatf_wo_skull if anatf_wo_skull is not None else anatf_w_skull
+                
                 step_name = self.pipeline.add_step(
                     name="anat2template_registration",
                     func=ants_register,
                     inputs={
-                        "movingf": anatf_cur,
+                        "movingf": anatf_for_registration,
                         "fixedf": str(self.template_file),
                         "output_prefix": qc_modality
                     }
@@ -467,12 +500,49 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                 )
                 self.logger.info(f"Step: {step_name} completed - {os.path.basename(result.output_files['imagef_registered'])}")
 
+                # Get registration outputs
+                forward_transform = result.output_files["forward_transform"]
+                inverse_transform = result.output_files["inverse_transform"]
+                
+                # Update the version that was registered
+                if anatf_wo_skull is not None:
+                    anatf_wo_skull = result.output_files["imagef_registered"]
+                else:
+                    anatf_w_skull = result.output_files["imagef_registered"]
+                
+                # Apply transform to full-brain version to create registered full-brain output
+                # Registration was done with skull-stripped version (if available), but output should be full-brain
+                if anatf_wo_skull is not None:
+                    # Registration used wo_skull, so transform the original full-brain version
+                    step_name_fullbrain = self.pipeline.add_step(
+                        name="anat2template_fullbrain_transform",
+                        func=ants_apply_transforms,
+                    )
+                    
+                    result_fullbrain = self.pipeline.run_step(
+                        step_name_fullbrain,
+                        movingf=anatf_w_skull_original,
+                        moving_type=3,
+                        interpolation=self.config.get("registration", {}).get("interpolation", "trilinear"),
+                        outputf_name=f"anat2template_fullbrain.nii.gz",
+                        fixedf=str(self.template_file),
+                        transformf=[forward_transform],
+                        reff=str(self.template_file),
+                        generate_tmean=False,
+                    )
+                    
+                    # Save space-{template} preprocessed file (full-brain version)
+                    anatf_w_skull_registered = result_fullbrain.output_files["imagef_registered"]
+                else:
+                    # Registration used w_skull, so w_skull is already registered - use it directly
+                    anatf_w_skull_registered = anatf_w_skull
+                
                 # output to output_dir
                 outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_space-{self.template_name}_desc-preproc_{self.modality}.nii.gz"
-                cmd_output = ["cp", str(result.output_files["imagef_registered"]), str(outputf)]
+                cmd_output = ["cp", str(anatf_w_skull_registered), str(outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(outputf))
-                self.logger.info(f"Output: registered anatomical file saved")
+                self.logger.info(f"Output: registered anatomical file saved (full-brain)")
 
                 # also save a json file that records the reference file
                 ref_info_outputf = f"{str(outputf).split('.nii.gz')[0]}.json"
@@ -487,13 +557,13 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
 
                 # save the xfm files
                 outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_from-{self.modality}_to-{self.template_name}_mode-image_xfm.h5"
-                cmd_output = ["cp", str(result.output_files["forward_transform"]), str(outputf)]
+                cmd_output = ["cp", str(forward_transform), str(outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(outputf))
                 self.logger.info(f"Output: forward transform saved")
 
                 outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_from-{self.template_name}_to-{self.modality}_mode-image_xfm.h5"
-                cmd_output = ["cp", str(result.output_files["inverse_transform"]), str(outputf)]
+                cmd_output = ["cp", str(inverse_transform), str(outputf)]
                 run_command(cmd_output)
                 self.generated_files.append(str(outputf))
                 self.logger.info(f"Output: inverse transform saved")
@@ -507,8 +577,10 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                         reg_qc_filename = f"{filename_stem}_desc-{qc_modality}_{self.modality}.png"
                         reg_qc_path = self.qc_dir / reg_qc_filename
                         
+                        # Use the version that was registered for QC
+                        anatf_for_qc = anatf_wo_skull if anatf_wo_skull is not None else anatf_w_skull
                         create_registration_qc(
-                            image_file=result.output_files["imagef_registered"],
+                            image_file=anatf_for_qc,
                             template_file=str(self.template_file),
                             save_f=str(reg_qc_path),
                             modality=qc_modality,

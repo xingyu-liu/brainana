@@ -570,6 +570,57 @@
             </div>
             
             <div class="sub-section">
+                <h3>bias_correction</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="func_bias_correction_enabled" name="func_bias_correction_enabled" checked>
+                        <label for="func_bias_correction_enabled">enabled</label>
+                    </div>
+                    <div class="help-text">(perform bias field correction, only done on tmean image for better registration)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_bias_correction_algorithm">algorithm</label>
+                    <select id="func_bias_correction_algorithm" name="func_bias_correction_algorithm">
+                        <option value="N4BiasFieldCorrection" selected>N4BiasFieldCorrection</option>
+                    </select>
+                    <span class="help-text">(bias correction algorithm, currently only "N4BiasFieldCorrection")</span>
+                </div>
+                <div class="form-group">
+                    <label for="func_bias_correction_shrink_factor">shrink_factor</label>
+                    <input type="number" id="func_bias_correction_shrink_factor" name="func_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
+                    <div class="help-text">(shrink factor for faster processing, > 0)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_bias_correction_bspline_fitting">bspline_fitting</label>
+                    <input type="text" id="func_bias_correction_bspline_fitting" name="func_bias_correction_bspline_fitting" value="[ 200 ]">
+                    <div class="help-text">(B-spline fitting parameters in ANTs format)</div>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="func_bias_correction_rescale_mean_to_100" name="func_bias_correction_rescale_mean_to_100" checked>
+                        <label for="func_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
+                    </div>
+                    <div class="help-text">(rescale image mean intensity to 100)</div>
+                </div>
+                <div class="form-group">
+                    <label for="func_bias_correction_threads">threads</label>
+                    <input type="number" id="func_bias_correction_threads" name="func_bias_correction_threads" value="8" min="1">
+                    <div class="help-text">(number of CPU threads for ITK operations, >= 1. Default 8 to avoid oversubscription when running multiple processes in parallel)</div>
+                </div>
+            </div>
+            
+            <div class="sub-section">
+                <h3>conform</h3>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="func_conform_enabled" name="func_conform_enabled" checked>
+                        <label for="func_conform_enabled">enabled</label>
+                    </div>
+                    <div class="help-text">(conform functional tmean image to target space using FLIRT rigid registration)</div>
+                </div>
+            </div>
+            
+            <div class="sub-section">
                 <h3>skullstripping</h3>
                 <div class="form-group">
                     <div class="checkbox-group">
@@ -630,46 +681,6 @@
                         <input type="number" id="func_fastSurferCNN_plane_weight_sagittal" name="func_fastSurferCNN_plane_weight_sagittal" value="0.4" step="0.1" min="0" max="1">
                         <div class="help-text">(weight for sagittal plane, 0.0-1.0)</div>
                     </div>
-                </div>
-            </div>
-            
-            <div class="sub-section">
-                <h3>bias_correction</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="func_bias_correction_enabled" name="func_bias_correction_enabled" checked>
-                        <label for="func_bias_correction_enabled">enabled</label>
-                    </div>
-                    <div class="help-text">(perform bias field correction, only done on tmean image for better registration)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_bias_correction_algorithm">algorithm</label>
-                    <select id="func_bias_correction_algorithm" name="func_bias_correction_algorithm">
-                        <option value="N4BiasFieldCorrection" selected>N4BiasFieldCorrection</option>
-                    </select>
-                    <span class="help-text">(bias correction algorithm, currently only "N4BiasFieldCorrection")</span>
-                </div>
-                <div class="form-group">
-                    <label for="func_bias_correction_shrink_factor">shrink_factor</label>
-                    <input type="number" id="func_bias_correction_shrink_factor" name="func_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
-                    <div class="help-text">(shrink factor for faster processing, > 0)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_bias_correction_bspline_fitting">bspline_fitting</label>
-                    <input type="text" id="func_bias_correction_bspline_fitting" name="func_bias_correction_bspline_fitting" value="[ 200 ]">
-                    <div class="help-text">(B-spline fitting parameters in ANTs format)</div>
-                </div>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="func_bias_correction_rescale_mean_to_100" name="func_bias_correction_rescale_mean_to_100" checked>
-                        <label for="func_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
-                    </div>
-                    <div class="help-text">(rescale image mean intensity to 100)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_bias_correction_threads">threads</label>
-                    <input type="number" id="func_bias_correction_threads" name="func_bias_correction_threads" value="8" min="1">
-                    <div class="help-text">(number of CPU threads for ITK operations, >= 1. Default 8 to avoid oversubscription when running multiple processes in parallel)</div>
                 </div>
             </div>
         </div>
@@ -911,6 +922,15 @@
                     localedit: true,
                     ignore_first_volumes: 0
                 },
+                bias_correction: {
+                    enabled: true,
+                    algorithm: "N4BiasFieldCorrection",
+                    shrink_factor: 2,
+                    bspline_fitting: "[ 200 ]",
+                    rescale_mean_to_100: true,
+                    threads: 8
+                },
+                conform: { enabled: true },
                 skullstripping: {
                     enabled: true,
                     method: "fastSurferCNN",
@@ -924,14 +944,6 @@
                         plane_weight_axial: 0.5,
                         plane_weight_sagittal: 0.4
                     }
-                },
-                bias_correction: {
-                    enabled: true,
-                    algorithm: "N4BiasFieldCorrection",
-                    shrink_factor: 2,
-                    bspline_fitting: "[ 200 ]",
-                    rescale_mean_to_100: true,
-                    threads: 8
                 }
             },
             registration: {
@@ -1290,6 +1302,7 @@
             // Functional
             config.func.registration_pipeline = document.getElementById('func_registration_pipeline').value;
             config.func.reorient.enabled = document.getElementById('func_reorient_enabled').checked;
+            config.func.conform.enabled = document.getElementById('func_conform_enabled').checked;
             
             config.func.slice_timing_correction.enabled = document.getElementById('func_slice_timing_correction_enabled').checked;
             const tr = parseNumberOrNull(document.getElementById('func_slice_timing_correction_repetition_time').value);

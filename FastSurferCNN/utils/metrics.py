@@ -144,15 +144,17 @@ class DiceScore:
             f" given {len(self.class_ids)} but {self.n_classes} is needed."
         )
         self.one_hot = one_hot
-        self.union = torch.zeros(self.n_classes, self.n_classes)
-        self.intersection = torch.zeros(self.n_classes, self.n_classes)
+        # Create tensors on the correct device from the start
+        self.union = torch.zeros(self.n_classes, self.n_classes, device=self._device)
+        self.intersection = torch.zeros(self.n_classes, self.n_classes, device=self._device)
 
     def reset(self):
         """
         Reset the state of the object.
         """
-        self.union = torch.zeros(self.n_classes, self.n_classes)
-        self.intersection = torch.zeros(self.n_classes, self.n_classes)
+        # Create tensors on the correct device (use stored device)
+        self.union = torch.zeros(self.n_classes, self.n_classes, device=self._device)
+        self.intersection = torch.zeros(self.n_classes, self.n_classes, device=self._device)
 
     def _check_output_type(self, output):
         """
@@ -250,9 +252,24 @@ class DiceScore:
 
         self._update_union_intersection(y_pred, y)
 
-    def compute(self, per_class=False, class_idxs=None):
+    def compute(self, per_class=False, class_idxs=None, exclude_background=False):
         """
         Compute the Dice score (GPU-only version).
+        
+        Parameters
+        ----------
+        per_class : bool
+            If True, return per-class dice scores. If False, return mean dice.
+        class_idxs : torch.Tensor, optional
+            Class indices to include in computation.
+        exclude_background : bool
+            If True, exclude background class (class 0) from mean calculation.
+            Default is False (include all valid classes).
+        
+        Returns
+        -------
+        If per_class=False: (dice_score, dice_cm_mat) tuple
+        If per_class=True: (dice_score_per_class, dice_cm_mat) tuple
         """
         dice_cm_mat = self._dice_confusion_matrix_gpu(class_idxs)
         dice_score_per_class = dice_cm_mat.diagonal()
@@ -262,10 +279,19 @@ class DiceScore:
         dice_union = self.union
         if class_idxs is not None:
             dice_union = dice_union[class_idxs[:, None], class_idxs]
-        valid_classes = dice_union.diagonal() > 0
+        
+        # Determine which classes to include in mean
+        if exclude_background and self.n_classes > 1:
+            # Exclude background (class 0), only consider classes with non-zero union
+            region_dice = dice_score_per_class[1:]  # Exclude class 0
+            valid_classes = dice_union.diagonal()[1:] > 0  # Exclude class 0
+        else:
+            # Include all classes with non-zero union
+            region_dice = dice_score_per_class
+            valid_classes = dice_union.diagonal() > 0
         
         if valid_classes.any():
-            dice_score = dice_score_per_class[valid_classes].mean()
+            dice_score = region_dice[valid_classes].mean()
         else:
             dice_score = torch.tensor(0.0, device=self.union.device)
             

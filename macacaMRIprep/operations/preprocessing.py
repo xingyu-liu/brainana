@@ -255,6 +255,7 @@ def conform_to_template(
     working_dir: Union[str, Path],
     output_name: str,
     logger: Optional[logging.Logger] = None,
+    modal: str = 'anat',
 ) -> Dict[str, str]:
     """Conform input image to template space using FLIRT rigid registration.
     
@@ -266,16 +267,19 @@ def conform_to_template(
     5. Applies transformation to conform input to resampled template space
     
     Args:
-        imagef: Input anatomical image file
+        imagef: Input image file (anatomical or functional)
         template_file: Template file path
         working_dir: Working directory for intermediate and output files
         output_name: Name of output conformed image file
         logger: Logger instance (optional, will create one if not provided)
+        modal: Modality type ('anat' or 'func'), default is 'anat'
         
     Returns:
         Dictionary with output file paths:
         - 'imagef_conformed': Path to conformed image
         - 'template_f': Path to resampled template file (for QC)
+        - 'forward_xfm': Path to forward transformation matrix (.mat file)
+        - 'inverse_xfm': Path to inverse transformation matrix (.mat file, may be None if inverse computation failed)
         
     Raises:
         FileNotFoundError: If input or template file doesn't exist
@@ -368,7 +372,7 @@ def conform_to_template(
         # Create a minimal config for skullstripping
         # NHPskullstripNN doesn't need much config, but we need to provide the structure
         conform_skull_config = {
-            'anat': {
+            modal: {
                 'skullstripping': {
                     'gpu_device': 'auto'
                 }
@@ -378,7 +382,7 @@ def conform_to_template(
         try:
             skull_result = apply_skullstripping(
                 imagef=str(image_path),
-                modal='anat',
+                modal=modal,
                 working_dir=str(work_dir),
                 output_name='conform_brain.nii.gz',
                 config=conform_skull_config,
@@ -412,12 +416,13 @@ def conform_to_template(
                 fixedf=template_f,
                 movingf=str(brain_f),
                 working_dir=str(work_dir),
-                output_prefix='conform_scanner2T1w',
+                output_prefix='conform_scanner2native',
                 config=None,  # Will use default config
                 logger=logger,
                 dof=6
             )
-            xfm_f = Path(registration_result['forward_transform'])
+            xfm_forward_f = Path(registration_result['forward_transform'])
+            xfm_inverse_f = Path(registration_result.get('inverse_transform')) if 'inverse_transform' in registration_result else None
         except Exception as e:
             logger.error(f"Error during FLIRT registration: {e}")
             raise RuntimeError(
@@ -482,7 +487,7 @@ def conform_to_template(
                 outputf_name=output_name,
                 reff=template_f,
                 working_dir=str(work_dir),
-                transformf=str(xfm_f),
+                transformf=str(xfm_forward_f),
                 logger=logger,
                 interpolation='trilinear',
                 generate_tmean=False  # Not needed for anatomical conform
@@ -497,10 +502,20 @@ def conform_to_template(
         
         logger.info(f"Workflow: conform to template completed successfully")
         
-        return {
+        # Build return dictionary
+        result = {
             "imagef_conformed": str(conformed_f),
-            "template_f": template_f
+            "template_f": template_f,
+            "forward_xfm": str(xfm_forward_f)
         }
+        
+        # Add inverse transform if available
+        if xfm_inverse_f is not None and xfm_inverse_f.exists():
+            result["inverse_xfm"] = str(xfm_inverse_f)
+        else:
+            result["inverse_xfm"] = None
+        
+        return result
         
     except (FileNotFoundError, ValueError) as e:
         # Re-raise these without modification
