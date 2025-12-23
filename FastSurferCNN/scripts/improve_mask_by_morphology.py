@@ -80,6 +80,7 @@ def _improve_mask(mask_data: np.ndarray, zooms: tuple[float, float, float]) -> n
         dnum=dnum,
         enum=enum,
         rounds=ROUNDS_OF_MORPHOLOGICAL_OPERATIONS,
+        voxel_size=zooms[:3],  # Pass voxel size for volume calculation
     )
 
     return mask.astype(np.uint8)

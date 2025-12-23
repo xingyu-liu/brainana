@@ -57,6 +57,12 @@ class NormT1(PipelineStage):
                 logger.info("T1.mgz already exists")
             
             # Create brainmask.mgz (masked T1)
+            # If brainmask exists as a symlink (from previous run with get_t1=False),
+            # we need to remove it and create a real file from T1.mgz
+            if brainmask.exists() and brainmask.is_symlink():
+                logger.info("Removing symlink brainmask.mgz (will recreate from T1.mgz)")
+                brainmask.unlink()
+            
             if not brainmask.exists():
                 logger.info("Creating brainmask.mgz (masked T1.mgz)")
                 mri_mask(
@@ -66,20 +72,51 @@ class NormT1(PipelineStage):
                     log_file=self.config.log_file,
                     subject_dir=self.sd.subject_dir,
                 )
+            else:
+                logger.info("brainmask.mgz already exists")
         else:
             # Link brainmask to norm
+            # If brainmask exists as a regular file (from previous run with get_t1=True),
+            # we need to remove it and create a symlink
+            if brainmask.exists() and not brainmask.is_symlink():
+                logger.info("Removing existing brainmask.mgz (will create symlink to norm.mgz)")
+                brainmask.unlink()
+            
             if not brainmask.exists():
                 logger.info("Linking brainmask.mgz to norm.mgz")
                 brainmask.symlink_to("norm.mgz")
     
     def should_skip(self) -> bool:
-        """Skip if norm and brainmask exist."""
+        """
+        Skip if norm and brainmask exist, and if get_t1=True, also check T1.mgz exists.
+        
+        Also check if brainmask needs to be recreated (e.g., if it's a symlink
+        but get_t1=True, or if it's a regular file but get_t1=False).
+        """
         norm = self.sd.mri("norm.mgz")
         brainmask = self.sd.mri("brainmask.mgz")
-        if not norm.exists() or not brainmask.exists():
+        
+        # Must have norm.mgz
+        if not norm.exists():
             return False
+        
+        # Must have brainmask.mgz
+        if not brainmask.exists():
+            return False
+        
+        # If get_t1 is True, we need T1.mgz and brainmask should be a regular file (not symlink)
         if self.config.processing.get_t1:
             t1 = self.sd.mri("T1.mgz")
-            return t1.exists()
-        return True
+            if not t1.exists():
+                return False
+            # If brainmask is a symlink, we need to recreate it from T1.mgz
+            if brainmask.is_symlink():
+                return False
+            return True
+        else:
+            # If get_t1 is False, brainmask should be a symlink to norm.mgz
+            # If it's a regular file, we need to recreate it as a symlink
+            if not brainmask.is_symlink():
+                return False
+            return True
 

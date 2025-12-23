@@ -29,7 +29,7 @@ def create_conform_qc(
     template_file: str,
     save_f: Union[str, Path],
     modality: str = "anat",
-    num_slices: int = 7,
+    num_slices: int = 6,
     logger: Optional[logging.Logger] = None,
     **kwargs
 ) -> Dict[str, str]:
@@ -62,10 +62,12 @@ def create_conform_qc(
         
         # Create conform overlay (conformed image as underlay, template as contours with 2 levels)
         # Pass file paths directly - let visualization function handle loading and value scaling
-        fig = create_overlay_grid_3xN(
-            conformed_file, 
-            template_file,
+        # Only show axial slices
+        fig = create_grid_mri_image(
+            underlay_data=conformed_file, 
+            overlay_data=template_file,
             num_cols=num_slices,
+            perspectives=["axial"],
             title="",
             alpha=0.7,
             underlay_cmap='gray',
@@ -163,7 +165,7 @@ def create_skullstripping_qc(
     mask_file: str,
     save_f: Union[str, Path],
     modality: str = "anat",
-    num_slices: int = 7,
+    num_slices: int = 6,
     logger: Optional[logging.Logger] = None,
     **kwargs
 ) -> Dict[str, str]:
@@ -226,7 +228,7 @@ def create_registration_qc(
     template_file: str,
     save_f: Union[str, Path],
     modality: str,
-    num_slices: int = 7,
+    num_slices: int = 6,
     logger: Optional[logging.Logger] = None,
     **kwargs
 ) -> Dict[str, str]:
@@ -289,7 +291,7 @@ def create_bias_correction_qc(
     image_corrected: str,
     save_f: Union[str, Path],
     modality: str = "anat",
-    num_slices: int = 7,
+    num_slices: int = 6,
     logger: Optional[logging.Logger] = None,
     **kwargs
 ) -> Dict[str, str]:
@@ -342,10 +344,79 @@ def create_bias_correction_qc(
         logger.error(f"QC: bias correction comparison generation failed - {e}")
         return {}
 
+def create_atlas_segmentation_qc(
+    underlay_file: str,
+    atlas_file: str,
+    save_f: Union[str, Path],
+    modality: str = "anat",
+    num_slices: int = 5,
+    logger: Optional[logging.Logger] = None,
+    
+    **kwargs
+) -> Dict[str, str]:
+    """
+    Generate atlas segmentation quality control overlays with multi-label support.
+    
+    Args:
+        underlay_file: Path to underlay image (e.g., T1w brain image with skull)
+        atlas_file: Path to atlas segmentation file (multi-label)
+        save_f: Full path for output file (e.g., 'figures/sub-01_desc-atlasSegmentation_T1w.png')
+        modality: Imaging modality ("anat" or "func")
+        num_slices: Number of slices per orientation
+        logger: Logger instance
+        
+    Returns:
+        Dictionary with snapshot file paths
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
+    output_path = Path(save_f)
+    logger.info(f"QC: creating {modality} atlas segmentation overlay")
+    
+    try:
+        # Validate inputs
+        for file_path, name in [(underlay_file, "underlay"), (atlas_file, "atlas")]:
+            if not os.path.exists(file_path):
+                logger.error(f"QC: {name} file not found - {os.path.basename(file_path)}")
+                return {}
+        
+        # Default colors for multi-label segmentation
+        overlay_colors = ['limegreen', 'red', 'blue', 'yellow', 'magenta', 'cyan', 'orange', 'pink',
+                         'purple', 'brown', 'gray', 'olive', 'navy', 'teal', 'coral', 'gold']
+        
+        # Create atlas segmentation overlay with discrete multi-label contours
+        # Use axial slices only for better visualization of multi-label segmentation
+        fig = create_grid_mri_image(
+            underlay_data=underlay_file,
+            overlay_data=atlas_file,
+            num_cols=num_slices,
+            perspectives=["axial"],  # Only axial slices
+            contour_type='discrete',
+            overlay_colors=overlay_colors,
+            show_legend=False,
+            alpha=0.7,
+            figsize_per_col=(5, 5),  # Larger subplots for better visibility
+            col_margin=1  # Extract extra slices on each side but only display middle num_slices
+        )
+        
+        # Ensure the parent directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='black')
+        plt.close(fig)
+        
+        logger.info(f"QC: atlas segmentation overlay saved - {os.path.basename(output_path)}")
+        return {f"{modality}_atlas_segmentation_overlay": str(output_path)}
+        
+    except Exception as e:
+        logger.error(f"QC: atlas segmentation overlay generation failed - {e}")
+        return {}
+
+
 def _create_before_after_comparison(
     before_data: Union[str, Path, np.ndarray],
     after_data: Union[str, Path, np.ndarray], 
-    num_cols: int = 7,
+    num_cols: int = 6,
     perspectives: List[str] = ["axial"],
     save_f: Union[str, Path] = None,
     logger: Optional[logging.Logger] = None,

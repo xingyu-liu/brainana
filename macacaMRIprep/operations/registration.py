@@ -75,9 +75,11 @@ def compose_transform_cmd(
     ]
     
     # Add metrics
-    for metric in config.get('metric'):
-        metric_str = metric.replace('fixed', str(fixedf)).replace('moving', str(movingf))
-        cmd.extend(["--metric", metric_str])
+    metrics = config.get('metric', [])
+    if metrics:
+        for metric in metrics:
+            metric_str = metric.replace('fixed', str(fixedf)).replace('moving', str(movingf))
+            cmd.extend(["--metric", metric_str])
 
     return cmd
 
@@ -103,7 +105,7 @@ def compose_ants_registration_cmd(
         'antsRegistration',
         '--dimensionality', '3',
         '--float', '0',
-        '--interpolation', config.get('interpolation'),
+        '--interpolation', config.get('interpolation', 'Linear'),
         '--use-histogram-matching', '0',
         '--initial-moving-transform', f"[{str(fixedf)},{str(movingf)},1]",
         '--winsorize-image-intensities', '[0.005,0.995]',
@@ -259,6 +261,116 @@ def ants_register(
     logger.info(f"Step: registration completed with {len(outputs)} output files - {list(outputs.keys())}")
     return outputs
 
+
+def ants_apply_transforms(
+    movingf: Union[str, Path],
+    moving_type: int,
+    interpolation: str,
+    outputf_name: Union[str, Path],
+    fixedf: Union[str, Path],
+    working_dir: Union[str, Path],
+    transformf: Union[list[Union[str, Path]], Union[str, Path]],
+    logger: Optional[logging.Logger] = None,
+    reff: Optional[Union[str, Path]] = None,
+    generate_tmean: Optional[bool] = True
+) -> Dict[str, str]:
+    
+    """Apply ANTs transformations to functional data.
+    
+    Args:
+        movingf: Moving (source) functional image
+        moving_type: Type of moving image (0:scalar, 1:vector, 2:tensor, 3:time series)
+        interpolation: Interpolation type
+        outputf_name: Name for output file
+        fixedf: Fixed (target) image
+        working_dir: Working directory for outputs
+        transformf: List of transformation files to apply (ANTs transforms)
+        logger: Logger instance
+        reff: Reference image for output space (optional)
+        generate_tmean: Whether to generate temporal mean
+        
+    Returns:
+        Dictionary with output file paths
+        
+    Raises:
+        FileNotFoundError: If input files don't exist
+        RuntimeError: If transformation application fails
+    """
+    # Validate inputs
+    if logger is None:
+        logger = logging.getLogger(__name__)
+        
+    movingf = validate_input_file(movingf, logger)
+    fixedf = validate_input_file(fixedf, logger)
+    if reff is not None:
+        reff = validate_input_file(reff, logger)
+    work_dir = ensure_working_directory(working_dir, logger)
+
+    outputf_name = work_dir / outputf_name
+
+    # Ensure transformf is a list
+    if not isinstance(transformf, list):
+        transformf = [transformf]
+
+    # Apply ANTs transformations
+    cmd = [
+        "antsApplyTransforms",
+        "-d", "3", "-e", str(moving_type),
+        "--input", str(movingf),
+        "--output", str(outputf_name),
+        "--interpolation", interpolation
+    ]
+
+    if reff is not None:
+        cmd.extend(["--reference-image", str(reff)])
+    else:
+        cmd.extend(["--reference-image", str(fixedf)])
+        
+    # Add transformation files in reverse order because ANTs applies transforms from right to left
+    # i.e. the last transform in the command is applied first to the moving image
+    for transform_file in reversed(transformf):
+        cmd.extend(["--transform", str(transform_file)])
+    
+    logger.debug(f"System: apply transforms command - {' '.join(cmd)}")
+    
+    # Get thread count from config if available, default to 8
+    num_threads = 8
+    try:
+        config = get_config().to_dict()
+        reg_config = config.get("registration", {})
+        num_threads = reg_config.get('threads', 8)
+    except Exception:
+        pass  # Use default if config access fails
+    
+    # Set up ITK thread environment variables
+    from ..utils.system import set_numerical_threads
+    env = set_numerical_threads(num_threads, include_itk=True, return_dict=True)
+    
+    logger.debug(f"System: using {num_threads} threads for ITK operations (capped at 32)")
+    
+    try:
+        run_command(cmd, env=env, step_logger=logger)
+        
+        # Validate output
+        validate_output_file(outputf_name, logger)
+        
+        outputs = {"imagef_registered": str(outputf_name)}
+        logger.info(f"Step: transform application completed successfully - {outputf_name}")
+        
+        # Generate temporal mean if requested
+        if generate_tmean:
+            tmean_file = work_dir / Path(str(outputf_name).replace('.nii.gz', '_tmean.nii.gz'))
+            calculate_func_tmean(str(outputf_name), str(tmean_file), logger)
+            outputs["imagef_registered_tmean"] = str(tmean_file)
+            logger.info(f"Output: tmean generated - {tmean_file}")
+        
+        return outputs
+        
+    except Exception as e:
+        logger.error(f"Step: transform application failed - {e}")
+        raise RuntimeError(f"Transform application failed: {e}")
+
+
 def flirt_register(
     fixedf: Union[str, Path],
     movingf: Union[str, Path],
@@ -310,54 +422,52 @@ def flirt_register(
     reg_config = config.get("registration", {})
     flirt_config = reg_config.get('flirt', {})
     
-    # Set default search ranges (matching preprocessing.py pattern)
-    searchrx_min, searchrx_max = '-180', '180'
-    searchry_min, searchry_max = '-180', '180'
-    searchrz_min, searchrz_max = '-180', '180'
+    # Helper function to extract simple parameter from config
+    def get_param(config_key: str, default: Any) -> str:
+        """Extract parameter from config and convert to string."""
+        return str(flirt_config.get(config_key, default))
     
-    # Override search ranges if specified in config
-    if flirt_config.get('searchrx'):
-        searchrx = flirt_config['searchrx']
-        if isinstance(searchrx, (list, tuple)) and len(searchrx) == 2:
-            searchrx_min, searchrx_max = str(searchrx[0]), str(searchrx[1])
-        elif isinstance(searchrx, dict):
-            searchrx_min = str(searchrx.get('min', -180))
-            searchrx_max = str(searchrx.get('max', 180))
+    # Helper function to extract search range from config
+    def get_search_range(config_key: str, default_min: int = -180, default_max: int = 180) -> tuple[str, str]:
+        """Extract min/max search range from config, supporting list/tuple or dict formats."""
+        value = flirt_config.get(config_key)
+        if not value:
+            return str(default_min), str(default_max)
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            return str(value[0]), str(value[1])
+        elif isinstance(value, dict):
+            return str(value.get('min', default_min)), str(value.get('max', default_max))
+        return str(default_min), str(default_max)
     
-    if flirt_config.get('searchry'):
-        searchry = flirt_config['searchry']
-        if isinstance(searchry, (list, tuple)) and len(searchry) == 2:
-            searchry_min, searchry_max = str(searchry[0]), str(searchry[1])
-        elif isinstance(searchry, dict):
-            searchry_min = str(searchry.get('min', -180))
-            searchry_max = str(searchry.get('max', 180))
+    # Extract all FLIRT parameters from config
+    cost = get_param('cost', 'mutualinfo')
+    searchcost = get_param('searchcost', 'mutualinfo')
+    searchrx_min, searchrx_max = get_search_range('searchrx')
+    searchry_min, searchry_max = get_search_range('searchry')
+    searchrz_min, searchrz_max = get_search_range('searchrz')
+    coarsesearch = get_param('coarsesearch', 30)
+    finesearch = get_param('finesearch', 10)
     
-    if flirt_config.get('searchrz'):
-        searchrz = flirt_config['searchrz']
-        if isinstance(searchrz, (list, tuple)) and len(searchrz) == 2:
-            searchrz_min, searchrz_max = str(searchrz[0]), str(searchrz[1])
-        elif isinstance(searchrz, dict):
-            searchrz_min = str(searchrz.get('min', -180))
-            searchrz_max = str(searchrz.get('max', 180))
-    
-    # Build FLIRT registration command (matching preprocessing.py pattern)
+    # Build FLIRT registration command
     cmd = [
         'flirt',
         '-in', str(moving_path),
         '-ref', str(fixed_path),
         '-dof', str(dof),
+        '-cost', cost,
+        '-searchcost', searchcost,
         '-searchrx', searchrx_min, searchrx_max,
         '-searchry', searchry_min, searchry_max,
         '-searchrz', searchrz_min, searchrz_max,
+        '-coarsesearch', coarsesearch,
+        '-finesearch', finesearch,
         '-omat', str(forward_transform)
     ]
     
-    # Add optional FLIRT parameters from config if available
-    if flirt_config.get('cost'):
-        cmd.extend(['-cost', flirt_config['cost']])
-    
-    if flirt_config.get('bins'):
-        cmd.extend(['-bins', str(flirt_config['bins'])])
+    # Add optional FLIRT parameters if specified in config
+    bins = flirt_config.get('bins')
+    if bins is not None:
+        cmd.extend(['-bins', str(bins)])
     
     logger.debug(f"Command: {' '.join(cmd)}")
     
@@ -487,114 +597,5 @@ def flirt_apply_transforms(
         logger.error(f"Error during affine transformation application: {e}")
         raise RuntimeError(f"Transform application failed: {e}")
         
-
-def ants_apply_transforms(
-    movingf: Union[str, Path],
-    moving_type: int,
-    interpolation: str,
-    outputf_name: Union[str, Path],
-    fixedf: Union[str, Path],
-    working_dir: Union[str, Path],
-    transformf: Union[list[Union[str, Path]], Union[str, Path]],
-    logger: Optional[logging.Logger] = None,
-    reff: Optional[Union[str, Path]] = None,
-    generate_tmean: Optional[bool] = True
-) -> Dict[str, str]:
-    
-    """Apply ANTs transformations to functional data.
-    
-    Args:
-        movingf: Moving (source) functional image
-        moving_type: Type of moving image (0:scalar, 1:vector, 2:tensor, 3:time series)
-        interpolation: Interpolation type
-        outputf_name: Name for output file
-        fixedf: Fixed (target) image
-        working_dir: Working directory for outputs
-        transformf: List of transformation files to apply (ANTs transforms)
-        logger: Logger instance
-        reff: Reference image for output space (optional)
-        generate_tmean: Whether to generate temporal mean
-        
-    Returns:
-        Dictionary with output file paths
-        
-    Raises:
-        FileNotFoundError: If input files don't exist
-        RuntimeError: If transformation application fails
-    """
-    # Validate inputs
-    if logger is None:
-        logger = logging.getLogger(__name__)
-        
-    movingf = validate_input_file(movingf, logger)
-    fixedf = validate_input_file(fixedf, logger)
-    if reff is not None:
-        reff = validate_input_file(reff, logger)
-    work_dir = ensure_working_directory(working_dir, logger)
-
-    outputf_name = work_dir / outputf_name
-
-    # Ensure transformf is a list
-    if not isinstance(transformf, list):
-        transformf = [transformf]
-
-    # Apply ANTs transformations
-    cmd = [
-        "antsApplyTransforms",
-        "-d", "3", "-e", str(moving_type),
-        "--input", str(movingf),
-        "--output", str(outputf_name),
-        "--interpolation", interpolation
-    ]
-
-    if reff is not None:
-        cmd.extend(["--reference-image", str(reff)])
-    else:
-        cmd.extend(["--reference-image", str(fixedf)])
-        
-    # Add transformation files in reverse order because ANTs applies transforms from right to left
-    # i.e. the last transform in the command is applied first to the moving image
-    for transform_file in reversed(transformf):
-        cmd.extend(["--transform", str(transform_file)])
-    
-    logger.debug(f"System: apply transforms command - {' '.join(cmd)}")
-    
-    # Get thread count from config if available, default to 8
-    num_threads = 8
-    try:
-        config = get_config().to_dict()
-        reg_config = config.get("registration", {})
-        num_threads = reg_config.get('threads', 8)
-    except Exception:
-        pass  # Use default if config access fails
-    
-    # Set up ITK thread environment variables
-    from ..utils.system import set_numerical_threads
-    env = set_numerical_threads(num_threads, include_itk=True, return_dict=True)
-    
-    logger.debug(f"System: using {num_threads} threads for ITK operations (capped at 32)")
-    
-    try:
-        run_command(cmd, env=env, step_logger=logger)
-        
-        # Validate output
-        validate_output_file(outputf_name, logger)
-        
-        outputs = {"imagef_registered": str(outputf_name)}
-        logger.info(f"Step: transform application completed successfully - {outputf_name}")
-        
-        # Generate temporal mean if requested
-        if generate_tmean:
-            tmean_file = work_dir / Path(str(outputf_name).replace('.nii.gz', '_tmean.nii.gz'))
-            calculate_func_tmean(str(outputf_name), str(tmean_file), logger)
-            outputs["imagef_registered_tmean"] = str(tmean_file)
-            logger.info(f"Output: tmean generated - {tmean_file}")
-        
-        return outputs
-        
-    except Exception as e:
-        logger.error(f"Step: transform application failed - {e}")
-        raise RuntimeError(f"Transform application failed: {e}")
-
 
 # %%

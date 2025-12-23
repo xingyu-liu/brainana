@@ -21,6 +21,7 @@ SNAPSHOT_MAPPINGS = {
     'conform': {'key': 'conform_overlay', 'description': 'Conform to template space'},
     'biasCorrection': {'key': 'bias_correction_comparison', 'description': 'Bias field correction'},
     'skullStripping': {'key': 'skullstripping_overlay', 'description': 'Skullstripping'},
+    'atlasSegmentation': {'key': 'atlas_segmentation_overlay', 'description': 'Atlas segmentation'},
     'anat2template': {'key': 'anat2template_registration_overlay', 'description': 'Structural to template registration'},
     'func2anat': {'key': 'func2anat_registration_overlay', 'description': 'Functional to structural registration'},
     'func2template': {'key': 'func2template_registration_overlay', 'description': 'Functional to template registration'},
@@ -29,8 +30,9 @@ SNAPSHOT_MAPPINGS = {
 }
 
 SNAPSHOT_ORDER = [
-    'conform_overlay', 'bias_correction_comparison', 'skullstripping_overlay', 'anat2template_registration_overlay', 
-    'T2w2T1w_registration_overlay', 'func2anat_registration_overlay', 'func2template_registration_overlay', 'motion_parameters'
+    'conform_overlay', 'bias_correction_comparison', 'skullstripping_overlay', 'atlas_segmentation_overlay', 
+    'anat2template_registration_overlay', 'T2w2T1w_registration_overlay', 'func2anat_registration_overlay', 
+    'func2template_registration_overlay', 'motion_parameters'
 ]
 
 SNAPSHOT_ORDER_INDEX = {key: index for index, key in enumerate(SNAPSHOT_ORDER)}

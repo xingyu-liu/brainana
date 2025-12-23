@@ -256,12 +256,13 @@ def conform_to_template(
     output_name: str,
     logger: Optional[logging.Logger] = None,
     modal: str = 'anat',
+    skip_skullstripping: bool = False,
 ) -> Dict[str, str]:
     """Conform input image to template space using FLIRT rigid registration.
     
     This function performs the following steps:
     1. Pads the template to ensure input image is fully contained
-    2. Skullstrips the input image using NHPskullstripNN
+    2. Skullstrips the input image using NHPskullstripNN (unless skip_skullstripping=True)
     3. Performs FLIRT rigid registration (brain-extracted input to padded template)
     4. Resamples template to input resolution (isotropic, min voxel size)
     5. Applies transformation to conform input to resampled template space
@@ -273,6 +274,7 @@ def conform_to_template(
         output_name: Name of output conformed image file
         logger: Logger instance (optional, will create one if not provided)
         modal: Modality type ('anat' or 'func'), default is 'anat'
+        skip_skullstripping: If True, skip skullstripping and assume input is already skullstripped (default: False)
         
     Returns:
         Dictionary with output file paths:
@@ -365,59 +367,81 @@ def conform_to_template(
         # Update template path for next steps
         template_f = str(zeropadded_f)
         
-        # Step 2: Skullstrip the input image using NHPskullstripNN
-        logger.info(f"Step: skullstripping input image for registration")
+        # Step 2: Skullstrip the input image using NHPskullstripNN (or skip if already skullstripped)
         brain_f = work_dir / 'conform_brain.nii.gz'
         
-        # Create a minimal config for skullstripping
-        # NHPskullstripNN doesn't need much config, but we need to provide the structure
-        conform_skull_config = {
-            modal: {
-                'skullstripping': {
-                    'gpu_device': 'auto'
-                }
-            }
-        }
-        
-        try:
-            skull_result = apply_skullstripping(
-                imagef=str(image_path),
-                modal=modal,
-                working_dir=str(work_dir),
-                output_name='conform_brain.nii.gz',
-                config=conform_skull_config,
-                logger=logger
-            )
+        if skip_skullstripping:
+            logger.info(f"Step: skipping skullstripping - assuming input is already skullstripped")
+            # Use input image directly as brain-extracted image
+            # Copy to expected location for consistency
+            shutil.copy2(str(image_path), str(brain_f))
+            logger.info(f"Using input image directly as brain-extracted image: {brain_f}")
+        else:
+            logger.info(f"Step: skullstripping input image for registration")
             
-            # Get the brain mask and brain-extracted image paths
-            mask_output = skull_result.get('brain_mask')
-            brain_extracted = skull_result.get('imagef_skullstripped')
-            
-            if not mask_output or not os.path.exists(mask_output):
-                raise RuntimeError(f"Skullstripping failed: mask file not found at {mask_output}")
-            if not brain_extracted or not os.path.exists(brain_extracted):
-                raise RuntimeError(f"Skullstripping failed: brain-extracted image not found at {brain_extracted}")
-            
-            # Move brain-extracted image to expected location
-            if brain_extracted != str(brain_f):
-                shutil.move(brain_extracted, str(brain_f))
-            
-            logger.info(f"Brain-extracted image saved to: {brain_f}")
-        except Exception as e:
-            logger.error(f"Error during skullstripping: {e}")
-            raise RuntimeError(
-                f"Conform step failed during skullstripping: {e}. "
-                f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
-            )
+            try:
+                skull_result = apply_skullstripping(
+                    imagef=str(image_path),
+                    modal=modal,
+                    working_dir=str(work_dir),
+                    output_name='conform_brain.nii.gz',
+                    config=None,  # Use defaults (gpu_device='auto')
+                    logger=logger
+                )
+                
+                # Get the brain mask and brain-extracted image paths
+                mask_output = skull_result.get('brain_mask')
+                brain_extracted = skull_result.get('imagef_skullstripped')
+                
+                if not mask_output or not os.path.exists(mask_output):
+                    raise RuntimeError(f"Skullstripping failed: mask file not found at {mask_output}")
+                if not brain_extracted or not os.path.exists(brain_extracted):
+                    raise RuntimeError(f"Skullstripping failed: brain-extracted image not found at {brain_extracted}")
+                
+                # Move brain-extracted image to expected location
+                if brain_extracted != str(brain_f):
+                    shutil.move(brain_extracted, str(brain_f))
+                
+                logger.info(f"Brain-extracted image saved to: {brain_f}")
+            except Exception as e:
+                logger.error(f"Error during skullstripping: {e}")
+                raise RuntimeError(
+                    f"Conform step failed during skullstripping: {e}. "
+                    f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
+                )
         
         # Step 3: FLIRT rigid registration from brain-extracted input to padded template
         try:
+            # Set modality-specific FLIRT parameters
+            if modal == 'anat':
+                flirt_config = {
+                    "registration": {
+                        "flirt": {
+                            "cost": "corratio",
+                            "searchcost": "corratio",
+                            "coarsesearch": 40,
+                            "finesearch": 15
+                        }
+                    }
+                }
+            else:  # modal == 'func'
+                flirt_config = {
+                    "registration": {
+                        "flirt": {
+                            "cost": "mutualinfo",
+                            "searchcost": "mutualinfo",
+                            "coarsesearch": 30,
+                            "finesearch": 10
+                        }
+                    }
+                }
+            
             registration_result = flirt_register(
                 fixedf=template_f,
                 movingf=str(brain_f),
                 working_dir=str(work_dir),
                 output_prefix='conform_scanner2native',
-                config=None,  # Will use default config
+                config=flirt_config,
                 logger=logger,
                 dof=6
             )
@@ -1209,7 +1233,7 @@ def apply_skullstripping(
     modal: str,
     working_dir: Union[str, Path],
     output_name: str,
-    config: Dict[str, Any],
+    config: Optional[Dict[str, Any]] = None,
     logger: Optional[logging.Logger] = None,
 ) -> Dict[str, str]:
     """Perform skullstripping using NHPskullstripNN.
@@ -1222,7 +1246,8 @@ def apply_skullstripping(
         modal: Modality ('func' or 'anat')
         working_dir: Working directory for this step
         output_name: Name of output file
-        config: Configuration dictionary
+        config: Configuration dictionary (optional). If provided, should have structure
+                {modal: {'skullstripping': {'gpu_device': ...}}}. If None, uses defaults.
         logger: Logger instance (optional)
         
     Returns:
@@ -1246,10 +1271,12 @@ def apply_skullstripping(
     if modal not in ['func', 'anat']:
         raise ValueError(f"Invalid modality: {modal}. Must be 'func' or 'anat'")
     
-    # Get configuration
-    skull_cfg = config.get(modal, {}).get('skullstripping')
-    if not skull_cfg:
-        raise ValueError("skullstripping configuration not found")
+    # Get configuration - use defaults if not provided
+    if config is not None:
+        skull_cfg = config.get(modal, {}).get('skullstripping', {})
+        device_id = skull_cfg.get('gpu_device', 'auto')
+    else:
+        device_id = 'auto'
     
     # Define output paths
     brain_mask_path = work_dir / 'brain_mask.nii.gz'
@@ -1260,8 +1287,6 @@ def apply_skullstripping(
     logger.info(f"System: output path - {brain_mask_path}")
     
     try:
-        # Get device_id from config if available
-        device_id = skull_cfg.get('gpu_device', 'auto')
         
         result = skullstripping(
             input_image=str(image_path),

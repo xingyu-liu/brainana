@@ -115,7 +115,8 @@ from .snapshots import (
     create_skullstripping_qc,
     create_registration_qc,
     create_bias_correction_qc,
-    create_conform_qc
+    create_conform_qc,
+    create_atlas_segmentation_qc
 )
 
 from .reports import generate_qc_report
@@ -136,6 +137,7 @@ __all__ = [
     'create_registration_qc',
     'create_bias_correction_qc',
     'create_conform_qc',
+    'create_atlas_segmentation_qc',
     
     # Report functions
     'generate_qc_report',

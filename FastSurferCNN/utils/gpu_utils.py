@@ -24,23 +24,32 @@ def get_least_busy_gpu():
         return 0
     
     try:
-        # Use nvidia-smi to get actual system-wide memory usage
-        result = subprocess.run(
+        # Use nvidia-smi to get actual system-wide memory usage and total memory
+        result_used = subprocess.run(
             ['nvidia-smi', '--query-gpu=memory.used', '--format=csv,noheader,nounits'],
             capture_output=True, text=True, timeout=5
         )
+        result_total = subprocess.run(
+            ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits'],
+            capture_output=True, text=True, timeout=5
+        )
         
-        if result.returncode == 0:
+        if result_used.returncode == 0 and result_total.returncode == 0:
             memory_usages = []
-            for line in result.stdout.strip().split('\n'):
+            memory_totals = []
+            for line in result_used.stdout.strip().split('\n'):
                 if line.strip():
                     memory_usages.append(int(line.strip()))
+            for line in result_total.stdout.strip().split('\n'):
+                if line.strip():
+                    memory_totals.append(int(line.strip()))
             
-            # Find GPU with minimum memory usage
-            if memory_usages:
+            # Find GPU with minimum memory usage (maximum unused memory)
+            if memory_usages and memory_totals and len(memory_usages) == len(memory_totals):
                 best_gpu = memory_usages.index(min(memory_usages))
+                memory_unused = memory_totals[best_gpu] - memory_usages[best_gpu]
                 print(f"[GPU Selection] GPU memory usage: {memory_usages} MB")
-                print(f"[GPU Selection] Selected GPU {best_gpu} with {memory_usages[best_gpu]} MB used")
+                print(f"[GPU Selection] Selected GPU {best_gpu} with {memory_unused} MB unused")
                 return best_gpu
     
     except (subprocess.SubprocessError, FileNotFoundError, ValueError, IndexError) as e:

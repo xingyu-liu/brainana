@@ -24,7 +24,8 @@ from ..quality_control import create_skullstripping_qc
 from ..quality_control.snapshots import (
     create_bias_correction_qc,
     create_registration_qc,
-    create_conform_qc
+    create_conform_qc,
+    create_atlas_segmentation_qc
 )
 from ..config import get_output_space
 
@@ -206,6 +207,9 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                         raise
                 
                 # run conform to template
+                # Check if skullstripping is disabled - if so, skip internal skullstripping in conform
+                skip_skullstripping = not self.config.get("anat.skullstripping.enabled", True)
+                
                 step_name = self.pipeline.add_step(
                     name="anat_conform",
                     func=conform_to_template,
@@ -217,7 +221,8 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                 )
                 result = self.pipeline.run_step(
                     step_name,
-                    logger=self.logger
+                    logger=self.logger,
+                    skip_skullstripping=skip_skullstripping
                 )
                 
                 if result.output_files["imagef_conformed"] is not None:
@@ -428,6 +433,26 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
 
                     outpuf_f_for_surfrecon["segmentation"] = outputf
                     outpuf_f_for_surfrecon["atlas_name"] = atlas_name
+
+                    # generate QC
+                    if self.config.get("quality_control.enabled", True):
+                        try:
+                            # Generate BIDS-compliant filename for atlas segmentation QC
+                            filename_stem = get_filename_stem(self.anat_file)
+                            filename_stem = filename_stem.replace(f"_{self.modality}", "")
+                            atlas_qc_filename = f"{filename_stem}_desc-atlasSegmentation_{self.modality}.png"
+                            atlas_qc_path = self.qc_dir / atlas_qc_filename
+                            
+                            create_atlas_segmentation_qc(
+                                underlay_file=str(anatf_w_skull),
+                                atlas_file=str(outputf),
+                                save_f=str(atlas_qc_path),
+                                modality="anat",
+                                logger=self.logger
+                            )
+                            self.logger.info("QC: atlas segmentation overlay created")
+                        except Exception as e:
+                            self.logger.warning(f"QC: atlas segmentation overlay failed - {e}")
 
                 if result.output_files.get("hemimask") is not None:
                     outputf = self.output_dir / f"{self.bids_prefix_wo_modality}_desc-brain_hemimask.nii.gz"
@@ -746,6 +771,8 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
                     self.logger.info(f"Surface Reconstruction: Skipped - missing required files: {', '.join(missing)}")
             else:
                 self.logger.info("Surface Reconstruction: Skipped (disabled in configuration)")
+
+            # TODO: QC
 
             # ------------------------------------------------------------
             # Calculate workflow duration

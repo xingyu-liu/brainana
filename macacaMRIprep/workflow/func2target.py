@@ -382,6 +382,9 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                     raise FileNotFoundError(f"Target file does not exist: {self.target_file}")
                 
                 # 1. do the conform to target for tmean image
+                # Check if skullstripping is disabled - if so, skip internal skullstripping in conform
+                skip_skullstripping = not self.config.get("func.skullstripping.enabled", True)
+                
                 step_name = self.pipeline.add_step(
                     name="func_conform",
                     func=conform_to_template,
@@ -395,7 +398,8 @@ class FunctionalProcessor(BasePreprocessingWorkflow):
                 result = self.pipeline.run_step(
                     step_name,
                     logger=self.logger,
-                    modal='func'
+                    modal='func',
+                    skip_skullstripping=skip_skullstripping
                 )
                 
                 if result.output_files["imagef_conformed"] is not None:

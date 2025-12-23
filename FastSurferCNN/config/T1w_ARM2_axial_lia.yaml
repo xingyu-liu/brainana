@@ -5,7 +5,7 @@
 TRAINING_DATA_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_data/T1w_seg-ARM2"
 
 # Direct path to output directory (for training logs, checkpoints, etc.)
-OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/T1w_seg-ARM2_axial_lia_v1"
+OUTPUT_DIR: "/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/training_output/T1w_seg-ARM2_axial_lia_v2"
 
 # ==============================================================================
 # MODEL ARCHITECTURE
@@ -63,7 +63,6 @@ DATA:
   AUG: [
     "Scaling",
     "Translation",
-    "Rotation",
     "Gaussian",
     "BiasField"
     ]
@@ -74,7 +73,7 @@ DATA:
   AUG_PROBABILITIES:
     Scaling: 0.8          # Safe geometric augmentation, helps with size variation
     Translation: 0.8       # Safe geometric augmentation, helps with positioning
-    Rotation: 0.5          # Safe geometric augmentation, helps with orientation
+    Rotation: 0.0          # Safe geometric augmentation, helps with orientation
     Gaussian: 0.5          # OPTIMIZED: Slightly increased from 0.4 for better generalization
     Elastic: 0.0          # Aggressive deformation
     RAnisotropy: 0.0       # Simulates acquisition artifacts

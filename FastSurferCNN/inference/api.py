@@ -437,14 +437,9 @@ def segmentation(
         mask_dilation_voxels,
         mask_erosion_voxels,
         ROUNDS_OF_MORPHOLOGICAL_OPERATIONS,
+        voxel_size=tuple(zoom),  # Pass voxel size for volume calculation
     )
     brain_mask = brain_mask.astype(np.uint8)
-    
-    # Calculate and report brain volume in mL
-    brain_voxels = np.sum(brain_mask > 0)
-    voxel_volume_mm3 = np.prod(zoom)  # mm³ per voxel
-    brain_volume_mL = (brain_voxels * voxel_volume_mm3) / 1000.0  # Convert mm³ to mL
-    log.info(f"Brain volume: {brain_volume_mL:.2f} mL ({brain_voxels:,} voxels)")
 
     # Hemisphere mask creation and saving (multi-class only, requires LUT)
     hemi_mask = None

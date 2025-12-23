@@ -12,18 +12,18 @@ from NHPskullstripNN.utils.gpu import get_device
 from NHPskullstripNN.utils.log import setup_logging
 from NHPskullstripNN.model import ModelLoader
 
-# %%
-# anat
-test_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/anat'
-# model_f = '/home/star/github/banana/NHPskullstripNN/pretrained_model/T1w_brainmask.pth'
-model_f = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_output/T1w_seg-brainmask_v2/checkpoints/best_model.pth'
-model_name = 'v2'
+# # %%
+# # anat
+# test_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/anat'
+# # model_f = '/home/star/github/banana/NHPskullstripNN/pretrained_model/T1w_brainmask.pth'
+# model_f = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_output/T1w_seg-brainmask_v2/checkpoints/best_model.pth'
+# model_name = 'v2'
 
-# # func
-# test_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/func'
-# model_f = '/home/star/github/banana/NHPskullstripNN/pretrained_model/EPI_brainmask.pth'
-# # model_f = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_output/EPI_seg-brainmask_v1/checkpoints/best_model.pth'
-# model_name = 'v1'
+# func
+test_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/func'
+model_f = '/home/star/github/banana/NHPskullstripNN/pretrained_model/EPI_brainmask.pth'
+# model_f = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_output/EPI_seg-brainmask_v1/checkpoints/best_model.pth'
+model_name = 'v3'
 
 output_dir = test_dir + f'/{model_name}'
 

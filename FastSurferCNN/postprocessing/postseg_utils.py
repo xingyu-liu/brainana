@@ -12,7 +12,7 @@ Copyright 2024
 
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import scipy.ndimage
@@ -239,7 +239,7 @@ def fill_label_holes(mask: npt.NDArray[int]) -> npt.NDArray[int]:
     return filled_mask.astype(mask.dtype)
 
 
-def create_mask(seg_data: npt.NDArray[int], dnum: int, enum: int, rounds: int = 1) -> npt.NDArray[int]:
+def create_mask(seg_data: npt.NDArray[int], dnum: int, enum: int, rounds: int = 1, voxel_size: Optional[tuple[float, float, float]] = None) -> npt.NDArray[int]:
     """
     Create brain mask from aseg.
     
@@ -262,6 +262,8 @@ def create_mask(seg_data: npt.NDArray[int], dnum: int, enum: int, rounds: int = 
         Number of erosion iterations (applied only in the final round)
     rounds : int, optional
         Number of processing rounds to apply (default: 1)
+    voxel_size : Optional[tuple[float, float, float]], optional
+        Voxel dimensions in mm (x, y, z). If provided, brain volume in mL will be calculated and printed.
         
     Returns
     -------
@@ -343,7 +345,16 @@ def create_mask(seg_data: npt.NDArray[int], dnum: int, enum: int, rounds: int = 
             mask = padded_mask[slices]
     
     final_voxels = np.sum(mask)
-    print(f"  Final mask: {final_voxels:,} voxels ({100 * final_voxels / mask.size:.2f}% of volume)")
+    volume_pct = 100 * final_voxels / mask.size
+    print(f"  Final mask: {final_voxels:,} voxels ({volume_pct:.2f}% of volume)", end="")
+    
+    # Calculate and display brain volume in mL if voxel size is provided
+    if voxel_size is not None:
+        voxel_volume_mm3 = np.prod(voxel_size)  # mm³ per voxel
+        brain_volume_mL = (final_voxels * voxel_volume_mm3) / 1000.0  # Convert mm³ to mL
+        print(f" ({brain_volume_mL:.2f} mL)")
+    else:
+        print()
     
     if final_voxels == 0:
         print("  Warning: Final mask is empty!")

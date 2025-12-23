@@ -211,6 +211,48 @@ def _get_rotation_for_perspective(perspective: str, orientation_code: str, shown
     return rotation_map.get(current_position, 0)
 
 
+def _plot_labeled_data(ax, data_slice: np.ndarray, label_to_color: dict, 
+                      plot_type: str = 'contour', alpha: float = 0.7, 
+                      linewidth: float = 2.0) -> List[Tuple[int, str]]:
+    """
+    Plot multi-label segmentation data with different colors for each label.
+    Uses a consistent label-to-color mapping to ensure same label gets same color across slices.
+    
+    Args:
+        ax: Matplotlib axis
+        data_slice: 2D slice of segmentation data (integer labels)
+        label_to_color: Dictionary mapping label_value -> color (ensures consistency)
+        plot_type: 'contour' for line contours, 'overlay' for filled
+        alpha: Transparency
+        
+    Returns:
+        List of (label_value, color) tuples for legend
+    """
+    # Force data to int and get unique non-zero labels
+    data_slice = data_slice.astype(int)
+    unique_labels = np.unique(data_slice[data_slice != 0])
+    
+    plotted_labels = []
+    for label_val in unique_labels:
+        # Use consistent color mapping
+        color = label_to_color.get(label_val)
+        if color is None:
+            continue  # Skip if label not in mapping
+        
+        mask = (data_slice == label_val).astype(float)
+        
+        if plot_type == 'overlay':
+            # Filled contour for overlay
+            ax.contourf(mask, levels=[0.5, 1.5], colors=[color], alpha=alpha)
+        elif plot_type == 'contour':
+            # Line contour only
+            ax.contour(mask, levels=[0.5], colors=[color], linewidths=linewidth, alpha=alpha)
+        
+        plotted_labels.append((label_val, color))
+    
+    return plotted_labels
+
+
 def _get_anatomical_labels(perspective: str, orientation_code: str, shown_axes: Tuple[int, int], rotation: int = 0) -> dict:
     """
     Get anatomical direction labels for each perspective based on NIfTI orientation code.
@@ -289,16 +331,23 @@ def create_grid_mri_image(
     title: str = "", 
     alpha: float = 0.7,
     underlay_cmap: str = 'gray',
-    overlay_color: str = 'limegreen',
+    overlay_color: str = 'limegreen',  # For backward compatibility
+    overlay_colors: Optional[List[str]] = None,  # For multi-label segmentation
     overlay_cmap: Optional[str] = None,
     num_contour_levels: int = 1,
     figsize_per_col: Tuple[int, int] = (3, 3),
     show_title: bool = True,
     underlay_vmin: Optional[float] = None,
-    underlay_vmax: Optional[float] = None
+    underlay_vmax: Optional[float] = None,
+    contour_type: str = 'continuous',  # 'discrete' or 'continuous'
+    show_legend: bool = False,  # Show legend for multi-label segmentation
+    show_row_labels: bool = False,  # Show orientation names on left
+    col_margin: int = 0,  # Extract extra slices on each side but only display middle num_cols
+    contour_linewidth: float = 2.0  # Line width for contour overlays
 ) -> plt.Figure:
     """
     Create a flexible grid of MRI images with optional overlay and customizable perspectives.
+    Supports multi-label segmentation with automatic color assignment.
     
     Args:
         underlay_data: 3D underlay image data array or path to NIfTI file
@@ -308,13 +357,19 @@ def create_grid_mri_image(
         title: Figure title
         alpha: Transparency of overlay contours
         underlay_cmap: Colormap for underlay
-        overlay_color: Color for overlay contours (used if overlay_cmap is None)
-        overlay_cmap: Colormap for overlay contours (overrides overlay_color)
-        num_contour_levels: Number of contour levels for overlay
+        overlay_color: Color for single-color overlay (backward compatibility)
+        overlay_colors: List of colors for multi-label segmentation (required if contour_type='discrete')
+        overlay_cmap: Colormap for continuous overlay (overrides overlay_color)
+        num_contour_levels: Number of contour levels for continuous overlay
         figsize_per_col: Size per column in inches (width, height)
         show_title: Whether to show the main title
         underlay_vmin: Minimum value for underlay intensity scaling
         underlay_vmax: Maximum value for underlay intensity scaling
+        contour_type: 'discrete' (integer labels) or 'continuous'
+        show_legend: Whether to show legend for multi-label segmentation
+        show_row_labels: Whether to show orientation names on left side
+        col_margin: Extract extra slices on each side (total slices = num_cols + 2*col_margin), 
+                   but only display the middle num_cols slices
         
     Returns:
         Matplotlib figure object
@@ -365,6 +420,41 @@ def create_grid_mri_image(
     
     # Filter orientations based on selected perspectives
     selected_orientations = [(name, all_orientations[name]) for name in perspectives if name in all_orientations]
+    orientation_names = [name.capitalize() for name in perspectives]
+    
+    # Collect labels for legend (only from first slice)
+    all_overlay_labels = []
+    
+    # Pre-compute consistent label-to-color mapping for discrete overlays
+    # This ensures the same label gets the same color across all slices
+    label_to_color_map = {}
+    if overlay is not None and contour_type == 'discrete':
+        if overlay_colors is None:
+            raise ValueError("overlay_colors must be provided when contour_type='discrete'")
+        # Get all unique labels from the entire overlay volume
+        all_unique_labels = np.unique(overlay[overlay != 0])
+        # Sort labels to ensure consistent ordering
+        all_unique_labels = np.sort(all_unique_labels)
+        # Create mapping: label_value -> color
+        for i, label_val in enumerate(all_unique_labels):
+            label_to_color_map[int(label_val)] = overlay_colors[i % len(overlay_colors)]
+    
+    # Helper function to create oriented slice (reused for consistency)
+    def create_oriented_slice(data, orient_info, slice_idx, rotation):
+        """Extract and rotate slice consistently."""
+        slice_axis = orient_info['axis']
+        if slice_axis == 0:
+            slice_data = data[slice_idx, :, :]
+        elif slice_axis == 1:
+            slice_data = data[:, slice_idx, :]
+        else:  # slice_axis == 2
+            slice_data = data[:, :, slice_idx]
+        
+        # Apply the same rotation as underlay
+        if rotation > 0:
+            slice_data = np.rot90(slice_data, k=rotation)
+        
+        return slice_data
     
     for row, (orient_name, orient_info) in enumerate(selected_orientations):
         # Calculate rotation needed to orient slice correctly
@@ -373,12 +463,17 @@ def create_grid_mri_image(
             shown_axes = orient_info.get('shown_axes', (0, 1))
             rotation = _get_rotation_for_perspective(orient_name, orientation_code, shown_axes)
         
-        # Calculate N evenly spaced slice indices
+        # Calculate slice indices with margin
         max_dim = orient_info['max_dim']
+        # Total slices to extract: num_cols + 2*col_margin
+        total_slices = num_cols + 2 * col_margin
         # Ensure indices are within bounds [0, max_dim-1]
         start_idx = max(0, int(0.15 * max_dim))
         end_idx = min(max_dim - 1, int(0.85 * max_dim))
-        slice_indices = np.linspace(start_idx, end_idx, num_cols, dtype=int)
+        # Extract all slices (including margins)
+        all_slice_indices = np.linspace(start_idx, end_idx, total_slices, dtype=int)
+        # Only display the middle num_cols slices (skip margin slices on each side)
+        slice_indices = all_slice_indices[col_margin:col_margin + num_cols]
         
         # Adjust aspect ratio if rotation is 90° or 270° (swaps rows/cols)
         # After rotation, the row/col dimensions are swapped, so aspect ratio is inverted
@@ -402,73 +497,79 @@ def create_grid_mri_image(
             
             # Handle overlay contours if overlay is provided
             if overlay is not None:
-                # Extract overlay slice using the same pattern as underlay
-                slice_axis = orient_info['axis']
-                if slice_axis == 0:
-                    overlay_slice = overlay[slice_idx, :, :]
-                elif slice_axis == 1:
-                    overlay_slice = overlay[:, slice_idx, :]
-                else:  # slice_axis == 2
-                    overlay_slice = overlay[:, :, slice_idx]
+                overlay_slice = create_oriented_slice(overlay, orient_info, slice_idx, rotation)
                 
-                # Apply the same rotation as underlay
-                if rotation > 0:
-                    overlay_slice = np.rot90(overlay_slice, k=rotation)
-                
-                # Create contour overlay 
-                # Get contour levels and colors
                 # Check if overlay has any non-zero values
                 overlay_nonzero = overlay_slice[overlay_slice != 0]
                 if len(overlay_nonzero) == 0:
                     # No overlay data to plot, skip contours
                     pass
                 else:
-                    # set outliers (values < or > 3IQR) to nan
-                    q1 = np.percentile(overlay_nonzero, 25)
-                    q3 = np.percentile(overlay_nonzero, 75)
-                    iqr = q3 - q1
-                    if iqr > 0:
-                        overlay_slice[overlay_slice < q1 - 3 * iqr] = np.nan
-                        overlay_slice[overlay_slice > q3 + 3 * iqr] = np.nan
+                    # Determine if this is discrete or continuous
+                    is_discrete = (contour_type == 'discrete')
                     
-                    min_val = np.nanmin(overlay_slice)
-                    max_val = np.nanmax(overlay_slice)
-                    
-                    # Check if we have valid values to plot
-                    if not (np.isnan(min_val) or np.isnan(max_val)):
-                        if num_contour_levels == 1:
-                            # Single level - use edge detection approach
-                            if overlay_cmap is not None:
-                                # Use colormap for single level
-                                cmap = plt.colormaps[overlay_cmap]
-                                color = cmap(0.5)
-                            else:
-                                color = overlay_color
-                            
-                            unique_vals = np.unique(overlay_slice[~np.isnan(overlay_slice)])
-                            if len(unique_vals) > 0:
-                                if len(unique_vals) == 1:
-                                    level = unique_vals[0] * 0.5
-                                else:
-                                    level = (min_val + max_val) / 2
-                                
-                                ax.contour(overlay_slice, levels=[level], 
-                                            colors=[color], linewidths=2, alpha=alpha)
-                        else:
-                            # Multiple levels
-                            if max_val > min_val:
-                                levels = np.linspace(min_val, max_val, num_contour_levels)
-                                
+                    if is_discrete:
+                        # Multi-label segmentation: plot each label with consistent color mapping
+                        plotted_labels = _plot_labeled_data(ax, overlay_slice, label_to_color_map, 
+                                                           plot_type='contour', alpha=alpha, 
+                                                           linewidth=contour_linewidth)
+                        # Collect labels for legend (only from first slice to avoid duplicates)
+                        if row == 0 and col == 0:
+                            all_overlay_labels = plotted_labels
+                    else:
+                        # Continuous overlay: use original approach
+                        # set outliers (values < or > 3IQR) to nan
+                        q1 = np.percentile(overlay_nonzero, 25)
+                        q3 = np.percentile(overlay_nonzero, 75)
+                        iqr = q3 - q1
+                        if iqr > 0:
+                            overlay_slice[overlay_slice < q1 - 3 * iqr] = np.nan
+                            overlay_slice[overlay_slice > q3 + 3 * iqr] = np.nan
+                        
+                        min_val = np.nanmin(overlay_slice)
+                        max_val = np.nanmax(overlay_slice)
+                        
+                        # Check if we have valid values to plot
+                        if not (np.isnan(min_val) or np.isnan(max_val)):
+                            if num_contour_levels == 1:
+                                # Single level - use edge detection approach
                                 if overlay_cmap is not None:
-                                    # Use colormap for multiple levels
-                                    cs = ax.contour(overlay_slice, levels=levels, 
-                                                    cmap=overlay_cmap, linewidths=2, alpha=alpha)
+                                    # Use colormap for single level
+                                    cmap = plt.colormaps[overlay_cmap]
+                                    color = cmap(0.5)
                                 else:
-                                    # Use single color for multiple levels
-                                    ax.contour(overlay_slice, levels=levels, 
-                                                colors=overlay_color, linewidths=2, alpha=alpha)
+                                    color = overlay_color
+                                
+                                unique_vals = np.unique(overlay_slice[~np.isnan(overlay_slice)])
+                                if len(unique_vals) > 0:
+                                    if len(unique_vals) == 1:
+                                        level = unique_vals[0] * 0.5
+                                    else:
+                                        level = (min_val + max_val) / 2
+                                    
+                                    ax.contour(overlay_slice, levels=[level], 
+                                                colors=[color], linewidths=contour_linewidth, alpha=alpha)
+                            else:
+                                # Multiple levels
+                                if max_val > min_val:
+                                    levels = np.linspace(min_val, max_val, num_contour_levels)
+                                    
+                                    if overlay_cmap is not None:
+                                        # Use colormap for multiple levels
+                                        cs = ax.contour(overlay_slice, levels=levels, 
+                                                        cmap=overlay_cmap, linewidths=contour_linewidth, alpha=alpha)
+                                    else:
+                                        # Use single color for multiple levels
+                                        ax.contour(overlay_slice, levels=levels, 
+                                                    colors=overlay_color, linewidths=contour_linewidth, alpha=alpha)
             
             ax.axis('off')
+            
+            # Add orientation label only for the first column
+            if col == 0 and show_row_labels:
+                ax.text(-0.1, 0.5, orientation_names[row], transform=ax.transAxes,
+                       rotation=90, ha='center', va='center', fontsize=12, fontweight='bold',
+                       color='greenyellow')
             
             # Add anatomical direction labels on middle subplot of each row when file path is provided
             middle_col = num_cols // 2
@@ -491,6 +592,14 @@ def create_grid_mri_image(
     if title and show_title:
         fig.suptitle(title, fontsize=16, fontweight='bold')
     
+    # Add legend if requested and we have labels
+    if show_legend and len(all_overlay_labels) > 0:
+        # Create legend from collected labels
+        legend_elements = [plt.Line2D([0], [0], color=color, lw=2, label=f'Label {label}') 
+                          for label, color in all_overlay_labels]
+        fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.98),
+                  framealpha=0.9, fontsize=8)
+    
     fig.subplots_adjust(hspace=0.05, wspace=0.05)
     fig.patch.set_facecolor('black')
 
@@ -501,19 +610,35 @@ def create_overlay_grid_3xN(
     underlay_data: Union[np.ndarray, str, Path], 
     overlay_data: Union[np.ndarray, str, Path], 
     num_cols: int = 7, 
+    overlay_colors: Optional[List[str]] = None,  # For multi-label segmentation (required if contour_type='discrete')
+    contour_type: str = 'continuous',  # 'discrete' or 'continuous'
+    show_legend: bool = False,  # Show legend for multi-label
     **kwargs
 ) -> plt.Figure:
     """
-    Backward compatibility function for create_overlay_grid_3xN.
     Creates a 3xN grid of overlay images (3 orientations, N slices each).
+    Supports multi-label segmentation with different colored contours for each label.
     
-    This function calls the new generic create_grid_mri_image function.
+    Args:
+        underlay_data: Underlay image data or path
+        overlay_data: Overlay/segmentation data or path
+        num_cols: Number of slices per orientation
+        overlay_colors: List of colors for multi-label segmentation (required if contour_type='discrete')
+        contour_type: 'discrete' (integer labels) or 'continuous'
+        show_legend: Whether to show legend for multi-label segmentation
+        **kwargs: Additional arguments passed to create_grid_mri_image
+        
+    Returns:
+        Matplotlib figure
     """
     return create_grid_mri_image(
         underlay_data=underlay_data,
         overlay_data=overlay_data,
         num_cols=num_cols,
         perspectives=["axial", "sagittal", "coronal"],
+        overlay_colors=overlay_colors,
+        contour_type=contour_type,
+        show_legend=show_legend,
         **kwargs
     )
 
