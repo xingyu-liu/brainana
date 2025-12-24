@@ -18,8 +18,11 @@ handle image orientation and voxel dimensions from NIfTI headers.
 import numpy as np
 import matplotlib.pyplot as plt
 import nibabel as nib
-from typing import Optional, Tuple, List, Union
+from typing import Optional, Tuple, List, Union, Set
 from pathlib import Path
+from PIL import Image
+import tempfile
+import shutil
 from ..utils.mri import get_opposite_orientation, get_image_orientation_from_affine
 
 # %%
@@ -683,4 +686,323 @@ def create_motion_plot(
     
     plt.tight_layout()
     return fig
+
+
+# Surface rasterization functions for surface contour visualization
+def rasterize_line_3d_bresenham(
+    p0: np.ndarray, 
+    p1: np.ndarray, 
+    shape: Tuple[int, int, int]
+) -> List[Tuple[int, int, int]]:
+    """
+    Rasterize a 3D line using 3D Bresenham algorithm.
+    Ensures single-voxel thickness to avoid double contours.
+    
+    Args:
+        p0: Start point as (x, y, z) array
+        p1: End point as (x, y, z) array
+        shape: Volume shape (x, y, z) for bounds checking
+        
+    Returns:
+        List of voxel coordinates (x, y, z) along the line
+    """
+    p0 = np.array(p0, dtype=int)
+    p1 = np.array(p1, dtype=int)
+    
+    # Handle degenerate case (same point)
+    if np.all(p0 == p1):
+        if (0 <= p0[0] < shape[0] and 0 <= p0[1] < shape[1] and 0 <= p0[2] < shape[2]):
+            return [tuple(p0)]
+        return []
+    
+    points = []
+    dx = abs(p1[0] - p0[0])
+    dy = abs(p1[1] - p0[1])
+    dz = abs(p1[2] - p0[2])
+    
+    xs = 1 if p1[0] > p0[0] else -1
+    ys = 1 if p1[1] > p0[1] else -1
+    zs = 1 if p1[2] > p0[2] else -1
+    
+    # Determine which dimension has the largest change (driving axis)
+    if dx >= dy and dx >= dz:
+        # X is the driving axis
+        p1_err = 2 * dy - dx
+        p2_err = 2 * dz - dx
+        x, y, z = p0[0], p0[1], p0[2]
+        for _ in range(dx + 1):
+            if (0 <= x < shape[0] and 0 <= y < shape[1] and 0 <= z < shape[2]):
+                points.append((x, y, z))
+            if p1_err > 0:
+                y += ys
+                p1_err -= 2 * dx
+            if p2_err > 0:
+                z += zs
+                p2_err -= 2 * dx
+            p1_err += 2 * dy
+            p2_err += 2 * dz
+            x += xs
+            if x == p1[0]:
+                break
+    elif dy >= dx and dy >= dz:
+        # Y is the driving axis
+        p1_err = 2 * dx - dy
+        p2_err = 2 * dz - dy
+        x, y, z = p0[0], p0[1], p0[2]
+        for _ in range(dy + 1):
+            if (0 <= x < shape[0] and 0 <= y < shape[1] and 0 <= z < shape[2]):
+                points.append((x, y, z))
+            if p1_err > 0:
+                x += xs
+                p1_err -= 2 * dy
+            if p2_err > 0:
+                z += zs
+                p2_err -= 2 * dy
+            p1_err += 2 * dx
+            p2_err += 2 * dz
+            y += ys
+            if y == p1[1]:
+                break
+    else:
+        # Z is the driving axis
+        p1_err = 2 * dy - dz
+        p2_err = 2 * dx - dz
+        x, y, z = p0[0], p0[1], p0[2]
+        for _ in range(dz + 1):
+            if (0 <= x < shape[0] and 0 <= y < shape[1] and 0 <= z < shape[2]):
+                points.append((x, y, z))
+            if p1_err > 0:
+                y += ys
+                p1_err -= 2 * dz
+            if p2_err > 0:
+                x += xs
+                p2_err -= 2 * dz
+            p1_err += 2 * dy
+            p2_err += 2 * dx
+            z += zs
+            if z == p1[2]:
+                break
+    
+    return points
+
+
+def _compute_vertex_neighbors(faces: np.ndarray, n_vertices: int) -> List[Set[int]]:
+    """
+    Compute 1-ring neighbors for each vertex from face connectivity.
+    
+    Args:
+        faces: Face array of shape (n_faces, 3) with vertex indices
+        n_vertices: Total number of vertices
+        
+    Returns:
+        List of sets, where each set contains neighbor vertex indices
+    """
+    neighbors = [set() for _ in range(n_vertices)]
+    
+    for face in faces:
+        v0_idx, v1_idx, v2_idx = face
+        # Validate indices before accessing
+        if (0 <= v0_idx < n_vertices and 
+            0 <= v1_idx < n_vertices and 
+            0 <= v2_idx < n_vertices):
+            # Add bidirectional edges (each face contributes 3 edges)
+            neighbors[v0_idx].update([v1_idx, v2_idx])
+            neighbors[v1_idx].update([v0_idx, v2_idx])
+            neighbors[v2_idx].update([v0_idx, v1_idx])
+    
+    return neighbors
+
+
+def create_surface_mask_from_mesh(
+    surface_vertices: np.ndarray, 
+    surface_faces: np.ndarray, 
+    volume_img: nib.Nifti1Image
+) -> np.ndarray:
+    """
+    Create a boundary mask from surface mesh using rasterization approach.
+    Computes neighbors from faces and rasterizes edges only between neighbor pairs.
+    Uses 3D Bresenham algorithm for single-voxel-thick lines.
+    
+    Args:
+        surface_vertices: Vertex coordinates in RAS space, shape (n_vertices, 3)
+        surface_faces: Face connectivity, shape (n_faces, 3)
+        volume_img: Nibabel image object for transformation and shape reference
+        
+    Returns:
+        Binary mask array of shape matching volume_img.shape[:3]
+    """
+    volume_shape = volume_img.shape[:3]
+    
+    # Get TkReg RAS to voxel transformation
+    try:
+        vox2ras_tkr = volume_img.header.get_vox2ras_tkr()
+    except AttributeError:
+        vox2ras_tkr = volume_img.affine
+    
+    # Transform vertices from TkReg RAS to voxel space
+    inv_affine = np.linalg.inv(vox2ras_tkr)
+    vertices_ras = np.column_stack([surface_vertices, np.ones(len(surface_vertices))])
+    vertices_vox = (inv_affine @ vertices_ras.T).T[:, :3]
+    
+    # Create output mask
+    surface_mask = np.zeros(volume_shape, dtype=np.uint8)
+    
+    # Compute neighbors from faces (1-ring neighbors)
+    n_vertices = len(vertices_vox)
+    neighbors = _compute_vertex_neighbors(surface_faces, n_vertices)
+    
+    # Rasterize edges only between neighbor pairs (avoid duplicate edges)
+    drawn_edges: set = set()
+    for v_idx in range(n_vertices):
+        for neighbor_idx in neighbors[v_idx]:
+            # Use canonical edge representation (smaller index first)
+            edge_key = (min(v_idx, neighbor_idx), max(v_idx, neighbor_idx))
+            if edge_key not in drawn_edges:
+                drawn_edges.add(edge_key)
+                v0 = np.round(vertices_vox[v_idx]).astype(int)
+                v1 = np.round(vertices_vox[neighbor_idx]).astype(int)
+                line_points = rasterize_line_3d_bresenham(v0, v1, volume_shape)
+                # Set mask voxels using tuple unpacking
+                for x, y, z in line_points:
+                    surface_mask[x, y, z] = 1
+    
+    return surface_mask
+
+
+def create_surface_mask_for_multiple_surfaces(
+    surface_pairs: List[Tuple[np.ndarray, np.ndarray]], 
+    volume_img: nib.Nifti1Image
+) -> np.ndarray:
+    """
+    Create a combined mask from multiple surface meshes.
+    
+    Args:
+        surface_pairs: List of (vertices, faces) tuples
+        volume_img: Nibabel image object for transformation reference
+        
+    Returns:
+        Combined binary mask
+    """
+    volume_shape = volume_img.shape[:3]
+    combined_mask = np.zeros(volume_shape, dtype=np.uint8)
+    
+    for verts, faces in surface_pairs:
+        mask = create_surface_mask_from_mesh(verts, faces, volume_img)
+        combined_mask = np.maximum(combined_mask, mask)
+    
+    return combined_mask
+
+
+# Surface atlas plot helper functions
+WHITE_THRESHOLD = 250
+CROP_PADDING = 5
+MARGIN_PERCENT = 0.03
+SURFACE_SPACING = 2
+SURFACE_PLOT_SIZE = (400, 200)
+SURFACE_PLOT_ZOOM = 1.2
+SURFACE_PLOT_DPI = 150
+CBAR_DPI = 300
+CBAR_SPACING = 20
+CBAR_GRADIENT_WIDTH_RATIO = 0.5
+CBAR_TARGET_WIDTH_RATIO = 0.25
+CBAR_LABEL_FONTSIZE = 6
+CBAR_TICK_FONTSIZE = 5
+CBAR_LABEL_PAD = 5
+
+
+def _crop_white_space(img: Image.Image, threshold: int = WHITE_THRESHOLD, padding: int = CROP_PADDING) -> Image.Image:
+    """Crop white space from image edges."""
+    img_array = np.array(img)
+    if img_array.size == 0:
+        return img
+    
+    mask = np.any(img_array < threshold, axis=2) if len(img_array.shape) == 3 else img_array < threshold
+    if not np.any(mask):
+        return img
+    
+    coords = np.argwhere(mask)
+    y_min, x_min = coords.min(axis=0)
+    y_max, x_max = coords.max(axis=0)
+    return img.crop((
+        max(0, x_min - padding),
+        max(0, y_min - padding),
+        min(img_array.shape[1], x_max + padding),
+        min(img_array.shape[0], y_max + padding)
+    ))
+
+
+def _create_colorbar(
+    cmap: str,
+    vmin: float,
+    vmax: float,
+    label: str,
+    fig_width_inches: float,
+    fig_height_inches: float,
+    dpi: int,
+    gradient_width_ratio: float,
+    temp_dir: Path
+) -> Image.Image:
+    """Create a colorbar image with specified parameters."""
+    fig, ax = plt.subplots(figsize=(fig_width_inches, fig_height_inches), dpi=dpi)
+    fig.patch.set_facecolor('white')
+    pos = ax.get_position()
+    ax.set_position([pos.x0, pos.y0, pos.width * gradient_width_ratio, pos.height])
+    
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+    sm.set_array([])
+    cbar = plt.colorbar(sm, cax=ax, orientation='vertical')
+    cbar.set_label(label, rotation=90, labelpad=CBAR_LABEL_PAD, fontsize=CBAR_LABEL_FONTSIZE)
+    cbar.ax.yaxis.set_label_position('left')
+    ax.tick_params(labelsize=CBAR_TICK_FONTSIZE)
+    fig.tight_layout()
+    
+    temp_path = temp_dir / f"{label.lower().replace(' ', '_')}_colorbar.png"
+    fig.savefig(temp_path, dpi=dpi, bbox_inches='tight', pad_inches=0.1, facecolor='white')
+    plt.close(fig)
+    
+    cbar_img = Image.open(temp_path)
+    aspect = cbar_img.height / cbar_img.width if cbar_img.width > 0 else 1
+    target_height = int(fig_height_inches * dpi)
+    return cbar_img.resize((int(target_height / aspect), target_height), Image.Resampling.LANCZOS)
+
+
+def _create_label_image(
+    label: str,
+    fig_width_inches: float,
+    fig_height_inches: float,
+    dpi: int,
+    gradient_width_ratio: float,
+    temp_dir: Path
+) -> Image.Image:
+    """Create a label-only image (no gradient)."""
+    fig, ax = plt.subplots(figsize=(fig_width_inches, fig_height_inches), dpi=dpi)
+    fig.patch.set_facecolor('white')
+    pos = ax.get_position()
+    ax.set_position([pos.x0, pos.y0, pos.width * gradient_width_ratio, pos.height])
+    ax.set_ylabel(label, rotation=90, labelpad=CBAR_LABEL_PAD, fontsize=CBAR_LABEL_FONTSIZE)
+    ax.yaxis.set_label_position('left')
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    fig.tight_layout()
+    
+    temp_path = temp_dir / f"{label.lower()}_label.png"
+    fig.savefig(temp_path, dpi=dpi, bbox_inches='tight', pad_inches=0.1, facecolor='white')
+    plt.close(fig)
+    
+    label_img = Image.open(temp_path)
+    aspect = label_img.height / label_img.width if label_img.width > 0 else 1
+    target_height = int(fig_height_inches * dpi)
+    return label_img.resize((int(target_height / aspect), target_height), Image.Resampling.LANCZOS)
+
+
+def _find_content_width(img: Image.Image, threshold: int = WHITE_THRESHOLD) -> int:
+    """Find the rightmost non-white pixel in an image."""
+    img_array = np.array(img)
+    is_not_white = np.any(img_array < threshold, axis=(0, 2)) if len(img_array.shape) == 3 else img_array < threshold
+    if np.any(is_not_white):
+        rightmost_col = np.where(is_not_white)[0].max() if len(np.where(is_not_white)[0]) > 0 else img.width
+        return min(rightmost_col + 10, img.width)
+    return img.width
 

@@ -25,7 +25,9 @@ from ..quality_control.snapshots import (
     create_bias_correction_qc,
     create_registration_qc,
     create_conform_qc,
-    create_atlas_segmentation_qc
+    create_atlas_segmentation_qc,
+    create_surf_recon_tissue_seg_qc,
+    create_cortical_surf_and_measures_qc
 )
 from ..config import get_output_space
 
@@ -772,7 +774,67 @@ class AnatomicalProcessor(BasePreprocessingWorkflow):
             else:
                 self.logger.info("Surface Reconstruction: Skipped (disabled in configuration)")
 
-            # TODO: QC
+            # SURFACE RECONSTRUCTION QC
+            # ------------------------------------------------------------
+            if self.qc_dir and self.config.get("anat.surface_reconstruction.enabled", True):
+                try:
+                    # Check if surface reconstruction was successful by checking if fs_subject_dir exists
+                    # We need to reconstruct fs_subject_dir path from the same logic used above
+                    bids_entities = parse_bids_entities(self.anat_file.name)
+                    subject_id = bids_entities.get("sub")
+                    if subject_id and not subject_id.startswith("sub-"):
+                        subject_id = f"sub-{subject_id}"
+                    
+                    if subject_id:
+                        fs_subjects_dir = self.output_root / "fastsurfer"
+                        fs_subject_dir = fs_subjects_dir / subject_id
+                        surf_dir = fs_subject_dir / "surf"
+                        
+                        # Check if surface reconstruction completed successfully
+                        if fs_subject_dir.exists() and surf_dir.exists():
+                            self.logger.info("QC: generating surface reconstruction QC snapshots...")
+                            
+                            # Get atlas name
+                            atlas_name = outpuf_f_for_surfrecon.get("atlas_name", "ARM2atlas")
+                            
+                            # Generate surface reconstruction tissue segmentation QC
+                            try:
+                                filename_stem = get_filename_stem(self.anat_file)
+                                filename_stem = filename_stem.replace(f"_{self.modality}", "")
+                                surf_seg_qc_filename = f"{filename_stem}_desc-surfReconTissueSeg_{self.modality}.png"
+                                surf_seg_qc_path = self.qc_dir / surf_seg_qc_filename
+                                
+                                create_surf_recon_tissue_seg_qc(
+                                    fs_subject_dir=str(fs_subject_dir),
+                                    save_f=str(surf_seg_qc_path),
+                                    modality=self.modality,
+                                    logger=self.logger
+                                )
+                                self.logger.info("QC: surface reconstruction tissue segmentation overlay created")
+                            except Exception as e:
+                                self.logger.warning(f"QC: surface reconstruction tissue segmentation failed - {e}")
+                            
+                            # Generate cortical surface and measures QC
+                            try:
+                                filename_stem = get_filename_stem(self.anat_file)
+                                filename_stem = filename_stem.replace(f"_{self.modality}", "")
+                                cortical_surf_qc_filename = f"{filename_stem}_desc-corticalSurfAndMeasures_{self.modality}.png"
+                                cortical_surf_qc_path = self.qc_dir / cortical_surf_qc_filename
+                                
+                                create_cortical_surf_and_measures_qc(
+                                    fs_subject_dir=str(fs_subject_dir),
+                                    save_f=str(cortical_surf_qc_path),
+                                    atlas_name=atlas_name,
+                                    modality=self.modality,
+                                    logger=self.logger
+                                )
+                                self.logger.info("QC: cortical surface and measures plot created")
+                            except Exception as e:
+                                self.logger.warning(f"QC: cortical surface and measures plot failed - {e}")
+                        else:
+                            self.logger.info("QC: surface reconstruction QC skipped - surface reconstruction not completed")
+                except Exception as e:
+                    self.logger.warning(f"QC: surface reconstruction QC generation failed - {e}")
 
             # ------------------------------------------------------------
             # Calculate workflow duration

@@ -379,11 +379,12 @@ python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
 # test new livingstone
 # ================================================
 dataset_root=/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test
-dataset_name=bids_reorient_upright
+dataset_name=bids
+version=v2
 
 dataset_dir=${dataset_root}/${dataset_name}
-output_dir=${dataset_root}/preproc/${dataset_name}
-config_f=${dataset_root}/config.yaml
+output_dir=${dataset_root}/preproc/${dataset_name}_${version}
+config_f=${dataset_root}/config_${version}.yaml
 
 python3 -m macacaMRIprep.cli.preproc ${dataset_dir} ${output_dir} \
     --config ${config_f}

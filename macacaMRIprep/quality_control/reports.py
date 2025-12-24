@@ -27,11 +27,17 @@ SNAPSHOT_MAPPINGS = {
     'func2template': {'key': 'func2template_registration_overlay', 'description': 'Functional to template registration'},
     'T2w2T1w': {'key': 'T2w2T1w_registration_overlay', 'description': 'T2w to T1w coregistration'},
     'motion': {'key': 'motion_parameters', 'description': 'Motion parameters'},
+    'surfReconTissueSeg': {'key': 'surf_recon_tissue_seg_overlay', 'description': 'Surface reconstruction tissue segmentation'},
+    'corticalSurfAndMeasures': {'key': 'cortical_surf_and_measures_overlay', 'description': 'Cortical surface and measures'},
 }
 
 SNAPSHOT_ORDER = [
-    'conform_overlay', 'bias_correction_comparison', 'skullstripping_overlay', 'atlas_segmentation_overlay', 
-    'anat2template_registration_overlay', 'T2w2T1w_registration_overlay', 'func2anat_registration_overlay', 
+    'conform_overlay', 'bias_correction_comparison', 
+    'skullstripping_overlay', 'atlas_segmentation_overlay', 
+    'surf_recon_tissue_seg_overlay', 'cortical_surf_and_measures_overlay',
+    'anat2template_registration_overlay', 
+    'T2w2T1w_registration_overlay', 
+    'func2anat_registration_overlay', 
     'func2template_registration_overlay', 'motion_parameters'
 ]
 

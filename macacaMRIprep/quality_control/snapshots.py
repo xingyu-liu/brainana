@@ -15,12 +15,42 @@ import nibabel as nib
 from pathlib import Path
 from typing import Dict, Any, Union, List, Optional
 from PIL import Image
+import tempfile
+import shutil
 
 from .mri_plotting import (
     create_overlay_grid_3xN, 
     create_motion_plot, 
-    create_grid_mri_image
+    create_grid_mri_image,
+    create_surface_mask_from_mesh,
+    create_surface_mask_for_multiple_surfaces,
+    _crop_white_space,
+    _create_colorbar,
+    _create_label_image,
+    _find_content_width,
+    WHITE_THRESHOLD,
+    CROP_PADDING,
+    MARGIN_PERCENT,
+    SURFACE_SPACING,
+    SURFACE_PLOT_SIZE,
+    SURFACE_PLOT_ZOOM,
+    SURFACE_PLOT_DPI,
+    CBAR_DPI,
+    CBAR_SPACING,
+    CBAR_GRADIENT_WIDTH_RATIO,
+    CBAR_TARGET_WIDTH_RATIO,
+    CBAR_LABEL_FONTSIZE,
+    CBAR_TICK_FONTSIZE,
+    CBAR_LABEL_PAD
 )
+
+# Try to import surfplot
+SURFPLOT_AVAILABLE = False
+try:
+    from surfplot import Plot
+    SURFPLOT_AVAILABLE = True
+except (ImportError, ValueError, Exception):
+    SURFPLOT_AVAILABLE = False
 
 # %%
 
@@ -494,4 +524,407 @@ def _create_before_after_comparison(
         plt.close(fig)
     
     return None  # Function doesn't need to return a figure anymore
+
+
+def create_surf_recon_tissue_seg_qc(
+    fs_subject_dir: Union[str, Path],
+    save_f: Union[str, Path],
+    modality: str = "anat",
+    num_slices: int = 4,
+    logger: Optional[logging.Logger] = None,
+    **kwargs
+) -> Dict[str, str]:
+    """
+    Generate surface reconstruction tissue segmentation quality control overlays.
+    Creates a 3xN grid showing T1w with white and pial surface contours.
+    
+    Args:
+        fs_subject_dir: Path to FreeSurfer subject directory (e.g., 'fastsurfer/sub-XXX')
+        save_f: Full path for output file (e.g., 'figures/sub-01_desc-surfReconTissueSeg_T1w.png')
+        modality: Imaging modality ("anat" or "func")
+        num_slices: Number of slices per orientation
+        logger: Logger instance
+        
+    Returns:
+        Dictionary with snapshot file paths
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
+    fs_subject_dir = Path(fs_subject_dir)
+    output_path = Path(save_f)
+    logger.info(f"QC: creating {modality} surface reconstruction tissue segmentation overlay")
+    
+    try:
+        # Construct file paths from FreeSurfer directory structure
+        surf_dir = fs_subject_dir / "surf"
+        mri_dir = fs_subject_dir / "mri"
+        
+        # Surface files
+        white_surf_lh = surf_dir / "lh.smoothwm"
+        white_surf_rh = surf_dir / "rh.smoothwm"
+        pial_surf_lh = surf_dir / "lh.pial"
+        pial_surf_rh = surf_dir / "rh.pial"
+        
+        # T1w file (try T1.mgz first, then fallback to brain.finalsurfs.mgz)
+        t1w_file = mri_dir / "T1.mgz"
+        if not t1w_file.exists():
+            t1w_file = mri_dir / "brain.finalsurfs.mgz"
+        
+        # Validate inputs
+        for file_path, name in [
+            (t1w_file, "T1w"), (white_surf_lh, "white_lh"), (white_surf_rh, "white_rh"),
+            (pial_surf_lh, "pial_lh"), (pial_surf_rh, "pial_rh")
+        ]:
+            if not file_path.exists():
+                logger.error(f"QC: {name} file not found - {file_path}")
+                return {}
+        
+        # Load T1w image
+        t1w_img = nib.load(str(t1w_file))
+        volume_shape = t1w_img.shape[:3]
+        
+        # Load surfaces
+        logger.info("QC: loading surface meshes...")
+        white_lh_verts, white_lh_faces = nib.freesurfer.read_geometry(str(white_surf_lh))
+        white_rh_verts, white_rh_faces = nib.freesurfer.read_geometry(str(white_surf_rh))
+        pial_lh_verts, pial_lh_faces = nib.freesurfer.read_geometry(str(pial_surf_lh))
+        pial_rh_verts, pial_rh_faces = nib.freesurfer.read_geometry(str(pial_surf_rh))
+        
+        # Create masks from surface meshes
+        logger.info("QC: creating masks from surface meshes (rasterization approach)...")
+        white_mask = create_surface_mask_for_multiple_surfaces(
+            [(white_lh_verts, white_lh_faces), (white_rh_verts, white_rh_faces)],
+            t1w_img
+        )
+        pial_mask = create_surface_mask_for_multiple_surfaces(
+            [(pial_lh_verts, pial_lh_faces), (pial_rh_verts, pial_rh_faces)],
+            t1w_img
+        )
+        
+        # Combine masks into a single multi-label overlay
+        # Label 1 = white surface, Label 2 = pial surface
+        # If both overlap, pial (label 2) takes precedence
+        logger.info("QC: combining white and pial surface masks...")
+        combined_mask = np.zeros(volume_shape, dtype=np.uint8)
+        combined_mask[white_mask > 0] = 1
+        combined_mask[pial_mask > 0] = 2  # Overwrites white where they overlap
+        
+        # Create combined surface overlay
+        logger.info("QC: creating combined surface overlay...")
+        fig = create_grid_mri_image(
+            underlay_data=str(t1w_file),
+            overlay_data=combined_mask,
+            num_cols=num_slices,
+            perspectives=["axial", "sagittal", "coronal"],
+            overlay_colors=['mediumseagreen', 'mediumpurple'],  # Label 1 (white), Label 2 (pial)
+            alpha=0.7,
+            num_contour_levels=1,
+            show_title=False,
+            col_margin=1,
+            figsize_per_col=(5, 5),
+            contour_linewidth=1.0,
+            contour_type='discrete'  # Use discrete for multi-label masks to avoid double lines
+        )
+        
+        # Ensure the parent directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='black')
+        plt.close(fig)
+        
+        logger.info(f"QC: surface reconstruction tissue segmentation overlay saved - {os.path.basename(output_path)}")
+        return {f"{modality}_surf_recon_tissue_seg_overlay": str(output_path)}
+        
+    except Exception as e:
+        logger.error(f"QC: surface reconstruction tissue segmentation overlay generation failed - {e}")
+        return {}
+
+
+def create_cortical_surf_and_measures_qc(
+    fs_subject_dir: Union[str, Path],
+    save_f: Union[str, Path],
+    atlas_name: str = "ARM2atlas",
+    modality: str = "anat",
+    logger: Optional[logging.Logger] = None,
+    **kwargs
+) -> Dict[str, str]:
+    """
+    Generate cortical surface and measures quality control plots.
+    Creates surface plots showing different data on three surface types:
+    - Row 1: smoothwm with curvature
+    - Row 2: pial with segmentation (atlas labels)
+    - Row 3: inflated with thickness
+    
+    Args:
+        fs_subject_dir: Path to FreeSurfer subject directory (e.g., 'fastsurfer/sub-XXX')
+        atlas_name: Name of the atlas (default: "ARM2atlas")
+        save_f: Full path for output file (e.g., 'figures/sub-01_desc-corticalSurfAndMeasures_T1w.png')
+        modality: Imaging modality ("anat" or "func")
+        logger: Logger instance
+        
+    Returns:
+        Dictionary with snapshot file paths
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
+    if not SURFPLOT_AVAILABLE:
+        logger.warning("QC: surfplot not available, skipping cortical surface and measures QC")
+        return {}
+    
+    fs_subject_dir = Path(fs_subject_dir)
+    output_path = Path(save_f)
+    logger.info(f"QC: creating {modality} cortical surface and measures plot")
+    
+    try:
+        # Construct file paths from FreeSurfer directory structure
+        surf_dir = fs_subject_dir / "surf"
+        label_dir = fs_subject_dir / "label"
+        
+        # Surface files
+        smoothwm_surf_lh = surf_dir / "lh.smoothwm"
+        smoothwm_surf_rh = surf_dir / "rh.smoothwm"
+        pial_surf_lh = surf_dir / "lh.pial"
+        pial_surf_rh = surf_dir / "rh.pial"
+        inflated_surf_lh = surf_dir / "lh.inflated"
+        inflated_surf_rh = surf_dir / "rh.inflated"
+        
+        # Data files
+        curv_lh = surf_dir / "lh.curv"
+        curv_rh = surf_dir / "rh.curv"
+        thickness_lh = surf_dir / "lh.thickness"
+        thickness_rh = surf_dir / "rh.thickness"
+        
+        # Annotation files (try mapped version first, then fallback)
+        atlas_annot_lh = label_dir / f"lh.aparc.{atlas_name}.mapped.annot"
+        atlas_annot_rh = label_dir / f"rh.aparc.{atlas_name}.mapped.annot"
+        if not atlas_annot_lh.exists():
+            atlas_annot_lh = label_dir / f"lh.aparc.{atlas_name}.annot"
+        if not atlas_annot_rh.exists():
+            atlas_annot_rh = label_dir / f"rh.aparc.{atlas_name}.annot"
+        
+        # Validate inputs
+        required_files = [
+            (smoothwm_surf_lh, "smoothwm_lh"), (smoothwm_surf_rh, "smoothwm_rh"),
+            (pial_surf_lh, "pial_lh"), (pial_surf_rh, "pial_rh"),
+            (inflated_surf_lh, "inflated_lh"), (inflated_surf_rh, "inflated_rh"),
+            (atlas_annot_lh, "atlas_annot_lh"), (atlas_annot_rh, "atlas_annot_rh"),
+            (curv_lh, "curv_lh"), (curv_rh, "curv_rh"),
+            (thickness_lh, "thickness_lh"), (thickness_rh, "thickness_rh")
+        ]
+        
+        for file_path, name in required_files:
+            if not file_path.exists():
+                logger.error(f"QC: {name} file not found - {file_path}")
+                return {}
+        
+        logger.info("QC: loading data files...")
+        
+        # Load annotations (for pial surface)
+        try:
+            lh_labels, _, lh_names = nib.freesurfer.read_annot(str(atlas_annot_lh))
+            rh_labels, _, rh_names = nib.freesurfer.read_annot(str(atlas_annot_rh))
+            logger.info(f"QC: loaded annotations: {len(lh_names)} labels for LH, {len(rh_names)} labels for RH")
+        except Exception as e:
+            logger.error(f"QC: error loading annotations - {e}")
+            return {}
+        
+        # Load curvature (for smoothwm surface)
+        try:
+            lh_curv = nib.freesurfer.read_morph_data(str(curv_lh))
+            rh_curv = nib.freesurfer.read_morph_data(str(curv_rh))
+            logger.info("QC: loaded curvature data")
+        except Exception as e:
+            logger.error(f"QC: error loading curvature - {e}")
+            return {}
+        
+        # Load thickness (for inflated surface)
+        try:
+            lh_thickness = nib.freesurfer.read_morph_data(str(thickness_lh))
+            rh_thickness = nib.freesurfer.read_morph_data(str(thickness_rh))
+            logger.info("QC: loaded thickness data")
+        except Exception as e:
+            logger.error(f"QC: error loading thickness - {e}")
+            return {}
+        
+        logger.info("QC: creating surface plots...")
+        
+        # Compute curvature distribution and symmetric range centered at 0
+        all_curv = np.concatenate([lh_curv, rh_curv])
+        curv_abs_max = max(abs(np.percentile(all_curv, 33)), abs(np.percentile(all_curv, 66)))
+        curv_vmin = -curv_abs_max
+        curv_vmax = curv_abs_max
+        
+        # Compute thickness percentiles for clipping
+        all_thickness = np.concatenate([lh_thickness, rh_thickness])
+        thickness_vmin = np.percentile(all_thickness, 5)
+        thickness_vmax = np.percentile(all_thickness, 95)
+        
+        # Surface types with their surfaces and corresponding data
+        surface_configs = [
+            ('smoothwm', smoothwm_surf_lh, smoothwm_surf_rh, 'curvature', {'left': lh_curv, 'right': rh_curv}),
+            ('pial', pial_surf_lh, pial_surf_rh, 'segmentation', {'left': lh_labels, 'right': rh_labels}),
+            ('inflated', inflated_surf_lh, inflated_surf_rh, 'thickness', {'left': lh_thickness, 'right': rh_thickness})
+        ]
+        
+        # Views: (hemisphere, view_name)
+        views = [
+            ('left', 'lateral'),
+            ('left', 'medial'),
+            ('right', 'lateral'),
+            ('right', 'medial')
+        ]
+        
+        # Create individual plots for each surface type and view combination
+        temp_dir = Path(tempfile.mkdtemp())
+        temp_images = {}  # Dictionary: (surf_name, hemi, view) -> image_path
+        
+        try:
+            for surf_name, surf_lh, surf_rh, data_type, data_dict in surface_configs:
+                logger.info(f"QC: creating {surf_name} surface plots with {data_type}...")
+                for hemi, view in views:
+                    # Create plot for single hemisphere and view
+                    plot_kwargs = {'views': view, 'size': SURFACE_PLOT_SIZE, 'zoom': SURFACE_PLOT_ZOOM}
+                    if hemi == 'left':
+                        plot_kwargs['surf_lh'] = str(surf_lh)
+                        data_key = 'left'
+                    else:
+                        plot_kwargs['surf_rh'] = str(surf_rh)
+                        data_key = 'right'
+                    
+                    p = Plot(**plot_kwargs)
+                    
+                    # Add data layer based on surface type
+                    if data_type == 'curvature':
+                        data = np.clip(data_dict[data_key], curv_vmin, curv_vmax)
+                        p.add_layer({data_key: data}, cmap='coolwarm_r', cbar=False)
+                    elif data_type == 'segmentation':
+                        p.add_layer({data_key: data_dict[data_key]}, cmap='tab20', cbar=False)
+                    else:  # thickness
+                        data = np.clip(data_dict[data_key], thickness_vmin, thickness_vmax)
+                        p.add_layer({data_key: data}, cmap='viridis', cbar=False)
+                    
+                    fig = p.build()
+                    temp_path = Path(temp_dir) / f"{surf_name}_{hemi}_{view}.png"
+                    fig.savefig(temp_path, dpi=SURFACE_PLOT_DPI, bbox_inches='tight', pad_inches=0.05, facecolor='white')
+                    temp_images[(surf_name, hemi, view)] = temp_path
+                    plt.close(fig)
+            
+            # Load and combine images
+            logger.info("QC: combining images...")
+            
+            # Load all images and crop white space
+            loaded_images = []
+            for surf_name, _, _, _, _ in surface_configs:
+                row_images = []
+                for hemi, view in views:
+                    img = Image.open(temp_images[(surf_name, hemi, view)])
+                    img = _crop_white_space(img)
+                    row_images.append(img)
+                loaded_images.append(row_images)
+            
+            # Get dimensions - use the maximum width and height from all images
+            max_width = max(img.width for row in loaded_images for img in row)
+            max_height = max(img.height for row in loaded_images for img in row)
+            
+            # Create colorbars for curvature (row 0), parcellation label (row 1), and thickness (row 2)
+            cbar_target_width = int(max_width * CBAR_TARGET_WIDTH_RATIO)
+            cbar_height = max_height
+            cbar_fig_width_inches = cbar_target_width / CBAR_DPI
+            cbar_fig_height_inches = cbar_height / CBAR_DPI
+            
+            # Create colorbars using helper functions
+            curv_cbar_img = _create_colorbar(
+                cmap='coolwarm_r',
+                vmin=curv_vmin,
+                vmax=curv_vmax,
+                label='Curvature',
+                fig_width_inches=cbar_fig_width_inches,
+                fig_height_inches=cbar_fig_height_inches,
+                dpi=CBAR_DPI,
+                gradient_width_ratio=CBAR_GRADIENT_WIDTH_RATIO,
+                temp_dir=temp_dir
+            )
+            
+            thickness_cbar_img = _create_colorbar(
+                cmap='viridis',
+                vmin=thickness_vmin,
+                vmax=thickness_vmax,
+                label='Thickness (mm)',
+                fig_width_inches=cbar_fig_width_inches,
+                fig_height_inches=cbar_fig_height_inches,
+                dpi=CBAR_DPI,
+                gradient_width_ratio=CBAR_GRADIENT_WIDTH_RATIO,
+                temp_dir=temp_dir
+            )
+            
+            parcellation_label_img = _create_label_image(
+                label='Parcellation',
+                fig_width_inches=cbar_fig_width_inches,
+                fig_height_inches=cbar_fig_height_inches,
+                dpi=CBAR_DPI,
+                gradient_width_ratio=CBAR_GRADIENT_WIDTH_RATIO,
+                temp_dir=temp_dir
+            )
+            
+            base_height = max_height * 3 + SURFACE_SPACING * 2
+            
+            # Create surface area image (4 columns)
+            surface_area_width = 4 * max_width + 3 * SURFACE_SPACING
+            surface_img = Image.new('RGB', (surface_area_width + 50, base_height), 'white')
+            
+            # Paste all surface images into the surface area image
+            for row_idx, row_images in enumerate(loaded_images):
+                for col_idx, img in enumerate(row_images):
+                    img_to_paste = img.copy()
+                    
+                    # Crop from center if too wide
+                    if img_to_paste.width > max_width:
+                        excess = img_to_paste.width - max_width
+                        img_to_paste = img_to_paste.crop((excess // 2, 0, excess // 2 + max_width, img_to_paste.height))
+                    
+                    x_pos = col_idx * (max_width + SURFACE_SPACING) + (max_width - img_to_paste.width) // 2
+                    y_pos = row_idx * (max_height + SURFACE_SPACING) + (max_height - img_to_paste.height) // 2
+                    surface_img.paste(img_to_paste, (x_pos, y_pos))
+            
+            # Find actual right edge of surface content
+            actual_surface_width = _find_content_width(surface_img)
+            
+            # Create colorbar area image (no white blank space on right)
+            left_cbar_width = max(curv_cbar_img.width, parcellation_label_img.width, thickness_cbar_img.width)
+            cbar_area_width = left_cbar_width
+            cbar_area_img = Image.new('RGB', (cbar_area_width, base_height), 'white')
+            
+            # Paste colorbars: left side for all labels (aligned)
+            max_cbar_height = max(curv_cbar_img.height, parcellation_label_img.height, thickness_cbar_img.height)
+            cbar_images = [curv_cbar_img, parcellation_label_img, thickness_cbar_img]
+            for row_idx, cbar_img in enumerate(cbar_images):
+                cbar_y_pos = row_idx * (max_height + SURFACE_SPACING) + (max_height - max_cbar_height) // 2
+                cbar_area_img.paste(cbar_img, (0, cbar_y_pos))
+            
+            # Crop surface image and create final combined image
+            if actual_surface_width < surface_img.width:
+                surface_img = surface_img.crop((0, 0, actual_surface_width, surface_img.height))
+            
+            actual_base_width = actual_surface_width + CBAR_SPACING + cbar_area_width
+            actual_margin_x = int(actual_base_width * MARGIN_PERCENT)
+            actual_margin_y = int(base_height * MARGIN_PERCENT)
+            combined_img = Image.new('RGB', (actual_base_width + 2 * actual_margin_x, base_height + 2 * actual_margin_y), 'white')
+            
+            combined_img.paste(surface_img, (actual_margin_x, actual_margin_y))
+            combined_img.paste(cbar_area_img, (actual_margin_x + actual_surface_width + CBAR_SPACING, actual_margin_y))
+            
+            # Save combined image
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            combined_img.save(output_path, dpi=(150, 150))
+            logger.info(f"QC: cortical surface and measures plot saved - {os.path.basename(output_path)}")
+            
+            return {f"{modality}_cortical_surf_and_measures_overlay": str(output_path)}
+            
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        
+    except Exception as e:
+        logger.error(f"QC: cortical surface and measures plot generation failed - {e}")
+        return {}
 
