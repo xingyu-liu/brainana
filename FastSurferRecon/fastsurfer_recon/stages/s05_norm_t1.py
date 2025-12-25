@@ -75,6 +75,20 @@ class NormT1(PipelineStage):
             else:
                 logger.info("brainmask.mgz already exists")
         else:
+            # Create T1.mgz as symlink to nu.mgz (for downstream tools that need T1.mgz)
+            # T1.mgz should have skull (like nu.mgz), not just brain (like norm.mgz)
+            # If T1.mgz exists as a regular file (from previous run with get_t1=True),
+            # we need to remove it and create a symlink
+            if t1.exists() and not t1.is_symlink():
+                logger.info("Removing existing T1.mgz (will create symlink to nu.mgz)")
+                t1.unlink()
+            
+            if not t1.exists():
+                logger.info("Linking T1.mgz to nu.mgz (skipping normalization, keeping skull)")
+                t1.symlink_to("nu.mgz")
+            elif t1.is_symlink():
+                logger.info("T1.mgz already exists as symlink")
+            
             # Link brainmask to norm
             # If brainmask exists as a regular file (from previous run with get_t1=True),
             # we need to remove it and create a symlink
@@ -114,7 +128,14 @@ class NormT1(PipelineStage):
                 return False
             return True
         else:
-            # If get_t1 is False, brainmask should be a symlink to norm.mgz
+            # If get_t1 is False, T1.mgz should be a symlink to nu.mgz (with skull)
+            t1 = self.sd.mri("T1.mgz")
+            if not t1.exists():
+                return False
+            if not t1.is_symlink():
+                return False
+            
+            # brainmask should also be a symlink to norm.mgz
             # If it's a regular file, we need to recreate it as a symlink
             if not brainmask.is_symlink():
                 return False

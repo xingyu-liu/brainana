@@ -87,7 +87,7 @@ Issues = "https://github.com/yourusername/banana/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["macacaMRIprep*", "FastSurferCNN*", "FastSurferRecon*"]
+include = ["macacaMRIprep*", "FastSurferCNN*", "FastSurferRecon*", "NHPskullstripNN*"]
 
 [tool.setuptools.package-data]
 "macacaMRIprep" = [
@@ -102,4 +102,8 @@ include = ["macacaMRIprep*", "FastSurferCNN*", "FastSurferRecon*"]
 "FastSurferRecon" = [
     "config/*.yaml",
     "fastsurfer_recon/atlas/**/*",
+]
+"NHPskullstripNN" = [
+    "config_example/*.yaml",
+    "pretrained_model/*.pth",
 ]

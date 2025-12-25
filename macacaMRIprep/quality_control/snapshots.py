@@ -643,7 +643,7 @@ def create_surf_recon_tissue_seg_qc(
 def create_cortical_surf_and_measures_qc(
     fs_subject_dir: Union[str, Path],
     save_f: Union[str, Path],
-    atlas_name: str = "ARM2atlas",
+    atlas_name: str = "ARM2",
     modality: str = "anat",
     logger: Optional[logging.Logger] = None,
     **kwargs
@@ -657,7 +657,7 @@ def create_cortical_surf_and_measures_qc(
     
     Args:
         fs_subject_dir: Path to FreeSurfer subject directory (e.g., 'fastsurfer/sub-XXX')
-        atlas_name: Name of the atlas (default: "ARM2atlas")
+        atlas_name: Name of the atlas without "atlas" suffix (default: "ARM2", will create "ARM2atlas.mapped.annot")
         save_f: Full path for output file (e.g., 'figures/sub-01_desc-corticalSurfAndMeasures_T1w.png')
         modality: Imaging modality ("anat" or "func")
         logger: Logger instance
@@ -677,6 +677,10 @@ def create_cortical_surf_and_measures_qc(
     logger.info(f"QC: creating {modality} cortical surface and measures plot")
     
     try:
+        # Normalize atlas name: remove "atlas" suffix if present (for backward compatibility)
+        # Then append "atlas" to match FreeSurferRecon naming convention
+        normalized_atlas_name = atlas_name.rstrip("atlas") if atlas_name.endswith("atlas") else atlas_name
+        
         # Construct file paths from FreeSurfer directory structure
         surf_dir = fs_subject_dir / "surf"
         label_dir = fs_subject_dir / "label"
@@ -696,12 +700,12 @@ def create_cortical_surf_and_measures_qc(
         thickness_rh = surf_dir / "rh.thickness"
         
         # Annotation files (try mapped version first, then fallback)
-        atlas_annot_lh = label_dir / f"lh.aparc.{atlas_name}.mapped.annot"
-        atlas_annot_rh = label_dir / f"rh.aparc.{atlas_name}.mapped.annot"
+        atlas_annot_lh = label_dir / f"lh.aparc.{normalized_atlas_name}atlas.mapped.annot"
+        atlas_annot_rh = label_dir / f"rh.aparc.{normalized_atlas_name}atlas.mapped.annot"
         if not atlas_annot_lh.exists():
-            atlas_annot_lh = label_dir / f"lh.aparc.{atlas_name}.annot"
+            atlas_annot_lh = label_dir / f"lh.aparc.{normalized_atlas_name}atlas.annot"
         if not atlas_annot_rh.exists():
-            atlas_annot_rh = label_dir / f"rh.aparc.{atlas_name}.annot"
+            atlas_annot_rh = label_dir / f"rh.aparc.{normalized_atlas_name}atlas.annot"
         
         # Validate inputs
         required_files = [

@@ -31,7 +31,7 @@ processing:
   do_surf_reg: false          # Surface registration to fsaverage
   
   # Additional options
-  get_t1: true  # Create T1.mgz (for compatibility with downstream tools like fMRIPrep). Default matches original FastSurfer.
+  get_t1: false  # Create T1.mgz (for compatibility with downstream tools like fMRIPrep). If false, creates T1.mgz as symlink to nu.mgz (faster).
   atlas_3t: true  # Use 3T Talairach atlas instead of 1.5T
   
   # Bias correction parameters (N4)

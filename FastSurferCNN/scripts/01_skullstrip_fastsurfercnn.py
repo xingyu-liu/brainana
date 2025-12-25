@@ -17,10 +17,7 @@ from FastSurferCNN.inference.segmentation import run_segmentation
 # %%
 # # # anat 
 input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/anat"
-# # input_image = f"{input_dir}/site-arcaro_sub-baby10_ses-anat_T1w.nii.gz"
 input_image = f"{input_dir}/anat_marge_upright.nii.gz"
-# # # # input_image = f"{input_dir}/test_1month.nii.gz"
-# input_image = f"{input_dir}/test_freddie.nii.gz"
 
 # surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
 # input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'

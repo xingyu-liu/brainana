@@ -20,6 +20,8 @@ template:
 anat:
   reorient:
     enabled: true
+  conform:
+    enabled: true
   bias_correction:
     enabled: false
     algorithm: N4BiasFieldCorrection
@@ -32,17 +34,17 @@ anat:
     method: fastSurferCNN
     fastSurferCNN:
       gpu_device: auto
-      batch_size: 8
-      threads: 8
+      batch_size: 1
+      threads: 20
       use_mixed_model: false
       enable_crop_2round: true
-      plane_weight_coronal: 0.4
-      plane_weight_axial: 0.4
+      plane_weight_coronal: 0.3
+      plane_weight_axial: 0.5
       plane_weight_sagittal: 0.2
-      fix_V1_WM: true
+      fix_V1_WM: false
   surface_reconstruction:
-    enabled: true
-    threads: 16  # int: number of threads for surface reconstruction (>= 1)
+    enabled: false
+    threads: 20
 func:
   registration_pipeline: func2anat2template
   reorient:
@@ -68,29 +70,31 @@ func:
     c2: 10
     localedit: true
     ignore_first_volumes: 0
-  skullstripping:
+  conform:
     enabled: true
-    method: fastSurferCNN
-    fastSurferCNN:
-      gpu_device: auto
-      batch_size: 8
-      threads: 8
-      use_mixed_model: false
-      enable_crop_2round: false
-      plane_weight_coronal: 0
-      plane_weight_axial: 0.6
-      plane_weight_sagittal: 0.4
   bias_correction:
-    enabled: false
+    enabled: true
     algorithm: N4BiasFieldCorrection
     shrink_factor: 2
     bspline_fitting: "[ 200 ]"
     rescale_mean_to_100: true
     threads: 8
+  skullstripping:
+    enabled: true
+    method: fastSurferCNN
+    fastSurferCNN:
+      gpu_device: auto
+      batch_size: 1
+      threads: 1
+      use_mixed_model: false
+      enable_crop_2round: false
+      plane_weight_coronal: 0
+      plane_weight_axial: 0.6
+      plane_weight_sagittal: 0.4
 registration:
   enabled: true
   anat2template_xfm_type: affine
-  func2anat_xfm_type: affine
+  func2anat_xfm_type: rigid
   func2template_xfm_type: affine
   keep_original_func_resolution: true
   interpolation: LanczosWindowedSinc
@@ -98,7 +102,7 @@ registration:
   output_inverse_registered_image: false
   threads: 8
 orientation_mismatch_correction:
-  enabled: true
+  enabled: false
   real_A_is_actually_labeled_as: A
   real_P_is_actually_labeled_as: P
   real_S_is_actually_labeled_as: S
