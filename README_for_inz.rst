@@ -136,16 +136,36 @@ banana/
 - **NHPskullstripNN**: Used for brain extraction (binary mask generation) in functional data and conform step
 
 ---
-Test Dataset
+Docker Usage
 ------------
 
-Test dataset, config file, and preprocessed data are available at: 
-``macacaMRI/testing_dataset`` on Hugging Face.
+We provide a pre-configured Docker image containing all external dependencies (FSL, ANTs, AFNI, FreeSurfer).
+
+**Run Interactive Environment:**
+
+.. code-block:: bash
+
+    docker run -it --rm \
+        --gpus all \
+        --network host \
+        --name macaca_dev \
+        --user $(id -u):$(id -g) \
+        --env="DISPLAY=$DISPLAY" \
+        --env="QT_X11_NO_MITSHM=1" \
+        --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" \
+        --volume="$(pwd):/opt/banana" \
+        --volume="$HOME/.cache/uv:/home/neuro/.cache/uv" \
+        --volume="/home/yinzi/dataset/testing_dataset:/data" \
+        --volume="/nvmessd/yinzi/banana/license.txt:/opt/freesurfer/license.txt" \
+        --workdir="/opt/banana" \
+        macacamriprep
+
+For detailed Docker instructions, please refer to ``README_Docker.md``.
 
 ---
 TODO
 ----
 
-1. Dockerize: Create Docker container with all dependencies
+1. [Done] Dockerize: Create Docker container with all dependencies
 2. Resource management: Memory, CPU, disk, network monitoring and limits
 3. Workflow optimization: Enhanced parallel processing, caching, resumption (refer to deepprep style using workflow)

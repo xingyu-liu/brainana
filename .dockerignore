@@ -1,0 +1,14 @@
+.venv
+uv.lock
+.git
+.github
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.db
+.ipynb_checkpoints
+.pytest_cache
+.vscode
+.idea
+
