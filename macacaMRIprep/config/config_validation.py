@@ -38,7 +38,7 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
     validate_motion_correction_config(func_config.get("motion_correction", {}))
     validate_despike_config(func_config.get("despike", {}))
     validate_skullstripping_config(func_config.get("skullstripping", {}))
-    validate_skullstripping_config(anat_config.get("skullstripping", {}))
+    validate_skullstripping_config(anat_config.get("skullstripping_segmentation", {}))
     validate_surface_reconstruction_config(anat_config.get("surface_reconstruction", {}))
     validate_bias_correction_config(func_config.get("bias_correction", {}))
     validate_bias_correction_config(anat_config.get("bias_correction", {}))
@@ -218,15 +218,6 @@ def validate_skullstripping_config(config: Dict[str, Any]) -> None:
             raise ValueError(
                 f"Configuration error in skullstripping.fastSurferCNN: "
                 f"batch_size must be a positive integer, got: {batch_size}. "
-                f"Please fix this in your configuration file."
-            )
-        
-        # Validate threads
-        threads = fscnn_cfg.get("threads", 1)
-        if not isinstance(threads, int) or threads < 1:
-            raise ValueError(
-                f"Configuration error in skullstripping.fastSurferCNN: "
-                f"threads must be a positive integer, got: {threads}. "
                 f"Please fix this in your configuration file."
             )
         
@@ -416,22 +407,6 @@ def validate_surface_reconstruction_config(config: Dict[str, Any]) -> None:
                 f"Please fix this in your configuration file."
             )
     
-    # Validate threads (optional, can be null for auto-detection)
-    if "threads" in config and config["threads"] is not None:
-        threads = config["threads"]
-        if not isinstance(threads, int):
-            raise ValueError(
-                f"Configuration error in anat.surface_reconstruction: "
-                f"threads must be an integer or null, got: {type(threads).__name__}. "
-                f"Please fix this in your configuration file."
-            )
-        if threads < 1:
-            raise ValueError(
-                f"Configuration error in anat.surface_reconstruction: "
-                f"threads must be >= 1, got: {threads}. "
-                f"Please fix this in your configuration file."
-            )
-
 
 def validate_paths(input_file: Union[str, Path], output_dir: Union[str, Path], 
                   template_file: Optional[Union[str, Path]] = None) -> None:

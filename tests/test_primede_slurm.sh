@@ -1,4 +1,5 @@
 #!/bin/bash
+# [OUTDATED] This script uses the old CLI which no longer exists. Use Nextflow instead.
 #SBATCH --job-name=macacaMRIprep
 #SBATCH --output=/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/macacaMRIprep_%j.out
 #SBATCH --error=/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/macacaMRIprep_%j.err

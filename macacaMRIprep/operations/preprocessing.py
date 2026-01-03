@@ -1076,9 +1076,11 @@ def apply_segmentation(
         raise ValueError(f"Invalid modality: {modal}. Must be 'func' or 'anat'")
     
     # Get configuration
-    skull_cfg = config.get(modal, {}).get('skullstripping')
+    # For anat, use skullstripping_segmentation; for func, use skullstripping
+    config_key = 'skullstripping_segmentation' if modal == 'anat' else 'skullstripping'
+    skull_cfg = config.get(modal, {}).get(config_key)
     if not skull_cfg:
-        raise ValueError("skullstripping configuration not found")
+        raise ValueError(f"{config_key} configuration not found")
     
     # Define output paths at the beginning
     brain_mask_path = work_dir / 'brain_mask.nii.gz'
@@ -1417,12 +1419,15 @@ def bias_correction(
     output_path = work_dir / output_name
     bias_field_path = work_dir / (output_name.split('.nii')[0] + '_bias_field.nii.gz')
 
-    # Get thread count from config, default to 8 to avoid oversubscription when running multiple processes
-    num_threads = bias_cfg.get('threads', 8)
+    # Get thread count from environment variable (set by Nextflow)
+    import os
+    num_threads = int(os.environ.get('OMP_NUM_THREADS', 8))
     
-    # Set up ITK thread environment variables
+    # Set up ITK thread environment variables for subprocess
     from ..utils.system import set_numerical_threads
     env = set_numerical_threads(num_threads, include_itk=True, return_dict=True)
+    # Merge with current environment to preserve other variables
+    env = {**os.environ, **env}
 
     # Build command
     if bias_cfg.get('algorithm') == 'N4BiasFieldCorrection':

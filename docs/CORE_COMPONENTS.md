@@ -1,85 +1,76 @@
-# macacaMRIprep Core Components
+# banana Core Components
 
 ## Overview
 
-This document describes the core architectural components of macacaMRIprep and their relationships, focusing on the main processing pipeline components.
+This document describes the core architectural components of banana and their relationships, focusing on the Nextflow-based processing pipeline.
 
 ## Core Components
 
-### 1. BIDS Dataset Processor
+### 1. Nextflow Pipeline
 
-**Location**: `macacaMRIprep/workflow/bids_processor.py`
+**Location**: `main.nf`, `modules/`
 
-**Purpose**: The central orchestrator that processes entire BIDS datasets with automatic file discovery and dependency management.
-
-**Key Responsibilities**:
-- Discovers and validates BIDS dataset structure
-- Handles cross-session dependencies (anatomical data in one session, functional in another)
-- Creates processing jobs for anatomical and functional data
-- Manages multi-run T1w synthesis (automatic coregistration and averaging)
-- Maintains BIDS derivatives structure for outputs
-
-**Components**:
-- `BIDSDatasetProcessor` - Main processor class
-- `BaseJob` - Base class for all processing jobs
-- `AnatomicalJob` - Handles anatomical MRI processing
-- `FunctionalJob` - Handles functional MRI processing
-
-### 2. Pipeline Management
-
-**Location**: `macacaMRIprep/operations/pipeline.py`
-
-**Purpose**: Manages the execution flow and state of processing pipelines.
+**Purpose**: The central orchestrator that processes entire BIDS datasets with maximum parallelization through per-step processing.
 
 **Key Responsibilities**:
-- Executes processing operations in the correct order
-- Manages pipeline state and execution flow
-- Handles error recovery and cleanup
-- Coordinates between different processing stages
+- Orchestrates preprocessing workflow with Nextflow
+- Manages parallel execution of processing steps
+- Handles automatic resumption from failures
+- Coordinates resource allocation (CPU, GPU, memory)
 
 **Components**:
-- `Pipeline` - Main pipeline execution engine
-- `PipelineState` - Manages pipeline state and execution flow
+- `main.nf` - Main Nextflow workflow
+- `modules/anatomical.nf` - Anatomical processing modules
+- `modules/functional.nf` - Functional processing modules
+- `modules/qc.nf` - Quality control modules
 
-### 3. Workflow Processors
+### 2. Step Functions
 
-**Location**: `macacaMRIprep/workflow/`
+**Location**: `macacaMRIprep/steps/`
 
-**Purpose**: Implements the specific processing workflows for different data types.
-
-**Key Responsibilities**:
-- Defines the processing steps for each data type
-- Coordinates with operations modules to execute processing
-- Manages workflow-specific configurations and parameters
-
-**Components**:
-- `BasePreprocessingWorkflow` - Base workflow class
-- `FunctionalProcessor` - Processes functional MRI data
-- `AnatomicalProcessor` - Processes anatomical MRI data
-
-#### Functional Processor
-**Processing Steps**:
-1. Slice timing correction
-2. Motion correction
-3. Despiking
-4. Bias field correction
-5. Skullstripping
-6. Registration to target (anatomical or template)
-
-#### Anatomical Processor
-**Processing Steps**:
-1. Bias field correction
-2. Skullstripping
-3. Registration to template space
-
-### 4. Processing Operations
-
-**Location**: `macacaMRIprep/operations/`
-
-**Purpose**: Provides the actual implementation of processing algorithms and operations.
+**Purpose**: Individual processing step functions used by Nextflow modules.
 
 **Key Responsibilities**:
 - Implements individual processing steps
+- Provides clean input/output interfaces
+- Handles step-specific validation and error checking
+
+**Components**:
+- `bids_discovery.py` - BIDS dataset discovery and job creation
+- `anatomical.py` - Anatomical processing steps (reorient, conform, bias correction, skull stripping, registration)
+- `functional.py` - Functional processing steps (slice timing, motion correction, despike, bias correction, skull stripping, registration)
+- `qc.py` - Quality control step functions
+- `types.py` - Type definitions for step inputs/outputs
+
+#### Anatomical Steps
+**Processing Steps**:
+1. T1w synthesis (if multiple runs)
+2. Reorient to template/RAS
+3. Conform to template space
+4. Bias field correction
+5. Skullstripping (GPU)
+6. Registration to template
+
+#### Functional Steps
+**Processing Steps**:
+1. Reorient + generate temporal mean
+2. Slice timing correction
+3. Motion correction
+4. Despiking
+5. Bias field correction (on temporal mean)
+6. Conform temporal mean to target
+7. Skullstripping on temporal mean (GPU)
+8. Register temporal mean to target
+9. Apply transforms to full 4D BOLD
+
+### 3. Processing Operations
+
+**Location**: `macacaMRIprep/operations/`
+
+**Purpose**: Provides the actual implementation of processing algorithms and operations used by step functions.
+
+**Key Responsibilities**:
+- Implements core processing algorithms
 - Interfaces with external tools (AFNI, ANTs, FSL)
 - Provides validation and error checking
 - Generates quality control metrics
@@ -87,7 +78,7 @@ This document describes the core architectural components of macacaMRIprep and t
 **Core Operations**:
 - **Preprocessing**: `preprocessing.py` - slice timing, motion correction, despiking, bias correction
 - **Registration**: `registration.py` - ANTs-based registration and transform application
-- **Skullstripping**: `skullstripping/` - UNet-based brain extraction
+- **Synthesis**: `synthesis_multiple_anat.py` - T1w synthesis for multiple runs
 - **Validation**: `validation.py` - input/output validation and working directory management
 
 ## Component Relationships
@@ -95,35 +86,46 @@ This document describes the core architectural components of macacaMRIprep and t
 ### Data Flow Architecture
 
 ```
-BIDS Dataset Processor
+Python Discovery Script (discover_bids_for_nextflow.py)
          ↓
-    Creates Jobs
+    Creates Processing Jobs (JSON files)
          ↓
-    Workflow Processors
+Nextflow Pipeline (main.nf)
          ↓
-    Pipeline Management
+    Parallel Step Execution
+         ├─→ Anatomical Modules
+         │      ↓
+         │   Step Functions
+         │      ↓
+         │   Processing Operations
+         │
+         └─→ Functional Modules
+                ↓
+             Step Functions
+                ↓
+             Processing Operations
          ↓
-    Processing Operations
+    Quality Control Modules
          ↓
-    Quality Control
+    BIDS Derivatives Output
 ```
 
 ### Detailed Relationships
 
-#### 1. BIDS Processor → Workflow Processors
-- **Relationship**: Creates and manages
-- **Flow**: BIDS processor discovers data and creates appropriate workflow instances
-- **Dependency**: BIDS processor depends on workflow processors for job execution
+#### 1. Python Discovery Script → Nextflow Pipeline
+- **Relationship**: Prepares
+- **Flow**: Python script runs before Nextflow to scan dataset and create job JSON files
+- **Dependency**: Nextflow depends on pre-generated job JSON files from discovery script
 
-#### 2. Workflow Processors → Pipeline Management
+#### 2. Nextflow Modules → Step Functions
+- **Relationship**: Calls
+- **Flow**: Nextflow modules call Python step functions for each processing step
+- **Dependency**: Nextflow modules depend on step functions for processing logic
+
+#### 3. Step Functions → Processing Operations
 - **Relationship**: Uses
-- **Flow**: Workflow processors use pipeline management to execute their processing steps
-- **Dependency**: Workflow processors depend on pipeline management for execution control
-
-#### 3. Pipeline Management → Processing Operations
-- **Relationship**: Executes
-- **Flow**: Pipeline management calls individual processing operations in sequence
-- **Dependency**: Pipeline management depends on processing operations for actual computation
+- **Flow**: Step functions call processing operations to perform actual computation
+- **Dependency**: Step functions depend on processing operations for algorithm implementation
 
 #### 4. Processing Operations → Quality Control
 - **Relationship**: Generates
@@ -132,20 +134,21 @@ BIDS Dataset Processor
 
 ### Execution Flow
 
-1. **Initialization**: BIDS processor scans dataset and creates processing jobs
-2. **Job Creation**: For each dataset, appropriate workflow processor is instantiated
-3. **Workflow Execution**: Workflow processor defines processing steps and hands off to pipeline
-4. **Pipeline Execution**: Pipeline management executes operations in sequence
-5. **Operation Processing**: Individual operations perform their specific tasks
-6. **Quality Control**: QC metrics are generated throughout the process
+1. **BIDS Discovery**: Python discovery script runs before Nextflow to scan dataset and create job JSON files
+2. **Initialization**: Nextflow pipeline starts and loads configuration
+3. **Parallel Execution**: Nextflow executes all steps in parallel across subjects/sessions/runs
+4. **Step Processing**: Each step function performs its specific task
+5. **Operation Execution**: Processing operations interface with external tools (AFNI, ANTs, FSL)
+6. **Quality Control**: QC modules generate metrics and snapshots
 7. **Output**: Processed data is saved in BIDS derivatives format
 
 ### Dependency Management
 
-- **Anatomical First**: Anatomical data is processed before functional data
-- **Cross-session Handling**: BIDS processor manages dependencies across sessions
-- **Template Registration**: Anatomical data is registered to template before functional registration
-- **Error Recovery**: Pipeline management handles failures and cleanup
+- **Nextflow Dependencies**: Nextflow automatically manages step dependencies
+- **Anatomical First**: Anatomical steps complete before functional steps that depend on them
+- **Cross-session Handling**: BIDS discovery identifies cross-session dependencies
+- **Automatic Resumption**: Nextflow can resume from any failed step
+- **Resource Management**: Nextflow manages CPU, GPU, and memory allocation per step
 
 ## Key Design Principles
 
@@ -166,4 +169,4 @@ The core components interface with external tools through the processing operati
 - **PyTorch**: UNet models for skullstripping
 - **Nibabel**: Neuroimaging file I/O
 
-This architecture ensures that macacaMRIprep can process complex BIDS datasets with proper dependency management while maintaining robust error handling and quality control throughout the pipeline. 
+This architecture ensures that banana can process complex BIDS datasets with maximum parallelization through Nextflow while maintaining robust error handling and quality control throughout the pipeline. 

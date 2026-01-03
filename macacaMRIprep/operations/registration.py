@@ -202,12 +202,14 @@ def ants_register(
         'inverse_transform': None,
     }
 
-    # Get thread count from config, default to 8 to avoid oversubscription when running multiple processes
-    num_threads = reg_config.get('threads', 8)
+    # Get thread count from environment variable (set by Nextflow)
+    num_threads = int(os.environ.get('OMP_NUM_THREADS', 8))
     
-    # Set up ITK thread environment variables
+    # Set up ITK thread environment variables for subprocess
     from ..utils.system import set_numerical_threads
     env = set_numerical_threads(num_threads, include_itk=True, return_dict=True)
+    # Merge with current environment to preserve other variables
+    env = {**os.environ, **env}
 
     # Build ANTs registration command
     command_ants = compose_ants_registration_cmd(
@@ -333,18 +335,14 @@ def ants_apply_transforms(
     
     logger.debug(f"System: apply transforms command - {' '.join(cmd)}")
     
-    # Get thread count from config if available, default to 8
-    num_threads = 8
-    try:
-        config = get_config().to_dict()
-        reg_config = config.get("registration", {})
-        num_threads = reg_config.get('threads', 8)
-    except Exception:
-        pass  # Use default if config access fails
+    # Get thread count from environment variable (set by Nextflow)
+    num_threads = int(os.environ.get('OMP_NUM_THREADS', 8))
     
-    # Set up ITK thread environment variables
+    # Set up ITK thread environment variables for subprocess
     from ..utils.system import set_numerical_threads
     env = set_numerical_threads(num_threads, include_itk=True, return_dict=True)
+    # Merge with current environment to preserve other variables
+    env = {**os.environ, **env}
     
     logger.debug(f"System: using {num_threads} threads for ITK operations (capped at 32)")
     

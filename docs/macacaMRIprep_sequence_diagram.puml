@@ -1,221 +1,223 @@
-@startuml macacaMRIprep_Workflow_Sequence
+@startuml banana_Nextflow_Workflow_Sequence
 
 !theme plain
 skinparam sequenceMessageAlign center
 skinparam responseMessageBelowArrow true
 
 actor User
-participant "preproc.main" as CLI
-participant "BIDSDatasetProcessor" as BIDS
-participant "Config" as Config
-participant "check_environment" as Env
-participant "check_dependencies" as Dep
-participant "BasePreprocessingWorkflow" as Base
-participant "Pipeline" as Pipeline
-participant "AnatomicalProcessor" as Anat
-participant "FunctionalProcessor" as Func
-participant "preprocessing" as Preproc
-participant "skullstripping" as Skull
-participant "registration" as Reg
-participant "quality_control" as QC
+participant "Discovery Script" as Discovery
+participant "Nextflow Pipeline" as Nextflow
+participant "Step Functions" as Steps
+participant "Processing Operations" as Ops
+participant "Quality Control" as QC
 
-User -> CLI: macacaMRIprep-preproc dataset output --output-space template
-activate CLI
+User -> Discovery: ./run_nextflow.sh run main.nf --bids_dir /data --output_dir /output
+activate Discovery
 
-CLI -> CLI: parse_args
-CLI -> Config: load_and_merge_config
-activate Config
-Config --> CLI: config_dict
-deactivate Config
+Discovery -> Discovery: Run BIDS discovery
+Discovery -> Steps: discover_bids_dataset
+activate Steps
+Steps --> Discovery: anatomical_jobs, functional_jobs
+deactivate Steps
+Discovery -> Discovery: Save JSON files (anatomical_jobs.json, functional_jobs.json)
+Discovery --> Discovery: Discovery complete
+deactivate Discovery
 
-CLI -> CLI: validate_arguments
-CLI -> CLI: print_configuration
+User -> Nextflow: Nextflow starts (after discovery)
+activate Nextflow
 
-CLI -> Dep: check_dependencies
-activate Dep
-Dep --> CLI: dependencies_ok
-deactivate Dep
+Nextflow -> Nextflow: Load configuration
+Nextflow -> Nextflow: Read job JSON files
 
-CLI -> Env: check_environment
-activate Env
-Env --> CLI: environment_ok
-deactivate Env
+note over Nextflow: **PHASE 1: ANATOMICAL PROCESSING**\nAll anatomical steps run in parallel
 
-CLI -> BIDS: __init__
-activate BIDS
-
-BIDS -> BIDS: _setup_dataset_logging
-BIDS -> BIDS: _setup_bids_derivatives
-BIDS -> BIDS: _load_cache
-
-BIDS -> BIDS: discover_processing_jobs
-activate BIDS
-BIDS -> BIDS: _create_anatomical_jobs
-BIDS -> BIDS: _create_functional_jobs
-BIDS --> BIDS: jobs_list
-deactivate BIDS
-
-BIDS -> BIDS: run_dataset
-activate BIDS
-
-note over BIDS: **PHASE 0: Cache and Completion Check**
-
-BIDS -> BIDS: check_job_completion for all jobs
-activate BIDS
-BIDS --> BIDS: completed_jobs, pending_jobs
-deactivate BIDS
-
-note over BIDS: **PHASE 1: ANATOMICAL PROCESSING**\nAll anatomical jobs processed first
-
-loop For each anatomical job
-    BIDS -> Anat: _process_anatomical_job
-    activate Anat
+par For each anatomical job (parallel)
+    Nextflow -> Nextflow: T1W_SYNTHESIS (if multiple runs)
+    Nextflow -> Nextflow: ANAT_REORIENT
+    Nextflow -> Steps: anat_reorient
+    activate Steps
+    Steps -> Ops: reorient_image
+    activate Ops
+    Ops --> Steps: reoriented_file
+    deactivate Ops
+    Steps --> Nextflow: anat_reoriented
+    deactivate Steps
     
-    Anat -> Anat: __init__
-    Anat -> Base: __init__
-    activate Base
-    Base -> Config: validate_config
-    Base -> Pipeline: __init__
-    activate Pipeline
-    Pipeline --> Base: pipeline_instance
-    deactivate Pipeline
-    Base --> Anat: base_workflow
-    deactivate Base
+    Nextflow -> Nextflow: ANAT_CONFORM
+    Nextflow -> Steps: anat_conform
+    activate Steps
+    Steps -> Ops: conform_image
+    activate Ops
+    Ops --> Steps: conformed_file
+    deactivate Ops
+    Steps --> Nextflow: anat_conformed
+    deactivate Steps
     
-    Anat -> Anat: run
-    activate Anat
+    Nextflow -> Nextflow: ANAT_BIAS_CORRECTION
+    Nextflow -> Steps: anat_bias_correction
+    activate Steps
+    Steps -> Ops: bias_correction
+    activate Ops
+    Ops --> Steps: bias_corrected_file
+    deactivate Ops
+    Steps --> Nextflow: anat_bias_corrected
+    deactivate Steps
     
-    Anat -> Preproc: bias_correction
-    activate Preproc
-    Preproc --> Anat: bias_corrected_file
-    deactivate Preproc
-    
-    Anat [#0066CC]-> QC: create_bias_correction_qc
+    Nextflow [#0066CC]-> QC: create_bias_correction_qc
     activate QC
-    QC -[#0066CC]-> Anat: anat_bias_qc_snapshot
+    QC -[#0066CC]-> Nextflow: anat_bias_qc_snapshot
     deactivate QC
     
-    Anat -> Skull: skullstripping
-    activate Skull
-    Skull -> Skull: _load_model
-    Skull -> Skull: predict_brain_mask
-    Skull --> Anat: brain_mask
-    deactivate Skull
+    Nextflow -> Nextflow: ANAT_SKULLSTRIPPING (GPU)
+    Nextflow -> Steps: anat_skullstripping
+    activate Steps
+    Steps -> Ops: skullstripping
+    activate Ops
+    Ops --> Steps: brain_mask
+    deactivate Ops
+    Steps --> Nextflow: anat_skullstripped
+    deactivate Steps
     
-    Anat [#0066CC]-> QC: create_skullstripping_qc
+    Nextflow [#0066CC]-> QC: create_skullstripping_qc
     activate QC
-    QC -[#0066CC]-> Anat: anat_skull_qc_snapshot
+    QC -[#0066CC]-> Nextflow: anat_skull_qc_snapshot
     deactivate QC
     
-    Anat -> Reg: ants_register
-    activate Reg
-    Reg --> Anat: registered_file
-    deactivate Reg
+    Nextflow -> Nextflow: ANAT_REGISTRATION
+    Nextflow -> Steps: anat_registration
+    activate Steps
+    Steps -> Ops: ants_register
+    activate Ops
+    Ops --> Steps: registered_file
+    deactivate Ops
+    Steps --> Nextflow: anat_registered
+    deactivate Steps
     
-    Anat [#0066CC]-> QC: create_registration_qc
+    Nextflow [#0066CC]-> QC: create_registration_qc
     activate QC
-    QC -[#0066CC]-> Anat: anat_reg_qc_snapshot
+    QC -[#0066CC]-> Nextflow: anat_reg_qc_snapshot
     deactivate QC
-    
-    Anat --> BIDS: anat_result
-    deactivate Anat
 end
 
-BIDS -> BIDS: _save_cache after anatomical processing
+note over Nextflow: **PHASE 2: FUNCTIONAL PROCESSING**\nAll functional steps run in parallel (after anatomical dependencies)
 
-note over BIDS: **PHASE 2: FUNCTIONAL PROCESSING**\nAll functional jobs processed after anatomical dependencies complete
-
-loop For each functional job (dependency check passed)
-    BIDS -> Func: _process_functional_job
-    activate Func
+par For each functional job (parallel)
+    Nextflow -> Nextflow: FUNC_REORIENT
+    Nextflow -> Steps: func_reorient
+    activate Steps
+    Steps -> Ops: reorient_and_tmean
+    activate Ops
+    Ops --> Steps: reoriented_file, tmean_file
+    deactivate Ops
+    Steps --> Nextflow: func_reoriented
+    deactivate Steps
     
-    Func -> Func: __init__
-    Func -> Base: __init__
-    activate Base
-    Base --> Func: base_workflow
-    deactivate Base
+    Nextflow -> Nextflow: FUNC_SLICE_TIMING
+    Nextflow -> Steps: func_slice_timing_correction
+    activate Steps
+    Steps -> Ops: slice_timing_correction
+    activate Ops
+    Ops --> Steps: slice_timed_file
+    deactivate Ops
+    Steps --> Nextflow: func_slice_timed
+    deactivate Steps
     
-    Func -> Func: run
-    activate Func
+    Nextflow -> Nextflow: FUNC_MOTION_CORRECTION
+    Nextflow -> Steps: func_motion_correction
+    activate Steps
+    Steps -> Ops: motion_correction
+    activate Ops
+    Ops --> Steps: motion_corrected_file
+    deactivate Ops
+    Steps --> Nextflow: func_motion_corrected
+    deactivate Steps
     
-    Func -> Preproc: precheck
-    activate Preproc
-    Preproc --> Func: func_tmean
-    deactivate Preproc
-    
-    Func -> Preproc: slice_timing_correction
-    activate Preproc
-    Preproc --> Func: slice_timed_file
-    deactivate Preproc
-    
-    Func -> Preproc: motion_correction
-    activate Preproc
-    Preproc --> Func: motion_corrected_file
-    deactivate Preproc
-    
-    Func [#0066CC]-> QC: create_motion_correction_qc
+    Nextflow [#0066CC]-> QC: create_motion_correction_qc
     activate QC
-    QC -[#0066CC]-> Func: motion_qc_snapshot
+    QC -[#0066CC]-> Nextflow: motion_qc_snapshot
     deactivate QC
     
-    Func -> Preproc: despike
-    activate Preproc
-    Preproc --> Func: despiked_file
-    deactivate Preproc
+    Nextflow -> Nextflow: FUNC_DESPIKE
+    Nextflow -> Steps: func_despike
+    activate Steps
+    Steps -> Ops: despike
+    activate Ops
+    Ops --> Steps: despiked_file
+    deactivate Ops
+    Steps --> Nextflow: func_despiked
+    deactivate Steps
     
-    Func -> Preproc: bias_correction
-    activate Preproc
-    Preproc --> Func: bias_corrected_file
-    deactivate Preproc
+    Nextflow -> Nextflow: FUNC_BIAS_CORRECTION (on tmean)
+    Nextflow -> Steps: func_bias_correction
+    activate Steps
+    Steps -> Ops: bias_correction
+    activate Ops
+    Ops --> Steps: bias_corrected_tmean
+    deactivate Ops
+    Steps --> Nextflow: func_bias_corrected
+    deactivate Steps
     
-    Func -> Skull: skullstripping
-    activate Skull
-    Skull --> Func: func_brain_mask
-    deactivate Skull
+    Nextflow -> Nextflow: FUNC_CONFORM (tmean)
+    Nextflow -> Steps: func_conform
+    activate Steps
+    Steps -> Ops: conform_image
+    activate Ops
+    Ops --> Steps: conformed_tmean
+    deactivate Ops
+    Steps --> Nextflow: func_conformed
+    deactivate Steps
     
-    Func [#0066CC]-> QC: create_skullstripping_qc
+    Nextflow -> Nextflow: FUNC_SKULLSTRIPPING (on tmean, GPU)
+    Nextflow -> Steps: func_skullstripping
+    activate Steps
+    Steps -> Ops: skullstripping
+    activate Ops
+    Ops --> Steps: func_brain_mask
+    deactivate Ops
+    Steps --> Nextflow: func_skullstripped
+    deactivate Steps
+    
+    Nextflow [#0066CC]-> QC: create_skullstripping_qc
     activate QC
-    QC -[#0066CC]-> Func: func_skull_qc_snapshot
+    QC -[#0066CC]-> Nextflow: func_skull_qc_snapshot
     deactivate QC
     
-    Func -> Reg: ants_register
-    activate Reg
-    Reg --> Func: registered_file
-    deactivate Reg
+    Nextflow -> Nextflow: FUNC_REGISTRATION (tmean to target)
+    Nextflow -> Steps: func_registration
+    activate Steps
+    Steps -> Ops: ants_register
+    activate Ops
+    Ops --> Steps: registered_tmean
+    deactivate Ops
+    Steps --> Nextflow: func_registered
+    deactivate Steps
     
-    Func -> Reg: ants_apply_transforms
-    activate Reg
-    Reg --> Func: final_func_file
-    deactivate Reg
+    Nextflow -> Nextflow: FUNC_APPLY_TRANSFORMS (to full 4D BOLD)
+    Nextflow -> Steps: func_apply_transforms
+    activate Steps
+    Steps -> Ops: ants_apply_transforms
+    activate Ops
+    Ops --> Steps: final_func_file
+    deactivate Ops
+    Steps --> Nextflow: func_final
+    deactivate Steps
     
-    Func [#0066CC]-> QC: create_registration_qc
+    Nextflow [#0066CC]-> QC: create_registration_qc
     activate QC
-    QC -[#0066CC]-> Func: func_reg_qc_snapshot
+    QC -[#0066CC]-> Nextflow: func_reg_qc_snapshot
     deactivate QC
-    
-    Func --> BIDS: func_result
-    deactivate Func
 end
 
-BIDS -> BIDS: _save_cache after functional processing
+note over Nextflow: **PHASE 3: QC REPORT GENERATION**
 
-note over BIDS: **PHASE 3: QC REPORT GENERATION**
-
-BIDS [#0066CC]-> BIDS: _generate_subject_reports
-activate BIDS
-BIDS [#0066CC]-> QC: generate_qc_report
+Nextflow [#0066CC]-> Nextflow: QC_ANATOMICAL
+Nextflow [#0066CC]-> Nextflow: QC_FUNCTIONAL
+Nextflow [#0066CC]-> QC: generate_qc_report
 activate QC
-QC -[#0066CC]-> BIDS: qc_report
+QC -[#0066CC]-> Nextflow: qc_report
 deactivate QC
-deactivate BIDS
 
-BIDS -> BIDS: _save_cache final save
-BIDS -> BIDS: clear_cache if successful
+Nextflow --> User: Processing complete
+deactivate Nextflow
 
-BIDS --> CLI: dataset_result
-deactivate BIDS
-
-CLI --> User: Processing complete
-deactivate CLI
-
-@enduml 
+@enduml

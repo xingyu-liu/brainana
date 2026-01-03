@@ -608,7 +608,7 @@ def check_environment(
     # ---- GPU check for skullstripping ----
     if config is not None:
         # Check if either anat or func skullstripping is enabled and using fastSurferCNN or macacaMRINN
-        anat_ss = config.get('anat', {}).get('skullstripping', {})
+        anat_ss = config.get('anat', {}).get('skullstripping_segmentation', {})
         func_ss = config.get('func', {}).get('skullstripping', {})
         anat_method = anat_ss.get('method', '').lower() if anat_ss.get('enabled', False) else None
         func_method = func_ss.get('method', '').lower() if func_ss.get('enabled', False) else None

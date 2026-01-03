@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
-CLI tool to launch the macacaMRIprep configuration generator with dataset preview.
+CLI tool to launch the macacaMRIprep configuration generator.
 
 This script:
-1. Takes a dataset_dir argument
-2. Finds the first scan in the BIDS dataset
-3. Generates a preview image
-4. Launches the HTML config generator with the preview
+1. Optionally takes a dataset_dir argument for preview image
+2. If provided, finds the first scan in the BIDS dataset and generates a preview
+3. Launches the HTML config generator (with preview if dataset_dir provided)
 """
 
 import argparse
@@ -34,6 +33,12 @@ try:
     from macacaMRIprep.quality_control.mri_plotting import create_overlay_grid_3xN
 except ImportError as e:
     print(f"Error importing plotting utilities: {e}")
+    sys.exit(1)
+
+try:
+    from macacaMRIprep.config.config_io import get_default_config
+except ImportError as e:
+    print(f"Error importing config utilities: {e}")
     sys.exit(1)
 
 
@@ -160,12 +165,14 @@ def create_server(html_content: str, port: int = 8000):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Launch macacaMRIprep configuration generator with dataset preview'
+        description='Launch macacaMRIprep configuration generator'
     )
     parser.add_argument(
         'dataset_dir',
         type=str,
-        help='Path to BIDS dataset directory'
+        nargs='?',
+        default=None,
+        help='Optional: Path to BIDS dataset directory for preview image'
     )
     parser.add_argument(
         '--port',
@@ -181,23 +188,26 @@ def main():
     
     args = parser.parse_args()
     
-    dataset_dir = Path(args.dataset_dir).resolve()
+    preview_base64 = None
     
-    # Find first scan
-    print(f"Searching for first scan in: {dataset_dir}")
-    first_scan = find_first_scan(dataset_dir)
-    
-    if first_scan is None:
-        print("Warning: No NIfTI files found in dataset. Preview image will not be available.")
-        preview_base64 = None
-    else:
-        print(f"Found first scan: {first_scan}")
-        print("Generating preview image...")
-        preview_base64 = generate_preview_image(first_scan, num_cols=5)
-        if preview_base64:
-            print("Preview image generated successfully")
+    # Generate preview if dataset_dir is provided
+    if args.dataset_dir:
+        dataset_dir = Path(args.dataset_dir).resolve()
+        
+        # Find first scan
+        print(f"Searching for first scan in: {dataset_dir}")
+        first_scan = find_first_scan(dataset_dir)
+        
+        if first_scan is None:
+            print("Warning: No NIfTI files found in dataset. Preview image will not be available.")
         else:
-            print("Warning: Could not generate preview image")
+            print(f"Found first scan: {first_scan}")
+            print("Generating preview image...")
+            preview_base64 = generate_preview_image(first_scan, num_cols=5)
+            if preview_base64:
+                print("Preview image generated successfully")
+            else:
+                print("Warning: Could not generate preview image")
     
     # Load the HTML template
     config_dir = Path(__file__).parent
@@ -210,25 +220,68 @@ def main():
     with open(html_path, 'r', encoding='utf-8') as f:
         html_content = f.read()
     
-    # Inject dataset_dir and preview image into HTML
+    # Load defaults from defaults.yaml and inject into HTML
+    try:
+        defaults = get_default_config()
+        import json
+        
+        # Convert Python dict to JSON string (JSON is valid JavaScript)
+        defaults_json = json.dumps(defaults, indent=12)  # 12 spaces to match existing indentation
+        
+        # Replace the hardcoded defaults object in the JavaScript
+        # Find the line with "const defaults = {" and replace until the closing "};"
+        lines = html_content.split('\n')
+        new_lines = []
+        in_defaults = False
+        found_defaults = False
+        
+        for line in lines:
+            if 'const defaults = {' in line and not found_defaults:
+                # Found the start - replace with new defaults
+                # Preserve the indentation from the original line
+                indent = len(line) - len(line.lstrip())
+                # JSON is already properly formatted, just prepend base indent to each line
+                json_lines = defaults_json.split('\n')
+                indented_json = '\n'.join(' ' * indent + json_line for json_line in json_lines)
+                new_lines.append(' ' * indent + 'const defaults = ' + indented_json + ';')
+                in_defaults = True
+                found_defaults = True
+                continue
+            elif in_defaults:
+                # Skip lines until we find the closing "};"
+                if line.strip() == '};':
+                    in_defaults = False
+                # Skip all lines within the defaults block
+                continue
+            else:
+                new_lines.append(line)
+        
+        html_content = '\n'.join(new_lines)
+        
+        if not found_defaults:
+            print("Warning: Could not find 'const defaults = {' in HTML. Defaults not injected.")
+    except Exception as e:
+        print(f"Warning: Could not load defaults from defaults.yaml: {e}")
+        print("HTML will use hardcoded defaults.")
+    
     # Add preview image if available
     if preview_base64:
         preview_html = f'''
         <div id="preview-section" style="margin: 20px 0; padding: 15px; border: 1px solid #ddd; background: #f9f9f9;">
             <h3>Dataset Preview (First Scan)</h3>
-            <p>Preview of the first scan found in the dataset to help determine orientation settings:</p>
+            <p>Preview of the first scan found in the dataset:</p>
             <img src="data:image/png;base64,{preview_base64}" alt="Dataset Preview" style="max-width: 100%; height: auto; border: 1px solid #ccc;">
         </div>
         '''
-        # Insert at the placeholder or before orientation_mismatch_correction section
+        # Insert at the placeholder or before the generate button
         if '<!-- PREVIEW_PLACEHOLDER -->' in html_content:
             html_content = html_content.replace(
                 '<!-- PREVIEW_PLACEHOLDER -->',
                 preview_html
             )
         else:
-            # Fallback: insert before orientation_mismatch_correction section
-            insert_marker = '<h2>orientation_mismatch_correction</h2>'
+            # Fallback: insert before the generate button
+            insert_marker = '<button type="button" onclick="generateConfig()">Generate Preprocessing Configuration File</button>'
             if insert_marker in html_content:
                 html_content = html_content.replace(
                     insert_marker,
@@ -240,8 +293,6 @@ def main():
                     '</body>',
                     preview_html + '\n    </body>'
                 )
-    
-    # Note: dataset_dir is no longer in the form, but we can still use it for preview
     
     # Start server
     print(f"Starting web server on port {args.port}...")

@@ -1,9 +1,12 @@
 # %%
 """
-Test script for BIDS dataset processing using macacaMRIprep.
+[OUTDATED] Test script for BIDS dataset processing using macacaMRIprep.
+
+NOTE: This test file references the old BIDSDatasetProcessor class which no longer exists.
+The project now uses Nextflow for orchestration. See README_NEXTFLOW.md for current usage.
 
 This script demonstrates how to process entire BIDS datasets using
-the BIDSDatasetProcessor class.
+the BIDSDatasetProcessor class (DEPRECATED).
 
 IMPORTANT NOTE ABOUT PARALLEL PROCESSING:
 ========================================

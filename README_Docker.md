@@ -1,6 +1,6 @@
-# macacaMRIprep Docker Usage Guide
+# banana Docker Usage Guide
 
-This Docker image provides a complete environment for `macacaMRIprep`, including neuroimaging toolkits (FSL, ANTs, AFNI, FreeSurfer) and a pre-configured Python environment. It supports GUI interaction, GPU acceleration, and automatic permission management.
+This Docker image provides a complete environment for `banana`, including neuroimaging toolkits (FSL, ANTs, AFNI, FreeSurfer) and a pre-configured Python environment. It supports GUI interaction, GPU acceleration, and automatic permission management.
 
 ## 1. Build the Image
 
@@ -10,7 +10,7 @@ Build the image from the project root. We recommend passing your local `USER_ID`
 docker build \
     --build-arg USER_ID=$(id -u) \
     --build-arg GROUP_ID=$(id -g) \
-    -t macacamriprep .
+    -t banana:latest .
 ```
 
 The build process uses `uv` for extremely fast installation of Python dependencies.
@@ -51,7 +51,7 @@ docker run -it --rm \
     --volume="/home/yinzi/dataset/testing_dataset:/data" \
     --volume="/nvmessd/yinzi/banana/license.txt:/opt/freesurfer/license.txt" \
     --workdir="/opt/banana" \
-    macacamriprep
+    banana:latest
 ```
 
 **Parameter Breakdown:**
@@ -65,7 +65,7 @@ docker run -it --rm \
 ---
 
 ### B. Production/Batch Mode
-Run the preprocessing pipeline directly without entering an interactive shell:
+Run the Nextflow preprocessing pipeline directly without entering an interactive shell:
 
 ```bash
 docker run --rm \
@@ -76,8 +76,9 @@ docker run --rm \
     --volume="/home/yinzi/dataset/testing_dataset:/data" \
     --volume="/path/to/output_dir:/output" \
     --volume="/nvmessd/yinzi/banana/license.txt:/opt/freesurfer/license.txt" \
-    macacamriprep \
-    macacaMRIprep-preproc /data /output --config /data/my_config.yaml
+    --workdir="/opt/banana" \
+    banana:latest \
+    ./run_nextflow.sh run main.nf --bids_dir /data --output_dir /output --output_space "NMT2Sym:res-1" --config_file /data/my_config.yaml
 ```
 
 ---
@@ -92,9 +93,9 @@ Upon entry, a welcome message will display the versions of installed tools.
     ```
     *Then access the URL (usually http://localhost:8050) from your host browser.*
 
-*   **Run Preprocessing Pipeline**:
+*   **Run Preprocessing Pipeline (Nextflow)**:
     ```bash
-    macacaMRIprep-preproc /data /output
+    ./run_nextflow.sh run main.nf --bids_dir /data --output_dir /output --output_space "NMT2Sym:res-1"
     ```
 
 *   **Access Neuroimaging Tools**:

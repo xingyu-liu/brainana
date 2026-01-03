@@ -19,6 +19,7 @@ sdist/
 var/
 wheels/
 *.egg-info/
+PKG-INFO
 .installed.cfg
 *.egg
 
@@ -38,3 +39,12 @@ ENV/
 .DS_Store
 Thumbs.db
 license.txt
+
+# Nextflow - all generated files
+.nextflow/
+.nextflow.log*
+nextflow
+work/
+null/
+*.nextflow.log
+*.nextflow.log.*

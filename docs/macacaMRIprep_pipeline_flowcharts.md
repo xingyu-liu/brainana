@@ -1,10 +1,12 @@
-# macacaMRIprep Pipeline Flowcharts
+# banana Pipeline Flowcharts
 
-This document provides flowcharts showing the processing steps for each of the three main preprocessing pipelines in macacaMRIprep.
+This document provides flowcharts showing the processing steps for each of the main preprocessing pipelines in banana.
+
+**Note**: The project now uses Nextflow for orchestration. These flowcharts show the step-by-step processing logic, which is implemented as Nextflow modules calling step functions. See `README_NEXTFLOW.md` for usage instructions.
 
 ## Pipeline Overview
 
-macacaMRIprep supports three main preprocessing pipelines:
+banana supports preprocessing pipelines orchestrated through Nextflow:
 
 1. **anat2template**: Anatomical data processing and registration to template space
 2. **func2template**: Functional data processing and direct registration to template space  

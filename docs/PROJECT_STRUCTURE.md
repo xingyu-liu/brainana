@@ -1,15 +1,15 @@
-# macacaMRIprep Project Structure
+# banana Project Structure
 
 ## Overview
 
-**macacaMRIprep** is a comprehensive Python package for preprocessing and registration of macaque neuroimaging data. It provides robust, reproducible preprocessing workflows specifically designed for non-human primate neuroimaging research with BIDS dataset support and sophisticated dependency management.
+**banana** is a comprehensive Python package for preprocessing and registration of macaque neuroimaging data. It provides robust, reproducible preprocessing workflows specifically designed for non-human primate neuroimaging research with BIDS dataset support and sophisticated dependency management.
 
 ## Key Features
 
 - **🧠 BIDS-First Approach**: Complete BIDS dataset processing with automatic file discovery
 - **⚡ Advanced Processing**: Complete preprocessing pipeline including slice timing correction, motion correction, despiking, skullstripping, and bias field correction
-- **🔧 Robust Architecture**: Modular design with comprehensive logging and error handling
-- **🖥️ User-Friendly Interface**: Command-line interface and Python API
+- **🔧 Nextflow-Based Architecture**: Maximum parallelization through per-step processing
+- **🖥️ Nextflow Pipeline**: User-friendly Nextflow workflow with automatic resumption and resource management
 
 ## Project Architecture
 
@@ -17,36 +17,30 @@
 
 The project follows a modular architecture with the following main components:
 
-#### 1. **Command Line Interface (CLI)**
-- **Location**: `macacaMRIprep/cli/`
-- **Main Module**: `preproc.py` - Main CLI entry point
-- **Purpose**: Provides user-friendly command-line interface with extensive BIDS filtering options
+#### 1. **Nextflow Pipeline**
+- **Location**: `main.nf`, `modules/`
+- **Main Components**:
+  - `main.nf` - Main Nextflow workflow orchestrator
+  - `modules/anatomical.nf` - Anatomical processing modules
+  - `modules/functional.nf` - Functional processing modules
+  - `modules/qc.nf` - Quality control modules
+- **Discovery Script**:
+  - `macacaMRIprep/scripts/discover_bids_for_nextflow.py` - BIDS dataset discovery (runs before Nextflow)
+- **Purpose**: Orchestrates preprocessing with maximum parallelization through per-step processing
 
-#### 2. **BIDS Dataset Processor**
-- **Location**: `macacaMRIprep/workflow/`
-- **Main Module**: `bids_processor.py` - Core BIDS processing logic
-- **Components**:
-  - `BaseJob` - Base job class for all processing jobs
-  - `AnatomicalJob` - Handles anatomical MRI processing
-  - `FunctionalJob` - Handles functional MRI processing
-- **Purpose**: Processes entire BIDS datasets with automatic file discovery and cross-session dependency handling
+#### 2. **Step Functions**
+- **Location**: `macacaMRIprep/steps/`
+- **Main Modules**:
+  - `bids_discovery.py` - BIDS dataset discovery and job creation
+  - `anatomical.py` - Anatomical processing step functions
+  - `functional.py` - Functional processing step functions
+  - `qc.py` - Quality control step functions
+  - `types.py` - Type definitions for step inputs/outputs
+- **Purpose**: Individual processing steps used by Nextflow modules for maximum parallelization
 
-#### 3. **Workflow Processors**
-- **Location**: `macacaMRIprep/workflow/`
-- **Components**:
-  - `BasePreprocessingWorkflow` - Base workflow class
-  - `FunctionalProcessor` - Processes functional MRI data (slice timing, motion correction, despiking, bias correction, skullstripping, registration)
-  - `AnatomicalProcessor` - Processes anatomical MRI data (bias correction, skullstripping, registration to template)
-
-#### 4. **Pipeline Management**
+#### 3. **Processing Operations**
 - **Location**: `macacaMRIprep/operations/`
-- **Main Module**: `pipeline.py`
-- **Components**:
-  - `Pipeline` - Main pipeline execution engine
-  - `PipelineState` - Manages pipeline state and execution flow
 
-#### 5. **Processing Operations**
-- **Location**: `macacaMRIprep/operations/`
 
 ##### Preprocessing Operations
 - `preprocessing.py` - Core preprocessing functions:
@@ -218,13 +212,20 @@ macacaMRIprep/
 │   └── unet_model/                   # UNet models
 │       ├── skullstripping_anat.model # Anatomical skullstripping model
 │       └── skullstripping_func.model # Functional skullstripping model
+├── modules/                          # Nextflow modules
+│   ├── anatomical.nf                # Anatomical processing modules
+│   ├── functional.nf               # Functional processing modules
+│   └── qc.nf                        # Quality control modules
+├── main.nf                           # Main Nextflow workflow
+├── nextflow.config                   # Nextflow configuration
+├── run_nextflow.sh                   # Nextflow wrapper script
 ├── templatezoo/                      # Template files
-│   └── *.nii.gz                      # NMT2Sym template files
+│   └── *.nii.gz                     # NMT2Sym template files
 ├── tests/                            # Test suite
 ├── docs/                             # Documentation
-├── scripts/                          # Utility scripts
-├── test_datasets/                    # Test datasets
-├── README.rst                        # Main documentation
+├── README_for_inz.rst               # Main documentation
+├── README_NEXTFLOW.md               # Nextflow documentation
+├── README_Docker.md                  # Docker documentation
 ├── CHANGELOG.md                      # Change log
 ├── CONTRIBUTING.md                   # Contribution guidelines
 ├── LICENSE                           # License file
@@ -256,9 +257,9 @@ macacaMRIprep/
 
 ## Configuration
 
-The system uses JSON-based configuration with validation:
-- Default settings in `config/defaults.json`
-- User-specific overrides via command line or config files
+The system uses YAML-based configuration with validation:
+- Default settings in `macacaMRIprep/config/defaults.yaml`
+- User-specific overrides via Nextflow parameters or config files
 - Environment variable support for external tool paths
 
 ## Quality Control

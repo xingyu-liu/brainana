@@ -33,9 +33,9 @@ from .registration import (
     compose_transform_cmd
 )
 
-# Import pipeline functionality
-from .pipeline import (
-    Pipeline
+# Import synthesis functions
+from .synthesis_multiple_anat import (
+    synthesize_multiple_anatomical
 )
 
 __all__ = [
@@ -62,8 +62,6 @@ __all__ = [
     'compose_ants_registration_cmd',
     'compose_transform_cmd',
     
-    # Pipeline
-    'Pipeline',
-    'PipelineStep',
-    'StepStatus'
+    # Synthesis
+    'synthesize_multiple_anatomical',
 ] 

@@ -7,7 +7,8 @@ file names and directory structures.
 
 import re
 from pathlib import Path
-from typing import Dict, Optional, Union, Any
+from typing import Dict, Optional, Union, Any, List
+from dataclasses import dataclass
 import json
 
 
@@ -133,6 +134,62 @@ def create_bids_filename(entities: Dict[str, str], suffix: str, extension: str =
     return filename
 
 
+def create_bids_output_filename(
+    original_file_path: Union[str, Path],
+    suffix: str,
+    modality: str,
+    extension: str = ".nii.gz"
+) -> str:
+    """
+    Create a BIDS-compliant output filename from an original input filename.
+    
+    This function mimics the behavior of the old anat2template.py workflow:
+    1. Gets the filename stem from the original file
+    2. Removes the modality suffix (e.g., '_T1w', '_bold')
+    3. Adds the new suffix and modality back
+    
+    This preserves the exact input structure including any non-standard entities.
+    
+    Args:
+        original_file_path: Path to the original input file
+        suffix: New BIDS suffix (e.g., 'desc-preproc', 'desc-brain', 'space-NMT2Sym_desc-preproc')
+        modality: Modality to append (e.g., 'T1w', 'T2w', 'bold')
+        extension: File extension (default: '.nii.gz')
+    
+    Returns:
+        BIDS-compliant output filename
+        
+    Examples:
+        >>> create_bids_output_filename('sub-032309_ses-001_T1w.nii.gz', 'desc-preproc', 'T1w')
+        'sub-032309_ses-001_desc-preproc_T1w.nii.gz'
+        
+        >>> create_bids_output_filename('sub-01_ses-pre_task-rest_bold.nii.gz', 'desc-preproc', 'bold')
+        'sub-01_ses-pre_task-rest_desc-preproc_bold.nii.gz'
+    """
+    # Get the filename stem from the original file (e.g., 'sub-032309_ses-001_T1w')
+    original_stem = get_filename_stem(original_file_path)
+    
+    # Remove the modality suffix from the stem (e.g., 'sub-032309_ses-001_T1w' -> 'sub-032309_ses-001')
+    # This matches the old behavior: bids_prefix_wo_modality = bids_prefix.replace(f"_{modality}", "")
+    bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
+    
+    # If the replacement didn't work (modality not found), try to extract it differently
+    # This handles cases where the modality might be part of a compound suffix
+    if bids_prefix_wo_modality == original_stem:
+        # Try to find and remove the modality from the end
+        if original_stem.endswith(f"_{modality}"):
+            bids_prefix_wo_modality = original_stem[:-len(f"_{modality}")]
+        else:
+            # If we can't find it, just use the original stem (fallback)
+            bids_prefix_wo_modality = original_stem
+    
+    # Create the new filename: prefix + suffix + modality + extension
+    # This matches: f"{bids_prefix_wo_modality}_desc-preproc_{modality}.nii.gz"
+    output_filename = f"{bids_prefix_wo_modality}_{suffix}_{modality}{extension}"
+    
+    return output_filename
+
+
 def find_bids_metadata(nifti_path: Union[str, Path], dataset_dir: Union[str, Path]) -> Optional[Dict[str, Any]]:
     """
     Find and load BIDS sidecar JSON metadata for a NIfTI file using hierarchical search.
@@ -231,4 +288,19 @@ def find_bids_metadata(nifti_path: Union[str, Path], dataset_dir: Union[str, Pat
             continue
     
     return merged_metadata if merged_metadata else None
+
+
+@dataclass
+class BIDSFile:
+    """Represents a BIDS file with metadata."""
+    path: str
+    sub: str
+    ses: Optional[str] = None
+    run: Optional[str] = None
+    task: Optional[str] = None
+    acq: Optional[str] = None
+    modality: Optional[str] = None
+    suffix: Optional[str] = None
+    extension: Optional[str] = None
+    entities: Optional[Dict[str, str]] = None
 

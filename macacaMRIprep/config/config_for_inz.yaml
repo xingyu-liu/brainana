@@ -28,15 +28,12 @@ anat:
     shrink_factor: 2
     bspline_fitting: "[ 200 ]"
     rescale_mean_to_100: true
-    threads: 8
-  skullstripping:
+  skullstripping_segmentation:
     enabled: true
     method: fastSurferCNN
     fastSurferCNN:
       gpu_device: auto
       batch_size: 1
-      threads: 20
-      use_mixed_model: false
       enable_crop_2round: true
       plane_weight_coronal: 0.3
       plane_weight_axial: 0.5
@@ -44,7 +41,6 @@ anat:
       fix_V1_WM: false
   surface_reconstruction:
     enabled: false
-    threads: 20
 func:
   registration_pipeline: func2anat2template
   reorient:
@@ -78,14 +74,12 @@ func:
     shrink_factor: 2
     bspline_fitting: "[ 200 ]"
     rescale_mean_to_100: true
-    threads: 8
   skullstripping:
     enabled: true
     method: fastSurferCNN
     fastSurferCNN:
       gpu_device: auto
       batch_size: 1
-      threads: 1
       use_mixed_model: false
       enable_crop_2round: false
       plane_weight_coronal: 0
@@ -100,7 +94,6 @@ registration:
   interpolation: LanczosWindowedSinc
   output_registered_image: true
   output_inverse_registered_image: false
-  threads: 8
 orientation_mismatch_correction:
   enabled: false
   real_A_is_actually_labeled_as: A

@@ -51,7 +51,6 @@ from .operations import (
     ants_apply_transforms,
     compose_ants_registration_cmd,
     compose_transform_cmd,
-    Pipeline
 )
 
 # Import quality control functionality
@@ -63,9 +62,6 @@ from .quality_control import (
     generate_qc_report,
 )
 
-# Import workflow functionality
-from .workflow.func2target import FunctionalProcessor
-from .workflow.anat2template import AnatomicalProcessor
 
 # Import configuration functionality
 from .config import (
@@ -115,9 +111,6 @@ __all__ = [
     'generate_report',     # backward compatibility
     # Registration
     'ants_register',
-    # Workflows
-    'FunctionalProcessor',
-    'AnatomicalProcessor',
     # Configuration
     'Config',
     'load_config',

@@ -20,7 +20,8 @@ RUN apt-get update && \
 
 RUN git clone --depth 1 --branch "${ANTS_VERSION}" https://github.com/ANTsX/ANTs.git /usr/local/src/ants
 WORKDIR /tmp/ants-build
-RUN cmake -GNinja \
+RUN mkdir -p /opt/ants && \
+    cmake -GNinja \
       -DBUILD_TESTING=OFF \
       -DRUN_LONG_TESTS=OFF \
       -DRUN_SHORT_TESTS=OFF \
@@ -28,7 +29,8 @@ RUN cmake -GNinja \
       -DCMAKE_INSTALL_PREFIX=/opt/ants \
       /usr/local/src/ants && \
     cmake --build . --parallel && \
-    cmake --build ANTS-build --target install
+    cmake --install . && \
+    test -d /opt/ants && ls -la /opt/ants || (echo "ERROR: /opt/ants not found after install" && exit 1)
 
 #########################
 # Runtime with all libs #
@@ -67,6 +69,7 @@ RUN apt-get update && \
       wget \
       vim \
       bash-completion \
+      openjdk-17-jdk \
       # graphics/openGL + X11 runtime for AFNI/FSL/FreeSurfer \
       freeglut3-dev \
       libfontconfig1 \
@@ -154,9 +157,10 @@ ENV ANTSPATH=/opt/ants/bin/ \
     AFNI_HOME=/usr/local/afni \
     AFNIPATH=/usr/local/afni \
     FREESURFER_HOME=/usr/local/freesurfer \
-    FS_LICENSE=/opt/freesurfer/license.txt
+    FS_LICENSE=/opt/freesurfer/license.txt \
+    JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
-ENV PATH=${FSLDIR}/bin:${AFNI_HOME}:${ANTSPATH}:${FREESURFER_HOME}/bin:${PATH}
+ENV PATH=${FSLDIR}/bin:${AFNI_HOME}:${ANTSPATH}:${FREESURFER_HOME}/bin:${JAVA_HOME}/bin:${PATH}
 ENV LD_LIBRARY_PATH=/opt/ants/lib:${FSLDIR}/lib
 ENV SUBJECTS_DIR=${FREESURFER_HOME}/subjects \
     LOCAL_DIR=${FREESURFER_HOME}/local \
@@ -174,7 +178,7 @@ ENV SUBJECTS_DIR=${FREESURFER_HOME}/subjects \
     MNI_DATAPATH=${FREESURFER_HOME}/mni/data \
     MNI_PERL5LIB=${FREESURFER_HOME}/mni/share/perl5 \
     PERL5LIB=${FREESURFER_HOME}/mni/share/perl5 \
-    PYTHONPATH=/opt/banana:${PYTHONPATH}
+    PYTHONPATH=/opt/banana
 
 # Create a shell script to source environments
 RUN printf '#!/bin/bash\n\
@@ -200,7 +204,7 @@ fi\n\
 # Welcome Message\n\
 if [ "$PS1" ]; then\n\
     echo "================================================================================"\n\
-    echo "Welcome to macacaMRIprep Interactive Environment"\n\
+    echo "Welcome to banana Interactive Environment"\n\
     echo "--------------------------------------------------------------------------------"\n\
     echo "Installed Tools:"\n\
     echo "  - FSL:        \$(fslval 2>/dev/null | head -n 1 || echo \"Installed\")"\n\
@@ -208,10 +212,11 @@ if [ "$PS1" ]; then\n\
     echo "  - AFNI:       \$(afni -version | head -n 1 || echo \"Installed\")"\n\
     echo "  - FreeSurfer: \$(cat \$FREESURFER_HOME/build-stamp.txt 2>/dev/null || echo \"Installed\")"\n\
     echo "  - Python:     \$(python3 --version)"\n\
+    echo "  - Java:       \$(java -version 2>&1 | head -n 1)"\n\
     echo "  - uv:         \$(uv --version)"\n\
     echo "--------------------------------------------------------------------------------"\n\
     echo "Usage Examples:"\n\
-    echo "  macacaMRIprep-preproc --help"\n\
+    echo "  ./run_nextflow.sh run main.nf --bids_dir /data --output_dir /output --output_space \"NMT2Sym:res-1\""\n\
     echo "  python3 -m macacaMRIprep.config.config_generator_cli"\n\
     echo "================================================================================"\n\
 fi\n' \

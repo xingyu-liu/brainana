@@ -1,12 +1,12 @@
-# Default configuration for macacaMRIprep preprocessing pipeline
-_description: "Default configuration for macacaMRIprep preprocessing pipeline"
+# Default configuration for banana preprocessing pipeline
+_description: "Default configuration for banana preprocessing pipeline"
 _version: "1.1"
 
 general:
   verbose: 2  # int or bool: verbosity level (0=quiet/ERROR, 1=normal/INFO, 2=verbose/DEBUG).
   overwrite: false  # bool: overwrite existing outputs
   generate_report_only: false  # bool: only generate QC reports from existing outputs
-  n_procs: 1  # int: number of parallel processes (>= 1)
+  n_procs: 3  # int: number of parallel processes (>= 1)
   anat_only: false  # bool: process only anatomical data
   func_only: false  # bool: process only functional data. TODO: add this to the pipeline
 
@@ -35,23 +35,19 @@ anat:
     shrink_factor: 2  # float: shrink factor for faster processing (> 0)
     bspline_fitting: "[ 200 ]"  # str: B-spline fitting parameters in ANTs format
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
-    threads: 8  # int: number of CPU threads for ITK operations (>= 1). Default 8 to avoid oversubscription when running multiple processes in parallel.
-  skullstripping:
-    enabled: true  # bool: perform brain extraction
+  skullstripping_segmentation:
+    enabled: true  # bool: perform brain extraction and segmentation
     method: "fastSurferCNN" 
     fastSurferCNN:
       gpu_device: "auto"  # int (>= -1) or "auto": GPU device ID (-1 = CPU, "auto" = auto-select)
       batch_size: 8  # int: batch size for inference (>= 1)
-      threads: 8  # int: number of CPU threads (>= 1)
-      use_mixed_model: false  # bool: use mixed precision model
       enable_crop_2round: true  # bool: enable two-round cropping for better accuracy
-      plane_weight_coronal: 0.3  # float: weight for coronal plane (0.0-1.0)
-      plane_weight_axial: 0.5  # float: weight for axial plane (0.0-1.0)
+      plane_weight_coronal: 0.4  # float: weight for coronal plane (0.0-1.0)
+      plane_weight_axial: 0.4  # float: weight for axial plane (0.0-1.0)
       plane_weight_sagittal: 0.2  # float: weight for sagittal plane (0.0-1.0)
       fix_V1_WM: true  # bool: fix missing thin WM in V1 by registering template V1 WM to individual space.
   surface_reconstruction:
     enabled: true  # bool: perform surface reconstruction
-    threads: 8  # int: number of threads for surface reconstruction (>= 1)
 
 func:
   registration_pipeline: "func2anat2template"  # str: "func2anat2template", "func2anat", or "func2template"
@@ -84,21 +80,10 @@ func:
     shrink_factor: 2  # float: shrink factor for faster processing (> 0)
     bspline_fitting: "[ 200 ]"  # str: B-spline fitting parameters in ANTs format
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
-    threads: 8  # int: number of CPU threads for ITK operations (>= 1). Default 8 to avoid oversubscription when running multiple processes in parallel.
   conform:
     enabled: true  # bool: conform functional tmean image to target space using FLIRT rigid registration
   skullstripping:
     enabled: true  # bool: perform brain extraction
-    method: "fastSurferCNN"  # str: "bet", "fastSurferCNN", or "macacaMRINN"
-    fastSurferCNN:
-      gpu_device: "auto"  # int (>= -1) or "auto": GPU device ID (-1 = CPU, "auto" = auto-select)
-      batch_size: 8  # int: batch size for inference (>= 1)
-      threads: 8  # int: number of CPU threads (>= 1)
-      use_mixed_model: false  # bool: use mixed precision model
-      enable_crop_2round: false  # bool: enable two-round cropping for better accuracy
-      plane_weight_coronal: 0.1  # float: weight for coronal plane (0.0-1.0)
-      plane_weight_axial: 0.5  # float: weight for axial plane (0.0-1.0)
-      plane_weight_sagittal: 0.4  # float: weight for sagittal plane (0.0-1.0)
 
 registration:
   enabled: true  # bool: perform image registration
@@ -109,14 +94,3 @@ registration:
   interpolation: "LanczosWindowedSinc"  # str: interpolation method ("Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline", "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc", "LanczosWindowedSinc", "GenericLabel")
   output_registered_image: true  # bool: output registered image
   output_inverse_registered_image: false  # bool: output inverse registered image
-  threads: 8  # int: number of CPU threads for ITK operations (>= 1). Default 8 to avoid oversubscription when running multiple processes in parallel.
-
-orientation_mismatch_correction:
-  enabled: true  # bool: perform orientation mismatch correction
-  # this only works if all of your scans are in the same orientation
-  # cause it will infer the correct orientation from the first scan
-  # possible values: P(posterior), A(anterior), I(inferior), S(superior), R(right), L(left) 
-  real_A_is_actually_labeled_as: 'A'
-  real_P_is_actually_labeled_as: 'P'
-  real_S_is_actually_labeled_as: 'S' 
-  real_I_is_actually_labeled_as: 'I'

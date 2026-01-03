@@ -60,11 +60,11 @@ python -m macacaMRINN.scripts.run_prediction \
     --no-save-prob-map
 
 # test marge neonate brainmask
+model=/home/star/github/banana/NHPskullstripNN/pretrained_model/T1w_brainmask.pth
 # input=/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_reorient/sub-baby31/ses-240710/anat/sub-baby31_ses-240710_T1w.nii.gz
-# model=/home/star/github/banana/NHPskullstripNN/pretrained_model/T1w_brainmask.pth
-model=/mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_output/T1w_seg-brainmask_v2/checkpoints/best_model.pth
 # input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/test_freddie_mixed/input.nii.gz
-input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/test_mebrain.nii.gz
+# input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/test_mebrain.nii.gz
+input="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/raw/casper25083_anat_probeHz.nii.gz"
 
 python -m NHPskullstripNN.scripts.run_prediction \
     --model $model \

@@ -45,18 +45,20 @@ But it is recommended to generate one using the config generator:
 
 .. code-block:: bash
 
-    python -m macacaMRIprep.config.config_generator_cli --dataset-dir /path/to/bids_dataset
+    python -m macacaMRIprep.config.config_generator_cli
 
 This launches a web-based config generator that will help you create a customized configuration file. 
 Alternatively, you can copy and modify the default config from ``macacaMRIprep/config/defaults.yaml``.
 
 **Step 2: Run Preprocessing Pipeline**
 
-Basic usage:
+The pipeline uses Nextflow for execution. Basic usage:
 
 .. code-block:: bash
 
-    macacaMRIprep-preproc /path/to/bids_dataset /path/to/output_dir --config /path/to/config_file
+    ./run_nextflow.sh run main.nf --bids_dir /path/to/bids_dataset --output_dir /path/to/output_dir --output_space "NMT2Sym:res-1" --config_file /path/to/config_file
+
+For more details, see ``README_NEXTFLOW.md``.
 
 --------------
 Code Structure
@@ -66,8 +68,11 @@ Important files and directories:
 
 banana/
 ├── macacaMRIprep/              # Main package
-│   ├── cli/
-│   │   └── preproc.py          # Main CLI entry point (macacaMRIprep-preproc command)
+│   ├── steps/                  # Step functions for Nextflow pipeline
+│   │   ├── bids_discovery.py   # BIDS dataset discovery
+│   │   ├── anatomical.py       # Anatomical processing steps
+│   │   ├── functional.py       # Functional processing steps
+│   │   └── qc.py               # Quality control steps
 │   ├── config/
 │   │   ├── defaults.yaml       # Default configuration parameters (YAML format)
 │   │   ├── config_generator_cli.py  # Web-based config generator
@@ -119,12 +124,15 @@ banana/
 │   └── fastsurfer_recon/      # Surface reconstruction pipeline
 └── templatezoo/                # Template files (NMT2Sym at various resolutions)
 
-**Key Workflow:**
-1. ``bids_processor.py``: Discovers BIDS files, creates processing jobs, manages dependencies, handles caching and resumption
-2. ``anat2template.py``: Processes T1w images (reorient → conform → bias correction → skull stripping → registration to template)
-3. ``func2target.py``: Processes BOLD images (slice timing → motion correction → despike → bias correction → skull stripping → registration)
-4. Two-phase processing: All anatomical jobs first, then all functional jobs (handles cross-session dependencies)
-5. Caching and resumption: Jobs are cached immediately upon completion, allowing safe resumption after interruptions
+**Key Architecture:**
+1. **Nextflow Pipeline** (``main.nf``): Orchestrates the entire preprocessing workflow with maximum parallelization
+2. **Step Functions** (``macacaMRIprep/steps/``): Individual processing steps used by Nextflow:
+   - ``bids_discovery.py``: Discovers BIDS files and creates processing jobs
+   - ``anatomical.py``: Anatomical processing steps (reorient → conform → bias correction → skull stripping → registration)
+   - ``functional.py``: Functional processing steps (slice timing → motion correction → despike → bias correction → skull stripping → registration)
+   - ``qc.py``: Quality control step functions
+3. **Per-Step Parallelization**: Each step runs independently across all subjects/sessions/runs simultaneously
+4. **Nextflow Resumability**: Automatic resumption from any failed step
 
 **Processing Pipelines that specify how the registration is performed:**
 - ``func2anat2template`` (default): Functional → Anatomical → Template
@@ -158,7 +166,7 @@ We provide a pre-configured Docker image containing all external dependencies (F
         --volume="/home/yinzi/dataset/testing_dataset:/data" \
         --volume="/nvmessd/yinzi/banana/license.txt:/opt/freesurfer/license.txt" \
         --workdir="/opt/banana" \
-        macacamriprep
+        banana:latest
 
 For detailed Docker instructions, please refer to ``README_Docker.md``.
 

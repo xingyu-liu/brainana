@@ -322,21 +322,16 @@
                     </div>
                     <div class="help-text">(rescale image mean intensity to 100)</div>
                 </div>
-                <div class="form-group">
-                    <label for="anat_bias_correction_threads">threads</label>
-                    <input type="number" id="anat_bias_correction_threads" name="anat_bias_correction_threads" value="8" min="1">
-                    <div class="help-text">(number of CPU threads for ITK operations, >= 1. Default 8 to avoid oversubscription when running multiple processes in parallel)</div>
-                </div>
             </div>
             
             <div class="sub-section">
-                <h3>skullstripping</h3>
+                <h3>skullstripping_segmentation</h3>
                 <div class="form-group">
                     <div class="checkbox-group">
                         <input type="checkbox" id="anat_skullstripping_enabled" name="anat_skullstripping_enabled" checked>
                         <label for="anat_skullstripping_enabled">enabled</label>
                     </div>
-                    <div class="help-text">(perform brain extraction)</div>
+                    <div class="help-text">(perform brain extraction and segmentation)</div>
                 </div>
                 <div class="form-group">
                     <label for="anat_skullstripping_method">method</label>
@@ -357,18 +352,6 @@
                         <div class="help-text">(batch size for inference, >= 1)</div>
                     </div>
                     <div class="form-group">
-                        <label for="anat_fastSurferCNN_threads">threads</label>
-                        <input type="number" id="anat_fastSurferCNN_threads" name="anat_fastSurferCNN_threads" value="8" min="1">
-                        <div class="help-text">(number of CPU threads, >= 1)</div>
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="anat_fastSurferCNN_use_mixed_model" name="anat_fastSurferCNN_use_mixed_model">
-                            <label for="anat_fastSurferCNN_use_mixed_model">use_mixed_model</label>
-                        </div>
-                        <div class="help-text">(use mixed precision model)</div>
-                    </div>
-                    <div class="form-group">
                         <div class="checkbox-group">
                             <input type="checkbox" id="anat_fastSurferCNN_enable_crop_2round" name="anat_fastSurferCNN_enable_crop_2round" checked>
                             <label for="anat_fastSurferCNN_enable_crop_2round">enable_crop_2round</label>
@@ -377,12 +360,12 @@
                     </div>
                     <div class="form-group">
                         <label for="anat_fastSurferCNN_plane_weight_coronal">plane_weight_coronal</label>
-                        <input type="number" id="anat_fastSurferCNN_plane_weight_coronal" name="anat_fastSurferCNN_plane_weight_coronal" value="0.3" step="0.1" min="0" max="1">
+                        <input type="number" id="anat_fastSurferCNN_plane_weight_coronal" name="anat_fastSurferCNN_plane_weight_coronal" value="0.4" step="0.1" min="0" max="1">
                         <div class="help-text">(weight for coronal plane, 0.0-1.0)</div>
                     </div>
                     <div class="form-group">
                         <label for="anat_fastSurferCNN_plane_weight_axial">plane_weight_axial</label>
-                        <input type="number" id="anat_fastSurferCNN_plane_weight_axial" name="anat_fastSurferCNN_plane_weight_axial" value="0.5" step="0.1" min="0" max="1">
+                        <input type="number" id="anat_fastSurferCNN_plane_weight_axial" name="anat_fastSurferCNN_plane_weight_axial" value="0.4" step="0.1" min="0" max="1">
                         <div class="help-text">(weight for axial plane, 0.0-1.0)</div>
                     </div>
                     <div class="form-group">
@@ -408,11 +391,6 @@
                         <label for="anat_surface_reconstruction_enabled">enabled</label>
                     </div>
                     <div class="help-text">(perform surface reconstruction)</div>
-                </div>
-                <div class="form-group">
-                    <label for="anat_surface_reconstruction_threads">threads</label>
-                    <input type="number" id="anat_surface_reconstruction_threads" name="anat_surface_reconstruction_threads" value="8" min="1">
-                    <div class="help-text">(number of threads for surface reconstruction, >= 1)</div>
                 </div>
             </div>
         </div>
@@ -602,11 +580,6 @@
                     </div>
                     <div class="help-text">(rescale image mean intensity to 100)</div>
                 </div>
-                <div class="form-group">
-                    <label for="func_bias_correction_threads">threads</label>
-                    <input type="number" id="func_bias_correction_threads" name="func_bias_correction_threads" value="8" min="1">
-                    <div class="help-text">(number of CPU threads for ITK operations, >= 1. Default 8 to avoid oversubscription when running multiple processes in parallel)</div>
-                </div>
             </div>
             
             <div class="sub-section">
@@ -628,59 +601,6 @@
                         <label for="func_skullstripping_enabled">enabled</label>
                     </div>
                     <div class="help-text">(perform brain extraction)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_skullstripping_method">method</label>
-                    <select id="func_skullstripping_method" name="func_skullstripping_method">
-                        <option value="fastSurferCNN" selected>fastSurferCNN</option>
-                    </select>
-                </div>
-                <div id="func_fastSurferCNN_options" class="sub-section">
-                    <h4>fastSurferCNN</h4>
-                    <div class="form-group">
-                        <label for="func_fastSurferCNN_gpu_device">gpu_device</label>
-                        <input type="text" id="func_fastSurferCNN_gpu_device" name="func_fastSurferCNN_gpu_device" value="auto">
-                        <div class="help-text">(GPU device ID: >= -1 where -1 = CPU, or "auto" for auto-select)</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="func_fastSurferCNN_batch_size">batch_size</label>
-                        <input type="number" id="func_fastSurferCNN_batch_size" name="func_fastSurferCNN_batch_size" value="8" min="1">
-                        <div class="help-text">(batch size for inference, >= 1)</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="func_fastSurferCNN_threads">threads</label>
-                        <input type="number" id="func_fastSurferCNN_threads" name="func_fastSurferCNN_threads" value="8" min="1">
-                        <div class="help-text">(number of CPU threads, >= 1)</div>
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="func_fastSurferCNN_use_mixed_model" name="func_fastSurferCNN_use_mixed_model">
-                            <label for="func_fastSurferCNN_use_mixed_model">use_mixed_model</label>
-                        </div>
-                        <div class="help-text">(use mixed precision model)</div>
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="func_fastSurferCNN_enable_crop_2round" name="func_fastSurferCNN_enable_crop_2round">
-                            <label for="func_fastSurferCNN_enable_crop_2round">enable_crop_2round</label>
-                        </div>
-                        <div class="help-text">(enable two-round cropping for better accuracy)</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="func_fastSurferCNN_plane_weight_coronal">plane_weight_coronal</label>
-                        <input type="number" id="func_fastSurferCNN_plane_weight_coronal" name="func_fastSurferCNN_plane_weight_coronal" value="0.1" step="0.1" min="0" max="1">
-                        <div class="help-text">(weight for coronal plane, 0.0-1.0)</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="func_fastSurferCNN_plane_weight_axial">plane_weight_axial</label>
-                        <input type="number" id="func_fastSurferCNN_plane_weight_axial" name="func_fastSurferCNN_plane_weight_axial" value="0.5" step="0.1" min="0" max="1">
-                        <div class="help-text">(weight for axial plane, 0.0-1.0)</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="func_fastSurferCNN_plane_weight_sagittal">plane_weight_sagittal</label>
-                        <input type="number" id="func_fastSurferCNN_plane_weight_sagittal" name="func_fastSurferCNN_plane_weight_sagittal" value="0.4" step="0.1" min="0" max="1">
-                        <div class="help-text">(weight for sagittal plane, 0.0-1.0)</div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -762,76 +682,11 @@
                 </div>
                 <div class="help-text">(output inverse registered image)</div>
             </div>
-            <div class="form-group">
-                <label for="registration_threads">threads</label>
-                <input type="number" id="registration_threads" name="registration_threads" value="8" min="1">
-                <div class="help-text">(number of CPU threads for ITK operations, >= 1. Default 8 to avoid oversubscription when running multiple processes in parallel)</div>
-            </div>
         </div>
 
         <!-- Preview Section (injected by CLI if dataset_dir provided) -->
         <!-- PREVIEW_PLACEHOLDER -->
         
-        <!-- Orientation Mismatch Correction -->
-        <h2>orientation_mismatch_correction</h2>
-        <div class="section">
-            <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" id="orientation_mismatch_correction_enabled" name="orientation_mismatch_correction_enabled" checked>
-                    <label for="orientation_mismatch_correction_enabled">enabled</label>
-                </div>
-                <div class="help-text">(perform orientation mismatch correction - this only works if all scans are in the same orientation, as it infers the correct orientation from the first scan)</div>
-            </div>
-            <div class="form-group">
-                <label for="orientation_mismatch_correction_real_A_is_actually_labeled_as">real_A_is_actually_labeled_as</label>
-                <select id="orientation_mismatch_correction_real_A_is_actually_labeled_as" name="orientation_mismatch_correction_real_A_is_actually_labeled_as">
-                    <option value="A" selected>A (Anterior)</option>
-                    <option value="P">P (Posterior)</option>
-                    <option value="S">S (Superior)</option>
-                    <option value="I">I (Inferior)</option>
-                    <option value="L">L (Left)</option>
-                    <option value="R">R (Right)</option>
-                </select>
-                <span class="help-text">(what the real A axis is actually labeled as in the image)</span>
-            </div>
-            <div class="form-group">
-                <label for="orientation_mismatch_correction_real_P_is_actually_labeled_as">real_P_is_actually_labeled_as</label>
-                <select id="orientation_mismatch_correction_real_P_is_actually_labeled_as" name="orientation_mismatch_correction_real_P_is_actually_labeled_as">
-                    <option value="A">A (Anterior)</option>
-                    <option value="P" selected>P (Posterior)</option>
-                    <option value="S">S (Superior)</option>
-                    <option value="I">I (Inferior)</option>
-                    <option value="L">L (Left)</option>
-                    <option value="R">R (Right)</option>
-                </select>
-                <span class="help-text">(what the real P axis is actually labeled as in the image)</span>
-            </div>
-            <div class="form-group">
-                <label for="orientation_mismatch_correction_real_S_is_actually_labeled_as">real_S_is_actually_labeled_as</label>
-                <select id="orientation_mismatch_correction_real_S_is_actually_labeled_as" name="orientation_mismatch_correction_real_S_is_actually_labeled_as">
-                    <option value="A">A (Anterior)</option>
-                    <option value="P">P (Posterior)</option>
-                    <option value="S" selected>S (Superior)</option>
-                    <option value="I">I (Inferior)</option>
-                    <option value="L">L (Left)</option>
-                    <option value="R">R (Right)</option>
-                </select>
-                <span class="help-text">(what the real S axis is actually labeled as in the image)</span>
-            </div>
-            <div class="form-group">
-                <label for="orientation_mismatch_correction_real_I_is_actually_labeled_as">real_I_is_actually_labeled_as</label>
-                <select id="orientation_mismatch_correction_real_I_is_actually_labeled_as" name="orientation_mismatch_correction_real_I_is_actually_labeled_as">
-                    <option value="A">A (Anterior)</option>
-                    <option value="P">P (Posterior)</option>
-                    <option value="S">S (Superior)</option>
-                    <option value="I" selected>I (Inferior)</option>
-                    <option value="L">L (Left)</option>
-                    <option value="R">R (Right)</option>
-                </select>
-                <span class="help-text">(what the real I axis is actually labeled as in the image)</span>
-            </div>
-        </div>
-
         <button type="button" onclick="generateConfig()">Generate Preprocessing Configuration File</button>
         <div id="errorMessages"></div>
         <div id="yamlOutput" class="yaml-output hidden">
@@ -872,27 +727,23 @@
                     algorithm: "N4BiasFieldCorrection",
                     shrink_factor: 2,
                     bspline_fitting: "[ 200 ]",
-                    rescale_mean_to_100: true,
-                    threads: 8
+                    rescale_mean_to_100: true
                 },
-                skullstripping: {
+                skullstripping_segmentation: {
                     enabled: true,
                     method: "fastSurferCNN",
                     fastSurferCNN: {
                         gpu_device: "auto",
                         batch_size: 8,
-                        threads: 8,
-                        use_mixed_model: false,
                         enable_crop_2round: true,
-                        plane_weight_coronal: 0.3,
-                        plane_weight_axial: 0.5,
+                        plane_weight_coronal: 0.4,
+                        plane_weight_axial: 0.4,
                         plane_weight_sagittal: 0.2,
                         fix_V1_WM: true
                     }
                 },
                 surface_reconstruction: {
-                    enabled: true,
-                    threads: 8
+                    enabled: true
                 }
             },
             func: {
@@ -927,23 +778,11 @@
                     algorithm: "N4BiasFieldCorrection",
                     shrink_factor: 2,
                     bspline_fitting: "[ 200 ]",
-                    rescale_mean_to_100: true,
-                    threads: 8
+                    rescale_mean_to_100: true
                 },
                 conform: { enabled: true },
                 skullstripping: {
-                    enabled: true,
-                    method: "fastSurferCNN",
-                    fastSurferCNN: {
-                        gpu_device: "auto",
-                        batch_size: 8,
-                        threads: 8,
-                        use_mixed_model: false,
-                        enable_crop_2round: false,
-                        plane_weight_coronal: 0.1,
-                        plane_weight_axial: 0.5,
-                        plane_weight_sagittal: 0.4
-                    }
+                    enabled: true
                 }
             },
             registration: {
@@ -954,25 +793,16 @@
                 keep_original_func_resolution: true,
                 interpolation: "LanczosWindowedSinc",
                 output_registered_image: true,
-                output_inverse_registered_image: false,
-                threads: 8
-            },
-            orientation_mismatch_correction: {
-                enabled: true,
-                real_A_is_actually_labeled_as: "A",
-                real_P_is_actually_labeled_as: "P",
-                real_S_is_actually_labeled_as: "S",
-                real_I_is_actually_labeled_as: "I"
+                output_inverse_registered_image: false
             }
         };
 
         // Show/hide conditional sections
         function updateConditionalVisibility() {
             const anatMethod = document.getElementById('anat_skullstripping_method').value;
-            const funcMethod = document.getElementById('func_skullstripping_method').value;
             
             document.getElementById('anat_fastSurferCNN_options').classList.toggle('hidden', anatMethod !== 'fastSurferCNN');
-            document.getElementById('func_fastSurferCNN_options').classList.toggle('hidden', funcMethod !== 'fastSurferCNN');
+            // func.skullstripping doesn't have method or fastSurferCNN options
         }
 
         // Initialize conditional visibility
@@ -1043,12 +873,12 @@
             }
             
             // Validate skullstripping
-            function validateSkullstripping(config, prefix) {
+            function validateSkullstripping(config, prefix, keyName) {
                 if (!config.enabled) return;
                 
                 const method = config.method;
                 if (method !== 'fastSurferCNN') {
-                    errors.push(`${prefix}.skullstripping.method must be 'fastSurferCNN'`);
+                    errors.push(`${prefix}.${keyName}.method must be 'fastSurferCNN'`);
                     return;
                 }
                 
@@ -1056,29 +886,25 @@
                     const fscnn = config.fastSurferCNN;
                     
                     if (fscnn.gpu_device !== 'auto' && (typeof fscnn.gpu_device !== 'number' || fscnn.gpu_device < -1)) {
-                        errors.push(`${prefix}.skullstripping.fastSurferCNN.gpu_device must be integer >= -1 or 'auto'`);
+                        errors.push(`${prefix}.${keyName}.fastSurferCNN.gpu_device must be integer >= -1 or 'auto'`);
                     }
                     
                     if (!Number.isInteger(fscnn.batch_size) || fscnn.batch_size < 1) {
-                        errors.push(`${prefix}.skullstripping.fastSurferCNN.batch_size must be a positive integer`);
-                    }
-                    
-                    if (!Number.isInteger(fscnn.threads) || fscnn.threads < 1) {
-                        errors.push(`${prefix}.skullstripping.fastSurferCNN.threads must be a positive integer`);
+                        errors.push(`${prefix}.${keyName}.fastSurferCNN.batch_size must be a positive integer`);
                     }
                     
                     ['plane_weight_coronal', 'plane_weight_axial', 'plane_weight_sagittal'].forEach(weight => {
                         if (fscnn[weight] !== null && fscnn[weight] !== undefined) {
                             if (typeof fscnn[weight] !== 'number' || fscnn[weight] < 0 || fscnn[weight] > 1) {
-                                errors.push(`${prefix}.skullstripping.fastSurferCNN.${weight} must be between 0 and 1`);
+                                errors.push(`${prefix}.${keyName}.fastSurferCNN.${weight} must be between 0 and 1`);
                             }
                         }
                     });
                 }
             }
             
-            validateSkullstripping(config.anat.skullstripping, 'anat');
-            validateSkullstripping(config.func.skullstripping, 'func');
+            validateSkullstripping(config.anat.skullstripping_segmentation, 'anat', 'skullstripping_segmentation');
+            // func.skullstripping only has 'enabled', no method or fastSurferCNN options
             
             // Validate bias correction
             function validateBiasCorrection(config, prefix) {
@@ -1091,16 +917,6 @@
             
             validateBiasCorrection(config.anat.bias_correction, 'anat');
             validateBiasCorrection(config.func.bias_correction, 'func');
-            
-            // Validate surface reconstruction
-            if (config.anat.surface_reconstruction.enabled) {
-                const threads = config.anat.surface_reconstruction.threads;
-                if (threads !== null && threads !== undefined) {
-                    if (!Number.isInteger(threads) || threads < 1) {
-                        errors.push("anat.surface_reconstruction.threads must be an integer >= 1");
-                    }
-                }
-            }
             
             // Validate registration
             if (config.registration.enabled) {
@@ -1206,6 +1022,7 @@
             const filename = 'config.yaml';
             
             // Try to use File System Access API if available (allows user to choose save location)
+            // This API requires HTTPS or localhost
             if ('showSaveFilePicker' in window) {
                 try {
                     const fileHandle = await window.showSaveFilePicker({
@@ -1213,24 +1030,34 @@
                         types: [{
                             description: 'YAML Configuration File',
                             accept: { 'text/yaml': ['.yaml', '.yml'] }
-                        }]
+                        }],
+                        excludeAcceptAllOption: false
                     });
                     
+                    // Write the file content
                     const writable = await fileHandle.createWritable();
                     await writable.write(yaml);
                     await writable.close();
                     
-                    alert('Configuration file saved successfully!');
+                    // Get the file name for confirmation
+                    const savedName = fileHandle.name || filename;
+                    alert(`Configuration file saved successfully to:\n${savedName}`);
                     return;
                 } catch (err) {
-                    // User cancelled or error occurred, fall back to download
-                    if (err.name !== 'AbortError') {
-                        console.error('Error saving file:', err);
+                    // Only fall back if user explicitly cancelled
+                    if (err.name === 'AbortError') {
+                        // User cancelled the file picker, don't do anything
+                        return;
                     }
+                    // For other errors, show error and fall back to download
+                    console.error('Error using File System Access API:', err);
+                    alert(`Error saving file: ${err.message}\n\nFalling back to download method.`);
+                    // Continue to fallback download method below
                 }
             }
             
             // Fallback: download to default download folder
+            // This always saves to browser's default download location
             const blob = new Blob([yaml], { type: 'text/yaml' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -1241,7 +1068,12 @@
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            alert('Configuration file downloaded to your default download folder.');
+            // Provide helpful message about save location
+            if ('showSaveFilePicker' in window) {
+                alert('Configuration file downloaded to your default download folder.\n\nNote: To choose a custom save location, ensure you are using HTTPS or localhost, and that your browser supports the File System Access API.');
+            } else {
+                alert('Configuration file downloaded to your default download folder.\n\nNote: Your browser does not support choosing a custom save location. Please use a modern browser (Chrome 86+, Edge 86+, or Opera 72+) for this feature.');
+            }
         }
 
         // Collect form data and generate config
@@ -1279,25 +1111,21 @@
             config.anat.bias_correction.shrink_factor = parseFloat(document.getElementById('anat_bias_correction_shrink_factor').value);
             config.anat.bias_correction.bspline_fitting = document.getElementById('anat_bias_correction_bspline_fitting').value;
             config.anat.bias_correction.rescale_mean_to_100 = document.getElementById('anat_bias_correction_rescale_mean_to_100').checked;
-            config.anat.bias_correction.threads = parseInt(document.getElementById('anat_bias_correction_threads').value);
             
-            config.anat.skullstripping.enabled = document.getElementById('anat_skullstripping_enabled').checked;
-            config.anat.skullstripping.method = document.getElementById('anat_skullstripping_method').value;
-            if (config.anat.skullstripping.method === 'fastSurferCNN') {
+            config.anat.skullstripping_segmentation.enabled = document.getElementById('anat_skullstripping_enabled').checked;
+            config.anat.skullstripping_segmentation.method = document.getElementById('anat_skullstripping_method').value;
+            if (config.anat.skullstripping_segmentation.method === 'fastSurferCNN') {
                 const gpuDevice = document.getElementById('anat_fastSurferCNN_gpu_device').value;
-                config.anat.skullstripping.fastSurferCNN.gpu_device = (gpuDevice === 'auto' || gpuDevice === '') ? 'auto' : parseInt(gpuDevice);
-                config.anat.skullstripping.fastSurferCNN.batch_size = parseInt(document.getElementById('anat_fastSurferCNN_batch_size').value);
-                config.anat.skullstripping.fastSurferCNN.threads = parseInt(document.getElementById('anat_fastSurferCNN_threads').value);
-                config.anat.skullstripping.fastSurferCNN.use_mixed_model = document.getElementById('anat_fastSurferCNN_use_mixed_model').checked;
-                config.anat.skullstripping.fastSurferCNN.enable_crop_2round = document.getElementById('anat_fastSurferCNN_enable_crop_2round').checked;
-                config.anat.skullstripping.fastSurferCNN.plane_weight_coronal = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_coronal').value);
-                config.anat.skullstripping.fastSurferCNN.plane_weight_axial = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_axial').value);
-                config.anat.skullstripping.fastSurferCNN.plane_weight_sagittal = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_sagittal').value);
-                config.anat.skullstripping.fastSurferCNN.fix_V1_WM = document.getElementById('anat_fastSurferCNN_fix_V1_WM').checked;
+                config.anat.skullstripping_segmentation.fastSurferCNN.gpu_device = (gpuDevice === 'auto' || gpuDevice === '') ? 'auto' : parseInt(gpuDevice);
+                config.anat.skullstripping_segmentation.fastSurferCNN.batch_size = parseInt(document.getElementById('anat_fastSurferCNN_batch_size').value);
+                config.anat.skullstripping_segmentation.fastSurferCNN.enable_crop_2round = document.getElementById('anat_fastSurferCNN_enable_crop_2round').checked;
+                config.anat.skullstripping_segmentation.fastSurferCNN.plane_weight_coronal = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_coronal').value);
+                config.anat.skullstripping_segmentation.fastSurferCNN.plane_weight_axial = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_axial').value);
+                config.anat.skullstripping_segmentation.fastSurferCNN.plane_weight_sagittal = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_sagittal').value);
+                config.anat.skullstripping_segmentation.fastSurferCNN.fix_V1_WM = document.getElementById('anat_fastSurferCNN_fix_V1_WM').checked;
             }
             
             config.anat.surface_reconstruction.enabled = document.getElementById('anat_surface_reconstruction_enabled').checked;
-            config.anat.surface_reconstruction.threads = parseInt(document.getElementById('anat_surface_reconstruction_threads').value);
             
             // Functional
             config.func.registration_pipeline = document.getElementById('func_registration_pipeline').value;
@@ -1331,25 +1159,13 @@
             config.func.despike.ignore_first_volumes = parseInt(document.getElementById('func_despike_ignore_first_volumes').value);
             
             config.func.skullstripping.enabled = document.getElementById('func_skullstripping_enabled').checked;
-            config.func.skullstripping.method = document.getElementById('func_skullstripping_method').value;
-            if (config.func.skullstripping.method === 'fastSurferCNN') {
-                const gpuDevice = document.getElementById('func_fastSurferCNN_gpu_device').value;
-                config.func.skullstripping.fastSurferCNN.gpu_device = (gpuDevice === 'auto' || gpuDevice === '') ? 'auto' : parseInt(gpuDevice);
-                config.func.skullstripping.fastSurferCNN.batch_size = parseInt(document.getElementById('func_fastSurferCNN_batch_size').value);
-                config.func.skullstripping.fastSurferCNN.threads = parseInt(document.getElementById('func_fastSurferCNN_threads').value);
-                config.func.skullstripping.fastSurferCNN.use_mixed_model = document.getElementById('func_fastSurferCNN_use_mixed_model').checked;
-                config.func.skullstripping.fastSurferCNN.enable_crop_2round = document.getElementById('func_fastSurferCNN_enable_crop_2round').checked;
-                config.func.skullstripping.fastSurferCNN.plane_weight_coronal = parseFloat(document.getElementById('func_fastSurferCNN_plane_weight_coronal').value);
-                config.func.skullstripping.fastSurferCNN.plane_weight_axial = parseFloat(document.getElementById('func_fastSurferCNN_plane_weight_axial').value);
-                config.func.skullstripping.fastSurferCNN.plane_weight_sagittal = parseFloat(document.getElementById('func_fastSurferCNN_plane_weight_sagittal').value);
-            }
+            // func.skullstripping only has 'enabled', no method or fastSurferCNN options
             
             config.func.bias_correction.enabled = document.getElementById('func_bias_correction_enabled').checked;
             config.func.bias_correction.algorithm = document.getElementById('func_bias_correction_algorithm').value;
             config.func.bias_correction.shrink_factor = parseFloat(document.getElementById('func_bias_correction_shrink_factor').value);
             config.func.bias_correction.bspline_fitting = document.getElementById('func_bias_correction_bspline_fitting').value;
             config.func.bias_correction.rescale_mean_to_100 = document.getElementById('func_bias_correction_rescale_mean_to_100').checked;
-            config.func.bias_correction.threads = parseInt(document.getElementById('func_bias_correction_threads').value);
             
             // Registration
             config.registration.enabled = document.getElementById('registration_enabled').checked;
@@ -1360,16 +1176,6 @@
             config.registration.interpolation = document.getElementById('registration_interpolation').value;
             config.registration.output_registered_image = document.getElementById('registration_output_registered_image').checked;
             config.registration.output_inverse_registered_image = document.getElementById('registration_output_inverse_registered_image').checked;
-            config.registration.threads = parseInt(document.getElementById('registration_threads').value);
-            
-            // Orientation mismatch correction
-            config.orientation_mismatch_correction = {
-                enabled: document.getElementById('orientation_mismatch_correction_enabled').checked,
-                real_A_is_actually_labeled_as: document.getElementById('orientation_mismatch_correction_real_A_is_actually_labeled_as').value,
-                real_P_is_actually_labeled_as: document.getElementById('orientation_mismatch_correction_real_P_is_actually_labeled_as').value,
-                real_S_is_actually_labeled_as: document.getElementById('orientation_mismatch_correction_real_S_is_actually_labeled_as').value,
-                real_I_is_actually_labeled_as: document.getElementById('orientation_mismatch_correction_real_I_is_actually_labeled_as').value
-            };
             
             // Validate
             const errors = validateConfig(config);
