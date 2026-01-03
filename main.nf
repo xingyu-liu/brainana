@@ -17,6 +17,7 @@ include { ANAT_REORIENT } from './modules/anatomical.nf'
 include { ANAT_CONFORM } from './modules/anatomical.nf'
 include { ANAT_BIAS_CORRECTION } from './modules/anatomical.nf'
 include { ANAT_SKULLSTRIPPING } from './modules/anatomical.nf'
+include { ANAT_SURFACE_RECONSTRUCTION } from './modules/anatomical.nf'
 include { ANAT_REGISTRATION } from './modules/anatomical.nf'
 
 // Include functional processing modules
@@ -31,8 +32,16 @@ include { FUNC_REGISTRATION } from './modules/functional.nf'
 include { FUNC_APPLY_TRANSFORMS } from './modules/functional.nf'
 
 // Include QC modules
-include { QC_ANATOMICAL } from './modules/qc.nf'
-include { QC_FUNCTIONAL } from './modules/qc.nf'
+include { QC_CONFORM } from './modules/qc.nf'
+include { QC_BIAS_CORRECTION } from './modules/qc.nf'
+include { QC_SKULLSTRIPPING } from './modules/qc.nf'
+include { QC_ATLAS_SEGMENTATION } from './modules/qc.nf'
+include { QC_REGISTRATION } from './modules/qc.nf'
+include { QC_MOTION_CORRECTION } from './modules/qc.nf'
+include { QC_BIAS_CORRECTION_FUNC } from './modules/qc.nf'
+include { QC_SKULLSTRIPPING_FUNC } from './modules/qc.nf'
+include { QC_REGISTRATION_FUNC } from './modules/qc.nf'
+include { QC_GENERATE_REPORT } from './modules/qc.nf'
 
 workflow {
     // ============================================
@@ -59,10 +68,9 @@ workflow {
         error "Config file not found: ${config_file_path}"
     }
     
-    // Read anat_only and func_only from YAML config file
+    // Read anat_only from YAML config file
     // Command-line params take precedence, but if not set, read from config file
     def anat_only = params.anat_only
-    def func_only = params.func_only
     
     // Read from config file using Python (more reliable than trying to parse YAML in Groovy)
     try {
@@ -104,46 +112,8 @@ except Exception as e:
         println "Warning: Could not read anat_only from config file: ${e.message}, using param value: ${params.anat_only}"
     }
     
-    try {
-        def func_only_script = """
-import yaml
-import sys
-try:
-    with open('${config_file_path}', 'r') as f:
-        config = yaml.safe_load(f)
-    value = config.get('general', {}).get('func_only', False)
-    print('true' if value else 'false')
-except Exception as e:
-    print('false')
-    sys.exit(1)
-"""
-        // Use a simpler approach: write script to temp file and execute
-        def temp_script2 = File.createTempFile("read_func_only", ".py")
-        temp_script2.text = func_only_script
-        def func_only_proc = ["python3", temp_script2.absolutePath].execute()
-        def func_only_output = new StringBuffer()
-        def func_only_error = new StringBuffer()
-        func_only_proc.consumeProcessOutput(func_only_output, func_only_error)
-        func_only_proc.waitFor()
-        def func_only_result = func_only_output.toString().trim()
-        def func_only_err = func_only_error.toString().trim()
-        temp_script2.delete()
-        if (func_only_err) {
-            println "Debug: Python stderr for func_only: ${func_only_err}"
-        }
-        println "Debug: Read func_only from config: '${func_only_result}' (exit code: ${func_only_proc.exitValue()})"
-        if (func_only_result == "true") {
-            func_only = true
-            println "Config: Reading func_only = true from config file"
-        } else if (func_only_proc.exitValue() != 0) {
-            println "Warning: Error reading func_only from config file (exit code: ${func_only_proc.exitValue()})"
-        }
-    } catch (Exception e) {
-        println "Warning: Could not read func_only from config file: ${e.message}, using param value: ${params.func_only}"
-    }
-    
     // Print final values being used
-    println "Processing mode: anat_only = ${anat_only}, func_only = ${func_only}"
+    println "Processing mode: anat_only = ${anat_only}"
     
     // Parse filtering parameters
     def subjects_str = params.subjects ?: ''
@@ -196,9 +166,6 @@ except Exception as e:
             
             [sub, ses, file_paths, needs_synth, suffix]
         }
-        .filter { sub, ses, file_paths, needs_synth, suffix ->
-            !func_only
-        }
         .set { anat_jobs_ch }
     
     // Parse functional jobs JSON into channel
@@ -222,20 +189,28 @@ except Exception as e:
     // ============================================
     // ANATOMICAL PIPELINE
     // ============================================
-    if (!func_only) {
-        // Separate synthesis jobs from regular jobs (for all anatomical modalities)
-        anat_jobs_ch
-            .filter { sub, ses, file_paths, needs_synth, suffix ->
-                needs_synth
+    // Separate synthesis jobs from regular jobs (for all anatomical modalities)
+    // Filter for jobs that need synthesis
+    anat_jobs_ch
+        .filter { sub, ses, file_paths, needs_synth, suffix ->
+            needs_synth == true && file_paths != null && file_paths.size() > 0
+        }
+        .map { sub, ses, file_paths, needs_synth, suffix ->
+            // Ensure file_paths is a list
+            def paths_list = file_paths instanceof List ? file_paths : [file_paths]
+            // Convert each path string to a file object
+            // Nextflow path() input accepts a list/collection of files
+            def file_objects = []
+            paths_list.each { path_str ->
+                file_objects.add(file(path_str.toString()))
             }
-            .map { sub, ses, file_paths, needs_synth, suffix ->
-                def files = file_paths.collect { file(it) }
-                [sub, ses, files]
-            }
-            .set { anat_synthesis_input }
-        
-        // Run synthesis process for all anatomical modalities (T1w, T2w, etc.)
-        ANAT_SYNTHESIS(anat_synthesis_input, config_file)
+            // Return tuple with exactly 3 elements: [sub, ses, file_list]
+            [sub, ses, file_objects]
+        }
+        .set { anat_synthesis_input }
+    
+    // Run synthesis process for all anatomical modalities (T1w, T2w, etc.)
+    ANAT_SYNTHESIS(anat_synthesis_input, config_file)
         
         // Separate single files (no synthesis needed) by modality
         anat_jobs_ch
@@ -266,19 +241,74 @@ except Exception as e:
         ANAT_CONFORM(ANAT_REORIENT.out.output, config_file)
         ANAT_BIAS_CORRECTION(ANAT_CONFORM.out.output, config_file)
         ANAT_SKULLSTRIPPING(ANAT_BIAS_CORRECTION.out.output, config_file)
+        
+        // Surface reconstruction: needs conformed file, segmentation, and brain mask
+        // Join brain file with segmentation and conformed file (all outputs are now tuples with subject/session keys)
+        ANAT_SKULLSTRIPPING.out.output
+            .join(ANAT_SKULLSTRIPPING.out.brain_segmentation, by: [0, 1])
+            .join(ANAT_CONFORM.out.output, by: [0, 1])
+            .map { sub, ses, brain_file, orig_path1, seg_file, conf_file, orig_path2 ->
+                [sub, ses, brain_file, orig_path2, conf_file, seg_file]
+            }
+            .set { surf_recon_input_base }
+        
+        // Join with brain mask
+        surf_recon_input_base
+            .join(ANAT_SKULLSTRIPPING.out.brain_mask, by: [0, 1])
+            .map { sub, ses, brain_file, orig_path, conf_file, seg_file, mask_file ->
+                [sub, ses, brain_file, orig_path, conf_file, seg_file, mask_file ?: file("")]
+            }
+            .set { surf_recon_input }
+        
+        ANAT_SURFACE_RECONSTRUCTION(surf_recon_input, config_file)
+        
         ANAT_REGISTRATION(ANAT_SKULLSTRIPPING.out.output, config_file)
         
-        // QC for anatomical (needs both output and transforms)
-        // Join by subject_id (index 0) and session_id (index 1)
+        // QC for anatomical - individual steps
+        // QC_CONFORM: needs conformed file + resampled template (same space as conformed image)
+        ANAT_CONFORM.out.output
+            .join(ANAT_CONFORM.out.template_resampled, by: [0, 1])
+            .map { sub, ses, conf_file, orig_path, template_resampled ->
+                [sub, ses, conf_file, orig_path, template_resampled]
+            }
+            .set { conform_qc_input }
+        QC_CONFORM(conform_qc_input, config_file)
+        
+        // QC_BIAS_CORRECTION: needs original (from CONFORM) + corrected (from BIAS_CORRECTION)
+        ANAT_CONFORM.out.output
+            .join(ANAT_BIAS_CORRECTION.out.output, by: [0, 1])
+            .map { sub, ses, conf_file, orig_path1, bias_file, orig_path2 ->
+                [sub, ses, conf_file, bias_file, orig_path2]
+            }
+            .set { bias_qc_input }
+        QC_BIAS_CORRECTION(bias_qc_input, config_file)
+        
+        // QC_SKULLSTRIPPING: needs brain file + mask file
+        ANAT_SKULLSTRIPPING.out.output
+            .join(ANAT_SKULLSTRIPPING.out.brain_mask, by: [0, 1])
+            .map { sub, ses, brain_file, orig_path, mask_file ->
+                [sub, ses, brain_file, mask_file, orig_path]
+            }
+            .set { skull_qc_input }
+        QC_SKULLSTRIPPING(skull_qc_input, config_file)
+        
+        // QC_ATLAS_SEGMENTATION: needs brain file + segmentation file (optional)
+        ANAT_SKULLSTRIPPING.out.output
+            .join(ANAT_SKULLSTRIPPING.out.brain_segmentation, by: [0, 1])
+            .map { sub, ses, brain_file, orig_path, seg_file ->
+                [sub, ses, brain_file, seg_file, orig_path]
+            }
+            .set { atlas_qc_input }
+        QC_ATLAS_SEGMENTATION(atlas_qc_input, config_file)
+        
+        // QC_REGISTRATION: needs registered file + transforms
         ANAT_REGISTRATION.out.output
             .join(ANAT_REGISTRATION.out.transforms, by: [0, 1])
             .map { sub, ses, reg_file, trans -> 
                 [sub, ses, reg_file, trans]
             }
             .set { anat_reg_for_qc }
-        
-        QC_ANATOMICAL(anat_reg_for_qc, config_file)
-    }
+        QC_REGISTRATION(anat_reg_for_qc, config_file)
     
     // ============================================
     // FUNCTIONAL PIPELINE
@@ -294,13 +324,58 @@ except Exception as e:
         FUNC_SKULLSTRIPPING(FUNC_CONFORM.out.output, config_file)
         
         // Functional registration (depends on anatomical if available)
-        // Join by subject_id (index 0) and session_id (index 1)
-        def anat_reg_ch = func_only ? Channel.empty() : ANAT_REGISTRATION.out.output
+        // Strategy: Join by subject AND session first, then fallback to first available anatomical session for same subject
+        // Prepare anatomical channel: [sub, ses, reg_file, trans]
+        def anat_reg_ch = ANAT_REGISTRATION.out.output
             .join(ANAT_REGISTRATION.out.transforms, by: [0, 1])
             .map { sub, ses, reg_file, trans -> 
                 [sub, ses, reg_file, trans]
             }
-        FUNC_REGISTRATION(FUNC_SKULLSTRIPPING.out.output, anat_reg_ch, config_file)
+        
+        // Create a map of subject -> first anatomical session for fallback
+        // Group by subject and take the first session (sorted by session_id)
+        def anat_by_subject = anat_reg_ch
+            .groupTuple(by: 0)  // Group by subject_id (index 0)
+            .map { sub, sessions ->
+                // sessions is a list of [ses, reg_file, trans] tuples
+                // Sort by session_id (handle null as empty string) and take the first one
+                def sorted_sessions = sessions.sort { a, b ->
+                    def ses_a = a[0] ?: ''
+                    def ses_b = b[0] ?: ''
+                    ses_a <=> ses_b
+                }
+                def first_session = sorted_sessions[0]
+                [sub, first_session[0], first_session[1], first_session[2]]  // [sub, ses, reg_file, trans]
+            }
+        
+        // Join functional data with anatomical data by subject AND session (exact match)
+        // FUNC_SKULLSTRIPPING.out.output: [sub, ses, task, run, file, orig_path]
+        // anat_reg_ch: [sub, ses, reg_file, trans]
+        def func_anat_exact = FUNC_SKULLSTRIPPING.out.output
+            .join(anat_reg_ch, by: [0, 1])  // Join by [subject_id, session_id]
+            .map { sub, ses, task, run, func_file, orig_path, anat_reg, anat_trans ->
+                // Exact match - same subject and session
+                [sub, ses, task, run, func_file, orig_path, anat_reg, anat_trans, ses, false]  // Last two: anat_ses, is_fallback
+            }
+        
+        // For functional sessions without exact anatomical match, use first available anatomical for same subject
+        // Combine all functional with first anatomical per subject, then filter to only unmatched cases
+        def func_anat_fallback = FUNC_SKULLSTRIPPING.out.output
+            .combine(anat_by_subject, by: 0)  // Combine by subject_id only
+            .filter { sub, ses_func, task, run, func_file, orig_path, ses_anat, anat_reg, anat_trans ->
+                // Only keep if functional session doesn't match anatomical session (fallback case)
+                ses_func != ses_anat
+            }
+            .map { sub, ses_func, task, run, func_file, orig_path, ses_anat, anat_reg, anat_trans ->
+                // Using anatomical from different session - add warning flag
+                [sub, ses_func, task, run, func_file, orig_path, anat_reg, anat_trans, ses_anat, true]  // Last two: anat_ses, is_fallback
+            }
+        
+        // Combine exact matches and fallbacks
+        def func_anat_joined = func_anat_exact
+            .mix(func_anat_fallback)
+        
+        FUNC_REGISTRATION(func_anat_joined, config_file)
         
         // Join registration outputs (tmean_registered and transforms) for apply_transforms
         // Join by subject_id (0), session_id (1), task_name (2), run (3)
@@ -332,11 +407,79 @@ except Exception as e:
         // FUNC_APPLY_TRANSFORMS expects: (tuple with reg info), (4D file path), (config file)
         FUNC_APPLY_TRANSFORMS(func_reg_input, func_4d_input, config_file)
         
-        // QC for functional
-        QC_FUNCTIONAL(FUNC_APPLY_TRANSFORMS.out.output, config_file)
+        // QC for functional - individual steps
+        // QC_MOTION_CORRECTION: needs motion params + input file
+        FUNC_MOTION_CORRECTION.out.output
+            .join(FUNC_MOTION_CORRECTION.out.motion_params, by: [0, 1, 2, 3])
+            .map { sub, ses, task, run, func_file, orig_path, motion_file ->
+                [sub, ses, task, run, motion_file, func_file, orig_path]
+            }
+            .set { motion_qc_input }
+        QC_MOTION_CORRECTION(motion_qc_input, config_file)
+        
+        // QC_BIAS_CORRECTION_FUNC: needs original (from DESPIKE) + corrected (from BIAS_CORRECTION)
+        FUNC_DESPIKE.out.output
+            .join(FUNC_BIAS_CORRECTION.out.output, by: [0, 1, 2, 3])
+            .map { sub, ses, task, run, despike_file, orig_path1, bias_file, orig_path2 ->
+                [sub, ses, task, run, despike_file, bias_file, orig_path2]
+            }
+            .set { func_bias_qc_input }
+        QC_BIAS_CORRECTION_FUNC(func_bias_qc_input, config_file)
+        
+        // QC_SKULLSTRIPPING_FUNC: needs brain file + mask file
+        FUNC_SKULLSTRIPPING.out.output
+            .join(FUNC_SKULLSTRIPPING.out.brain_mask, by: [0, 1, 2, 3])
+            .map { sub, ses, task, run, brain_file, orig_path, mask_file ->
+                [sub, ses, task, run, brain_file, mask_file, orig_path]
+            }
+            .set { func_skull_qc_input }
+        QC_SKULLSTRIPPING_FUNC(func_skull_qc_input, config_file)
+        
+        // QC_REGISTRATION_FUNC: needs registered file
+        QC_REGISTRATION_FUNC(FUNC_APPLY_TRANSFORMS.out.output, config_file)
     }
     
-    println "============================================"
-    println "Pipeline execution started"
-    println "============================================"
+    // ============================================
+    // QC REPORT GENERATION (per subject)
+    // ============================================
+    // Ensure all QC processes complete before report generation
+    // Use QC_REGISTRATION outputs as the final dependency (since it runs last)
+    
+    // Collect all QC_REGISTRATION metadata files to create a completion signal
+    // Group them to ensure all complete before proceeding
+    def anat_qc_completion = QC_REGISTRATION.out.metadata
+        .groupTuple()  // Collect all anatomical QC_REGISTRATION metadata files
+    
+    // Create completion signal - wait for anatomical, and functional if applicable
+    def qc_completion_signal = anat_qc_completion
+    if (!anat_only) {
+        def func_qc_completion = QC_REGISTRATION_FUNC.out.metadata
+            .groupTuple()  // Collect all functional QC_REGISTRATION metadata files
+        // Combine both signals - ensures both anatomical and functional QC complete
+        qc_completion_signal = anat_qc_completion
+            .combine(func_qc_completion)
+            .map { anat_meta, func_meta -> anat_meta }  // Use anatomical as the signal
+    }
+    
+    // Get unique subjects from anatomical or functional jobs
+    def all_subjects = Channel.empty()
+    all_subjects = all_subjects.mix(anat_jobs_ch.map { sub, ses, file_paths, needs_synth, suffix -> sub }.unique())
+    if (!anat_only) {
+        all_subjects = all_subjects.mix(func_jobs_ch.map { sub, ses, task, run, file_path, original_file_path -> sub }.unique())
+    }
+    
+    // Create snapshot directory path for each subject
+    // Combine with QC completion signal to ensure all QC processes finish first
+    // QC_GENERATE_REPORT expects: tuple (subject_id, snapshot_dir, config_file)
+    def qc_report_input = all_subjects
+        .combine(qc_completion_signal)  // Combine ensures QC processes complete before report generation
+        .map { sub, meta_files ->
+            def snapshot_dir = file("${params.output_dir}/sub-${sub}/figures")
+            [sub, snapshot_dir, config_file]
+        }
+        .groupTuple(by: 0)  // Group by subject_id to remove duplicates
+        .map { sub, items -> items[0] }  // Take first item from each group
+    
+    QC_GENERATE_REPORT(qc_report_input)
+
 }

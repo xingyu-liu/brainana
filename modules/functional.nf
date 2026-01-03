@@ -73,7 +73,8 @@ process FUNC_REORIENT {
     
     # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
     create_output_link(result.output_file, bids_output_filename)
-    for f in result.additional_files:
+    # Copy additional files (e.g., tmean)
+    for key, f in result.additional_files.items():
         shutil.copy2(f, f.name)
     
     # Save metadata
@@ -145,7 +146,8 @@ process FUNC_SLICE_TIMING {
     
     # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
     create_output_link(result.output_file, bids_output_filename)
-    for f in result.additional_files:
+    # Copy additional files (e.g., tmean)
+    for key, f in result.additional_files.items():
         shutil.copy2(f, f.name)
     
     # Save metadata
@@ -169,7 +171,7 @@ process FUNC_MOTION_CORRECTION {
     
     output:
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(original_file_path), emit: output
-    path "*.tsv", emit: motion_params
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.tsv"), emit: motion_params
     path "*.json", emit: metadata
     
     script:
@@ -218,7 +220,8 @@ process FUNC_MOTION_CORRECTION {
     
     # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
     create_output_link(result.output_file, bids_output_filename)
-    for f in result.additional_files:
+    # Copy additional files (e.g., tmean)
+    for key, f in result.additional_files.items():
         shutil.copy2(f, f.name)
     
     # Save metadata
@@ -290,7 +293,8 @@ process FUNC_DESPIKE {
     
     # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
     create_output_link(result.output_file, bids_output_filename)
-    for f in result.additional_files:
+    # Copy additional files (e.g., tmean)
+    for key, f in result.additional_files.items():
         shutil.copy2(f, f.name)
     
     # Save metadata
@@ -461,7 +465,8 @@ process FUNC_CONFORM {
     
     # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
     create_output_link(result.output_file, bids_output_filename)
-    for f in result.additional_files:
+    # Copy additional files (e.g., tmean)
+    for key, f in result.additional_files.items():
         shutil.copy2(f, f.name)
     
     # Save metadata
@@ -485,6 +490,7 @@ process FUNC_SKULLSTRIPPING {
     
     output:
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*_desc-brain_mask.nii.gz"), emit: brain_mask
     path "*.json", emit: metadata
     
     script:
@@ -532,8 +538,11 @@ process FUNC_SKULLSTRIPPING {
     
     # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
     create_output_link(result.output_file, bids_output_filename)
-    for f in result.additional_files:
-        shutil.copy2(f, f.name)
+    
+    # Copy and rename additional files with BIDS-compliant names
+    if "brain_mask" in result.additional_files:
+        bids_additional_name = f"{bids_prefix_wobold}_desc-brain_mask.nii.gz"
+        shutil.copy2(result.additional_files["brain_mask"], bids_additional_name)
     
     # Save metadata
     with open('metadata.json', 'w') as f:
@@ -551,8 +560,8 @@ process FUNC_REGISTRATION {
         pattern: '*.{nii.gz,h5}'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(original_file_path)  // This should be tmean
-    tuple val(anat_subject_id), val(anat_session_id), path(anat_registered), path(anat_transforms)  // From ANAT_REGISTRATION
+    // Combined channel: [sub, ses, task, run, func_file, orig_path, anat_reg, anat_trans, anat_ses, is_fallback]
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(original_file_path), path(anat_registered), path(anat_transforms), val(anat_session_id), val(is_fallback)
     path config_file
     
     output:
@@ -582,6 +591,13 @@ PYTHON
     
     echo "Set thread environment variables to \$THREADS"
     
+    # Check if using anatomical from different session (fallback case)
+    if [ "${is_fallback}" = "true" ]; then
+        echo "WARNING: Functional session ${session_id} for subject ${subject_id} does not have anatomical data." >&2
+        echo "WARNING: Using anatomical data from session ${anat_session_id} instead." >&2
+        echo "WARNING: This may affect registration quality if sessions have different head positions." >&2
+    fi
+    
     python3 <<EOF
     from macacaMRIprep.steps.functional import func_registration
     from macacaMRIprep.steps.types import StepInput
@@ -592,6 +608,7 @@ PYTHON
     import yaml
     import shutil
     import os
+    import sys
     from macacaMRIprep.utils import create_output_link
     
     # Load config
@@ -601,34 +618,71 @@ PYTHON
     # Get original file path (for BIDS filename generation)
     original_file_path = Path('${original_file_path}')
     
+    # Check if anatomical data is available
+    is_fallback = '${is_fallback}' == 'true'
+    anat_session_id = '${anat_session_id}'
+    func_session_id = '${session_id}'
+    
     # Determine target based on registration pipeline
     registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
     template_name = '${template_name}'
     
-    if registration_pipeline == 'func2template':
+    # Check if anatomical file exists (handle missing anatomical data)
+    anat_registered_path_str = '${anat_registered}'
+    # Check if path is a dummy/placeholder (contains .dummy or is empty)
+    is_dummy_anat = '.dummy' in anat_registered_path_str or not anat_registered_path_str or anat_registered_path_str.strip() == ''
+    if is_dummy_anat:
+        has_anat = False
+        anat_registered_path = None
+    else:
+        anat_registered_path = Path(anat_registered_path_str)
+        has_anat = anat_registered_path.exists()
+    
+    if registration_pipeline == 'func2template' or not has_anat:
+        # Direct to template registration (no anatomical needed)
         target_file = Path(resolve_template('${params.output_space}'))
         target_type = 'template'
         target_name = template_name
+        if not has_anat:
+            print(f"INFO: No anatomical data available, registering directly to template", file=sys.stderr)
     elif registration_pipeline == 'func2anat':
-        # Use anatomical file as target
-        target_file = Path('${anat_registered}')
-        target_type = 'anat'
-        # Extract anatomical target name from filename
-        anat_filename = Path('${anat_registered}').name
-        if 'space-' in anat_filename:
-            target_name = anat_filename.split('space-')[1].split('_')[0]
+        if not has_anat:
+            # Fallback to template if no anatomical data
+            target_file = Path(resolve_template('${params.output_space}'))
+            target_type = 'template'
+            target_name = template_name
+            print(f"INFO: No anatomical data available for func2anat pipeline, using template instead", file=sys.stderr)
         else:
-            target_name = 'anat'
+            # Use anatomical file as target
+            target_file = anat_registered_path
+            target_type = 'anat'
+            # Extract anatomical target name from filename
+            anat_filename = anat_registered_path.name
+            if 'space-' in anat_filename:
+                target_name = anat_filename.split('space-')[1].split('_')[0]
+            else:
+                target_name = 'anat'
+            if is_fallback:
+                print(f"WARNING: Using anatomical from session {anat_session_id} for functional session {func_session_id}", file=sys.stderr)
     else:  # func2anat2template
-        # First register to anatomical
-        target_file = Path('${anat_registered}')
-        target_type = 'anat'
-        # Extract anatomical target name from filename
-        anat_filename = Path('${anat_registered}').name
-        if 'space-' in anat_filename:
-            target_name = anat_filename.split('space-')[1].split('_')[0]
+        if not has_anat:
+            # Fallback to template if no anatomical data
+            target_file = Path(resolve_template('${params.output_space}'))
+            target_type = 'template'
+            target_name = template_name
+            print(f"INFO: No anatomical data available for func2anat2template pipeline, using template instead", file=sys.stderr)
         else:
-            target_name = 'anat'
+            # First register to anatomical
+            target_file = anat_registered_path
+            target_type = 'anat'
+            # Extract anatomical target name from filename
+            anat_filename = anat_registered_path.name
+            if 'space-' in anat_filename:
+                target_name = anat_filename.split('space-')[1].split('_')[0]
+            else:
+                target_name = 'anat'
+            if is_fallback:
+                print(f"WARNING: Using anatomical from session {anat_session_id} for functional session {func_session_id}", file=sys.stderr)
     
     # Create step input
     input_obj = StepInput(
@@ -657,7 +711,8 @@ PYTHON
     
     # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
     create_output_link(result.output_file, bids_output_filename)
-    for f in result.additional_files:
+    # Copy additional files (e.g., tmean)
+    for key, f in result.additional_files.items():
         shutil.copy2(f, f.name)
     
     # Save metadata
@@ -750,7 +805,8 @@ process FUNC_APPLY_TRANSFORMS {
     
     # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
     create_output_link(result.output_file, bids_output_filename)
-    for f in result.additional_files:
+    # Copy additional files (e.g., tmean)
+    for key, f in result.additional_files.items():
         shutil.copy2(f, f.name)
     
     # Save metadata

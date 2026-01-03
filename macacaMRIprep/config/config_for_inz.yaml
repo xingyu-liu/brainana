@@ -9,7 +9,6 @@ general:
   generate_report_only: false
   n_procs: 3
   anat_only: false
-  func_only: false
 bids_filtering:
   subjects: null
   sessions: null

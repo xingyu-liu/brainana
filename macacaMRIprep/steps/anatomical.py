@@ -106,12 +106,14 @@ def anat_conform(input: StepInput, template_file: Path) -> StepOutput:
     )
     
     output_file = Path(result["imagef_conformed"]) if result.get("imagef_conformed") else input.input_file
-    additional_files = []
+    additional_files = {}
     
     if result.get("forward_xfm"):
-        additional_files.append(Path(result["forward_xfm"]))
+        additional_files["forward_transform"] = Path(result["forward_xfm"])
     if result.get("inverse_xfm"):
-        additional_files.append(Path(result["inverse_xfm"]))
+        additional_files["inverse_transform"] = Path(result["inverse_xfm"])
+    if result.get("template_f"):
+        additional_files["template_resampled"] = Path(result["template_f"])  # template_f is already the resampled template
     
     return StepOutput(
         output_file=output_file,
@@ -191,16 +193,16 @@ def anat_skullstripping(input: StepInput) -> StepOutput:
     )
     
     output_file = Path(result["imagef_skullstripped"])
-    additional_files = []
+    additional_files = {}
     
     if result.get("brain_mask"):
-        additional_files.append(Path(result["brain_mask"]))
+        additional_files["brain_mask"] = Path(result["brain_mask"])
     if result.get("segmentation"):
-        additional_files.append(Path(result["segmentation"]))
+        additional_files["segmentation"] = Path(result["segmentation"])
     if result.get("hemimask"):
-        additional_files.append(Path(result["hemimask"]))
+        additional_files["hemimask"] = Path(result["hemimask"])
     if result.get("input_cropped"):
-        additional_files.append(Path(result["input_cropped"]))
+        additional_files["input_cropped"] = Path(result["input_cropped"])
     
     return StepOutput(
         output_file=output_file,
@@ -248,12 +250,12 @@ def anat_registration(input: StepInput, template_file: Path, template_name: str)
     )
     
     output_file = Path(result["imagef_registered"])
-    additional_files = []
+    additional_files = {}
     
     if result.get("forward_transform"):
-        additional_files.append(Path(result["forward_transform"]))
+        additional_files["forward_transform"] = Path(result["forward_transform"])
     if result.get("inverse_transform"):
-        additional_files.append(Path(result["inverse_transform"]))
+        additional_files["inverse_transform"] = Path(result["inverse_transform"])
     
     return StepOutput(
         output_file=output_file,
@@ -335,6 +337,139 @@ def anat_synthesis(anat_files: List[Path], working_dir: Path, config: Dict[str, 
             "step": "anat_synthesis",
             "synthesized": True,
             "num_runs": len(anat_files)
+        }
+    )
+
+
+def anat_surface_reconstruction(input: StepInput, conformed_file: Path, segmentation_file: Path, brain_mask: Optional[Path] = None) -> StepOutput:
+    """
+    Perform surface reconstruction using FastSurferRecon.
+    
+    Args:
+        input: StepInput with input_file, working_dir, config, metadata
+        conformed_file: Conformed T1w image (from conform step)
+        segmentation_file: Segmentation file (from skullstripping step)
+        brain_mask: Brain mask file (required for surface reconstruction)
+        
+    Returns:
+        StepOutput with surface reconstruction directory path
+    """
+    if not input.config.get("anat.surface_reconstruction.enabled", True):
+        logger.info("Step: surface reconstruction skipped (disabled in configuration)")
+        return StepOutput(
+            output_file=input.input_file,
+            metadata={"step": "surface_reconstruction", "skipped": True}
+        )
+    
+    # Validate required inputs
+    if not brain_mask:
+        raise ValueError("brain_mask is required for surface reconstruction")
+    
+    # Add FastSurferRecon directory to sys.path to enable fastsurfer_recon imports
+    import sys
+    project_root = Path(__file__).parent.parent.parent
+    fastsurfer_recon_dir = project_root / "FastSurferRecon"
+    if str(fastsurfer_recon_dir) not in sys.path:
+        sys.path.insert(0, str(fastsurfer_recon_dir))
+    
+    # Import FastSurferRecon modules
+    from fastsurfer_recon.pipeline import ReconSurfPipeline
+    from fastsurfer_recon.config import ReconSurfConfig, AtlasConfig
+    
+    # Get subject ID from metadata or derive from input
+    subject_id = input.metadata.get("subject_id") or "unknown"
+    if not subject_id.startswith("sub-"):
+        subject_id = f"sub-{subject_id}"
+    
+    # Get atlas name from config (default to ARM2 for macaque)
+    atlas_name = input.config.get("anat", {}).get("skullstripping_segmentation", {}).get("atlas_name", "ARM2")
+    
+    # Create subjects directory structure
+    subjects_dir = Path(input.working_dir) / "fastsurfer"
+    subject_dir = subjects_dir / subject_id
+    
+    logger.info(f"Step: Surface reconstruction for {subject_id}")
+    logger.info(f"Step: Atlas = {atlas_name}")
+    logger.info(f"Step: Subjects directory = {subjects_dir}")
+    
+    # Get LUT path using FastSurferRecon's AtlasConfig (has built-in fallbacks)
+    atlas_config = AtlasConfig(name=atlas_name)
+    lut_path = atlas_config.colorlut_path
+    
+    if lut_path is None or not lut_path.exists():
+        raise FileNotFoundError(
+            f"LUT file not found for atlas {atlas_name}. "
+            f"AtlasConfig searched but could not locate ColorLUT file."
+        )
+    
+    logger.info(f"Step: LUT path = {lut_path}")
+    
+    # Validate required files exist before processing
+    for path, name in [(conformed_file, "T1w image"), (segmentation_file, "segmentation"), (brain_mask, "mask")]:
+        if not path.exists():
+            raise FileNotFoundError(f"Step: Required file not found: {name} at {path}")
+    
+    logger.info("Step: All required files validated")
+    
+    # Step 1: Prepare files for FreeSurfer using postprocess_for_freesurfer
+    logger.info("Step: Preparing files for FreeSurfer format")
+    try:
+        from FastSurferCNN.postprocessing.prepping_for_surfrecon import postprocess_for_freesurfer
+        
+        prep_result = postprocess_for_freesurfer(
+            t1w_image=str(conformed_file),
+            segmentation=str(segmentation_file),
+            mask=str(brain_mask),
+            lut_path=str(lut_path),
+            subject_dir=str(subject_dir),
+            vox_size="min",
+            orientation="lia"
+        )
+        
+        if prep_result != 0:
+            raise RuntimeError(f"File preparation failed: {prep_result}")
+        
+        logger.info("Step: File preparation completed successfully")
+    except ImportError as e:
+        logger.error(f"Step: Failed to import postprocess_for_freesurfer - {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Step: File preparation failed - {e}")
+        raise
+    
+    # Step 2: Run surface reconstruction pipeline
+    logger.info("Step: Running surface reconstruction pipeline")
+    try:
+        # Get thread count from config
+        threads = input.config.get("processing", {}).get("threads", 1)
+        
+        # Create configuration using defaults from YAML, only override non-default values
+        recon_config = ReconSurfConfig.with_defaults(
+            subject_id=subject_id,
+            subjects_dir=str(subjects_dir),
+            atlas={"name": atlas_name},
+            processing={"threads": threads, "skip_cc": True, "skip_talairach": True},  # Default for macaque
+            verbose=1,
+        )
+        
+        # Run pipeline
+        pipeline = ReconSurfPipeline(recon_config)
+        pipeline.run()
+        
+        logger.info("Step: Surface reconstruction completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Step: Pipeline execution failed - {e}")
+        raise
+    
+    return StepOutput(
+        output_file=subject_dir,  # Return subject directory as output
+        metadata={
+            "step": "surface_reconstruction",
+            "modality": "anat",
+            "subject_id": subject_id,
+            "atlas_name": atlas_name,
+            "subjects_dir": str(subjects_dir)
         }
     )
 

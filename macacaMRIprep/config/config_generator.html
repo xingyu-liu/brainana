@@ -220,13 +220,6 @@
                 </div>
                 <div class="help-text">(process only anatomical data)</div>
             </div>
-            <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" id="general_func_only" name="general_func_only">
-                    <label for="general_func_only">func_only</label>
-                </div>
-                <div class="help-text">(process only functional data)</div>
-            </div>
         </div>
 
         <!-- BIDS Filtering -->
@@ -707,8 +700,7 @@
                 overwrite: false,
                 generate_report_only: false,
                 n_procs: 1,
-                anat_only: false,
-                func_only: false
+                anat_only: false
             },
             bids_filtering: {
                 subjects: null,
@@ -1092,7 +1084,6 @@
             config.general.generate_report_only = document.getElementById('general_generate_report_only').checked;
             config.general.n_procs = parseInt(document.getElementById('general_n_procs').value);
             config.general.anat_only = document.getElementById('general_anat_only').checked;
-            config.general.func_only = document.getElementById('general_func_only').checked;
             
             // BIDS filtering
             config.bids_filtering.subjects = parseListInput(document.getElementById('bids_subjects').value);

@@ -151,7 +151,6 @@ All parameters can be set via command line or in `nextflow.config`:
 - `--tasks`: Comma-separated list of task names (optional)
 - `--runs`: Comma-separated list of run numbers (optional)
 - `--anat_only`: Process only anatomical data
-- `--func_only`: Process only functional data
 - `--overwrite`: Overwrite existing outputs
 
 ### Executor Profiles

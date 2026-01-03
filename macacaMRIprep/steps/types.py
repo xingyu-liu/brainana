@@ -42,22 +42,24 @@ class StepOutput:
     Attributes:
         output_file: Primary output file path
         metadata: Step-specific metadata
-        additional_files: Additional output files (masks, transforms, etc.)
+        additional_files: Additional output files (masks, transforms, etc.) as dict with semantic keys
         qc_files: QC visualization files (if generated during step)
     """
     output_file: Path
     metadata: Dict[str, Any] = field(default_factory=dict)
-    additional_files: List[Path] = field(default_factory=list)
+    additional_files: Dict[str, Path] = field(default_factory=dict)
     qc_files: List[Path] = field(default_factory=list)
     
     def __post_init__(self):
         """Convert string paths to Path objects."""
         if isinstance(self.output_file, str):
             self.output_file = Path(self.output_file)
-        self.additional_files = [
-            Path(f) if isinstance(f, str) else f 
-            for f in self.additional_files
-        ]
+        # Convert additional_files dict values to Path objects
+        if isinstance(self.additional_files, dict):
+            self.additional_files = {
+                k: Path(v) if isinstance(v, str) else v
+                for k, v in self.additional_files.items()
+            }
         self.qc_files = [
             Path(f) if isinstance(f, str) else f 
             for f in self.qc_files

@@ -93,14 +93,12 @@ def discover_bids_dataset(
     anatomical_jobs = []
     functional_jobs = []
     
-    # Check if we should skip anatomical or functional discovery based on config
+    # Check if we should skip functional discovery based on config
     general_config = config.get("general", {})
     anat_only = general_config.get("anat_only", False)
-    func_only = general_config.get("func_only", False)
     
-    # Discover anatomical files (skip if func_only is True)
-    if not func_only:
-        for sub in target_subjects:
+    # Discover anatomical files (always discover, regardless of anat_only setting)
+    for sub in target_subjects:
             # Get sessions for this subject
             sub_sessions = layout.get_sessions(subject=sub)
             if not sub_sessions:
@@ -229,9 +227,6 @@ def discover_bids_dataset(
                     functional_jobs.append(job)
     else:
         logger.info("Skipping functional discovery (anat_only = True)")
-    
-    if func_only:
-        logger.info("Skipping anatomical discovery (func_only = True)")
     
     logger.info(f"Discovered {len(anatomical_jobs)} anatomical jobs and {len(functional_jobs)} functional jobs")
     

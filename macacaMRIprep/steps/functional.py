@@ -46,7 +46,7 @@ def func_reorient(input: StepInput, template_file: Optional[Path] = None) -> Ste
         return StepOutput(
             output_file=input.input_file,
             metadata={"step": "reorient", "skipped": True},
-            additional_files=[tmean_path]
+            additional_files={"tmean": tmean_path}
         )
     
     # Determine target for reorientation
@@ -72,9 +72,9 @@ def func_reorient(input: StepInput, template_file: Optional[Path] = None) -> Ste
     output_file = Path(result["imagef_reoriented"]) if result.get("imagef_reoriented") else input.input_file
     tmean_file = Path(result["imagef_tmean"]) if result.get("imagef_tmean") else None
     
-    additional_files = []
+    additional_files = {}
     if tmean_file:
-        additional_files.append(tmean_file)
+        additional_files["tmean"] = tmean_file
     
     return StepOutput(
         output_file=output_file,
@@ -118,9 +118,9 @@ def func_slice_timing_correction(input: StepInput) -> StepOutput:
     output_file = Path(result["imagef_slice_time_corrected"]) if result.get("imagef_slice_time_corrected") else input.input_file
     tmean_file = Path(result["imagef_slice_time_corrected_tmean"]) if result.get("imagef_slice_time_corrected_tmean") else None
     
-    additional_files = []
+    additional_files = {}
     if tmean_file:
-        additional_files.append(tmean_file)
+        additional_files["tmean"] = tmean_file
     
     return StepOutput(
         output_file=output_file,
@@ -163,11 +163,11 @@ def func_motion_correction(input: StepInput) -> StepOutput:
     tmean_file = Path(result["imagef_motion_corrected_tmean"]) if result.get("imagef_motion_corrected_tmean") else None
     motion_params = Path(result["motion_parameters"]) if result.get("motion_parameters") else None
     
-    additional_files = []
+    additional_files = {}
     if tmean_file:
-        additional_files.append(tmean_file)
+        additional_files["tmean"] = tmean_file
     if motion_params:
-        additional_files.append(motion_params)
+        additional_files["motion_params"] = motion_params
     
     return StepOutput(
         output_file=output_file,
@@ -210,11 +210,11 @@ def func_despike(input: StepInput) -> StepOutput:
     output_file = Path(result["imagef_despiked"]) if result.get("imagef_despiked") else input.input_file
     tmean_file = Path(result["imagef_despiked_tmean"]) if result.get("imagef_despiked_tmean") else None
     
-    additional_files = []
+    additional_files = {}
     if tmean_file:
-        additional_files.append(tmean_file)
+        additional_files["tmean"] = tmean_file
     if result.get("spikiness_map"):
-        additional_files.append(Path(result["spikiness_map"]))
+        additional_files["spikiness_map"] = Path(result["spikiness_map"])
     
     return StepOutput(
         output_file=output_file,
@@ -300,12 +300,12 @@ def func_conform(input: StepInput, target_file: Path) -> StepOutput:
     )
     
     output_file = Path(result["imagef_conformed"]) if result.get("imagef_conformed") else input.input_file
-    additional_files = []
+    additional_files = {}
     
     if result.get("forward_xfm"):
-        additional_files.append(Path(result["forward_xfm"]))
+        additional_files["forward_transform"] = Path(result["forward_xfm"])
     if result.get("inverse_xfm"):
-        additional_files.append(Path(result["inverse_xfm"]))
+        additional_files["inverse_transform"] = Path(result["inverse_xfm"])
     
     return StepOutput(
         output_file=output_file,
@@ -346,10 +346,10 @@ def func_skullstripping(input: StepInput) -> StepOutput:
     )
     
     output_file = Path(result["imagef_skullstripped"])
-    additional_files = []
+    additional_files = {}
     
     if result.get("brain_mask"):
-        additional_files.append(Path(result["brain_mask"]))
+        additional_files["brain_mask"] = Path(result["brain_mask"])
     
     return StepOutput(
         output_file=output_file,
@@ -417,12 +417,12 @@ def func_registration(
     )
     
     output_file = Path(result["imagef_registered"])
-    additional_files = []
+    additional_files = {}
     
     if result.get("forward_transform"):
-        additional_files.append(Path(result["forward_transform"]))
+        additional_files["forward_transform"] = Path(result["forward_transform"])
     if result.get("inverse_transform"):
-        additional_files.append(Path(result["inverse_transform"]))
+        additional_files["inverse_transform"] = Path(result["inverse_transform"])
     
     return StepOutput(
         output_file=output_file,
@@ -476,10 +476,10 @@ def func_apply_transforms(
     )
     
     output_file = Path(result["imagef_registered"])
-    additional_files = []
+    additional_files = {}
     
     if result.get("imagef_registered_tmean"):
-        additional_files.append(Path(result["imagef_registered_tmean"]))
+        additional_files["tmean"] = Path(result["imagef_registered_tmean"])
     
     return StepOutput(
         output_file=output_file,

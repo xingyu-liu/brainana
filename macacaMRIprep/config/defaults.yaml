@@ -8,7 +8,6 @@ general:
   generate_report_only: false  # bool: only generate QC reports from existing outputs
   n_procs: 3  # int: number of parallel processes (>= 1)
   anat_only: false  # bool: process only anatomical data
-  func_only: false  # bool: process only functional data. TODO: add this to the pipeline
 
 bids_filtering:
   subjects: null  # list of str or null: filter by subject IDs (e.g., ["01", "02"])

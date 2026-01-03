@@ -184,6 +184,114 @@ def qc_registration(
         )
 
 
+def qc_conform(
+    conformed_file: Path,
+    template_file: Path,
+    output_path: Path,
+    modality: str = "anat",
+    config: Optional[Dict[str, Any]] = None
+) -> StepOutput:
+    """
+    Generate conform QC snapshot.
+    
+    Args:
+        conformed_file: Path to conformed image
+        template_file: Path to template image used for conforming
+        output_path: Output path for QC snapshot
+        modality: Modality ('anat' or 'func')
+        config: Configuration dictionary (optional)
+        
+    Returns:
+        StepOutput with QC file
+    """
+    if not config or not config.get("quality_control", {}).get("enabled", True):
+        logger.info("QC: conform QC skipped (disabled in configuration)")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_conform", "skipped": True}
+        )
+    
+    try:
+        result = create_conform_qc(
+            conformed_file=str(conformed_file),
+            template_file=str(template_file),
+            save_f=str(output_path),
+            modality=modality,
+            logger=logger
+        )
+        
+        qc_file = Path(result.get(f"{modality}_conform_overlay", output_path))
+        
+        return StepOutput(
+            output_file=qc_file,
+            metadata={
+                "step": "qc_conform",
+                "modality": modality
+            },
+            qc_files=[qc_file]
+        )
+    except Exception as e:
+        logger.warning(f"QC: conform QC failed - {e}")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_conform", "error": str(e)}
+        )
+
+
+def qc_atlas_segmentation(
+    underlay_file: Path,
+    atlas_file: Path,
+    output_path: Path,
+    modality: str = "anat",
+    config: Optional[Dict[str, Any]] = None
+) -> StepOutput:
+    """
+    Generate atlas segmentation QC snapshot.
+    
+    Args:
+        underlay_file: Path to underlay image (e.g., T1w brain image)
+        atlas_file: Path to atlas segmentation file
+        output_path: Output path for QC snapshot
+        modality: Modality ('anat' or 'func')
+        config: Configuration dictionary (optional)
+        
+    Returns:
+        StepOutput with QC file
+    """
+    if not config or not config.get("quality_control", {}).get("enabled", True):
+        logger.info("QC: atlas segmentation QC skipped (disabled in configuration)")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_atlas_segmentation", "skipped": True}
+        )
+    
+    try:
+        result = create_atlas_segmentation_qc(
+            underlay_file=str(underlay_file),
+            atlas_file=str(atlas_file),
+            save_f=str(output_path),
+            modality=modality,
+            logger=logger
+        )
+        
+        qc_file = Path(result.get(f"{modality}_atlas_segmentation_overlay", output_path))
+        
+        return StepOutput(
+            output_file=qc_file,
+            metadata={
+                "step": "qc_atlas_segmentation",
+                "modality": modality
+            },
+            qc_files=[qc_file]
+        )
+    except Exception as e:
+        logger.warning(f"QC: atlas segmentation QC failed - {e}")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_atlas_segmentation", "error": str(e)}
+        )
+
+
 def qc_motion_correction(
     motion_params_file: Path,
     output_path: Path,
