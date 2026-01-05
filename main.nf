@@ -14,10 +14,15 @@ nextflow.enable.dsl=2
 // Include anatomical processing modules
 include { ANAT_SYNTHESIS } from './modules/anatomical.nf'
 include { ANAT_REORIENT } from './modules/anatomical.nf'
-include { ANAT_REORIENT as ANAT_REORIENT_T2W } from './modules/anatomical.nf'  // Alias for T2w special processing
+// Process aliases for T2w special processing pipeline
+// Note: Nextflow requires process aliases when the same process needs to be called with different
+// channel inputs in the same workflow. ANAT_REORIENT_T2W and ANAT_BIAS_CORRECTION_T2W are
+// identical to their non-aliased counterparts but allow separate channel tracking for T2w files
+// that need special processing (REORIENT → REG_TO_T1W → BIAS_CORRECTION, skipping CONFORM/SKULLSTRIP/REG).
+include { ANAT_REORIENT as ANAT_REORIENT_T2W } from './modules/anatomical.nf'
 include { ANAT_CONFORM } from './modules/anatomical.nf'
 include { ANAT_BIAS_CORRECTION } from './modules/anatomical.nf'
-include { ANAT_BIAS_CORRECTION as ANAT_BIAS_CORRECTION_T2W } from './modules/anatomical.nf'  // Alias for T2w special processing
+include { ANAT_BIAS_CORRECTION as ANAT_BIAS_CORRECTION_T2W } from './modules/anatomical.nf'
 include { ANAT_SKULLSTRIPPING } from './modules/anatomical.nf'
 include { ANAT_SURFACE_RECONSTRUCTION } from './modules/anatomical.nf'
 include { ANAT_REGISTRATION } from './modules/anatomical.nf'
@@ -228,8 +233,38 @@ except Exception as e:
     // ============================================
     // ANATOMICAL PIPELINE
     // ============================================
+    // Helper closures for common operations
+    // Extract single file path from file_paths (handles both List and single value)
+    def getSingleFilePath = { file_paths ->
+        file_paths instanceof List ? file_paths[0] : file_paths
+    }
+    
+    // Map single-file job tuple to [sub, ses, file, bids_template] format
+    def mapSingleFileJob = { item ->
+        def sub = item[0]
+        def ses = item[1]
+        def file_paths = item[2]
+        def file_path = getSingleFilePath(file_paths)
+        def anat_file = file(file_path)
+        [sub, ses, anat_file, file_path]
+    }
+    
+    // Filter predicate for T1w files (checks bids_template)
+    def isT1wFile = { sub, ses, file, bids_template ->
+        bids_template.toString().contains('T1w')
+    }
+    
+    // Pass-through mapping helper (preserves channel structure when step is disabled)
+    def passThroughAnat = { sub, ses, file, bids_template ->
+        [sub, ses, file, bids_template]
+    }
+    
+    // Pass-through mapping helper for functional (preserves 6-element tuple structure)
+    def passThroughFunc = { sub, ses, task, run, file, bids_template ->
+        [sub, ses, task, run, file, bids_template]
+    }
+    
     // First, extract all subjects from anat_jobs_ch for later use
-    // Use tap to keep a copy of the channel for subject extraction
     anat_jobs_ch
         .map { it[0] }  // Get subject_id (index 0)
         .unique()
@@ -264,39 +299,21 @@ except Exception as e:
     
     // Process T1w single files (no synthesis needed)
     anat_branched.t1w_single
-        .map { item ->
-            def sub = item[0]
-            def ses = item[1]
-            def file_paths = item[2]
-            def file_path = file_paths instanceof List ? file_paths[0] : file_paths
-            def anat_file = file(file_path)
-            [sub, ses, anat_file, file_path]
-        }
+        .map(mapSingleFileJob)
         .set { anat_t1w_jobs }
     
     // T2w files that need special processing (with T1w in same session)
     // These go through a separate pipeline: REORIENT_T2W → REG_TO_T1W → BIAS_CORRECTION_T2W
+    // Note: Process aliases (ANAT_REORIENT_T2W, ANAT_BIAS_CORRECTION_T2W) are required because
+    // Nextflow doesn't allow reusing the same process name with different channel inputs.
+    // The aliases are identical processes but allow separate channel tracking for T2w special processing.
     anat_branched.t2w_with_t1w
-        .map { item ->
-            def sub = item[0]
-            def ses = item[1]
-            def file_paths = item[2]
-            def file_path = file_paths instanceof List ? file_paths[0] : file_paths
-            def anat_file = file(file_path)
-            [sub, ses, anat_file, file_path]
-        }
+        .map(mapSingleFileJob)
         .set { anat_t2w_with_t1w_jobs }
     
     // T2w-only files (no T1w in session - process normally)
     anat_branched.t2w_only
-        .map { item ->
-            def sub = item[0]
-            def ses = item[1]
-            def file_paths = item[2]
-            def file_path = file_paths instanceof List ? file_paths[0] : file_paths
-            def anat_file = file(file_path)
-            [sub, ses, anat_file, file_path]
-        }
+        .map(mapSingleFileJob)
         .set { anat_t2w_only_jobs }
     
     // Combine T1w and T2w-only jobs for normal processing
@@ -331,10 +348,7 @@ except Exception as e:
         anat_after_reorient_normal = ANAT_REORIENT.out.output
     } else {
         // Pass through: create channel with same structure
-        anat_after_reorient_normal = anat_input_ch
-            .map { sub, ses, file, bids_template ->
-                [sub, ses, file, bids_template]
-            }
+        anat_after_reorient_normal = anat_input_ch.map(passThroughAnat)
     }
     
     // CONFORM step (conditionally enabled) - only for normal processing (not T2w-with-T1w)
@@ -376,10 +390,7 @@ except Exception as e:
         anat_skull_seg = ANAT_SKULLSTRIPPING.out.brain_segmentation
     } else {
         // Pass through: create channel with same structure (no mask/seg)
-        anat_after_skull = anat_after_bias
-            .map { sub, ses, file, bids_template ->
-                [sub, ses, file, bids_template]
-            }
+        anat_after_skull = anat_after_bias.map(passThroughAnat)
     }
     
     // REGISTRATION step (conditionally enabled)
@@ -520,40 +531,26 @@ except Exception as e:
         t2w_after_reorient = ANAT_REORIENT_T2W.out.output
     } else {
         // Pass through: create channel with same structure
-        t2w_after_reorient = anat_t2w_with_t1w_jobs
-            .map { sub, ses, file, bids_template ->
-                [sub, ses, file, bids_template]
-            }
+        t2w_after_reorient = anat_t2w_with_t1w_jobs.map(passThroughAnat)
     }
     
     // Step 2: Get T1w bias-corrected output to use as reference
     // Filter T1w files from the main pipeline
     def t1w_bias_corrected = anat_after_bias
-        .filter { sub, ses, file, bids_template ->
-            // Check if this is a T1w file by examining the bids_template
-            bids_template.toString().contains('T1w')
-        }
+        .filter(isT1wFile)
     
-    // Step 3: Join reoriented T2w with T1w bias-corrected output
-    // T1w bias-corrected: [sub, ses, file, bids_template]
-    // T2w reoriented: [sub, ses, file, bids_template]
-    def t2w_reg_joined = t2w_after_reorient
+    // Step 3: Join reoriented T2w with T1w bias-corrected output and split channels
+    // Join once, then split into two channels using multiMap
+    t2w_after_reorient
         .join(t1w_bias_corrected, by: [0, 1])  // Join by subject and session
-        .map { sub, ses, t2w_file, t2w_bids_template, t1w_file, t1w_bids_template ->
-            // Create tuple for process: [sub, ses, t2w_file, bids_template, t1w_file]
-            [sub, ses, t2w_file, t2w_bids_template, t1w_file]
+        .multiMap { sub, ses, t2w_file, t2w_bids_template, t1w_file, t1w_bids_template ->
+            tuple: [sub, ses, t2w_file, t2w_bids_template]
+            reference: t1w_file
         }
+        .set { t2w_reg_multi }
     
-    // Split into tuple channel and T1w reference channel
-    def t2w_reg_input = t2w_reg_joined
-        .map { sub, ses, t2w_file, t2w_bids_template, t1w_file ->
-            [sub, ses, t2w_file, t2w_bids_template]
-        }
-    
-    def t1w_ref_for_t2w = t2w_reg_joined
-        .map { sub, ses, t2w_file, t2w_bids_template, t1w_file ->
-            t1w_file
-        }
+    def t2w_reg_input = t2w_reg_multi.tuple
+    def t1w_ref_for_t2w = t2w_reg_multi.reference
     
     // Step 4: Run T2w→T1w registration
     // Process signature: (tuple, t1w_reference, config_file)
@@ -567,10 +564,7 @@ except Exception as e:
         t2w_after_bias_final = ANAT_BIAS_CORRECTION_T2W.out.output
     } else {
         // Pass through: create channel with same structure
-        t2w_after_bias_final = t2w_after_reg_to_t1w
-            .map { sub, ses, file, bids_template ->
-                [sub, ses, file, bids_template]
-            }
+        t2w_after_bias_final = t2w_after_reg_to_t1w.map(passThroughAnat)
     }
     
     // QC for T2w→T1w registration
@@ -578,31 +572,19 @@ except Exception as e:
     // Process expects: tuple [sub, ses, registered_t2w_file, t1w_reference_file], bids_naming_template, config_file
     // Get skull-stripped T1w brain files from the main pipeline
     def t1w_skullstripped = anat_after_skull
-        .filter { sub, ses, file, bids_template ->
-            // Check if this is a T1w file by examining the bids_template
-            bids_template.toString().contains('T1w')
-        }
+        .filter(isT1wFile)
     
-    def t2w_qc_input = t2w_after_reg_to_t1w
+    // Join and split channels using multiMap
+    t2w_after_reg_to_t1w
         .join(t1w_skullstripped, by: [0, 1])
-        .map { sub, ses, t2w_file, t2w_bids_template, t1w_file, t1w_bids_template ->
-            // Create tuple for process: [sub, ses, t2w_file, t1w_file, t2w_bids_template]
-            [sub, ses, t2w_file, t1w_file, t2w_bids_template]
+        .multiMap { sub, ses, t2w_file, t2w_bids_template, t1w_file, t1w_bids_template ->
+            tuple: [sub, ses, t2w_file, t1w_file]
+            bids_template: t2w_bids_template
         }
-    
-    // Split into tuple channel and bids_template channel
-    def t2w_qc_tuple = t2w_qc_input
-        .map { sub, ses, t2w_file, t1w_file, t2w_bids_template ->
-            [sub, ses, t2w_file, t1w_file]
-        }
-    
-    def t2w_qc_bids_template = t2w_qc_input
-        .map { sub, ses, t2w_file, t1w_file, t2w_bids_template ->
-            t2w_bids_template
-        }
+        .set { t2w_qc_channels }
     
     // QC_T2W_TO_T1W_REGISTRATION
-    QC_T2W_TO_T1W_REGISTRATION(t2w_qc_tuple, t2w_qc_bids_template, config_file)
+    QC_T2W_TO_T1W_REGISTRATION(t2w_qc_channels.tuple, t2w_qc_channels.bids_template, config_file)
 
     
     // ============================================
@@ -618,10 +600,7 @@ except Exception as e:
             func_after_reorient = FUNC_REORIENT.out.output
         } else {
             // Pass through: create channel with same structure
-            func_after_reorient = func_jobs_ch
-                .map { sub, ses, task, run, file, bids_template ->
-                    [sub, ses, task, run, file, bids_template]
-                }
+            func_after_reorient = func_jobs_ch.map(passThroughFunc)
         }
         
         // SLICE_TIMING step
@@ -630,10 +609,7 @@ except Exception as e:
             FUNC_SLICE_TIMING(func_after_reorient, config_file)
             func_after_slice = FUNC_SLICE_TIMING.out.output
         } else {
-            func_after_slice = func_after_reorient
-                .map { sub, ses, task, run, file, bids_template ->
-                    [sub, ses, task, run, file, bids_template]
-                }
+            func_after_slice = func_after_reorient.map(passThroughFunc)
         }
         
         // MOTION_CORRECTION step
@@ -644,10 +620,7 @@ except Exception as e:
             func_after_motion = FUNC_MOTION_CORRECTION.out.output
             func_motion_params = FUNC_MOTION_CORRECTION.out.motion_params
         } else {
-            func_after_motion = func_after_slice
-                .map { sub, ses, task, run, file, bids_template ->
-                    [sub, ses, task, run, file, bids_template]
-                }
+            func_after_motion = func_after_slice.map(passThroughFunc)
         }
         
         // DESPIKE step
@@ -656,10 +629,7 @@ except Exception as e:
             FUNC_DESPIKE(func_after_motion, config_file)
             func_after_despike = FUNC_DESPIKE.out.output
         } else {
-            func_after_despike = func_after_motion
-                .map { sub, ses, task, run, file, bids_template ->
-                    [sub, ses, task, run, file, bids_template]
-                }
+            func_after_despike = func_after_motion.map(passThroughFunc)
         }
         
         // BIAS_CORRECTION step
@@ -668,10 +638,7 @@ except Exception as e:
             FUNC_BIAS_CORRECTION(func_after_despike, config_file)
             func_after_bias = FUNC_BIAS_CORRECTION.out.output
         } else {
-            func_after_bias = func_after_despike
-                .map { sub, ses, task, run, file, bids_template ->
-                    [sub, ses, task, run, file, bids_template]
-                }
+            func_after_bias = func_after_despike.map(passThroughFunc)
         }
         
         // CONFORM step (conditionally enabled - needs pass-through for transforms)
@@ -683,10 +650,7 @@ except Exception as e:
             func_conform_transforms = FUNC_CONFORM.out.transforms
         } else {
             // Pass through: create channel with same structure (no transforms)
-            func_after_conform = func_after_bias
-                .map { sub, ses, task, run, file, bids_template ->
-                    [sub, ses, task, run, file, bids_template]
-                }
+            func_after_conform = func_after_bias.map(passThroughFunc)
         }
         
         // SKULLSTRIPPING step
@@ -697,10 +661,7 @@ except Exception as e:
             func_after_skull = FUNC_SKULLSTRIPPING.out.output
             func_skull_mask = FUNC_SKULLSTRIPPING.out.brain_mask
         } else {
-            func_after_skull = func_after_conform
-                .map { sub, ses, task, run, file, bids_template ->
-                    [sub, ses, task, run, file, bids_template]
-                }
+            func_after_skull = func_after_conform.map(passThroughFunc)
         }
         
         // Functional registration (depends on anatomical if available)
@@ -764,10 +725,7 @@ except Exception as e:
             func_reg_transforms = FUNC_REGISTRATION.out.transforms
         } else {
             // Pass through: create channel with same structure (no transforms)
-            func_after_reg = func_after_skull
-                .map { sub, ses, task, run, file, bids_template ->
-                    [sub, ses, task, run, file, bids_template]
-                }
+            func_after_reg = func_after_skull.map(passThroughFunc)
         }
         
         // APPLY_TRANSFORMS step (only if registration was enabled)

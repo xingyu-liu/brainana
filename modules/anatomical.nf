@@ -24,30 +24,25 @@ process ANAT_SYNTHESIS {
     """
     \${PYTHON:-python3} <<'PYTHON_EOF' > /dev/null
 from macacaMRIprep.steps.anatomical import anat_synthesis
-from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename, get_filename_stem
-from macacaMRIprep.utils import init_cmd_log_file, create_output_link
+from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename
+from macacaMRIprep.utils.nextflow import (
+    load_config, detect_modality, init_cmd_log_for_nextflow, create_output_link
+)
 from pathlib import Path
 import json
-import yaml
 import shutil
 import os
 
-# Initialize command log file (saves to output_dir/reports/commands.log)
-# Set job/step context for command logging
-job_id = f"sub-${subject_id}"
-if '${session_id}':
-    job_id += f"_ses-${session_id}"
-init_cmd_log_file(
+# Initialize command log file
+init_cmd_log_for_nextflow(
     output_dir='${params.output_dir}',
-    job_id=job_id,
-    step_name='ANAT_SYNTHESIS',
     subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_SYNTHESIS'
 )
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+config = load_config('${config_file}')
 
 # Get anatomical files
 anat_files = [Path(f) for f in [${anat_files_list}]]
@@ -56,12 +51,7 @@ anat_files = [Path(f) for f in [${anat_files_list}]]
 bids_naming_template = Path('${first_file}')
 
 # Determine modality from BIDS naming template filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
+modality = detect_modality(bids_naming_template)
 
 # Run synthesis (anat_synthesis function works for all anatomical modalities via underlying synthesis_multiple_anatomical)
 result = anat_synthesis(
@@ -100,8 +90,7 @@ else:
         shutil.copy2(result.output_file, bids_output_filename)
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 
 # Determine what to write to bids_naming_template.txt for downstream steps
 # If synthesis occurred, use the synthesized filename (without run) as the BIDS naming template
@@ -145,40 +134,28 @@ process ANAT_REORIENT {
 from macacaMRIprep.steps.anatomical import anat_reorient
 from macacaMRIprep.steps.types import StepInput
 from macacaMRIprep.utils.templates import resolve_template
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils import init_cmd_log_file, create_output_link
+from macacaMRIprep.utils.bids import create_bids_output_filename
+from macacaMRIprep.utils.nextflow import (
+    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+)
 from pathlib import Path
-import json
-import yaml
-import shutil
 
-# Initialize command log file (saves to output_dir/reports/commands.log)
-# Set job/step context for command logging
-job_id = f"sub-${subject_id}"
-if '${session_id}':
-    job_id += f"_ses-${session_id}"
-init_cmd_log_file(
+# Initialize command log file
+init_cmd_log_for_nextflow(
     output_dir='${params.output_dir}',
-    job_id=job_id,
-    step_name='ANAT_REORIENT',
     subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_REORIENT'
 )
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from BIDS naming template filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
+modality = detect_modality(bids_naming_template)
 
 # Resolve template if needed
 template_file = None
@@ -211,8 +188,7 @@ bids_output_filename = create_bids_output_filename(
 create_output_link(result.output_file, bids_output_filename)
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -243,41 +219,29 @@ from macacaMRIprep.steps.anatomical import anat_conform
 from macacaMRIprep.steps.types import StepInput
 from macacaMRIprep.utils.templates import resolve_template
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils import init_cmd_log_file, create_output_link
+from macacaMRIprep.utils.nextflow import (
+    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+)
 from pathlib import Path
-import json
-import yaml
 import shutil
 import os
-from macacaMRIprep.utils import create_output_link
 
-# Initialize command log file (saves to output_dir/reports/commands.log)
-# Set job/step context for command logging
-job_id = f"sub-${subject_id}"
-if '${session_id}':
-    job_id += f"_ses-${session_id}"
-init_cmd_log_file(
+# Initialize command log file
+init_cmd_log_for_nextflow(
     output_dir='${params.output_dir}',
-    job_id=job_id,
-    step_name='ANAT_CONFORM',
     subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_CONFORM'
 )
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from BIDS naming template filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
+modality = detect_modality(bids_naming_template)
 
 # Resolve template
 template_file = Path(resolve_template('${params.output_space}'))
@@ -333,8 +297,7 @@ if "template_resampled" in result.additional_files:
         os.symlink(template_resampled_src, template_resampled_dest)
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -379,42 +342,30 @@ PYTHON
     \${PYTHON:-python3} <<'PYTHON_EOF'
 from macacaMRIprep.steps.anatomical import anat_bias_correction
 from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils import init_cmd_log_file, create_output_link
+from macacaMRIprep.utils.bids import create_bids_output_filename
+from macacaMRIprep.utils.nextflow import (
+    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+)
 from pathlib import Path
-import json
-import yaml
 import shutil
 import os
-from macacaMRIprep.utils import create_output_link
 
-# Initialize command log file (saves to output_dir/reports/commands.log)
-# Set job/step context for command logging
-job_id = f"sub-${subject_id}"
-if '${session_id}':
-    job_id += f"_ses-${session_id}"
-init_cmd_log_file(
+# Initialize command log file
+init_cmd_log_for_nextflow(
     output_dir='${params.output_dir}',
-    job_id=job_id,
-    step_name='ANAT_BIAS_CORRECTION',
     subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_BIAS_CORRECTION'
 )
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from BIDS naming template filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
+modality = detect_modality(bids_naming_template)
 
 # Create step input
 input_obj = StepInput(
@@ -471,41 +422,30 @@ process ANAT_SKULLSTRIPPING {
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.anatomical import anat_skullstripping
 from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils import init_cmd_log_file, create_output_link
+from macacaMRIprep.utils.bids import create_bids_output_filename
+from macacaMRIprep.utils.nextflow import (
+    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+)
 from pathlib import Path
-import json
-import yaml
 import shutil
 import os
 
-# Initialize command log file (saves to output_dir/reports/commands.log)
-# Set job/step context for command logging
-job_id = f"sub-${subject_id}"
-if '${session_id}':
-    job_id += f"_ses-${session_id}"
-init_cmd_log_file(
+# Initialize command log file
+init_cmd_log_for_nextflow(
     output_dir='${params.output_dir}',
-    job_id=job_id,
-    step_name='ANAT_SKULLSTRIPPING',
     subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_SKULLSTRIPPING'
 )
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from BIDS naming template filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
+modality = detect_modality(bids_naming_template)
 
 # Create step input
 input_obj = StepInput(
@@ -556,8 +496,7 @@ if "input_cropped" in result.additional_files:
     shutil.copy2(result.additional_files["input_cropped"], result.additional_files["input_cropped"].name)
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -587,27 +526,22 @@ process ANAT_SURFACE_RECONSTRUCTION {
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.anatomical import anat_surface_reconstruction
 from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils import init_cmd_log_file
+from macacaMRIprep.utils.nextflow import (
+    load_config, init_cmd_log_for_nextflow, save_metadata
+)
 from pathlib import Path
-import json
-import yaml
 import os
 
 # Initialize command log file
-job_id = f"sub-${subject_id}"
-if '${session_id}':
-    job_id += f"_ses-${session_id}"
-init_cmd_log_file(
+init_cmd_log_for_nextflow(
     output_dir='${params.output_dir}',
-    job_id=job_id,
-    step_name='ANAT_SURFACE_RECONSTRUCTION',
     subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_SURFACE_RECONSTRUCTION'
 )
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+config = load_config('${config_file}')
 
 # Create step input
 input_obj = StepInput(
@@ -668,8 +602,7 @@ if not expected_path.exists():
     raise FileNotFoundError(f"Failed to create expected output path: {expected_path} (absolute: {expected_abs})")
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -718,40 +651,29 @@ from macacaMRIprep.steps.anatomical import anat_registration
 from macacaMRIprep.steps.types import StepInput
 from macacaMRIprep.utils.templates import resolve_template
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils import init_cmd_log_file, create_output_link
+from macacaMRIprep.utils.nextflow import (
+    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+)
 from pathlib import Path
-import json
-import yaml
 import shutil
 import os
 
-# Initialize command log file (saves to output_dir/reports/commands.log)
-# Set job/step context for command logging
-job_id = f"sub-${subject_id}"
-if '${session_id}':
-    job_id += f"_ses-${session_id}"
-init_cmd_log_file(
+# Initialize command log file
+init_cmd_log_for_nextflow(
     output_dir='${params.output_dir}',
-    job_id=job_id,
-    step_name='ANAT_REGISTRATION',
     subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_REGISTRATION'
 )
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from BIDS naming template filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
+modality = detect_modality(bids_naming_template)
 
 # Resolve template
 template_file = Path(resolve_template('${params.output_space}'))
@@ -798,8 +720,7 @@ if "inverse_transform" in result.additional_files:
     shutil.copy2(result.additional_files["inverse_transform"], bids_transform_name)
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -846,37 +767,30 @@ PYTHON
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.anatomical import anat_t2w_to_t1w_registration
 from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils import init_cmd_log_file, create_output_link
+from macacaMRIprep.utils.bids import create_bids_output_filename
+from macacaMRIprep.utils.nextflow import (
+    load_config, init_cmd_log_for_nextflow, save_metadata, create_output_link
+)
 from pathlib import Path
-import json
-import yaml
 import shutil
 import os
 
-# Initialize command log file (saves to output_dir/reports/commands.log)
-# Set job/step context for command logging
-job_id = f"sub-${subject_id}"
-if '${session_id}':
-    job_id += f"_ses-${session_id}"
-init_cmd_log_file(
+# Initialize command log file
+init_cmd_log_for_nextflow(
     output_dir='${params.output_dir}',
-    job_id=job_id,
-    step_name='ANAT_T2W_TO_T1W_REGISTRATION',
     subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_T2W_TO_T1W_REGISTRATION'
 )
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from BIDS naming template filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T2w'
+modality = detect_modality(bids_naming_template)
 
 # Get T1w reference file
 t1w_reference = Path('${t1w_reference}')
@@ -922,8 +836,7 @@ if "inverse_transform" in result.additional_files:
     shutil.copy2(result.additional_files["inverse_transform"], bids_transform_name)
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -954,8 +867,8 @@ process ANAT_CONFORM_PASSTHROUGH {
     """
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from macacaMRIprep.utils.nextflow import detect_modality, save_metadata
 from pathlib import Path
-import json
 import shutil
 import os
 import numpy as np
@@ -964,12 +877,8 @@ import numpy as np
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality
+modality = detect_modality(bids_naming_template)
 original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
 
 # Pass through input file (create symlink)
 bids_output_filename = create_bids_output_filename(
@@ -1031,20 +940,16 @@ process ANAT_BIAS_CORRECTION_PASSTHROUGH {
     """
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from macacaMRIprep.utils.nextflow import detect_modality, save_metadata
 from pathlib import Path
-import json
 import os
 
 # Get BIDS naming template
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality
+modality = detect_modality(bids_naming_template)
 original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
 
 # Pass through input file (create symlink)
 bids_output_filename = create_bids_output_filename(
@@ -1061,8 +966,7 @@ metadata = {
     "reason": "disabled in configuration",
     "modality": modality
 }
-with open('metadata.json', 'w') as f:
-    json.dump(metadata, f, indent=2)
+save_metadata(metadata)
 EOF
     """
 }
@@ -1090,8 +994,8 @@ process ANAT_REGISTRATION_PASSTHROUGH {
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from macacaMRIprep.utils.templates import resolve_template
+from macacaMRIprep.utils.nextflow import detect_modality, save_metadata
 from pathlib import Path
-import json
 import os
 import subprocess
 import shutil
@@ -1100,12 +1004,8 @@ import shutil
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality
+modality = detect_modality(bids_naming_template)
 original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
 
 template_name = '${template_name}'
 
@@ -1167,8 +1067,7 @@ metadata = {
     "modality": modality,
     "target": template_name
 }
-with open('metadata.json', 'w') as f:
-    json.dump(metadata, f, indent=2)
+save_metadata(metadata)
 EOF
     """
 }

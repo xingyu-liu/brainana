@@ -28,16 +28,13 @@ process FUNC_REORIENT {
     from macacaMRIprep.steps.types import StepInput
     from macacaMRIprep.utils.templates import resolve_template
     from macacaMRIprep.utils.bids import create_bids_output_filename
+    from macacaMRIprep.utils.nextflow import load_config, save_metadata, create_output_link
     from pathlib import Path
-    import json
-    import yaml
     import shutil
     import os
-    from macacaMRIprep.utils import create_output_link
     
     # Load config
-    with open('${config_file}') as f:
-        config = yaml.safe_load(f)
+    config = load_config('${config_file}')
     
     # Get BIDS naming template (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
@@ -78,8 +75,7 @@ process FUNC_REORIENT {
         shutil.copy2(f, f.name)
     
     # Save metadata
-    with open('metadata.json', 'w') as f:
-        json.dump(result.metadata, f, indent=2)
+    save_metadata(result.metadata)
     EOF
     """
 }
@@ -107,15 +103,13 @@ process FUNC_SLICE_TIMING {
     from macacaMRIprep.steps.types import StepInput
     from macacaMRIprep.utils.bids import create_bids_output_filename
     from pathlib import Path
-    import json
-    import yaml
     import shutil
     import os
-    from macacaMRIprep.utils import create_output_link
+    from macacaMRIprep.utils.nextflow import create_output_link
     
     # Load config
-    with open('${config_file}') as f:
-        config = yaml.safe_load(f)
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
@@ -151,8 +145,7 @@ process FUNC_SLICE_TIMING {
         shutil.copy2(f, f.name)
     
     # Save metadata
-    with open('metadata.json', 'w') as f:
-        json.dump(result.metadata, f, indent=2)
+    save_metadata(result.metadata)
     EOF
     """
 }
@@ -181,15 +174,13 @@ process FUNC_MOTION_CORRECTION {
     from macacaMRIprep.steps.types import StepInput
     from macacaMRIprep.utils.bids import create_bids_output_filename
     from pathlib import Path
-    import json
-    import yaml
     import shutil
     import os
-    from macacaMRIprep.utils import create_output_link
+    from macacaMRIprep.utils.nextflow import create_output_link
     
     # Load config
-    with open('${config_file}') as f:
-        config = yaml.safe_load(f)
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
@@ -225,8 +216,7 @@ process FUNC_MOTION_CORRECTION {
         shutil.copy2(f, f.name)
     
     # Save metadata
-    with open('metadata.json', 'w') as f:
-        json.dump(result.metadata, f, indent=2)
+    save_metadata(result.metadata)
     EOF
     """
 }
@@ -254,15 +244,13 @@ process FUNC_DESPIKE {
     from macacaMRIprep.steps.types import StepInput
     from macacaMRIprep.utils.bids import create_bids_output_filename
     from pathlib import Path
-    import json
-    import yaml
     import shutil
     import os
-    from macacaMRIprep.utils import create_output_link
+    from macacaMRIprep.utils.nextflow import create_output_link
     
     # Load config
-    with open('${config_file}') as f:
-        config = yaml.safe_load(f)
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
@@ -298,8 +286,7 @@ process FUNC_DESPIKE {
         shutil.copy2(f, f.name)
     
     # Save metadata
-    with open('metadata.json', 'w') as f:
-        json.dump(result.metadata, f, indent=2)
+    save_metadata(result.metadata)
     EOF
     """
 }
@@ -324,7 +311,6 @@ process FUNC_BIAS_CORRECTION {
     """
     # Set thread environment variables from config
     THREADS=\$(\${PYTHON:-python3} <<'PYTHON'
-import yaml
 with open('${config_file}') as f:
     config = yaml.safe_load(f)
 threads = config.get('func', {}).get('bias_correction', {}).get('threads', 8)
@@ -346,15 +332,13 @@ PYTHON
     from macacaMRIprep.steps.types import StepInput
     from macacaMRIprep.utils.bids import create_bids_output_filename
     from pathlib import Path
-    import json
-    import yaml
     import shutil
     import os
-    from macacaMRIprep.utils import create_output_link
+    from macacaMRIprep.utils.nextflow import create_output_link
     
     # Load config
-    with open('${config_file}') as f:
-        config = yaml.safe_load(f)
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
@@ -387,8 +371,7 @@ PYTHON
     create_output_link(result.output_file, bids_output_filename)
     
     # Save metadata
-    with open('metadata.json', 'w') as f:
-        json.dump(result.metadata, f, indent=2)
+    save_metadata(result.metadata)
     EOF
     """
 }
@@ -418,15 +401,13 @@ process FUNC_CONFORM {
     from macacaMRIprep.utils.templates import resolve_template
     from macacaMRIprep.utils.bids import create_bids_output_filename
     from pathlib import Path
-    import json
-    import yaml
     import shutil
     import os
-    from macacaMRIprep.utils import create_output_link
+    from macacaMRIprep.utils.nextflow import create_output_link
     
     # Load config
-    with open('${config_file}') as f:
-        config = yaml.safe_load(f)
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
@@ -470,8 +451,7 @@ process FUNC_CONFORM {
         shutil.copy2(f, f.name)
     
     # Save metadata
-    with open('metadata.json', 'w') as f:
-        json.dump(result.metadata, f, indent=2)
+    save_metadata(result.metadata)
     EOF
     """
 }
@@ -500,15 +480,13 @@ process FUNC_SKULLSTRIPPING {
     from macacaMRIprep.steps.types import StepInput
     from macacaMRIprep.utils.bids import get_filename_stem
     from pathlib import Path
-    import json
-    import yaml
     import shutil
     import os
-    from macacaMRIprep.utils import create_output_link
+    from macacaMRIprep.utils.nextflow import create_output_link
     
     # Load config
-    with open('${config_file}') as f:
-        config = yaml.safe_load(f)
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
@@ -545,8 +523,7 @@ process FUNC_SKULLSTRIPPING {
         shutil.copy2(result.additional_files["brain_mask"], bids_additional_name)
     
     # Save metadata
-    with open('metadata.json', 'w') as f:
-        json.dump(result.metadata, f, indent=2)
+    save_metadata(result.metadata)
     EOF
     """
 }
@@ -574,7 +551,6 @@ process FUNC_REGISTRATION {
     """
     # Set thread environment variables from config
     THREADS=\$(\${PYTHON:-python3} <<'PYTHON'
-import yaml
 with open('${config_file}') as f:
     config = yaml.safe_load(f)
 threads = config.get('registration', {}).get('threads', 8)
@@ -604,16 +580,14 @@ PYTHON
     from macacaMRIprep.utils.templates import resolve_template
     from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
     from pathlib import Path
-    import json
-    import yaml
     import shutil
     import os
     import sys
-    from macacaMRIprep.utils import create_output_link
+    from macacaMRIprep.utils.nextflow import create_output_link
     
     # Load config
-    with open('${config_file}') as f:
-        config = yaml.safe_load(f)
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
@@ -716,8 +690,7 @@ PYTHON
         shutil.copy2(f, f.name)
     
     # Save metadata
-    with open('metadata.json', 'w') as f:
-        json.dump(result.metadata, f, indent=2)
+    save_metadata(result.metadata)
     EOF
     """
 }
@@ -746,17 +719,15 @@ process FUNC_APPLY_TRANSFORMS {
     from macacaMRIprep.steps.functional import func_apply_transforms
     from macacaMRIprep.steps.types import StepInput
     from macacaMRIprep.utils.bids import create_bids_output_filename
-    from macacaMRIprep.utils import create_output_link
+    from macacaMRIprep.utils.nextflow import create_output_link
     from pathlib import Path
-    import json
-    import yaml
     import glob
     import shutil
     import os
     
     # Load config
-    with open('${config_file}') as f:
-        config = yaml.safe_load(f)
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
@@ -810,8 +781,7 @@ process FUNC_APPLY_TRANSFORMS {
         shutil.copy2(f, f.name)
     
     # Save metadata
-    with open('metadata.json', 'w') as f:
-        json.dump(result.metadata, f, indent=2)
+    save_metadata(result.metadata)
     EOF
     """
 }

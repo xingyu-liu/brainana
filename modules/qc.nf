@@ -28,23 +28,16 @@ process QC_CONFORM {
 from macacaMRIprep.steps.qc import qc_conform
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
-import json
-import yaml
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from original filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
+modality = detect_modality(bids_naming_template)
 
 # Use the resampled template file from conform step (matches the conformed image space)
 # File is staged as 'template.nii.gz' to avoid filename collisions
@@ -67,8 +60,7 @@ result = qc_conform(
 )
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -95,23 +87,16 @@ process QC_BIAS_CORRECTION {
 from macacaMRIprep.steps.qc import qc_bias_correction
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
-import json
-import yaml
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from original filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
+modality = detect_modality(bids_naming_template)
 
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
@@ -130,8 +115,7 @@ result = qc_bias_correction(
 )
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -158,23 +142,16 @@ process QC_SKULLSTRIPPING {
 from macacaMRIprep.steps.qc import qc_skullstripping
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
-import json
-import yaml
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from original filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
+modality = detect_modality(bids_naming_template)
 
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
@@ -193,8 +170,7 @@ result = qc_skullstripping(
 )
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -221,34 +197,26 @@ process QC_ATLAS_SEGMENTATION {
 from macacaMRIprep.steps.qc import qc_atlas_segmentation
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
-import json
-import yaml
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from original filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
+modality = detect_modality(bids_naming_template)
 
 # Check if segmentation file exists
 segmentation_file = Path('${segmentation_file}')
 if not segmentation_file.exists():
     logger.warning(f"QC: Atlas segmentation file not found - {segmentation_file}. Skipping atlas segmentation QC.")
     # Create empty metadata file
-    with open('metadata.json', 'w') as f:
-        json.dump({"step": "qc_atlas_segmentation", "skipped": True, "reason": "segmentation_file_not_found"}, f, indent=2)
+    save_metadata({"step": "qc_atlas_segmentation", "skipped": True, "reason": "segmentation_file_not_found"})
 else:
     # Generate BIDS-compliant QC output filename
     qc_output_filename = create_bids_output_filename(
@@ -267,8 +235,7 @@ else:
     )
     
     # Save metadata
-    with open('metadata.json', 'w') as f:
-        json.dump(result.metadata, f, indent=2)
+    save_metadata(result.metadata)
 EOF
     """
 }
@@ -295,13 +262,11 @@ process QC_REGISTRATION {
 from macacaMRIprep.steps.qc import qc_registration
 from macacaMRIprep.utils.templates import resolve_template
 from pathlib import Path
-import json
-import yaml
 import glob
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Resolve template
 template_file = Path(resolve_template('${params.output_space}'))
@@ -341,8 +306,7 @@ result = qc_registration(
 )
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -370,13 +334,11 @@ process QC_T2W_TO_T1W_REGISTRATION {
 from macacaMRIprep.steps.qc import qc_registration
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
-import json
-import yaml
 import glob
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Get T1w reference file
 t1w_reference = Path('${t1w_reference_file}')
@@ -409,8 +371,7 @@ result = qc_registration(
 )
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -437,23 +398,16 @@ process QC_SURF_RECON_TISSUE_SEG {
 from macacaMRIprep.steps.qc import qc_surf_recon_tissue_seg
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
-import json
-import yaml
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from original filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
+modality = detect_modality(bids_naming_template)
 
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
@@ -462,8 +416,10 @@ qc_output_filename = create_bids_output_filename(
     modality=modality
 ).replace('.nii.gz', '.png')
 
-# Resolve symlinks to get actual path (in case fs_subject_dir is a symlink)
-fs_subject_dir_resolved = Path('${fs_subject_dir}').resolve()
+# Since ANAT_SURFACE_RECONSTRUCTION uses publishDir with mode: 'move',
+# the directory has been moved to the published location, not staged.
+# Use the published directory path directly.
+fs_subject_dir_resolved = Path('${params.output_dir}/fastsurfer/sub-${subject_id}').resolve()
 
 # Generate QC
 result = qc_surf_recon_tissue_seg(
@@ -474,8 +430,7 @@ result = qc_surf_recon_tissue_seg(
 )
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -502,23 +457,16 @@ process QC_CORTICAL_SURF_AND_MEASURES {
 from macacaMRIprep.steps.qc import qc_cortical_surf_and_measures
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
-import json
-import yaml
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from original filename
-original_stem = get_filename_stem(bids_naming_template)
-modality = 'T1w'  # default
-if '_T2w' in original_stem or original_stem.endswith('_T2w'):
-    modality = 'T2w'
-elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
-    modality = 'T1w'
+modality = detect_modality(bids_naming_template)
 
 # Get atlas name (remove "atlas" suffix if present for compatibility)
 atlas_name = '${atlas_name}'.rstrip('atlas') if '${atlas_name}'.endswith('atlas') else '${atlas_name}'
@@ -532,8 +480,10 @@ qc_output_filename = create_bids_output_filename(
     modality=modality
 ).replace('.nii.gz', '.png')
 
-# Resolve symlinks to get actual path (in case fs_subject_dir is a symlink)
-fs_subject_dir_resolved = Path('${fs_subject_dir}').resolve()
+# Since ANAT_SURFACE_RECONSTRUCTION uses publishDir with mode: 'move',
+# the directory has been moved to the published location, not staged.
+# Use the published directory path directly.
+fs_subject_dir_resolved = Path('${params.output_dir}/fastsurfer/sub-${subject_id}').resolve()
 
 # Generate QC
 result = qc_cortical_surf_and_measures(
@@ -545,8 +495,7 @@ result = qc_cortical_surf_and_measures(
 )
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -577,12 +526,10 @@ process QC_MOTION_CORRECTION {
 from macacaMRIprep.steps.qc import qc_motion_correction
 from macacaMRIprep.utils.bids import create_bids_output_filename
 from pathlib import Path
-import json
-import yaml
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
@@ -603,8 +550,7 @@ result = qc_motion_correction(
 )
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -631,12 +577,10 @@ process QC_BIAS_CORRECTION_FUNC {
 from macacaMRIprep.steps.qc import qc_bias_correction
 from macacaMRIprep.utils.bids import create_bids_output_filename
 from pathlib import Path
-import json
-import yaml
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
@@ -658,8 +602,7 @@ result = qc_bias_correction(
 )
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -686,12 +629,10 @@ process QC_SKULLSTRIPPING_FUNC {
 from macacaMRIprep.steps.qc import qc_skullstripping
 from macacaMRIprep.utils.bids import create_bids_output_filename
 from pathlib import Path
-import json
-import yaml
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
@@ -713,8 +654,7 @@ result = qc_skullstripping(
 )
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -741,13 +681,11 @@ process QC_REGISTRATION_FUNC {
 from macacaMRIprep.steps.qc import qc_registration
 from macacaMRIprep.utils.templates import resolve_template
 from pathlib import Path
-import json
-import yaml
 import glob
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Resolve template
 template_file = Path(resolve_template('${params.output_space}'))
@@ -778,8 +716,7 @@ result = qc_registration(
 )
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
@@ -808,12 +745,10 @@ process QC_GENERATE_REPORT {
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.qc import qc_generate_report
 from pathlib import Path
-import json
-import yaml
 
 # Load config
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
 
 # Set paths:
 # - snapshot_dir: use published directory path where snapshots are located
@@ -832,8 +767,7 @@ result = qc_generate_report(
 )
 
 # Save metadata
-with open('metadata.json', 'w') as f:
-    json.dump(result.metadata, f, indent=2)
+save_metadata(result.metadata)
 EOF
     """
 }
