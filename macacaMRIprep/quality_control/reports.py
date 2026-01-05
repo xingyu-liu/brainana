@@ -128,8 +128,10 @@ class SnapshotProcessor:
             if desc == 'conform' and modality == 'functional':
                 description = 'Conform to target space'
             
+            # Store the filename separately for reliable path construction
             snapshots[name] = {
                 'path': str(path),
+                'filename': path.name,
                 'entities': entities,
                 'modality': modality,
                 'description': description,
@@ -184,8 +186,69 @@ class SnapshotProcessor:
         """Organize snapshots by BIDS hierarchy."""
         organized = {"anatomical": {}, "functional": {}, "field_mapping": {}, "summary": {}}
         
+        # Calculate relative path from report parent to snapshot directory
+        # snapshot_dir is the published path: /full/path/to/output/sub-XXX/figures
+        # report_path might be relative (work directory) or absolute (published)
+        # We need the published report path for correct relative path calculation
+        # Derive it from snapshot_dir: if snapshot_dir is /path/to/output/sub-XXX/figures,
+        # then published report is /path/to/output/sub-XXX.html
+        
+        snapshot_dir_str = str(snapshot_dir)
+        report_path_str = str(report_path)
+        
+        # If report_path is relative, derive published path from snapshot_dir
+        if not os.path.isabs(report_path_str):
+            # snapshot_dir is like: /path/to/output/sub-XXX/figures
+            # published report is: /path/to/output/sub-XXX.html
+            snapshot_dir_path = Path(snapshot_dir_str)
+            # Get parent (sub-XXX) and then parent again (output directory)
+            output_dir = snapshot_dir_path.parent.parent
+            report_filename = Path(report_path_str).name  # e.g., "sub-XXX.html"
+            published_report_path = output_dir / report_filename
+            report_parent = str(published_report_path.parent)
+        else:
+            # report_path is already absolute (published path)
+            report_parent = str(Path(report_path_str).parent)
+        
+        # Calculate relative path using string paths (don't resolve to avoid work directory issues)
+        try:
+            report_to_snapshot_dir = os.path.relpath(snapshot_dir_str, report_parent)
+        except ValueError:
+            # If paths are on different drives (Windows) or can't be made relative,
+            # extract the relative portion manually
+            # Both paths should share a common prefix up to the output directory
+            report_parent_parts = Path(report_parent).parts
+            snapshot_dir_parts = Path(snapshot_dir_str).parts
+            
+            # Find common prefix
+            common_parts = []
+            for r_part, s_part in zip(report_parent_parts, snapshot_dir_parts):
+                if r_part == s_part:
+                    common_parts.append(r_part)
+                else:
+                    break
+            
+            # Calculate relative path: go up from report_parent, then down to snapshot_dir
+            up_levels = len(report_parent_parts) - len(common_parts)
+            down_parts = snapshot_dir_parts[len(common_parts):]
+            
+            if up_levels > 0 and down_parts:
+                report_to_snapshot_dir = os.path.join(*(['..'] * up_levels + list(down_parts)))
+            elif down_parts:
+                report_to_snapshot_dir = os.path.join(*down_parts)
+            else:
+                report_to_snapshot_dir = '.'
+        
         for name, snapshot_info in snapshots.items():
-            relative_path = os.path.relpath(snapshot_info['path'], report_path.parent)
+            # Get filename (stored separately for reliability, or extract from path)
+            filename = snapshot_info.get('filename', Path(snapshot_info['path']).name)
+            
+            # Construct relative path: from report_parent to snapshot_dir, then filename
+            if report_to_snapshot_dir == '.':
+                relative_path = filename
+            else:
+                relative_path = os.path.join(report_to_snapshot_dir, filename)
+            
             snapshot_data = {
                 "path": relative_path,
                 "entities": snapshot_info['entities'],

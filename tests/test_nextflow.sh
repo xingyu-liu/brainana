@@ -27,6 +27,8 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Test parameters
 BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_nextflow"
 OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_nextflow"
+# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_classic_plus_2pass"
+# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_classic_plus_2pass_nextflow"
 CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_nextflow.yaml"
 WORKING_DIR=${OUTPUT_DIR}_wd
 

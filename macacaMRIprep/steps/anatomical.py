@@ -341,13 +341,13 @@ def anat_synthesis(anat_files: List[Path], working_dir: Path, config: Dict[str, 
     )
 
 
-def anat_surface_reconstruction(input: StepInput, conformed_file: Path, segmentation_file: Path, brain_mask: Optional[Path] = None) -> StepOutput:
+def anat_surface_reconstruction(input: StepInput, t1w_file: Path, segmentation_file: Path, brain_mask: Optional[Path] = None) -> StepOutput:
     """
     Perform surface reconstruction using FastSurferRecon.
     
     Args:
         input: StepInput with input_file, working_dir, config, metadata
-        conformed_file: Conformed T1w image (from conform step)
+        t1w_file: T1w image file (any T1w file, independent of preprocessing pipeline)
         segmentation_file: Segmentation file (from skullstripping step)
         brain_mask: Brain mask file (required for surface reconstruction)
         
@@ -405,7 +405,7 @@ def anat_surface_reconstruction(input: StepInput, conformed_file: Path, segmenta
     logger.info(f"Step: LUT path = {lut_path}")
     
     # Validate required files exist before processing
-    for path, name in [(conformed_file, "T1w image"), (segmentation_file, "segmentation"), (brain_mask, "mask")]:
+    for path, name in [(t1w_file, "T1w image"), (segmentation_file, "segmentation"), (brain_mask, "mask")]:
         if not path.exists():
             raise FileNotFoundError(f"Step: Required file not found: {name} at {path}")
     
@@ -417,7 +417,7 @@ def anat_surface_reconstruction(input: StepInput, conformed_file: Path, segmenta
         from FastSurferCNN.postprocessing.prepping_for_surfrecon import postprocess_for_freesurfer
         
         prep_result = postprocess_for_freesurfer(
-            t1w_image=str(conformed_file),
+            t1w_image=str(t1w_file),
             segmentation=str(segmentation_file),
             mask=str(brain_mask),
             lut_path=str(lut_path),

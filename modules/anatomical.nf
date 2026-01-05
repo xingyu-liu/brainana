@@ -15,7 +15,7 @@ process ANAT_SYNTHESIS {
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*.nii.gz"), file("original_file_path.txt"), emit: synthesized
+    tuple val(subject_id), val(session_id), path("*.nii.gz"), file("bids_naming_template.txt"), emit: synthesized
     path "metadata.json", emit: metadata
     
     script:
@@ -52,11 +52,11 @@ with open('${config_file}') as f:
 # Get anatomical files
 anat_files = [Path(f) for f in [${anat_files_list}]]
 
-# Get original file path for BIDS filename generation
-original_file_path = Path('${first_file}')
+# Get BIDS naming template for BIDS filename generation
+bids_naming_template = Path('${first_file}')
 
-# Determine modality from original filename
-original_stem = get_filename_stem(original_file_path)
+# Determine modality from BIDS naming template filename
+original_stem = get_filename_stem(bids_naming_template)
 modality = 'T1w'  # default
 if '_T2w' in original_stem or original_stem.endswith('_T2w'):
     modality = 'T2w'
@@ -74,8 +74,8 @@ result = anat_synthesis(
 synthesized = result.metadata.get("synthesized", False)
 
 # Generate BIDS-compliant output filename
-# Parse entities from original file and remove 'run' entity for synthesized output
-entities = parse_bids_entities(original_file_path.name)
+# Parse entities from BIDS naming template and remove 'run' entity for synthesized output
+entities = parse_bids_entities(bids_naming_template.name)
 # Remove 'run' entity since synthesis combines multiple runs
 if 'run' in entities:
     del entities['run']
@@ -103,22 +103,22 @@ else:
 with open('metadata.json', 'w') as f:
     json.dump(result.metadata, f, indent=2)
 
-# Determine what to write to original_file_path.txt for downstream steps
-# If synthesis occurred, use the synthesized filename (without run) as the "original" path
+# Determine what to write to bids_naming_template.txt for downstream steps
+# If synthesis occurred, use the synthesized filename (without run) as the BIDS naming template
 # If synthesis didn't occur, use the original file path (preserves run for single files)
 if synthesized:
     # For synthesized files, construct a path using the synthesized filename
     # This ensures downstream steps don't include run identifiers
     # Use the same directory structure as the original file
-    synthesized_path = original_file_path.parent / bids_output_filename
-    original_file_path_for_downstream = str(synthesized_path)
+    synthesized_path = bids_naming_template.parent / bids_output_filename
+    bids_naming_template_for_downstream = str(synthesized_path)
 else:
     # For single files (no synthesis), use the original file path
-    original_file_path_for_downstream = str(original_file_path)
+    bids_naming_template_for_downstream = str(bids_naming_template)
 
 # Write the appropriate path to file for Nextflow value output
-with open('original_file_path.txt', 'w') as f:
-    f.write(original_file_path_for_downstream)
+with open('bids_naming_template.txt', 'w') as f:
+    f.write(bids_naming_template_for_downstream)
 PYTHON_EOF
     """
 }
@@ -132,11 +132,11 @@ process ANAT_REORIENT {
         pattern: '*.nii.gz'
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_naming_template), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -169,11 +169,11 @@ init_cmd_log_file(
 with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
-# Get original file path (for BIDS filename generation)
-original_file_path = Path('${original_file_path}')
+# Get BIDS naming template (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
 
-# Determine modality from original filename
-original_stem = get_filename_stem(original_file_path)
+# Determine modality from BIDS naming template filename
+original_stem = get_filename_stem(bids_naming_template)
 modality = 'T1w'  # default
 if '_T2w' in original_stem or original_stem.endswith('_T2w'):
     modality = 'T2w'
@@ -202,7 +202,7 @@ result = anat_reorient(input_obj, template_file=template_file)
 
 # Generate BIDS-compliant output filename
 bids_output_filename = create_bids_output_filename(
-    original_file_path=original_file_path,
+    original_file_path=bids_naming_template,
     suffix='desc-reorient',
     modality=modality
 )
@@ -227,11 +227,11 @@ process ANAT_CONFORM {
         saveAs: { filename -> filename == 'template_resampled.nii.gz' ? null : filename }
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(bids_naming_template), emit: output
     path "*.mat", emit: transforms
     tuple val(subject_id), val(session_id), path("template_resampled.nii.gz"), emit: template_resampled
     path "*.json", emit: metadata
@@ -268,11 +268,11 @@ init_cmd_log_file(
 with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
-# Get original file path (for BIDS filename generation)
-original_file_path = Path('${original_file_path}')
+# Get BIDS naming template (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
 
-# Determine modality from original filename
-original_stem = get_filename_stem(original_file_path)
+# Determine modality from BIDS naming template filename
+original_stem = get_filename_stem(bids_naming_template)
 modality = 'T1w'  # default
 if '_T2w' in original_stem or original_stem.endswith('_T2w'):
     modality = 'T2w'
@@ -299,7 +299,7 @@ result = anat_conform(input_obj, template_file=template_file)
 
 # Generate BIDS-compliant output filename
 bids_output_filename = create_bids_output_filename(
-    original_file_path=original_file_path,
+    original_file_path=bids_naming_template,
     suffix='desc-conform',
     modality=modality
 )
@@ -308,7 +308,7 @@ bids_output_filename = create_bids_output_filename(
 create_output_link(result.output_file, bids_output_filename)
 
 # Generate BIDS prefix (filename stem without modality)
-original_stem = get_filename_stem(original_file_path)
+original_stem = get_filename_stem(bids_naming_template)
 bids_prefix = original_stem.replace(f"_{modality}", "")
 
 # Copy transform files with BIDS-compliant names
@@ -348,11 +348,11 @@ process ANAT_BIAS_CORRECTION {
         pattern: '*.nii.gz'
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_naming_template), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -405,11 +405,11 @@ init_cmd_log_file(
 with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
-# Get original file path (for BIDS filename generation)
-original_file_path = Path('${original_file_path}')
+# Get BIDS naming template (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
 
-# Determine modality from original filename
-original_stem = get_filename_stem(original_file_path)
+# Determine modality from BIDS naming template filename
+original_stem = get_filename_stem(bids_naming_template)
 modality = 'T1w'  # default
 if '_T2w' in original_stem or original_stem.endswith('_T2w'):
     modality = 'T2w'
@@ -433,7 +433,7 @@ result = anat_bias_correction(input_obj)
 
 # Generate BIDS-compliant output filename (main preprocessed file)
 bids_output_filename = create_bids_output_filename(
-    original_file_path=original_file_path,
+    original_file_path=bids_naming_template,
     suffix='desc-preproc',
     modality=modality
 )
@@ -457,11 +457,11 @@ process ANAT_SKULLSTRIPPING {
         pattern: '*.nii.gz'
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*_desc-preproc_*_brain.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), path("*_desc-preproc_*_brain.nii.gz"), val(bids_naming_template), emit: output
     tuple val(subject_id), val(session_id), path("*_desc-brain_mask.nii.gz"), emit: brain_mask
     tuple val(subject_id), val(session_id), path("*_desc-brain_atlas*.nii.gz"), optional: true, emit: brain_segmentation
     path "*.json", emit: metadata
@@ -496,11 +496,11 @@ init_cmd_log_file(
 with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
-# Get original file path (for BIDS filename generation)
-original_file_path = Path('${original_file_path}')
+# Get BIDS naming template (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
 
-# Determine modality from original filename
-original_stem = get_filename_stem(original_file_path)
+# Determine modality from BIDS naming template filename
+original_stem = get_filename_stem(bids_naming_template)
 modality = 'T1w'  # default
 if '_T2w' in original_stem or original_stem.endswith('_T2w'):
     modality = 'T2w'
@@ -526,7 +526,7 @@ result = anat_skullstripping(input_obj)
 # Format: {prefix}_desc-preproc_{modality}_brain.nii.gz
 # We need to handle _brain specially since it's not part of the modality
 from macacaMRIprep.utils.bids import get_filename_stem
-original_stem = get_filename_stem(original_file_path)
+original_stem = get_filename_stem(bids_naming_template)
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 bids_output_filename = f"{bids_prefix_wo_modality}_desc-preproc_{modality}_brain.nii.gz"
 
@@ -566,17 +566,25 @@ process ANAT_SURFACE_RECONSTRUCTION {
     label 'cpu'
     tag "${subject_id}_${session_id}"
     
+    publishDir "${params.output_dir}/fastsurfer",
+        mode: 'copy',
+        pattern: 'fastsurfer/**',
+        saveAs: { filename -> 
+            // Strip 'fastsurfer/' prefix to copy sub-XXX directly to output_dir/fastsurfer/sub-XXX
+            filename.replace('fastsurfer/', '')
+        }
+    
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/surf",
         mode: 'copy',
-        pattern: '**/*'
+        pattern: 'metadata.json'
     
     input:
-    tuple val(subject_id), val(session_id), path(brain_file), val(original_file_path), path(conformed_file), path(segmentation_file), path(brain_mask)
+    tuple val(subject_id), val(session_id), path(t1w_file), val(bids_naming_template), path(segmentation_file), path(brain_mask)
     path config_file
     
     output:
-    path "fastsurfer/sub-${subject_id}", emit: subject_dir
-    path "metadata.json", emit: metadata
+    tuple val(subject_id), val(session_id), path("fastsurfer/sub-${subject_id}"), emit: subject_dir
+    tuple val(subject_id), val(session_id), path("metadata.json"), emit: metadata
     
     script:
     """
@@ -607,7 +615,7 @@ with open('${config_file}') as f:
 
 # Create step input
 input_obj = StepInput(
-    input_file=Path('${brain_file}'),
+    input_file=Path('${t1w_file}'),
     working_dir=Path('work'),
     config=config,
     output_name='surface_reconstruction',
@@ -625,10 +633,46 @@ if '${brain_mask}' and Path('${brain_mask}').exists() and Path('${brain_mask}').
 # Run surface reconstruction
 result = anat_surface_reconstruction(
     input_obj,
-    conformed_file=Path('${conformed_file}'),
+    t1w_file=Path('${t1w_file}'),
     segmentation_file=Path('${segmentation_file}'),
     brain_mask=brain_mask_path
 )
+
+# Create symlink in work directory root so Nextflow can find it
+# The output is created in work/fastsurfer/sub-XXX, but Nextflow expects fastsurfer/sub-XXX
+output_subject_dir = result.output_file
+expected_path = Path('fastsurfer') / 'sub-${subject_id}'
+
+# Ensure the output directory exists
+if not output_subject_dir.exists():
+    raise FileNotFoundError(f"Surface reconstruction output not found: {output_subject_dir}")
+
+# Get absolute paths for reliable symlink creation
+output_abs = output_subject_dir.resolve()
+expected_abs = expected_path.resolve()
+
+# Create the expected path location
+expected_abs.parent.mkdir(parents=True, exist_ok=True)
+
+# Remove existing symlink/directory if it exists
+if expected_abs.exists() or expected_abs.is_symlink():
+    import shutil
+    if expected_abs.is_symlink() or expected_abs.is_file():
+        expected_abs.unlink()
+    elif expected_abs.is_dir():
+        shutil.rmtree(expected_abs)
+
+# Create symlink using absolute paths
+try:
+    expected_abs.symlink_to(output_abs)
+except (OSError, AttributeError) as e:
+    # Symlink failed (Windows or cross-filesystem), use copy instead
+    import shutil
+    shutil.copytree(output_abs, expected_abs, dirs_exist_ok=True)
+
+# Verify the expected path exists (check relative path for Nextflow)
+if not expected_path.exists():
+    raise FileNotFoundError(f"Failed to create expected output path: {expected_path} (absolute: {expected_abs})")
 
 # Save metadata
 with open('metadata.json', 'w') as f:
@@ -646,7 +690,7 @@ process ANAT_REGISTRATION {
         pattern: '*.{nii.gz,h5}'
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -705,11 +749,11 @@ init_cmd_log_file(
 with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
-# Get original file path (for BIDS filename generation)
-original_file_path = Path('${original_file_path}')
+# Get BIDS naming template (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
 
-# Determine modality from original filename
-original_stem = get_filename_stem(original_file_path)
+# Determine modality from BIDS naming template filename
+original_stem = get_filename_stem(bids_naming_template)
 modality = 'T1w'  # default
 if '_T2w' in original_stem or original_stem.endswith('_T2w'):
     modality = 'T2w'
@@ -738,7 +782,7 @@ result = anat_registration(input_obj, template_file=template_file, template_name
 # Generate BIDS-compliant output filename with space entity
 # Format: space-{template}_desc-preproc_{modality}.nii.gz
 bids_output_filename = create_bids_output_filename(
-    original_file_path=original_file_path,
+    original_file_path=bids_naming_template,
     suffix=f'space-{template_name}_desc-preproc',
     modality=modality
 )

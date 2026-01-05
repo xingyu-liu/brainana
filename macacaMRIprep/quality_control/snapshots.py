@@ -530,7 +530,7 @@ def create_surf_recon_tissue_seg_qc(
     fs_subject_dir: Union[str, Path],
     save_f: Union[str, Path],
     modality: str = "anat",
-    num_slices: int = 4,
+    num_slices: int = 5,
     logger: Optional[logging.Logger] = None,
     **kwargs
 ) -> Dict[str, str]:
@@ -566,14 +566,12 @@ def create_surf_recon_tissue_seg_qc(
         pial_surf_lh = surf_dir / "lh.pial"
         pial_surf_rh = surf_dir / "rh.pial"
         
-        # T1w file (try T1.mgz first, then fallback to brain.finalsurfs.mgz)
-        t1w_file = mri_dir / "T1.mgz"
-        if not t1w_file.exists():
-            t1w_file = mri_dir / "brain.finalsurfs.mgz"
+        # T1w brain file
+        t1w_brain_file = mri_dir / "brain.finalsurfs.mgz"
         
         # Validate inputs
         for file_path, name in [
-            (t1w_file, "T1w"), (white_surf_lh, "white_lh"), (white_surf_rh, "white_rh"),
+            (t1w_brain_file, "T1w"), (white_surf_lh, "white_lh"), (white_surf_rh, "white_rh"),
             (pial_surf_lh, "pial_lh"), (pial_surf_rh, "pial_rh")
         ]:
             if not file_path.exists():
@@ -581,8 +579,8 @@ def create_surf_recon_tissue_seg_qc(
                 return {}
         
         # Load T1w image
-        t1w_img = nib.load(str(t1w_file))
-        volume_shape = t1w_img.shape[:3]
+        t1w_brain_img = nib.load(str(t1w_brain_file))
+        volume_shape = t1w_brain_img.shape[:3]
         
         # Load surfaces
         logger.info("QC: loading surface meshes...")
@@ -595,11 +593,11 @@ def create_surf_recon_tissue_seg_qc(
         logger.info("QC: creating masks from surface meshes (rasterization approach)...")
         white_mask = create_surface_mask_for_multiple_surfaces(
             [(white_lh_verts, white_lh_faces), (white_rh_verts, white_rh_faces)],
-            t1w_img
+            t1w_brain_img
         )
         pial_mask = create_surface_mask_for_multiple_surfaces(
             [(pial_lh_verts, pial_lh_faces), (pial_rh_verts, pial_rh_faces)],
-            t1w_img
+            t1w_brain_img
         )
         
         # Combine masks into a single multi-label overlay
@@ -613,7 +611,7 @@ def create_surf_recon_tissue_seg_qc(
         # Create combined surface overlay
         logger.info("QC: creating combined surface overlay...")
         fig = create_grid_mri_image(
-            underlay_data=str(t1w_file),
+            underlay_data=str(t1w_brain_file),
             overlay_data=combined_mask,
             num_cols=num_slices,
             perspectives=["axial", "sagittal", "coronal"],

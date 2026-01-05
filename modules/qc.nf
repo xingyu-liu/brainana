@@ -15,7 +15,7 @@ process QC_CONFORM {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), path(conformed_file), val(original_file_path), path(template_resampled_file, stageAs: 'template.nii.gz')
+    tuple val(subject_id), val(session_id), path(conformed_file), val(bids_naming_template), path(template_resampled_file, stageAs: 'template.nii.gz')
     path config_file
     
     output:
@@ -36,10 +36,10 @@ with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
 # Get original file path (for BIDS filename generation)
-original_file_path = Path('${original_file_path}')
+bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from original filename
-original_stem = get_filename_stem(original_file_path)
+original_stem = get_filename_stem(bids_naming_template)
 modality = 'T1w'  # default
 if '_T2w' in original_stem or original_stem.endswith('_T2w'):
     modality = 'T2w'
@@ -52,7 +52,7 @@ template_file = Path('template.nii.gz')
 
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
-    original_file_path=original_file_path,
+    original_file_path=bids_naming_template,
     suffix='desc-conform',
     modality=modality
 ).replace('.nii.gz', '.png')
@@ -82,7 +82,7 @@ process QC_BIAS_CORRECTION {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), path(original_file), path(corrected_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), path(original_file), path(corrected_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -103,10 +103,10 @@ with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
 # Get original file path (for BIDS filename generation)
-original_file_path = Path('${original_file_path}')
+bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from original filename
-original_stem = get_filename_stem(original_file_path)
+original_stem = get_filename_stem(bids_naming_template)
 modality = 'T1w'  # default
 if '_T2w' in original_stem or original_stem.endswith('_T2w'):
     modality = 'T2w'
@@ -115,7 +115,7 @@ elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
 
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
-    original_file_path=original_file_path,
+    original_file_path=bids_naming_template,
     suffix='desc-biasCorrection',
     modality=modality
 ).replace('.nii.gz', '.png')
@@ -145,7 +145,7 @@ process QC_SKULLSTRIPPING {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), path(brain_file), path(mask_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), path(brain_file), path(mask_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -166,10 +166,10 @@ with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
 # Get original file path (for BIDS filename generation)
-original_file_path = Path('${original_file_path}')
+bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from original filename
-original_stem = get_filename_stem(original_file_path)
+original_stem = get_filename_stem(bids_naming_template)
 modality = 'T1w'  # default
 if '_T2w' in original_stem or original_stem.endswith('_T2w'):
     modality = 'T2w'
@@ -178,7 +178,7 @@ elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
 
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
-    original_file_path=original_file_path,
+    original_file_path=bids_naming_template,
     suffix='desc-skullStripping',
     modality=modality
 ).replace('.nii.gz', '.png')
@@ -208,7 +208,7 @@ process QC_ATLAS_SEGMENTATION {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), path(brain_file), path(segmentation_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), path(brain_file), path(segmentation_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -232,10 +232,10 @@ with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
 # Get original file path (for BIDS filename generation)
-original_file_path = Path('${original_file_path}')
+bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from original filename
-original_stem = get_filename_stem(original_file_path)
+original_stem = get_filename_stem(bids_naming_template)
 modality = 'T1w'  # default
 if '_T2w' in original_stem or original_stem.endswith('_T2w'):
     modality = 'T2w'
@@ -252,7 +252,7 @@ if not segmentation_file.exists():
 else:
     # Generate BIDS-compliant QC output filename
     qc_output_filename = create_bids_output_filename(
-        original_file_path=original_file_path,
+        original_file_path=bids_naming_template,
         suffix='desc-atlasSegmentation',
         modality=modality
     ).replace('.nii.gz', '.png')
@@ -347,6 +347,136 @@ EOF
     """
 }
 
+process QC_SURF_RECON_TISSUE_SEG {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}/figures",
+        mode: 'copy',
+        pattern: '*.png'
+    
+    input:
+    tuple val(subject_id), val(session_id), path(fs_subject_dir), val(bids_naming_template)
+    path config_file
+    
+    output:
+    path "*.png", emit: qc_files
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.steps.qc import qc_surf_recon_tissue_seg
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from pathlib import Path
+import json
+import yaml
+
+# Load config
+with open('${config_file}') as f:
+    config = yaml.safe_load(f)
+
+# Get original file path (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Determine modality from original filename
+original_stem = get_filename_stem(bids_naming_template)
+modality = 'T1w'  # default
+if '_T2w' in original_stem or original_stem.endswith('_T2w'):
+    modality = 'T2w'
+elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
+    modality = 'T1w'
+
+# Generate BIDS-compliant QC output filename
+qc_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-surfReconTissueSeg',
+    modality=modality
+).replace('.nii.gz', '.png')
+
+# Generate QC
+result = qc_surf_recon_tissue_seg(
+    fs_subject_dir=Path('${fs_subject_dir}'),
+    output_path=Path(qc_output_filename),
+    modality='anat',
+    config=config
+)
+
+# Save metadata
+with open('metadata.json', 'w') as f:
+    json.dump(result.metadata, f, indent=2)
+EOF
+    """
+}
+
+process QC_CORTICAL_SURF_AND_MEASURES {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}/figures",
+        mode: 'copy',
+        pattern: '*.png'
+    
+    input:
+    tuple val(subject_id), val(session_id), path(fs_subject_dir), val(bids_naming_template), val(atlas_name)
+    path config_file
+    
+    output:
+    path "*.png", emit: qc_files
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.steps.qc import qc_cortical_surf_and_measures
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from pathlib import Path
+import json
+import yaml
+
+# Load config
+with open('${config_file}') as f:
+    config = yaml.safe_load(f)
+
+# Get original file path (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Determine modality from original filename
+original_stem = get_filename_stem(bids_naming_template)
+modality = 'T1w'  # default
+if '_T2w' in original_stem or original_stem.endswith('_T2w'):
+    modality = 'T2w'
+elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
+    modality = 'T1w'
+
+# Get atlas name (remove "atlas" suffix if present for compatibility)
+atlas_name = '${atlas_name}'.rstrip('atlas') if '${atlas_name}'.endswith('atlas') else '${atlas_name}'
+if not atlas_name:
+    atlas_name = 'ARM2'  # default
+
+# Generate BIDS-compliant QC output filename
+qc_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-corticalSurfAndMeasures',
+    modality=modality
+).replace('.nii.gz', '.png')
+
+# Generate QC
+result = qc_cortical_surf_and_measures(
+    fs_subject_dir=Path('${fs_subject_dir}'),
+    output_path=Path(qc_output_filename),
+    atlas_name=atlas_name,
+    modality='anat',
+    config=config
+)
+
+# Save metadata
+with open('metadata.json', 'w') as f:
+    json.dump(result.metadata, f, indent=2)
+EOF
+    """
+}
+
 // ============================================
 // FUNCTIONAL QC PROCESSES
 // ============================================
@@ -360,7 +490,7 @@ process QC_MOTION_CORRECTION {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task), val(run), path(motion_params_file), path(input_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), val(task), val(run), path(motion_params_file), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -381,11 +511,11 @@ with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
 # Get original file path (for BIDS filename generation)
-original_file_path = Path('${original_file_path}')
+bids_naming_template = Path('${bids_naming_template}')
 
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
-    original_file_path=original_file_path,
+    original_file_path=bids_naming_template,
     suffix='desc-motion',
     modality='bold'
 ).replace('.nii.gz', '.png')
@@ -414,7 +544,7 @@ process QC_BIAS_CORRECTION_FUNC {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task), val(run), path(original_file), path(corrected_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), val(task), val(run), path(original_file), path(corrected_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -435,11 +565,11 @@ with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
 # Get original file path (for BIDS filename generation)
-original_file_path = Path('${original_file_path}')
+bids_naming_template = Path('${bids_naming_template}')
 
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
-    original_file_path=original_file_path,
+    original_file_path=bids_naming_template,
     suffix='desc-biasCorrection',
     modality='bold'
 ).replace('.nii.gz', '.png')
@@ -469,7 +599,7 @@ process QC_SKULLSTRIPPING_FUNC {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task), val(run), path(brain_file), path(mask_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), val(task), val(run), path(brain_file), path(mask_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -490,11 +620,11 @@ with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
 # Get original file path (for BIDS filename generation)
-original_file_path = Path('${original_file_path}')
+bids_naming_template = Path('${bids_naming_template}')
 
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
-    original_file_path=original_file_path,
+    original_file_path=bids_naming_template,
     suffix='desc-skullStripping',
     modality='bold'
 ).replace('.nii.gz', '.png')
@@ -611,7 +741,11 @@ import yaml
 with open('${config_file}') as f:
     config = yaml.safe_load(f)
 
-# Set paths - use published directory path, not work directory
+# Set paths:
+# - snapshot_dir: use published directory path where snapshots are located
+# - report_path: write to work directory (Nextflow will copy to publishDir)
+# Note: organize_by_hierarchy will derive the published report path from snapshot_dir
+# for correct relative path calculation
 snapshot_dir = Path('${params.output_dir}/sub-${subject_id}/figures')
 report_path = Path('sub-${subject_id}.html')
 

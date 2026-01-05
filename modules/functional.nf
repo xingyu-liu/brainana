@@ -14,11 +14,11 @@ process FUNC_REORIENT {
         pattern: '*.nii.gz'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(bids_naming_template), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -39,8 +39,8 @@ process FUNC_REORIENT {
     with open('${config_file}') as f:
         config = yaml.safe_load(f)
     
-    # Get original file path (for BIDS filename generation)
-    original_file_path = Path('${original_file_path}')
+    # Get BIDS naming template (for BIDS filename generation)
+    bids_naming_template = Path('${bids_naming_template}')
     
     # Resolve template if needed
     template_file = None
@@ -66,7 +66,7 @@ process FUNC_REORIENT {
     
     # Generate BIDS-compliant output filename
     bids_output_filename = create_bids_output_filename(
-        original_file_path=original_file_path,
+        original_file_path=bids_naming_template,
         suffix='desc-reorient',
         modality='bold'
     )
@@ -93,11 +93,11 @@ process FUNC_SLICE_TIMING {
         pattern: '*.nii.gz'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(bids_naming_template), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -118,7 +118,7 @@ process FUNC_SLICE_TIMING {
         config = yaml.safe_load(f)
     
     # Get original file path (for BIDS filename generation)
-    original_file_path = Path('${original_file_path}')
+    bids_naming_template = Path('${bids_naming_template}')
     
     # Create step input
     input_obj = StepInput(
@@ -139,7 +139,7 @@ process FUNC_SLICE_TIMING {
     
     # Generate BIDS-compliant output filename
     bids_output_filename = create_bids_output_filename(
-        original_file_path=original_file_path,
+        original_file_path=bids_naming_template,
         suffix='desc-sliceTiming',
         modality='bold'
     )
@@ -166,11 +166,11 @@ process FUNC_MOTION_CORRECTION {
         pattern: '*.{nii.gz,tsv}'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(bids_naming_template), emit: output
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.tsv"), emit: motion_params
     path "*.json", emit: metadata
     
@@ -192,7 +192,7 @@ process FUNC_MOTION_CORRECTION {
         config = yaml.safe_load(f)
     
     # Get original file path (for BIDS filename generation)
-    original_file_path = Path('${original_file_path}')
+    bids_naming_template = Path('${bids_naming_template}')
     
     # Create step input
     input_obj = StepInput(
@@ -213,7 +213,7 @@ process FUNC_MOTION_CORRECTION {
     
     # Generate BIDS-compliant output filename
     bids_output_filename = create_bids_output_filename(
-        original_file_path=original_file_path,
+        original_file_path=bids_naming_template,
         suffix='desc-motion',
         modality='bold'
     )
@@ -240,11 +240,11 @@ process FUNC_DESPIKE {
         pattern: '*.nii.gz'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(original_file_path)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(bids_naming_template), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -265,7 +265,7 @@ process FUNC_DESPIKE {
         config = yaml.safe_load(f)
     
     # Get original file path (for BIDS filename generation)
-    original_file_path = Path('${original_file_path}')
+    bids_naming_template = Path('${bids_naming_template}')
     
     # Create step input
     input_obj = StepInput(
@@ -286,7 +286,7 @@ process FUNC_DESPIKE {
     
     # Generate BIDS-compliant output filename
     bids_output_filename = create_bids_output_filename(
-        original_file_path=original_file_path,
+        original_file_path=bids_naming_template,
         suffix='desc-despike',
         modality='bold'
     )
@@ -313,11 +313,11 @@ process FUNC_BIAS_CORRECTION {
         pattern: '*.nii.gz'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(original_file_path)  // This should be tmean
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(bids_naming_template)  // This should be tmean
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(bids_naming_template), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -357,7 +357,7 @@ PYTHON
         config = yaml.safe_load(f)
     
     # Get original file path (for BIDS filename generation)
-    original_file_path = Path('${original_file_path}')
+    bids_naming_template = Path('${bids_naming_template}')
     
     # Create step input
     input_obj = StepInput(
@@ -378,7 +378,7 @@ PYTHON
     
     # Generate BIDS-compliant output filename
     bids_output_filename = create_bids_output_filename(
-        original_file_path=original_file_path,
+        original_file_path=bids_naming_template,
         suffix='desc-biasCorrection',
         modality='bold'
     )
@@ -402,11 +402,11 @@ process FUNC_CONFORM {
         pattern: '*.{nii.gz,mat}'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(original_file_path)  // This should be tmean
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(bids_naming_template)  // This should be tmean
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(bids_naming_template), emit: output
     path "*.mat", emit: transforms
     path "*.json", emit: metadata
     
@@ -429,7 +429,7 @@ process FUNC_CONFORM {
         config = yaml.safe_load(f)
     
     # Get original file path (for BIDS filename generation)
-    original_file_path = Path('${original_file_path}')
+    bids_naming_template = Path('${bids_naming_template}')
     
     # Determine target file (anatomical or template based on pipeline)
     registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
@@ -458,7 +458,7 @@ process FUNC_CONFORM {
     
     # Generate BIDS-compliant output filename
     bids_output_filename = create_bids_output_filename(
-        original_file_path=original_file_path,
+        original_file_path=bids_naming_template,
         suffix='desc-conform',
         modality='bold'
     )
@@ -485,11 +485,11 @@ process FUNC_SKULLSTRIPPING {
         pattern: '*.nii.gz'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(original_file_path)  // This should be tmean
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(bids_naming_template)  // This should be tmean
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(bids_naming_template), emit: output
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*_desc-brain_mask.nii.gz"), emit: brain_mask
     path "*.json", emit: metadata
     
@@ -511,7 +511,7 @@ process FUNC_SKULLSTRIPPING {
         config = yaml.safe_load(f)
     
     # Get original file path (for BIDS filename generation)
-    original_file_path = Path('${original_file_path}')
+    bids_naming_template = Path('${bids_naming_template}')
     
     # Create step input
     input_obj = StepInput(
@@ -532,7 +532,7 @@ process FUNC_SKULLSTRIPPING {
     
     # Generate BIDS-compliant output filename for brain-only version
     # Format: {prefix}_desc-preproc_bold_brain.nii.gz
-    original_stem = get_filename_stem(original_file_path)
+    original_stem = get_filename_stem(bids_naming_template)
     bids_prefix_wobold = original_stem.replace("_bold", "")
     bids_output_filename = f"{bids_prefix_wobold}_desc-preproc_bold_brain.nii.gz"
     
@@ -560,12 +560,12 @@ process FUNC_REGISTRATION {
         pattern: '*.{nii.gz,h5}'
     
     input:
-    // Combined channel: [sub, ses, task, run, func_file, orig_path, anat_reg, anat_trans, anat_ses, is_fallback]
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(original_file_path), path(anat_registered), path(anat_transforms), val(anat_session_id), val(is_fallback)
+    // Combined channel: [sub, ses, task, run, func_file, bids_naming_template, anat_reg, anat_trans, anat_ses, is_fallback]
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(input_file), val(bids_naming_template), path(anat_registered), path(anat_transforms), val(anat_session_id), val(is_fallback)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(original_file_path), emit: output
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.nii.gz"), val(bids_naming_template), emit: output
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*.h5"), emit: transforms
     path "*.json", emit: metadata
     
@@ -616,7 +616,7 @@ PYTHON
         config = yaml.safe_load(f)
     
     # Get original file path (for BIDS filename generation)
-    original_file_path = Path('${original_file_path}')
+    bids_naming_template = Path('${bids_naming_template}')
     
     # Check if anatomical data is available
     is_fallback = '${is_fallback}' == 'true'
@@ -704,7 +704,7 @@ PYTHON
     # Generate BIDS-compliant output filename with space entity
     # Format: space-{target_name}_desc-preproc_bold.nii.gz
     bids_output_filename = create_bids_output_filename(
-        original_file_path=original_file_path,
+        original_file_path=bids_naming_template,
         suffix=f'space-{target_name}_desc-preproc',
         modality='bold'
     )
@@ -731,7 +731,7 @@ process FUNC_APPLY_TRANSFORMS {
         pattern: '*.nii.gz'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(tmean_registered), path(transforms), val(original_file_path)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(tmean_registered), path(transforms), val(bids_naming_template)
     path(func_4d_file)  // Original 4D BOLD file
     path config_file
     
@@ -759,7 +759,7 @@ process FUNC_APPLY_TRANSFORMS {
         config = yaml.safe_load(f)
     
     # Get original file path (for BIDS filename generation)
-    original_file_path = Path('${original_file_path}')
+    bids_naming_template = Path('${bids_naming_template}')
     
     # Get transform files
     transform_files = [Path(f) for f in glob.glob('${transforms}/*.h5')]
@@ -798,7 +798,7 @@ process FUNC_APPLY_TRANSFORMS {
     # Generate BIDS-compliant output filename with space entity
     # Format: space-{target_name}_desc-preproc_bold.nii.gz
     bids_output_filename = create_bids_output_filename(
-        original_file_path=original_file_path,
+        original_file_path=bids_naming_template,
         suffix=f'space-{target_name}_desc-preproc',
         modality='bold'
     )

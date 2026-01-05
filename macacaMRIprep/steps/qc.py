@@ -15,7 +15,9 @@ from ..quality_control import (
     create_registration_qc,
     create_conform_qc,
     create_atlas_segmentation_qc,
-    create_motion_correction_qc
+    create_motion_correction_qc,
+    create_surf_recon_tissue_seg_qc,
+    create_cortical_surf_and_measures_qc
 )
 from ..quality_control.reports import generate_qc_report
 
@@ -392,5 +394,111 @@ def qc_generate_report(
         return StepOutput(
             output_file=report_path,
             metadata={"step": "qc_report", "error": str(e)}
+        )
+
+
+def qc_surf_recon_tissue_seg(
+    fs_subject_dir: Path,
+    output_path: Path,
+    modality: str = "anat",
+    config: Optional[Dict[str, Any]] = None
+) -> StepOutput:
+    """
+    Generate surface reconstruction tissue segmentation QC snapshot.
+    
+    Args:
+        fs_subject_dir: Path to FreeSurfer subject directory
+        output_path: Output path for QC snapshot
+        modality: Modality ('anat' or 'func')
+        config: Configuration dictionary (optional)
+        
+    Returns:
+        StepOutput with QC file
+    """
+    if not config or not config.get("quality_control", {}).get("enabled", True):
+        logger.info("QC: surface reconstruction tissue segmentation QC skipped (disabled in configuration)")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_surf_recon_tissue_seg", "skipped": True}
+        )
+    
+    try:
+        result = create_surf_recon_tissue_seg_qc(
+            fs_subject_dir=str(fs_subject_dir),
+            save_f=str(output_path),
+            modality=modality,
+            logger=logger
+        )
+        
+        qc_file = Path(result.get(f"{modality}_surf_recon_tissue_seg_overlay", output_path))
+        
+        return StepOutput(
+            output_file=qc_file,
+            metadata={
+                "step": "qc_surf_recon_tissue_seg",
+                "modality": modality
+            },
+            qc_files=[qc_file]
+        )
+    except Exception as e:
+        logger.warning(f"QC: surface reconstruction tissue segmentation QC failed - {e}")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_surf_recon_tissue_seg", "error": str(e)}
+        )
+
+
+def qc_cortical_surf_and_measures(
+    fs_subject_dir: Path,
+    output_path: Path,
+    atlas_name: str = "ARM2",
+    modality: str = "anat",
+    config: Optional[Dict[str, Any]] = None
+) -> StepOutput:
+    """
+    Generate cortical surface and measures QC snapshot.
+    
+    Args:
+        fs_subject_dir: Path to FreeSurfer subject directory
+        output_path: Output path for QC snapshot
+        atlas_name: Atlas name (default: "ARM2")
+        modality: Modality ('anat' or 'func')
+        config: Configuration dictionary (optional)
+        
+    Returns:
+        StepOutput with QC file
+    """
+    if not config or not config.get("quality_control", {}).get("enabled", True):
+        logger.info("QC: cortical surface and measures QC skipped (disabled in configuration)")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_cortical_surf_and_measures", "skipped": True}
+        )
+    
+    try:
+        result = create_cortical_surf_and_measures_qc(
+            fs_subject_dir=str(fs_subject_dir),
+            save_f=str(output_path),
+            atlas_name=atlas_name,
+            modality=modality,
+            logger=logger
+        )
+        
+        qc_file = Path(result.get("snapshot_file", output_path))
+        
+        return StepOutput(
+            output_file=qc_file,
+            metadata={
+                "step": "qc_cortical_surf_and_measures",
+                "modality": modality,
+                "atlas_name": atlas_name
+            },
+            qc_files=[qc_file]
+        )
+    except Exception as e:
+        logger.warning(f"QC: cortical surface and measures QC failed - {e}")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_cortical_surf_and_measures", "error": str(e)}
         )
 
