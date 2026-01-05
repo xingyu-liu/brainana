@@ -25,11 +25,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
-BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_nextflow"
-OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_nextflow"
+BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_classic"
+OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_classic_nextflow_v1"
+# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_2pass"
+# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_2pass_nextflow"
 # BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_classic_plus_2pass"
 # OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_classic_plus_2pass_nextflow"
-CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_nextflow.yaml"
+
+CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_2pass.yaml"
+# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_nextflow.yaml"
+
 WORKING_DIR=${OUTPUT_DIR}_wd
 
 # Check if .ymal exists (user typo), use it if .yaml doesn't exist

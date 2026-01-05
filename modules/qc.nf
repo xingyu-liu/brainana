@@ -347,6 +347,74 @@ EOF
     """
 }
 
+process QC_T2W_TO_T1W_REGISTRATION {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}/figures",
+        mode: 'copy',
+        pattern: '*.png'
+    
+    input:
+    tuple val(subject_id), val(session_id), path(registered_t2w_file), path(t1w_reference_file)
+    val(bids_naming_template)
+    path config_file
+    
+    output:
+    path "*.png", emit: qc_files
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.steps.qc import qc_registration
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from pathlib import Path
+import json
+import yaml
+import glob
+
+# Load config
+with open('${config_file}') as f:
+    config = yaml.safe_load(f)
+
+# Get T1w reference file
+t1w_reference = Path('${t1w_reference_file}')
+
+# Find the registered T2w file (handle glob pattern)
+registered_files = glob.glob('*.nii.gz')
+if not registered_files:
+    raise FileNotFoundError("No registered T2w file found")
+registered_t2w = Path(registered_files[0])
+
+# Get BIDS naming template (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Determine modality from BIDS naming template filename
+original_stem = get_filename_stem(bids_naming_template)
+modality = 'T2w'
+
+# Generate BIDS-compliant QC output filename
+# Format: {prefix}_desc-T2w2T1w_T2w.png
+bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
+qc_output_filename = f"{bids_prefix_wo_modality}_desc-T2w2T1w_{modality}.png"
+
+# Generate QC
+result = qc_registration(
+    image_file=registered_t2w,
+    template_file=t1w_reference,  # Use T1w reference instead of template
+    output_path=Path(qc_output_filename),
+    modality='T2w2T1w',
+    config=config
+)
+
+# Save metadata
+with open('metadata.json', 'w') as f:
+    json.dump(result.metadata, f, indent=2)
+EOF
+    """
+}
+
 process QC_SURF_RECON_TISSUE_SEG {
     label 'cpu'
     tag "${subject_id}_${session_id}"
@@ -394,9 +462,12 @@ qc_output_filename = create_bids_output_filename(
     modality=modality
 ).replace('.nii.gz', '.png')
 
+# Resolve symlinks to get actual path (in case fs_subject_dir is a symlink)
+fs_subject_dir_resolved = Path('${fs_subject_dir}').resolve()
+
 # Generate QC
 result = qc_surf_recon_tissue_seg(
-    fs_subject_dir=Path('${fs_subject_dir}'),
+    fs_subject_dir=fs_subject_dir_resolved,
     output_path=Path(qc_output_filename),
     modality='anat',
     config=config
@@ -461,9 +532,12 @@ qc_output_filename = create_bids_output_filename(
     modality=modality
 ).replace('.nii.gz', '.png')
 
+# Resolve symlinks to get actual path (in case fs_subject_dir is a symlink)
+fs_subject_dir_resolved = Path('${fs_subject_dir}').resolve()
+
 # Generate QC
 result = qc_cortical_surf_and_measures(
-    fs_subject_dir=Path('${fs_subject_dir}'),
+    fs_subject_dir=fs_subject_dir_resolved,
     output_path=Path(qc_output_filename),
     atlas_name=atlas_name,
     modality='anat',

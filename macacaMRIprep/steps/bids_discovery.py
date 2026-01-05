@@ -168,6 +168,8 @@ def discover_bids_dataset(
                             anatomical_jobs.append(job)
                 
                 # T2w files (always individual jobs)
+                # Check if T2w should be registered to T1w (if T1w exists in same session)
+                has_t1w_in_session = len(t1w_files) > 0
                 for t2w_file in t2w_files:
                     entities = t2w_file.get_entities()
                     job = {
@@ -179,7 +181,8 @@ def discover_bids_dataset(
                         "task": None,
                         "run": entities.get('run'),
                         "entities": entities,
-                        "needs_synthesis": False
+                        "needs_synthesis": False,
+                        "needs_t1w_registration": has_t1w_in_session  # Flag for special T2w processing
                     }
                     anatomical_jobs.append(job)
     

@@ -40,7 +40,6 @@ anat:
     fastSurferCNN:
       gpu_device: "auto"  # int (>= -1) or "auto": GPU device ID (-1 = CPU, "auto" = auto-select)
       batch_size: 8  # int: batch size for inference (>= 1)
-      enable_crop_2round: true  # bool: enable two-round cropping for better accuracy
       plane_weight_coronal: 0.4  # float: weight for coronal plane (0.0-1.0)
       plane_weight_axial: 0.4  # float: weight for axial plane (0.0-1.0)
       plane_weight_sagittal: 0.2  # float: weight for sagittal plane (0.0-1.0)

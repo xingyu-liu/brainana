@@ -225,7 +225,7 @@ def main():
     
     # Create output directory
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    (args.output_dir / 'reports').mkdir(exist_ok=True)
+    (args.output_dir / 'nextflow_reports').mkdir(exist_ok=True)
     
     # Discover jobs
     try:
@@ -247,8 +247,8 @@ def main():
     print_summary(anat_jobs, func_jobs, args.output_dir)
     
     # Save JSON files
-    anat_json_path = args.output_dir / 'reports' / 'anatomical_jobs.json'
-    func_json_path = args.output_dir / 'reports' / 'functional_jobs.json'
+    anat_json_path = args.output_dir / 'nextflow_reports' / 'anatomical_jobs.json'
+    func_json_path = args.output_dir / 'nextflow_reports' / 'functional_jobs.json'
     
     with open(anat_json_path, 'w') as f:
         json.dump(anat_jobs, f, indent=2)

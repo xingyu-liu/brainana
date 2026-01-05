@@ -1128,7 +1128,7 @@ def apply_segmentation(
             "device_id": fscnn_cfg.get('gpu_device', 'auto'),
             "logger": logger,
             "output_data_format": 'nifti',
-            "enable_crop_2round": fscnn_cfg.get('enable_crop_2round', False),
+            "enable_crop_2round": False,
             "plane_weight_coronal": fscnn_cfg.get('plane_weight_coronal'),
             "plane_weight_axial": fscnn_cfg.get('plane_weight_axial'),
             "plane_weight_sagittal": fscnn_cfg.get('plane_weight_sagittal'),

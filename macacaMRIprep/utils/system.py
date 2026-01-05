@@ -255,7 +255,7 @@ def init_cmd_log_file(output_dir: Optional[Union[str, Path]] = None,
         )
     
     output_dir = Path(output_dir)
-    reports_dir = output_dir / 'reports'
+    reports_dir = output_dir / 'nextflow_reports'
     cmd_log_file = reports_dir / 'commands.log'
     
     # Create reports directory if it doesn't exist

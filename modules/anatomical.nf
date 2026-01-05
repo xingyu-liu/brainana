@@ -567,16 +567,12 @@ process ANAT_SURFACE_RECONSTRUCTION {
     tag "${subject_id}_${session_id}"
     
     publishDir "${params.output_dir}/fastsurfer",
-        mode: 'copy',
+        mode: 'move',
         pattern: 'fastsurfer/**',
         saveAs: { filename -> 
-            // Strip 'fastsurfer/' prefix to copy sub-XXX directly to output_dir/fastsurfer/sub-XXX
+            // Strip 'fastsurfer/' prefix to move sub-XXX directly to output_dir/fastsurfer/sub-XXX
             filename.replace('fastsurfer/', '')
         }
-    
-    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/surf",
-        mode: 'copy',
-        pattern: 'metadata.json'
     
     input:
     tuple val(subject_id), val(session_id), path(t1w_file), val(bids_naming_template), path(segmentation_file), path(brain_mask)
@@ -638,8 +634,9 @@ result = anat_surface_reconstruction(
     brain_mask=brain_mask_path
 )
 
-# Create symlink in work directory root so Nextflow can find it
+# Copy directory to work directory root so Nextflow can find it
 # The output is created in work/fastsurfer/sub-XXX, but Nextflow expects fastsurfer/sub-XXX
+# We copy (not symlink) to ensure actual content is moved, not just a symlink
 output_subject_dir = result.output_file
 expected_path = Path('fastsurfer') / 'sub-${subject_id}'
 
@@ -647,7 +644,7 @@ expected_path = Path('fastsurfer') / 'sub-${subject_id}'
 if not output_subject_dir.exists():
     raise FileNotFoundError(f"Surface reconstruction output not found: {output_subject_dir}")
 
-# Get absolute paths for reliable symlink creation
+# Get absolute paths for reliable copying
 output_abs = output_subject_dir.resolve()
 expected_abs = expected_path.resolve()
 
@@ -662,13 +659,9 @@ if expected_abs.exists() or expected_abs.is_symlink():
     elif expected_abs.is_dir():
         shutil.rmtree(expected_abs)
 
-# Create symlink using absolute paths
-try:
-    expected_abs.symlink_to(output_abs)
-except (OSError, AttributeError) as e:
-    # Symlink failed (Windows or cross-filesystem), use copy instead
-    import shutil
-    shutil.copytree(output_abs, expected_abs, dirs_exist_ok=True)
+# Always copy the directory (not symlink) to ensure actual content is moved
+import shutil
+shutil.copytree(output_abs, expected_abs, dirs_exist_ok=True)
 
 # Verify the expected path exists (check relative path for Nextflow)
 if not expected_path.exists():
@@ -807,6 +800,375 @@ if "inverse_transform" in result.additional_files:
 # Save metadata
 with open('metadata.json', 'w') as f:
     json.dump(result.metadata, f, indent=2)
+EOF
+    """
+}
+
+process ANAT_T2W_TO_T1W_REGISTRATION {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
+        mode: 'copy',
+        pattern: '*.{nii.gz,h5}'
+    
+    input:
+    tuple val(subject_id), val(session_id), path(t2w_file), val(bids_naming_template)
+    path(t1w_reference)
+    path config_file
+    
+    output:
+    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), path("*.h5"), emit: transforms
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    # Set thread environment variables from config
+    THREADS=\$(\${PYTHON:-python3} <<'PYTHON'
+import yaml
+with open('${config_file}') as f:
+    config = yaml.safe_load(f)
+threads = config.get('registration', {}).get('threads', 8)
+threads = min(threads, 32)  # Cap at 32 to prevent oversubscription
+print(threads)
+PYTHON
+    )
+    
+    export OMP_NUM_THREADS=\$THREADS
+    export MKL_NUM_THREADS=\$THREADS
+    export NUMEXPR_NUM_THREADS=\$THREADS
+    export OPENBLAS_NUM_THREADS=\$THREADS
+    export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=\$THREADS
+    
+    echo "Set thread environment variables to \$THREADS"
+    
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.steps.anatomical import anat_t2w_to_t1w_registration
+from macacaMRIprep.steps.types import StepInput
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from macacaMRIprep.utils import init_cmd_log_file, create_output_link
+from pathlib import Path
+import json
+import yaml
+import shutil
+import os
+
+# Initialize command log file (saves to output_dir/reports/commands.log)
+# Set job/step context for command logging
+job_id = f"sub-${subject_id}"
+if '${session_id}':
+    job_id += f"_ses-${session_id}"
+init_cmd_log_file(
+    output_dir='${params.output_dir}',
+    job_id=job_id,
+    step_name='ANAT_T2W_TO_T1W_REGISTRATION',
+    subject_id='${subject_id}',
+    session_id='${session_id}' if '${session_id}' else None
+)
+
+# Load config
+with open('${config_file}') as f:
+    config = yaml.safe_load(f)
+
+# Get BIDS naming template (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Determine modality from BIDS naming template filename
+original_stem = get_filename_stem(bids_naming_template)
+modality = 'T2w'
+
+# Get T1w reference file
+t1w_reference = Path('${t1w_reference}')
+
+# Create step input
+input_obj = StepInput(
+    input_file=Path('${t2w_file}'),
+    working_dir=Path('work'),
+    config=config,
+    output_name='t2w_to_t1w_registered.nii.gz',
+    metadata={
+        'subject_id': '${subject_id}',
+        'session_id': '${session_id}'
+    }
+)
+
+# Run step
+result = anat_t2w_to_t1w_registration(input_obj, t1w_reference=t1w_reference)
+
+# Generate BIDS-compliant output filename with space-T1w entity
+# Format: space-T1w_desc-reorient_T2w.nii.gz (after reorient, before bias correction)
+bids_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='space-T1w_desc-reorient',
+    modality=modality
+)
+
+# Use symlink to avoid duplication - Nextflow publishDir will handle final copy
+create_output_link(result.output_file, bids_output_filename)
+
+# Generate BIDS prefix (filename stem without modality)
+bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
+
+# Copy transform files with BIDS-compliant names
+if "forward_transform" in result.additional_files:
+    # Forward transform: from-T2w_to-T1w
+    bids_transform_name = f"{bids_prefix_wo_modality}_from-T2w_to-T1w_mode-image_xfm.h5"
+    shutil.copy2(result.additional_files["forward_transform"], bids_transform_name)
+
+if "inverse_transform" in result.additional_files:
+    # Inverse transform: from-T1w_to-T2w
+    bids_transform_name = f"{bids_prefix_wo_modality}_from-T1w_to-T2w_mode-image_xfm.h5"
+    shutil.copy2(result.additional_files["inverse_transform"], bids_transform_name)
+
+# Save metadata
+with open('metadata.json', 'w') as f:
+    json.dump(result.metadata, f, indent=2)
+EOF
+    """
+}
+
+// ============================================
+// PASS-THROUGH HELPER PROCESSES (for skipped steps)
+// ============================================
+
+process ANAT_CONFORM_PASSTHROUGH {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
+        mode: 'copy',
+        pattern: '*.{nii.gz,mat}'
+    
+    input:
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
+    path config_file
+    
+    output:
+    tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(bids_naming_template), emit: output
+    path "*.mat", emit: transforms
+    tuple val(subject_id), val(session_id), path("template_resampled.nii.gz"), emit: template_resampled
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from pathlib import Path
+import json
+import shutil
+import os
+import numpy as np
+
+# Get BIDS naming template
+bids_naming_template = Path('${bids_naming_template}')
+
+# Determine modality
+original_stem = get_filename_stem(bids_naming_template)
+modality = 'T1w'  # default
+if '_T2w' in original_stem or original_stem.endswith('_T2w'):
+    modality = 'T2w'
+elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
+    modality = 'T1w'
+
+# Pass through input file (create symlink)
+bids_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-conform',
+    modality=modality
+)
+os.symlink(Path('${input_file}').resolve(), bids_output_filename)
+
+# Generate BIDS prefix
+bids_prefix = original_stem.replace(f"_{modality}", "")
+
+# Create identity transform matrices (FLIRT format: 4x4 matrix)
+# Identity matrix: 1.0 on diagonal, 0.0 elsewhere
+identity_matrix = np.eye(4)
+
+# Forward transform: from-scanner_to-{modality}
+forward_transform_name = f"{bids_prefix}_from-scanner_to-{modality}_mode-image_xfm.mat"
+np.savetxt(forward_transform_name, identity_matrix, fmt='%.6f', delimiter=' ')
+
+# Inverse transform: from-{modality}_to-scanner
+inverse_transform_name = f"{bids_prefix}_from-{modality}_to-scanner_mode-image_xfm.mat"
+np.savetxt(inverse_transform_name, identity_matrix, fmt='%.6f', delimiter=' ')
+
+# Create dummy template_resampled (copy of input for QC compatibility)
+template_resampled_name = 'template_resampled.nii.gz'
+shutil.copy2(Path('${input_file}'), template_resampled_name)
+
+# Save metadata
+metadata = {
+    "step": "conform",
+    "skipped": True,
+    "reason": "disabled in configuration",
+    "modality": modality
+}
+with open('metadata.json', 'w') as f:
+    json.dump(metadata, f, indent=2)
+EOF
+    """
+}
+
+process ANAT_BIAS_CORRECTION_PASSTHROUGH {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
+        mode: 'copy',
+        pattern: '*.nii.gz'
+    
+    input:
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
+    path config_file
+    
+    output:
+    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_naming_template), emit: output
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from pathlib import Path
+import json
+import os
+
+# Get BIDS naming template
+bids_naming_template = Path('${bids_naming_template}')
+
+# Determine modality
+original_stem = get_filename_stem(bids_naming_template)
+modality = 'T1w'  # default
+if '_T2w' in original_stem or original_stem.endswith('_T2w'):
+    modality = 'T2w'
+elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
+    modality = 'T1w'
+
+# Pass through input file (create symlink)
+bids_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-preproc',
+    modality=modality
+)
+os.symlink(Path('${input_file}').resolve(), bids_output_filename)
+
+# Save metadata
+metadata = {
+    "step": "bias_correction",
+    "skipped": True,
+    "reason": "disabled in configuration",
+    "modality": modality
+}
+with open('metadata.json', 'w') as f:
+    json.dump(metadata, f, indent=2)
+EOF
+    """
+}
+
+process ANAT_REGISTRATION_PASSTHROUGH {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
+        mode: 'copy',
+        pattern: '*.{nii.gz,h5}'
+    
+    input:
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
+    path config_file
+    
+    output:
+    tuple val(subject_id), val(session_id), path("*.nii.gz"), emit: output
+    tuple val(subject_id), val(session_id), path("*.h5"), emit: transforms
+    path "*.json", emit: metadata
+    
+    script:
+    def template_name = params.output_space.split(':')[0]
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from macacaMRIprep.utils.templates import resolve_template
+from pathlib import Path
+import json
+import os
+import subprocess
+import shutil
+
+# Get BIDS naming template
+bids_naming_template = Path('${bids_naming_template}')
+
+# Determine modality
+original_stem = get_filename_stem(bids_naming_template)
+modality = 'T1w'  # default
+if '_T2w' in original_stem or original_stem.endswith('_T2w'):
+    modality = 'T2w'
+elif '_T1w' in original_stem or original_stem.endswith('_T1w'):
+    modality = 'T1w'
+
+template_name = '${template_name}'
+
+# Pass through input file (create symlink with space entity)
+bids_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix=f'space-{template_name}_desc-preproc',
+    modality=modality
+)
+os.symlink(Path('${input_file}').resolve(), bids_output_filename)
+
+# Generate BIDS prefix
+bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
+
+# Create identity transform using ANTs
+# Create identity affine transform file first
+template_file = Path(resolve_template('${params.output_space}'))
+input_file = Path('${input_file}')
+
+# Forward transform: from-{modality}_to-{template_name}
+forward_transform_name = f"{bids_prefix_wo_modality}_from-{modality}_to-{template_name}_mode-image_xfm.h5"
+
+# Create identity affine transform (.txt format)
+identity_affine = Path('identity_affine.txt')
+with open(identity_affine, 'w') as f:
+    f.write('#Insight Transform File V1.0\n')
+    f.write('#Transform 0\n')
+    f.write('Transform: AffineTransform_double_3_3\n')
+    f.write('Parameters: 1 0 0 0 1 0 0 0 1 0 0 0\n')
+    f.write('FixedParameters: 0 0 0\n')
+
+# Convert to .h5 using ConvertTransformFile
+try:
+    cmd_convert = [
+        'ConvertTransformFile', '3',
+        str(identity_affine),
+        forward_transform_name
+    ]
+    result = subprocess.run(cmd_convert, check=True, capture_output=True, text=True)
+except (subprocess.CalledProcessError, FileNotFoundError):
+    # If ConvertTransformFile fails, create minimal .h5 structure
+    # This is a simplified approach - proper identity would need full ANTs transform structure
+    with open(forward_transform_name, 'w') as f:
+        f.write('#Insight Transform File V1.0\n')
+        f.write('#Transform 0\n')
+        f.write('Transform: AffineTransform_double_3_3\n')
+        f.write('Parameters: 1 0 0 0 1 0 0 0 1 0 0 0\n')
+        f.write('FixedParameters: 0 0 0\n')
+
+# Inverse transform: from-{template_name}_to-{modality} (same as forward for identity)
+inverse_transform_name = f"{bids_prefix_wo_modality}_from-{template_name}_to-{modality}_mode-image_xfm.h5"
+shutil.copy2(forward_transform_name, inverse_transform_name)
+
+# Save metadata
+metadata = {
+    "step": "registration",
+    "skipped": True,
+    "reason": "disabled in configuration",
+    "modality": modality,
+    "target": template_name
+}
+with open('metadata.json', 'w') as f:
+    json.dump(metadata, f, indent=2)
 EOF
     """
 }

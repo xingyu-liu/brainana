@@ -16,7 +16,7 @@ from ..operations.preprocessing import (
     bias_correction,
     apply_segmentation
 )
-from ..operations.registration import ants_register
+from ..operations.registration import ants_register, flirt_register, flirt_apply_transforms
 
 
 logger = logging.getLogger(__name__)
@@ -264,6 +264,88 @@ def anat_registration(input: StepInput, template_file: Path, template_name: str)
             "modality": "anat",
             "target": template_name,
             "xfm_type": xfm_type
+        },
+        additional_files=additional_files
+    )
+
+
+def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepOutput:
+    """
+    Register T2w image to preprocessed T1w space.
+    
+    This is used when T2w and T1w are in the same session. The T2w is registered
+    to the bias-corrected T1w (not to template), then bias correction is applied.
+    
+    Args:
+        input: StepInput with input_file (reoriented T2w), working_dir, config, metadata
+        t1w_reference: Path to preprocessed T1w reference (desc-preproc_T1w.nii.gz)
+        
+    Returns:
+        StepOutput with registered T2w file and transform files
+    """
+    # Set FLIRT parameters for anatomical registration
+    flirt_config = {
+        "registration": {
+            "flirt": {
+                "cost": "mutualinfo",
+                "searchcost": "mutualinfo",
+                "coarsesearch": 40,
+                "finesearch": 15
+            }
+        }
+    }
+    
+    # Step 1: FLIRT rigid registration from T2w to T1w
+    try:
+        registration_result = flirt_register(
+            fixedf=str(t1w_reference),
+            movingf=str(input.input_file),
+            working_dir=str(input.working_dir),
+            output_prefix="t2w_to_t1w_coreg",
+            config=flirt_config,
+            logger=logger,
+            dof=6  # Use rigid registration for T2w→T1w coregistration
+        )
+        xfm_forward_f = Path(registration_result['forward_transform'])
+        xfm_inverse_f = Path(registration_result.get('inverse_transform')) if 'inverse_transform' in registration_result else None
+    except Exception as e:
+        logger.error(f"Error during FLIRT registration: {e}")
+        raise RuntimeError(
+            f"T2w to T1w registration failed during FLIRT registration: {e}"
+        )
+    
+    # Step 2: Apply the affine transformation to the T2w image
+    try:
+        apply_result = flirt_apply_transforms(
+            movingf=str(input.input_file),
+            outputf_name="t2w_to_t1w_coreg_registered.nii.gz",
+            reff=str(t1w_reference),
+            working_dir=str(input.working_dir),
+            transformf=str(xfm_forward_f),
+            logger=logger,
+            interpolation='trilinear',
+            generate_tmean=False
+        )
+        output_file = Path(apply_result['imagef_registered'])
+    except Exception as e:
+        logger.error(f"Error during affine transformation application: {e}")
+        raise RuntimeError(
+            f"T2w to T1w registration failed when applying transformation: {e}"
+        )
+    
+    additional_files = {}
+    if xfm_forward_f.exists():
+        additional_files["forward_transform"] = xfm_forward_f
+    if xfm_inverse_f is not None and xfm_inverse_f.exists():
+        additional_files["inverse_transform"] = xfm_inverse_f
+    
+    return StepOutput(
+        output_file=output_file,
+        metadata={
+            "step": "t2w_to_t1w_registration",
+            "modality": "T2w",
+            "target": "T1w",
+            "xfm_type": "rigid"
         },
         additional_files=additional_files
     )
