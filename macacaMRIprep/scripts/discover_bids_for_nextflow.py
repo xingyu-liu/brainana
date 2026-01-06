@@ -118,12 +118,9 @@ def print_summary(
     
     if func_jobs:
         func_tasks = sorted(set(j.get('task') for j in func_jobs if j.get('task')))
-        func_runs = sorted(set(j.get('run') for j in func_jobs if j.get('run')))
         print(f"  BOLD files: {len(func_jobs)}")
         if func_tasks:
             print(f"  Tasks: {', '.join(func_tasks)}")
-        if func_runs:
-            print(f"  Runs: {', '.join(str(r) for r in func_runs)}")
     else:
         print(f"  BOLD files: 0")
 

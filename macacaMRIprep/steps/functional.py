@@ -267,16 +267,17 @@ def func_bias_correction(input: StepInput) -> StepOutput:
     )
 
 
-def func_conform(input: StepInput, target_file: Path) -> StepOutput:
+def func_conform(input: StepInput, target_file: Path, bold_4d_file: Optional[Path] = None) -> StepOutput:
     """
-    Conform functional tmean image to target space.
+    Conform functional tmean image to target space, and optionally apply transform to full 4D BOLD.
     
     Args:
         input: StepInput with input_file (tmean), working_dir, config, metadata
         target_file: Target file for conforming (anatomical or template)
+        bold_4d_file: Optional path to full 4D BOLD timeseries to also conform
         
     Returns:
-        StepOutput with conformed tmean file and transform files
+        StepOutput with conformed tmean file, conformed 4D BOLD (if provided), and transform files
     """
     if not input.config.get("func.conform.enabled", True):
         logger.info("Step: conform skipped (disabled in configuration)")
@@ -288,7 +289,7 @@ def func_conform(input: StepInput, target_file: Path) -> StepOutput:
     # Check if skullstripping is disabled
     skip_skullstripping = not input.config.get("func.skullstripping.enabled", True)
     
-    # Call operation
+    # Step 1: Conform the tmean (used for registration)
     result = conform_to_template(
         imagef=str(input.input_file),
         template_file=str(target_file),
@@ -306,13 +307,41 @@ def func_conform(input: StepInput, target_file: Path) -> StepOutput:
         additional_files["forward_transform"] = Path(result["forward_xfm"])
     if result.get("inverse_xfm"):
         additional_files["inverse_transform"] = Path(result["inverse_xfm"])
+    if result.get("template_f"):
+        additional_files["template_resampled"] = Path(result["template_f"])
+    
+    # Step 2: Apply the same transform to the full 4D BOLD timeseries if provided
+    if bold_4d_file and bold_4d_file.exists() and result.get("forward_xfm"):
+        logger.info("Step: applying conform transform to full 4D BOLD timeseries")
+        from ..operations.registration import flirt_apply_transforms
+        
+        # Use the conformed tmean as reference for resampling
+        # Pass only filename, not full path, since flirt_apply_transforms will prepend work_dir
+        bold_4d_conformed_filename = "func_bold_conformed.nii.gz"
+        
+        # Apply transform to 4D BOLD
+        bold_result = flirt_apply_transforms(
+            movingf=str(bold_4d_file),
+            outputf_name=bold_4d_conformed_filename,
+            reff=str(output_file),  # Use conformed tmean as reference
+            working_dir=str(input.working_dir),
+            transformf=str(result["forward_xfm"]),
+            logger=logger,
+            interpolation="trilinear",
+            generate_tmean=False  # Don't generate tmean, we already have it
+        )
+        
+        if bold_result.get("imagef_registered"):
+            additional_files["bold_4d_conformed"] = Path(bold_result["imagef_registered"])
+            logger.info(f"Output: conformed 4D BOLD saved - {bold_result['imagef_registered']}")
     
     return StepOutput(
         output_file=output_file,
         metadata={
             "step": "conform",
             "modality": "func",
-            "target_file": str(target_file)
+            "target_file": str(target_file),
+            "bold_4d_conformed": str(bold_4d_file) if bold_4d_file else None
         },
         additional_files=additional_files
     )
@@ -384,6 +413,9 @@ def func_registration(
             output_file=input.input_file,
             metadata={"step": "registration", "skipped": True}
         )
+    
+    # Ensure working directory exists
+    input.working_dir.mkdir(parents=True, exist_ok=True)
     
     # Get transform type from config
     config_key = f"func2{target_type}_xfm_type"
@@ -460,10 +492,13 @@ def func_apply_transforms(
     # Convert transform files to strings
     transform_strs = [str(tf) for tf in transform_files]
     
+    # Ensure working directory exists
+    input.working_dir.mkdir(parents=True, exist_ok=True)
+    
     # Call operation
     result = ants_apply_transforms(
         movingf=str(input.input_file),
-        moving_type=3,  # 3D image
+        moving_type=3,  # 3D image (time series)
         interpolation=interpolation,
         outputf_name=input.output_name or "func_registered.nii.gz",
         fixedf=str(reference_file),
@@ -471,7 +506,6 @@ def func_apply_transforms(
         reff=str(reference_file),
         working_dir=str(input.working_dir),
         generate_tmean=True,
-        config=input.config,
         logger=logger
     )
     

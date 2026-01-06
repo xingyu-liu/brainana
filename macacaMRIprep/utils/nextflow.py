@@ -104,20 +104,24 @@ def init_cmd_log_for_nextflow(
     output_dir: str,
     subject_id: str,
     session_id: Optional[str],
-    step_name: str
+    step_name: str,
+    task_name: Optional[str] = None,
+    run: Optional[str] = None
 ) -> Optional[Path]:
     """
     Initialize command log file for Nextflow process.
     
     This is a convenience wrapper around init_cmd_log_file that constructs
-    the job_id from subject_id and session_id, which is the common pattern
-    in Nextflow processes.
+    the job_id from subject_id and session_id (and optionally task_name and run
+    for functional processes), which is the common pattern in Nextflow processes.
     
     Args:
         output_dir: Output directory path (string from Nextflow params)
         subject_id: Subject ID
         session_id: Session ID (can be None or empty string)
-        step_name: Step/process name (e.g., 'ANAT_REORIENT')
+        step_name: Step/process name (e.g., 'ANAT_REORIENT', 'FUNC_SKULLSTRIPPING')
+        task_name: Task name (for functional data, optional)
+        run: Run number (for functional data, optional)
     
     Returns:
         Path to command log file, or None if initialization failed
@@ -126,6 +130,11 @@ def init_cmd_log_for_nextflow(
     job_id = f"sub-{subject_id}"
     if session_id:
         job_id += f"_ses-{session_id}"
+    # Add task and run for functional processes to ensure unique job IDs
+    if task_name:
+        job_id += f"_task-{task_name}"
+    if run:
+        job_id += f"_run-{run}"
     
     return _init_cmd_log_file(
         output_dir=output_dir,

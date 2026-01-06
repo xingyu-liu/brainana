@@ -249,7 +249,7 @@ process QC_REGISTRATION {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), path(registered_file), path(transforms)
+    tuple val(subject_id), val(session_id), path(registered_file)
     path config_file
     
     output:
@@ -502,16 +502,72 @@ EOF
 // FUNCTIONAL QC PROCESSES
 // ============================================
 
-process QC_MOTION_CORRECTION {
+process QC_CONFORM_FUNC {
     label 'cpu'
-    tag "${subject_id}_${session_id}_${task}_${run}"
+    tag "${subject_id}_${session_id}_${task_name}_${run}"
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task), val(run), path(motion_params_file), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(conformed_file), val(bids_naming_template), path(template_resampled_file, stageAs: 'template.nii.gz')
+    path config_file
+    
+    output:
+    path "*.png", emit: qc_files
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.steps.qc import qc_conform
+from macacaMRIprep.utils.bids import create_bids_output_filename
+from pathlib import Path
+
+# Load config
+from macacaMRIprep.utils.nextflow import load_config, save_metadata
+config = load_config('${config_file}')
+
+# Get original file path (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Use the resampled template file from conform step (matches the conformed image space)
+# File is staged as 'template.nii.gz' to avoid filename collisions
+template_file = Path('template.nii.gz')
+
+# Generate BIDS-compliant QC output filename
+qc_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-conform',
+    modality='bold'
+).replace('.nii.gz', '.png')
+
+# Generate QC
+result = qc_conform(
+    conformed_file=Path('${conformed_file}'),
+    template_file=template_file,
+    output_path=Path(qc_output_filename),
+    modality='func',
+    config=config
+)
+
+# Save metadata
+save_metadata(result.metadata)
+EOF
+    """
+}
+
+process QC_MOTION_CORRECTION {
+    label 'cpu'
+    tag "${subject_id}_${session_id}_${task_name}_${run}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}/figures",
+        mode: 'copy',
+        pattern: '*.png'
+    
+    input:
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(motion_params_file), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -555,14 +611,14 @@ EOF
 
 process QC_BIAS_CORRECTION_FUNC {
     label 'cpu'
-    tag "${subject_id}_${session_id}_${task}_${run}"
+    tag "${subject_id}_${session_id}_${task_name}_${run}"
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task), val(run), path(original_file), path(corrected_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(original_file), path(corrected_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -607,14 +663,14 @@ EOF
 
 process QC_SKULLSTRIPPING_FUNC {
     label 'cpu'
-    tag "${subject_id}_${session_id}_${task}_${run}"
+    tag "${subject_id}_${session_id}_${task_name}_${run}"
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task), val(run), path(brain_file), path(mask_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(brain_file), path(mask_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -659,14 +715,14 @@ EOF
 
 process QC_REGISTRATION_FUNC {
     label 'cpu'
-    tag "${subject_id}_${session_id}_${task}_${run}"
+    tag "${subject_id}_${session_id}_${task_name}_${run}"
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task), val(run), path(registered_file)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(registered_file)
     path config_file
     
     output:

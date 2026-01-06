@@ -357,7 +357,9 @@ def ants_apply_transforms(
         
         # Generate temporal mean if requested
         if generate_tmean:
-            tmean_file = work_dir / Path(str(outputf_name).replace('.nii.gz', '_tmean.nii.gz'))
+            # Extract just the filename from outputf_name (which already includes work_dir)
+            tmean_filename = Path(outputf_name).name.split('.nii')[0] + '_tmean.nii.gz'
+            tmean_file = work_dir / tmean_filename
             calculate_func_tmean(str(outputf_name), str(tmean_file), logger)
             outputs["imagef_registered_tmean"] = str(tmean_file)
             logger.info(f"Output: tmean generated - {tmean_file}")
@@ -584,7 +586,10 @@ def flirt_apply_transforms(
         
         # Generate temporal mean if requested
         if generate_tmean:
-            tmean_file = work_dir / Path(str(outputf_name).replace('.nii.gz', '_tmean.nii.gz'))
+            # Extract just the filename from outputf_name (which already includes work_dir)
+            output_filename = Path(outputf_name).name
+            tmean_filename = output_filename.replace('.nii.gz', '_tmean.nii.gz')
+            tmean_file = work_dir / tmean_filename
             calculate_func_tmean(str(outputf_name), str(tmean_file), logger)
             outputs["imagef_registered_tmean"] = str(tmean_file)
             logger.info(f"Output: tmean generated - {tmean_file}")

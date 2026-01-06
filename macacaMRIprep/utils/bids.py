@@ -180,8 +180,13 @@ def create_bids_output_filename(
         if original_stem.endswith(f"_{modality}"):
             bids_prefix_wo_modality = original_stem[:-len(f"_{modality}")]
         else:
-            # If we can't find it, just use the original stem (fallback)
-            bids_prefix_wo_modality = original_stem
+            # Special case: if modality is 'boldref' but original has '_bold', remove '_bold' instead
+            # This handles the case where we're converting from bold timeseries to boldref (tmean)
+            if modality == 'boldref' and '_bold' in original_stem:
+                bids_prefix_wo_modality = original_stem.replace('_bold', '')
+            else:
+                # If we can't find it, just use the original stem (fallback)
+                bids_prefix_wo_modality = original_stem
     
     # Create the new filename: prefix + suffix + modality + extension
     # This matches: f"{bids_prefix_wo_modality}_desc-preproc_{modality}.nii.gz"

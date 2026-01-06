@@ -620,7 +620,7 @@ def create_surf_recon_tissue_seg_qc(
             num_contour_levels=1,
             show_title=False,
             col_margin=1,
-            figsize_per_col=(5, 5),
+            figsize_per_col=(3, 3),
             contour_linewidth=1.0,
             contour_type='discrete'  # Use discrete for multi-label masks to avoid double lines
         )

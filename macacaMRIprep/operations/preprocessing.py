@@ -765,7 +765,10 @@ def slice_timing_correction(
 
         # Generate Tmean of the func_all
         if generate_tmean:
-            tmean_path = str(Path(work_dir) / Path(outputs["imagef_slice_time_corrected"].split('.nii')[0] + "_tmean.nii.gz"))
+            # Extract just the filename part to avoid double work_dir in path
+            output_path_str = str(outputs["imagef_slice_time_corrected"])
+            output_filename = Path(output_path_str).stem.replace('.nii', '')  # Remove .nii.gz extension
+            tmean_path = str(work_dir / f"{output_filename}_tmean.nii.gz")
             calculate_func_tmean(outputs["imagef_slice_time_corrected"], tmean_path, logger)
             outputs["imagef_slice_time_corrected_tmean"] = tmean_path
             logger.info(f"Output: Tmean of slice time corrected func_all - {os.path.basename(tmean_path)}")
@@ -920,8 +923,10 @@ def motion_correction(
         
         # Generate Tmean of the func_all
         if generate_tmean:
+            # Extract just the filename part to avoid double work_dir in path
             output_path_str = str(outputs["imagef_motion_corrected"])
-            tmean_path = str(Path(work_dir) / Path(output_path_str.split('.nii')[0] + "_tmean.nii.gz"))
+            output_filename = Path(output_path_str).stem.replace('.nii', '')  # Remove .nii.gz extension
+            tmean_path = str(work_dir / f"{output_filename}_tmean.nii.gz")
             calculate_func_tmean(outputs["imagef_motion_corrected"], tmean_path, logger)
             outputs["imagef_motion_corrected_tmean"] = tmean_path
             logger.info(f"Output: Tmean of motion corrected func_all - {os.path.basename(tmean_path)}")
@@ -1017,8 +1022,10 @@ def despike(
         
         # Generate Tmean of the func_all
         if generate_tmean:
-            output_path_str = str(outputs["imagef_despiked"])
-            tmean_path = str(Path(work_dir) / Path(output_path_str.split('.nii')[0] + "_tmean.nii.gz"))
+            # Extract just the filename part to avoid double work_dir in path
+            # Use output_name directly to get just the filename without directory
+            output_filename = output_name.split('.nii')[0]
+            tmean_path = str(work_dir / f"{output_filename}_tmean.nii.gz")
             calculate_func_tmean(outputs["imagef_despiked"], tmean_path, logger)
             outputs["imagef_despiked_tmean"] = tmean_path
             logger.info(f"Output: Tmean of despiked func_all - {os.path.basename(tmean_path)}")

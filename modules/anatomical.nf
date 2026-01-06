@@ -414,6 +414,7 @@ process ANAT_SKULLSTRIPPING {
     output:
     tuple val(subject_id), val(session_id), path("*_desc-preproc_*_brain.nii.gz"), val(bids_naming_template), emit: output
     tuple val(subject_id), val(session_id), path("*_desc-brain_mask.nii.gz"), emit: brain_mask
+    tuple val(subject_id), val(session_id), path("*_desc-brain_hemimask.nii.gz"), optional: true, emit: brain_hemimask
     tuple val(subject_id), val(session_id), path("*_desc-brain_atlas*.nii.gz"), optional: true, emit: brain_segmentation
     path "*.json", emit: metadata
     

@@ -49,8 +49,6 @@ anat:
 
 func:
   registration_pipeline: "func2anat2template"  # str: "func2anat2template", "func2anat", or "func2template"
-  reorient:
-    enabled: true  # bool: reorient functional images to template orientation when given, otherwise to RAS
   slice_timing_correction:
     enabled: true  # bool: perform slice timing correction
     repetition_time: null  # float: repetition time in seconds, or null (auto-detect from BIDS)
@@ -58,6 +56,8 @@ func:
     tzero: null  # float: reference time point in seconds, or null (auto-calculate)
     slice_time_ref: 0.5  # float: reference slice time (0.0-1.0), 0.5 = middle slice
     slice_encoding_direction: null  # str: "x", "-x", "y", "-y", "z", "-z", or null (auto-detect from BIDS)
+  reorient:
+    enabled: true  # bool: reorient functional images to template orientation when given, otherwise to RAS
   motion_correction:
     enabled: true  # bool: perform motion correction
     dof: 6  # int: degrees of freedom (6, 9, or 12)
