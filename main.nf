@@ -544,10 +544,14 @@ except Exception as e:
     // Gate processing: only process if t2w_has_items emits (meaning T2w files exist)
     // Use combine to create a gated channel - only emits when both channels have items
     // If t2w_has_items is empty, t2w_processing_enabled will be empty, and all processes will be skipped
+    // t2w_has_items: [sub, ses, file, bids_template] (4 elements)
+    // anat_t2w_with_t1w_jobs_for_processing: [sub, ses, file, bids_template] (4 elements)
+    // combine creates cartesian product, so we need to extract the actual job item
     def t2w_processing_enabled = t2w_has_items
-        .combine(anat_t2w_with_t1w_jobs_for_processing)
-        .map { gate_item, sub, ses, file, bids_template ->
-            [sub, ses, file, bids_template]
+        .combine(anat_t2w_with_t1w_jobs_for_processing, by: [0, 1])  // Combine by subject and session to match items
+        .map { sub, ses, file1, bids_template1, file2, bids_template2 ->
+            // Use the actual job item (file2, bids_template2) from anat_t2w_with_t1w_jobs_for_processing
+            [sub, ses, file2, bids_template2]
         }
     
     // Step 1: REORIENT T2w files (using aliased process)
@@ -566,9 +570,19 @@ except Exception as e:
         .filter(isT1wFile)
     
     // Step 3: Join reoriented T2w with T1w bias-corrected output and split channels
-    // Join once, then split into two channels using multiMap
-    t2w_after_reorient
+    // t2w_after_reorient: [sub, ses, t2w_file, t2w_bids_template] (4 elements)
+    // t1w_bias_corrected: [sub, ses, t1w_file, t1w_bids_template] (4 elements)
+    // Join by [0, 1] produces: [sub, ses, t2w_file, t2w_bids_template, t1w_file, t1w_bids_template] (6 elements)
+    // If there are multiple T1w files, join creates cartesian product - take first match
+    def t2w_t1w_joined = t2w_after_reorient
         .join(t1w_bias_corrected, by: [0, 1])  // Join by subject and session
+        .map { sub, ses, t2w_file, t2w_bids_template, t1w_file, t1w_bids_template ->
+            // Ensure we have exactly 6 elements
+            [sub, ses, t2w_file, t2w_bids_template, t1w_file, t1w_bids_template]
+        }
+    
+    // Split into separate channels using multiMap
+    t2w_t1w_joined
         .multiMap { sub, ses, t2w_file, t2w_bids_template, t1w_file, t1w_bids_template ->
             tuple: [sub, ses, t2w_file, t2w_bids_template]
             reference: t1w_file
@@ -790,8 +804,40 @@ except Exception as e:
             
             // FUNC_REGISTRATION expects: combined channel tuple + anatomical brain + session info
             // func_anat_joined: [sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback] (10 elements)
-            // Split into combined channel and anatomical data using multiMap
-            func_anat_joined
+            // Extract separate values and combine them explicitly to ensure alignment
+            def func_reg_combined = func_anat_joined
+                .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback ->
+                    [sub, ses, task, run, bold_file, tmean_file, bids_template]
+                }
+            
+            def func_reg_anat_brain = func_anat_joined
+                .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback ->
+                    [sub, ses, task, run, anat_brain]
+                }
+            
+            def func_reg_anat_ses = func_anat_joined
+                .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback ->
+                    [sub, ses, task, run, anat_ses]
+                }
+            
+            def func_reg_is_fallback = func_anat_joined
+                .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback ->
+                    [sub, ses, task, run, is_fallback]
+                }
+            
+            // Combine channels by [0,1,2,3] to ensure alignment, then extract values
+            def func_reg_final = func_reg_combined
+                .combine(func_reg_anat_brain, by: [0, 1, 2, 3])
+                .combine(func_reg_anat_ses, by: [0, 1, 2, 3])
+                .combine(func_reg_is_fallback, by: [0, 1, 2, 3])
+                .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback ->
+                    // Now we have everything aligned: [sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback]
+                    // Split using multiMap for process call
+                    [sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback]
+                }
+            
+            // Use multiMap to split into separate channels for process call
+            func_reg_final
                 .multiMap { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback ->
                     combined: [sub, ses, task, run, bold_file, tmean_file, bids_template]
                     anat_brain: anat_brain
@@ -800,9 +846,14 @@ except Exception as e:
                 }
                 .set { func_reg_multi }
             
-            // Call FUNC_REGISTRATION with aligned channels
-            // FUNC_REGISTRATION registers to anatomical brain (not template), so we don't need anat_transforms here
-            FUNC_REGISTRATION(func_reg_multi.combined, func_reg_multi.anat_brain, func_reg_multi.anat_ses, func_reg_multi.is_fallback, config_file)
+            // Call FUNC_REGISTRATION with separate arguments
+            FUNC_REGISTRATION(
+                func_reg_multi.combined,
+                func_reg_multi.anat_brain,
+                func_reg_multi.anat_ses,
+                func_reg_multi.is_fallback,
+                config_file
+            )
             func_after_reg = FUNC_REGISTRATION.out.combined  // Combined channel: [sub, ses, task, run, bold, registered_tmean, bids_template]
             func_reg_transforms = FUNC_REGISTRATION.out.transforms
         } else {
