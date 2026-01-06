@@ -26,7 +26,7 @@ process ANAT_SYNTHESIS {
 from macacaMRIprep.steps.anatomical import anat_synthesis
 from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename
 from macacaMRIprep.utils.nextflow import (
-    load_config, detect_modality, init_cmd_log_for_nextflow, create_output_link
+    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
 )
 from pathlib import Path
 import json
@@ -506,7 +506,7 @@ process ANAT_SURFACE_RECONSTRUCTION {
     tag "${subject_id}_${session_id}"
     
     publishDir "${params.output_dir}/fastsurfer",
-        mode: 'move',
+        mode: 'copy',
         pattern: 'fastsurfer/**',
         saveAs: { filename -> 
             // Strip 'fastsurfer/' prefix to move sub-XXX directly to output_dir/fastsurfer/sub-XXX
@@ -705,6 +705,9 @@ bids_output_filename = create_bids_output_filename(
 # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
 create_output_link(result.output_file, bids_output_filename)
 
+# Get filename stem for BIDS-compliant transform naming
+original_stem = get_filename_stem(bids_naming_template)
+
 # Generate BIDS prefix (filename stem without modality)
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 
@@ -767,9 +770,9 @@ PYTHON
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.anatomical import anat_t2w_to_t1w_registration
 from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from macacaMRIprep.utils.nextflow import (
-    load_config, init_cmd_log_for_nextflow, save_metadata, create_output_link
+    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
 )
 from pathlib import Path
 import shutil
@@ -791,6 +794,9 @@ bids_naming_template = Path('${bids_naming_template}')
 
 # Determine modality from BIDS naming template filename
 modality = detect_modality(bids_naming_template)
+
+# Get filename stem for BIDS-compliant transform naming
+original_stem = get_filename_stem(bids_naming_template)
 
 # Get T1w reference file
 t1w_reference = Path('${t1w_reference}')

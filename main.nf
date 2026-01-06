@@ -568,14 +568,14 @@ except Exception as e:
     }
     
     // QC for T2w→T1w registration
-    // Join registered T2w output with skull-stripped T1w brain reference (for overlaid contour)
+    // Join bias-corrected T2w output with skull-stripped T1w brain reference (for overlaid contour)
     // Process expects: tuple [sub, ses, registered_t2w_file, t1w_reference_file], bids_naming_template, config_file
-    // Get skull-stripped T1w brain files from the main pipeline
+    // Get skull-stripped T1w brain files from the main pipeline for overlay contours
     def t1w_skullstripped = anat_after_skull
         .filter(isT1wFile)
     
     // Join and split channels using multiMap
-    t2w_after_reg_to_t1w
+    t2w_after_bias_final
         .join(t1w_skullstripped, by: [0, 1])
         .multiMap { sub, ses, t2w_file, t2w_bids_template, t1w_file, t1w_bids_template ->
             tuple: [sub, ses, t2w_file, t1w_file]

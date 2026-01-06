@@ -267,11 +267,11 @@ cat ~/.nextflow/logs/nextflow.log
 ### Nextflow Reports
 ```bash
 # HTML reports
-open output_dir/reports/nextflow_report.html
-open output_dir/reports/nextflow_timeline.html
+open output_dir/nextflow_reports/nextflow_report.html
+open output_dir/nextflow_reports/nextflow_timeline.html
 
 # Text trace
-cat output_dir/reports/nextflow_trace.txt
+cat output_dir/nextflow_reports/nextflow_trace.txt
 ```
 
 ---
@@ -374,7 +374,7 @@ In Nextflow processes, Python logging level is controlled by:
 
 4. **Use Nextflow reports** for workflow overview:
    ```bash
-   open output_dir/reports/nextflow_report.html
+   open output_dir/nextflow_reports/nextflow_report.html
    ```
 
 ---

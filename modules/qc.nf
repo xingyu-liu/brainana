@@ -334,7 +334,6 @@ process QC_T2W_TO_T1W_REGISTRATION {
 from macacaMRIprep.steps.qc import qc_registration
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
-import glob
 
 # Load config
 from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
@@ -343,11 +342,10 @@ config = load_config('${config_file}')
 # Get T1w reference file
 t1w_reference = Path('${t1w_reference_file}')
 
-# Find the registered T2w file (handle glob pattern)
-registered_files = glob.glob('*.nii.gz')
-if not registered_files:
-    raise FileNotFoundError("No registered T2w file found")
-registered_t2w = Path(registered_files[0])
+# Get the registered T2w file directly from input
+registered_t2w = Path('${registered_t2w_file}')
+if not registered_t2w.exists():
+    raise FileNotFoundError(f"Registered T2w file not found: {registered_t2w}")
 
 # Get BIDS naming template (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')

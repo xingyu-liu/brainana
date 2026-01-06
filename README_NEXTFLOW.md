@@ -263,7 +263,7 @@ After running, view the workflow graph:
 
 ```bash
 # Open in browser
-open output_dir/reports/nextflow_dag.svg
+open output_dir/nextflow_reports/nextflow_dag.svg
 ```
 
 ## Integration with Existing Code
