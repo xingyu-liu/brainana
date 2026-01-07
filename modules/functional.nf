@@ -410,7 +410,8 @@ process FUNC_BIAS_CORRECTION {
     
     input:
     // Combined channel: [sub, ses, task, run, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(bold_file), path(tmean_file), val(bids_naming_template)
+    // Use stageAs to automatically create bold_inherited.nii.gz symlink (avoids duplicate symlinks)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(bold_file, stageAs: 'bold_inherited.nii.gz'), path(tmean_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -467,32 +468,13 @@ config = load_config('${config_file}')
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
-# Create symlink to inherited BOLD file for output
-bold_input = Path('${bold_file}')
+# bold_inherited.nii.gz is automatically created by Nextflow via stageAs parameter
+# No need to manually create symlink - Nextflow handles it
 bold_inherited = Path('bold_inherited.nii.gz')
 
-# Ensure source file exists
-if not bold_input.exists():
-    raise FileNotFoundError(f"BOLD input file does not exist: {bold_input}")
-
-# Remove existing symlink/file if present
-if bold_inherited.exists() or bold_inherited.is_symlink():
-    bold_inherited.unlink()
-
-# Create symlink using absolute path to ensure it works
-bold_input_abs = bold_input.resolve()
-bold_inherited_abs = bold_inherited.resolve()
-
-try:
-    os.symlink(str(bold_input_abs), str(bold_inherited_abs))
-except OSError as e:
-    # If symlink fails, try copying the file instead
-    print(f"WARNING: Symlink creation failed ({e}), copying file instead", file=sys.stderr)
-    shutil.copy2(str(bold_input_abs), str(bold_inherited_abs))
-
-# Verify the output file exists
+# Verify the file exists (Nextflow should have staged it)
 if not bold_inherited.exists():
-    raise FileNotFoundError(f"Failed to create bold_inherited.nii.gz: symlink/copy failed")
+    raise FileNotFoundError(f"BOLD inherited file does not exist: {bold_inherited}. Nextflow stageAs may have failed.")
 
 # Create step input (process tmean, inherit BOLD via symlink)
 input_obj = StepInput(
@@ -684,16 +666,15 @@ process FUNC_SKULLSTRIPPING {
     
     input:
     // Combined channel: [sub, ses, task, run, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(bold_file), path(tmean_file), val(bids_naming_template)
+    // Use stageAs to automatically create bold_inherited.nii.gz symlink (avoids duplicate symlinks)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(bold_file, stageAs: 'bold_inherited.nii.gz'), path(tmean_file), val(bids_naming_template)
     path config_file
     
     output:
-    // Combined channel: [sub, ses, task, run, bold_file, brain_file, bids_template]
-    // Note: brain_file replaces tmean_file (it's the skull-stripped tmean)
+    // Combined channel: 7 elements [sub, ses, task, run, bold_file, tmean_file (brain_file), bids_template]
+    // brain mask channel: 6 elements [sub, ses, task, run, mask_file, bids_template]
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("bold_inherited.nii.gz"), path("*_boldref_brain.nii.gz"), val(bids_naming_template), emit: combined
-    // Keep separate outputs for backward compatibility
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-brain_mask.nii.gz"), val(bids_naming_template), emit: brain_mask
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*_boldref_brain.nii.gz"), val(bids_naming_template), emit: brain
     path "*.json", emit: metadata
     
     script:
@@ -724,33 +705,13 @@ process FUNC_SKULLSTRIPPING {
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
     
-    # Create symlink to inherited BOLD file for output
-    bold_input = Path('${bold_file}')
+    # bold_inherited.nii.gz is automatically created by Nextflow via stageAs parameter
+    # No need to manually create symlink - Nextflow handles it
     bold_inherited = Path('bold_inherited.nii.gz')
     
-    # Ensure source file exists
-    if not bold_input.exists():
-        raise FileNotFoundError(f"BOLD input file does not exist: {bold_input}")
-    
-    # Remove existing symlink/file if present
-    if bold_inherited.exists() or bold_inherited.is_symlink():
-        bold_inherited.unlink()
-    
-    # Create symlink using absolute path to ensure it works
-    bold_input_abs = bold_input.resolve()
-    bold_inherited_abs = bold_inherited.resolve()
-    
-    try:
-        os.symlink(str(bold_input_abs), str(bold_inherited_abs))
-    except OSError as e:
-        # If symlink fails, try copying the file instead
-        import shutil
-        print(f"WARNING: Symlink creation failed ({e}), copying file instead", file=sys.stderr)
-        shutil.copy2(str(bold_input_abs), str(bold_inherited_abs))
-    
-    # Verify the output file exists
+    # Verify the file exists (Nextflow should have staged it)
     if not bold_inherited.exists():
-        raise FileNotFoundError(f"Failed to create bold_inherited.nii.gz: symlink/copy failed")
+        raise FileNotFoundError(f"BOLD inherited file does not exist: {bold_inherited}. Nextflow stageAs may have failed.")
     
     # Create step input (process tmean → brain, inherit BOLD via symlink)
     input_obj = StepInput(
@@ -942,20 +903,33 @@ bold_inherited = Path('bold_inherited.nii.gz')
 if not bold_input.exists():
     raise FileNotFoundError(f"BOLD input file does not exist: {bold_input}")
 
-# Remove existing symlink/file if present
-if bold_inherited.exists() or bold_inherited.is_symlink():
-    bold_inherited.unlink()
+# Check if input and output are the same file (resolve to check actual file)
+bold_input_resolved = bold_input.resolve()
+bold_inherited_resolved = bold_inherited.resolve()
 
-# Create symlink using absolute path to ensure it works
-bold_input_abs = bold_input.resolve()
-bold_inherited_abs = bold_inherited.resolve()
+# If they're the same file, no need to create symlink - just use it
+if bold_input_resolved == bold_inherited_resolved:
+    # Input is already the output file - nothing to do
+    pass
+else:
+    # Remove existing symlink/file if present
+    if bold_inherited.exists() or bold_inherited.is_symlink():
+        bold_inherited.unlink()
 
-try:
-    os.symlink(str(bold_input_abs), str(bold_inherited_abs))
-except OSError as e:
-    # If symlink fails, try copying the file instead
-    print(f"WARNING: Symlink creation failed ({e}), copying file instead", file=sys.stderr)
-    shutil.copy2(str(bold_input_abs), str(bold_inherited_abs))
+    # Create symlink using relative path (works better with Nextflow file staging)
+    # Get the relative path from bold_inherited's parent to bold_input
+    try:
+        # Use relative path for symlink (more reliable with Nextflow staging)
+        bold_input_rel = os.path.relpath(str(bold_input), str(bold_inherited.parent))
+        os.symlink(bold_input_rel, str(bold_inherited))
+    except OSError as e:
+        # If relative symlink fails, try absolute path
+        try:
+            os.symlink(str(bold_input_resolved), str(bold_inherited_resolved))
+        except OSError as e2:
+            # If symlink fails completely, try copying the file instead
+            print(f"WARNING: Symlink creation failed ({e2}), copying file instead", file=sys.stderr)
+            shutil.copy2(str(bold_input_resolved), str(bold_inherited_resolved))
 
 # Verify the output file exists
 if not bold_inherited.exists():
@@ -1001,13 +975,13 @@ for key, f in result.additional_files.items():
         # Forward transform: from-bold_to-{space_name}
         # Use space_name (T1w for anatomical, template name for template)
         bids_transform_name = f"{bids_prefix}_from-bold_to-{space_name}_mode-image_xfm.h5"
-        shutil.copy2(f, bids_transform_name)
+        create_output_link(f, bids_transform_name)
     elif key == 'inverse_transform':
         # Inverse transform: from-{space_name}_to-bold
         bids_transform_name = f"{bids_prefix}_from-{space_name}_to-bold_mode-image_xfm.h5"
-        shutil.copy2(f, bids_transform_name)
+        create_output_link(f, bids_transform_name)
     else:
-        shutil.copy2(f, f.name)
+        create_output_link(f, f.name)
 
 # Save metadata
 save_metadata(result.metadata)
@@ -1021,7 +995,7 @@ process FUNC_APPLY_TRANSFORMS {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.nii.gz'
+        pattern: '*.{nii.gz,h5}'
     
     input:
     // Stage tmean_registered with a different name to avoid conflict with output filename
@@ -1031,7 +1005,7 @@ process FUNC_APPLY_TRANSFORMS {
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*space-*desc-preproc*.nii.gz"), emit: output
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*space-*desc-preproc_bold.nii.gz"), path("*space-*desc-preproc_boldref.nii.gz"), val(bids_naming_template), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -1040,7 +1014,7 @@ process FUNC_APPLY_TRANSFORMS {
     \${PYTHON:-python3} <<EOF
     from macacaMRIprep.steps.functional import func_apply_transforms
     from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.bids import create_bids_output_filename
+    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
     from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
     from pathlib import Path
     import glob
@@ -1103,15 +1077,19 @@ process FUNC_APPLY_TRANSFORMS {
         modality='bold'
     )
     
-    # Ensure output file exists
-    output_file_path = Path(result.output_file)
-    if not output_file_path.exists():
-        raise FileNotFoundError(f"Output file not found: {output_file_path}")
-    
-    # Create BIDS-compliant output file for Nextflow
-    # Use symlink to avoid duplicating large files (Nextflow publishDir will copy actual content)
+    # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
     create_output_link(result.output_file, bids_output_filename)
     
+    # Generate BIDS-compliant output filename for tmean (boldref)
+    # Format: space-{target_name}_desc-preproc_boldref.nii.gz
+    if "tmean" in result.additional_files:
+        bids_boldref_filename = create_bids_output_filename(
+            original_file_path=bids_naming_template,
+            suffix=f'space-{target_name}_desc-preproc',
+            modality='boldref'
+        )
+        create_output_link(result.additional_files["tmean"], bids_boldref_filename)
+
     # Save metadata
     save_metadata(result.metadata)
     EOF
