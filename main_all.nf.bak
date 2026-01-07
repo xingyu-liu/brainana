@@ -862,6 +862,31 @@ except Exception as e:
             // Extract channels - EXACTLY like T2W_TO_T1W_REGISTRATION
             def func_reg_tuple = func_reg_multi.tuple
             def func_reg_anat_brain = func_reg_multi.anat_brain
+            
+            println "DEBUG [FUNC_REGISTRATION]: About to call process - 3 inputs like T2W"
+            println "DEBUG [FUNC_REGISTRATION]:   tuple (9 elements): ${func_reg_tuple.getClass().simpleName}"
+            println "DEBUG [FUNC_REGISTRATION]:   anat_brain: ${func_reg_anat_brain.getClass().simpleName}"
+            println "DEBUG [FUNC_REGISTRATION]:   config_file: ${config_file.getClass().simpleName}"
+            
+            // Debug: Verify tuple structure and ensure it's properly formatted
+            func_reg_tuple
+                .first()
+                .view { tuple_items ->
+                    def final_dict = [
+                        "sub": tuple_items[0],
+                        "ses": tuple_items[1],
+                        "task": tuple_items[2],
+                        "run": tuple_items[3],
+                        "bold_file": tuple_items[4].toString().take(60),
+                        "tmean_file": tuple_items[5].toString().take(60),
+                        "bids_template": tuple_items[6].toString().take(60),
+                        "anat_ses": tuple_items[7],
+                        "is_fallback": tuple_items[8],
+                        "tuple_size": tuple_items.size(),
+                        "tuple_type": tuple_items.getClass().simpleName
+                    ]
+                    "DEBUG [FUNC_REGISTRATION]: Final tuple_dict before process call: ${final_dict}"
+                }
 
             FUNC_REGISTRATION(func_reg_tuple, func_reg_anat_brain, config_file)
             func_after_reg = FUNC_REGISTRATION.out.combined  // Combined channel: [sub, ses, task, run, bold, registered_tmean, bids_template]
@@ -869,6 +894,35 @@ except Exception as e:
         } else {
             // Pass through combined channel unchanged
             func_after_reg = func_after_skull
+        }
+        
+        // APPLY_TRANSFORMS step (only if registration was enabled)
+        def func_final_output = func_after_reg
+        if (anat_registration_enabled) {
+            // func_after_reg: [sub, ses, task, run, bold_file, registered_tmean, bids_template] (7 elements)
+            // func_reg_transforms: [sub, ses, task, run, forward_transform] (5 elements)
+            // Join to get registered tmean and transform together
+            def func_reg_with_transforms = func_after_reg
+                .join(func_reg_transforms, by: [0, 1, 2, 3])
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform ->
+                    // Extract BOLD from combined channel for APPLY_TRANSFORMS
+                    // FUNC_APPLY_TRANSFORMS needs: [sub, ses, task, run, registered_tmean, transform, bids_template] + bold_file
+                    [sub, ses, task, run, registered_tmean, forward_transform, bids_template, bold_file]
+                }
+            
+            // Use multiMap to split into aligned channels
+            func_reg_with_transforms
+                .multiMap { sub, ses, task, run, registered_tmean, forward_transform, bids_template, bold_file ->
+                    // Create tuple with registration info: [sub, ses, task, run, registered_tmean, forward_transform, bids_template]
+                    reg_tuple: [sub, ses, task, run, registered_tmean, forward_transform, bids_template]
+                    // Extract BOLD file path
+                    func_4d_file: bold_file
+                }
+                .set { func_apply_transforms_multi }
+            
+            // FUNC_APPLY_TRANSFORMS expects: (tuple with reg info), (4D file path), (config file)
+            FUNC_APPLY_TRANSFORMS(func_apply_transforms_multi.reg_tuple, func_apply_transforms_multi.func_4d_file, config_file)
+            func_final_output = FUNC_APPLY_TRANSFORMS.out.output
         }
         
         // QC for functional - individual steps (conditionally enabled)
@@ -921,5 +975,100 @@ except Exception as e:
                 .set { func_skull_qc_input }
             QC_SKULLSTRIPPING_FUNC(func_skull_qc_input, config_file)
         }
+        
+        // QC_REGISTRATION_FUNC: needs registered file
+        if (anat_registration_enabled) {
+            // Extract registered tmean from combined channel
+            func_final_output
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template ->
+                    [sub, ses, task, run, registered_tmean]
+                }
+                .set { func_reg_qc_input }
+            QC_REGISTRATION_FUNC(func_reg_qc_input, config_file)
+        }
     }
+    
+    // ============================================
+    // QC REPORT GENERATION (per subject)
+    // ============================================
+    // Ensure all QC processes complete before report generation
+    // Use QC_REGISTRATION outputs as the final dependency (since it runs last)
+    
+    // Create completion signal - wait for all QC processes to complete
+    // Collect all QC metadata channels that are actually enabled
+    def anat_qc_channels = Channel.empty()
+    
+    // Add QC channels based on enabled steps
+    if (anat_registration_enabled) {
+        anat_qc_channels = anat_qc_channels.mix(QC_REGISTRATION.out.metadata)
+    }
+    if (surf_recon_enabled && anat_skullstripping_enabled) {
+        anat_qc_channels = anat_qc_channels.mix(QC_SURF_RECON_TISSUE_SEG.out.metadata)
+        anat_qc_channels = anat_qc_channels.mix(QC_CORTICAL_SURF_AND_MEASURES.out.metadata)
+    }
+    if (anat_conform_enabled) {
+        anat_qc_channels = anat_qc_channels.mix(QC_CONFORM.out.metadata)
+    }
+    if (anat_bias_correction_enabled) {
+        anat_qc_channels = anat_qc_channels.mix(QC_BIAS_CORRECTION.out.metadata)
+    }
+    if (anat_skullstripping_enabled) {
+        anat_qc_channels = anat_qc_channels.mix(QC_SKULLSTRIPPING.out.metadata)
+        anat_qc_channels = anat_qc_channels.mix(QC_ATLAS_SEGMENTATION.out.metadata)
+    }
+    // Add T2w→T1w registration QC (always enabled if T2w files with T1w exist)
+    anat_qc_channels = anat_qc_channels.mix(QC_T2W_TO_T1W_REGISTRATION.out.metadata)
+    
+    // Wait for the last QC process to complete (ensures all finish)
+    def anat_qc_completion = anat_qc_channels
+        .last()  // Wait for last anatomical QC to complete
+    
+    // Create completion signal - wait for anatomical, and functional if applicable
+    def qc_completion_signal = anat_qc_completion
+    if (!anat_only) {
+        def func_qc_channels = Channel.empty()
+        if (func_motion_correction_enabled) {
+            func_qc_channels = func_qc_channels.mix(QC_MOTION_CORRECTION.out.metadata)
+        }
+        if (func_bias_correction_enabled) {
+            func_qc_channels = func_qc_channels.mix(QC_BIAS_CORRECTION_FUNC.out.metadata)
+        }
+        if (func_conform_enabled) {
+            func_qc_channels = func_qc_channels.mix(QC_CONFORM_FUNC.out.metadata)
+        }
+        if (func_skullstripping_enabled) {
+            func_qc_channels = func_qc_channels.mix(QC_SKULLSTRIPPING_FUNC.out.metadata)
+        }
+        if (anat_registration_enabled) {
+            func_qc_channels = func_qc_channels.mix(QC_REGISTRATION_FUNC.out.metadata)
+        }
+        
+        def func_qc_completion = func_qc_channels
+            .last()  // Wait for last functional QC to complete
+        
+        // Combine both signals - ensures both anatomical and functional QC complete
+        qc_completion_signal = anat_qc_completion
+            .combine(func_qc_completion)
+            .map { anat_meta, func_meta -> true }  // Simple completion signal
+    }
+    
+    // Get unique subjects from the extracted subjects channel
+    def all_subjects = anat_subjects_ch
+    if (!anat_only) {
+        all_subjects = all_subjects.mix(func_jobs_ch.map { sub, ses, task, run, file_path, bids_naming_template -> sub }.unique())
+    }
+    
+    // Create snapshot directory path for each subject
+    // Combine with QC completion signal to ensure all QC processes finish first
+    // QC_GENERATE_REPORT expects: tuple (subject_id, snapshot_dir, config_file)
+    def qc_report_input = all_subjects
+        .unique()  // Ensure unique subjects before combining
+        .combine(qc_completion_signal)  // Combine ensures QC processes complete before report generation
+        .map { sub, completion_signal ->
+            def snapshot_dir = file("${params.output_dir}/sub-${sub}/figures")
+            [sub, snapshot_dir, config_file]
+        }
+    
+    QC_GENERATE_REPORT(qc_report_input)
+
 }

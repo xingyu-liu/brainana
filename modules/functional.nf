@@ -470,13 +470,29 @@ bids_naming_template = Path('${bids_naming_template}')
 # Create symlink to inherited BOLD file for output
 bold_input = Path('${bold_file}')
 bold_inherited = Path('bold_inherited.nii.gz')
+
+# Ensure source file exists
+if not bold_input.exists():
+    raise FileNotFoundError(f"BOLD input file does not exist: {bold_input}")
+
 # Remove existing symlink/file if present
 if bold_inherited.exists() or bold_inherited.is_symlink():
     bold_inherited.unlink()
+
 # Create symlink using absolute path to ensure it works
 bold_input_abs = bold_input.resolve()
 bold_inherited_abs = bold_inherited.resolve()
-os.symlink(str(bold_input_abs), str(bold_inherited_abs))
+
+try:
+    os.symlink(str(bold_input_abs), str(bold_inherited_abs))
+except OSError as e:
+    # If symlink fails, try copying the file instead
+    print(f"WARNING: Symlink creation failed ({e}), copying file instead", file=sys.stderr)
+    shutil.copy2(str(bold_input_abs), str(bold_inherited_abs))
+
+# Verify the output file exists
+if not bold_inherited.exists():
+    raise FileNotFoundError(f"Failed to create bold_inherited.nii.gz: symlink/copy failed")
 
 # Create step input (process tmean, inherit BOLD via symlink)
 input_obj = StepInput(
@@ -711,13 +727,30 @@ process FUNC_SKULLSTRIPPING {
     # Create symlink to inherited BOLD file for output
     bold_input = Path('${bold_file}')
     bold_inherited = Path('bold_inherited.nii.gz')
+    
+    # Ensure source file exists
+    if not bold_input.exists():
+        raise FileNotFoundError(f"BOLD input file does not exist: {bold_input}")
+    
     # Remove existing symlink/file if present
     if bold_inherited.exists() or bold_inherited.is_symlink():
         bold_inherited.unlink()
+    
     # Create symlink using absolute path to ensure it works
     bold_input_abs = bold_input.resolve()
     bold_inherited_abs = bold_inherited.resolve()
-    os.symlink(str(bold_input_abs), str(bold_inherited_abs))
+    
+    try:
+        os.symlink(str(bold_input_abs), str(bold_inherited_abs))
+    except OSError as e:
+        # If symlink fails, try copying the file instead
+        import shutil
+        print(f"WARNING: Symlink creation failed ({e}), copying file instead", file=sys.stderr)
+        shutil.copy2(str(bold_input_abs), str(bold_inherited_abs))
+    
+    # Verify the output file exists
+    if not bold_inherited.exists():
+        raise FileNotFoundError(f"Failed to create bold_inherited.nii.gz: symlink/copy failed")
     
     # Create step input (process tmean → brain, inherit BOLD via symlink)
     input_obj = StepInput(
@@ -769,12 +802,12 @@ process FUNC_REGISTRATION {
         pattern: '*.{nii.gz,h5}'
     
     input:
-    // Combined channel: [sub, ses, task, run, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(bold_file), path(tmean_file), val(bids_naming_template)
-    // Anatomical skull-stripped brain (target for registration)
+    // 3-input pattern - EXACTLY like T2W_TO_T1W_REGISTRATION: (tuple, path, path)
+    // Tuple: 9 elements [sub, ses, task, run, bold_file, tmean_file, bids_template, anat_session_id, is_fallback]
+    // anat_brain: separate path input (like t1w_file in T2W)
+    // config_file: config path
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(bold_file), path(tmean_file), val(bids_naming_template), val(anat_session_id), val(is_fallback)
     path(anat_brain)
-    val(anat_session_id)
-    val(is_fallback)
     path config_file
     
     output:
@@ -904,13 +937,29 @@ else:  # func2anat2template
 # Create symlink to inherited BOLD file for output
 bold_input = Path('${bold_file}')
 bold_inherited = Path('bold_inherited.nii.gz')
+
+# Ensure source file exists
+if not bold_input.exists():
+    raise FileNotFoundError(f"BOLD input file does not exist: {bold_input}")
+
 # Remove existing symlink/file if present
 if bold_inherited.exists() or bold_inherited.is_symlink():
     bold_inherited.unlink()
+
 # Create symlink using absolute path to ensure it works
 bold_input_abs = bold_input.resolve()
 bold_inherited_abs = bold_inherited.resolve()
-os.symlink(str(bold_input_abs), str(bold_inherited_abs))
+
+try:
+    os.symlink(str(bold_input_abs), str(bold_inherited_abs))
+except OSError as e:
+    # If symlink fails, try copying the file instead
+    print(f"WARNING: Symlink creation failed ({e}), copying file instead", file=sys.stderr)
+    shutil.copy2(str(bold_input_abs), str(bold_inherited_abs))
+
+# Verify the output file exists
+if not bold_inherited.exists():
+    raise FileNotFoundError(f"Failed to create bold_inherited.nii.gz: symlink/copy failed")
 
 # Create step input
 input_obj = StepInput(
