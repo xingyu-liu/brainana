@@ -750,14 +750,14 @@ except Exception as e:
             func_after_skull_processed = FUNC_SKULLSTRIPPING.out.combined
             func_mask = FUNC_SKULLSTRIPPING.out.brain_mask
 
-            // debug: view the first element of func_after_skull_processed
-            func_after_skull_processed.first().view { tuple ->
-                "DEBUG [FUNC_SKULLSTRIPPING: func_after_skull_processed]: ${tuple}"
-            }
-            // debug: view the first element of func_mask
-            func_mask.first().view { tuple ->
-                "DEBUG [FUNC_SKULLSTRIPPING: func_mask]: ${tuple}"
-            }
+            // // debug: view the first element of func_after_skull_processed
+            // func_after_skull_processed.first().view { tuple ->
+            //     "DEBUG [FUNC_SKULLSTRIPPING: func_after_skull_processed]: ${tuple}"
+            // }
+            // // debug: view the first element of func_mask
+            // func_mask.first().view { tuple ->
+            //     "DEBUG [FUNC_SKULLSTRIPPING: func_mask]: ${tuple}"
+
         } else {
             // Only assign passthrough when skullstripping is disabled
             func_after_skull_passthrough = func_after_conform
@@ -768,9 +768,12 @@ except Exception as e:
         def func_after_skull = func_after_skull_processed.mix(func_after_skull_passthrough)
 
         // REGISTRATION step (conditionally enabled)
-        // FUNC_REGISTRATION registers functional tmean/brain to anatomical skull-stripped brain
+        // FUNC_REGISTRATION registers functional tmean/brain to anatomical skull-stripped brain OR template
         def func_after_reg = func_after_skull
         def func_reg_transforms = Channel.empty()
+        def func_reg_reference = Channel.empty()
+        def func_reg_metadata = Channel.empty()  // [sub, ses, task, run, target_type, target2template]
+        
         if (anat_registration_enabled) {
             // Normal case: Join functional data with anatomical skull-stripped brain by subject AND session (exact match)
             def anat_ch = anat_after_skull
@@ -822,9 +825,33 @@ except Exception as e:
                     [sub, ses_func, task, run, bold_file, tmean_file, bids_template, anat_brain, ses_anat, true]  // Last two: anat_ses, is_fallback
                 }
             
-            // Combine exact matches (normal case: same session, handles multiple runs) and fallbacks (edge case: different sessions)
+            // Handle functional sessions with NO anatomical data (func2template case)
+            // Get all functional sessions that were matched (same_ses or across_ses)
+            def func_matched_keys = func_anat_same_ses
+                .mix(func_anat_across_sess)
+                .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback ->
+                    [sub, ses, task, run]  // Key for filtering
+                }
+                .unique()
+            
+            // Find functional sessions without any anatomical match
+            // Use combine to find unmatched sessions, then filter
+            def func_no_anat = func_after_skull
+                .combine(func_matched_keys.groupTuple(), by: [0, 1, 2, 3])
+                .filter { sub, ses, task, run, bold_file, tmean_file, bids_template, matched_list ->
+                    // matched_list is empty if no match found
+                    matched_list == null || matched_list.isEmpty()
+                }
+                .map { sub, ses, task, run, bold_file, tmean_file, bids_template ->
+                    // Create dummy anatomical file path (will be detected by Python code)
+                    def dummy_anat = file("${workDir}/dummy_anat.dummy")
+                    [sub, ses, task, run, bold_file, tmean_file, bids_template, dummy_anat, ses, false]  // Last two: anat_ses, is_fallback
+                }
+            
+            // Combine exact matches (normal case: same session, handles multiple runs), fallbacks (edge case: different sessions), and no-anat cases (func2template)
             def func_anat_joined = func_anat_same_ses
                 .mix(func_anat_across_sess)
+                .mix(func_no_anat)
 
             // Split using multiMap
             func_anat_joined
@@ -845,44 +872,111 @@ except Exception as e:
             FUNC_REGISTRATION(func_reg_multi.combined, func_reg_multi.reference, config_file)
             func_after_reg = FUNC_REGISTRATION.out.combined
             func_reg_transforms = FUNC_REGISTRATION.out.transforms
+            func_reg_reference = FUNC_REGISTRATION.out.reference
+            func_reg_metadata = FUNC_REGISTRATION.out.metadata
         } else {
             // Pass through combined channel unchanged
             func_after_reg = func_after_skull
         }
         
         // APPLY_TRANSFORMS step (only if registration was enabled)
-        def func_final_output = func_after_reg
+        def func_apply_reg = func_after_reg
+        def func_apply_reg_reference = Channel.empty()  // Reference files for QC
         if (anat_registration_enabled) {
+            // Parse metadata to extract target_type and target2template
+            def func_reg_metadata_parsed = func_reg_metadata
+                .map { sub, ses, task, run, metadata_file ->
+                    // Read metadata file (tab-separated: target_type, target2template)
+                    def metadata_text = metadata_file.text.trim()
+                    def parts = metadata_text.split('\t')
+                    def target_type = parts[0]
+                    def target2template = parts.length > 1 ? parts[1].toBoolean() : false
+                    [sub, ses, task, run, target_type, target2template]
+                }
+            
             // func_after_reg: [sub, ses, task, run, bold_file, registered_tmean, bids_template] (7 elements)
             // func_reg_transforms: [sub, ses, task, run, forward_transform] (5 elements)
-            // Join to get registered tmean and transform together
-            def func_reg_with_transforms = func_after_reg
+            // func_reg_metadata_parsed: [sub, ses, task, run, target_type, target2template] (6 elements)
+            // func_reg_reference: [sub, ses, task, run, reference_file] (5 elements)
+            
+            // Join all registration outputs together
+            def func_reg_complete = func_after_reg
                 .join(func_reg_transforms, by: [0, 1, 2, 3])
-                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform ->
-                    // Extract BOLD from combined channel for APPLY_TRANSFORMS
-                    // FUNC_APPLY_TRANSFORMS needs: [sub, ses, task, run, registered_tmean, transform, bids_template] + bold_file
-                    [sub, ses, task, run, registered_tmean, forward_transform, bids_template, bold_file]
+                .join(func_reg_metadata_parsed, by: [0, 1, 2, 3])
+                .join(func_reg_reference, by: [0, 1, 2, 3])
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file ->
+                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file]
                 }
             
-            // Use multiMap to split into aligned channels
-            func_reg_with_transforms
-                .multiMap { sub, ses, task, run, registered_tmean, forward_transform, bids_template, bold_file ->
-                    // Create tuple with registration info: [sub, ses, task, run, registered_tmean, forward_transform, bids_template]
-                    reg_tuple: [sub, ses, task, run, registered_tmean, forward_transform, bids_template]
-                    // Extract BOLD file path
+            // Split into sequential transforms (func2anat2template) and single transform cases
+            def func_sequential = func_reg_complete
+                .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file ->
+                    target2template && target_type == 'anat'  // Sequential: func2anat then anat2template
+                }
+            
+            def func_single = func_reg_complete
+                .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file ->
+                    !(target2template && target_type == 'anat')  // Single transform: func2anat or func2template
+                }
+            
+            // Handle sequential transforms: need anat2template transform
+            // Create dummy empty file for single transforms (anat2template not needed)
+            def dummy_anat2template = file("${workDir}/dummy_anat2template.dummy")
+            
+            // Join sequential transforms with anatomical registration transforms
+            // First, try to join with anat_reg_transforms
+            def func_sequential_joined = func_sequential
+                .join(anat_reg_transforms, by: [0, 1])  // Join by subject and session
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat2template_transform ->
+                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file]
+                }
+            
+            // Find sequential transforms that didn't match (shouldn't happen, but handle gracefully)
+            def func_sequential_keys = func_sequential_joined
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
+                    [sub, ses, task, run]
+                }
+                .unique()
+            
+            def func_sequential_no_match = func_sequential
+                .combine(func_sequential_keys.groupTuple(), by: [0, 1, 2, 3])
+                .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, matched_list ->
+                    matched_list == null || matched_list.isEmpty()
+                }
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file ->
+                    // No anat2template transform found - use dummy (shouldn't happen in normal flow)
+                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, dummy_anat2template, target_type, target2template, reference_file]
+                }
+            
+            def func_sequential_with_anat2template = func_sequential_joined
+                .mix(func_sequential_no_match)
+            
+            // Add dummy anat2template for single transforms
+            def func_single_with_dummy = func_single
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file ->
+                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, dummy_anat2template, target_type, target2template, reference_file]
+                }
+            
+            // Combine all (sequential and single) with consistent structure
+            def func_all_for_apply = func_sequential_with_anat2template
+                .mix(func_single_with_dummy)
+            
+            // Prepare for FUNC_APPLY_TRANSFORMS
+            func_all_for_apply
+                .multiMap { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
+                    reg_tuple: [sub, ses, task, run, registered_tmean, forward_transform, anat2template_transform, bids_template, target_type, target2template, reference_file]
                     func_4d_file: bold_file
                 }
-                .set { func_apply_transforms_multi }
+                .set { func_apply_multi }
             
-            // FUNC_APPLY_TRANSFORMS expects: (tuple with reg info), (4D file path), (config file)
-            FUNC_APPLY_TRANSFORMS(func_apply_transforms_multi.reg_tuple, func_apply_transforms_multi.func_4d_file, config_file)
-            func_final_output = FUNC_APPLY_TRANSFORMS.out.output
+            FUNC_APPLY_TRANSFORMS(func_apply_multi.reg_tuple, func_apply_multi.func_4d_file, config_file)
+            func_apply_reg = FUNC_APPLY_TRANSFORMS.out.output
+            func_apply_reg_reference = FUNC_APPLY_TRANSFORMS.out.reference
 
-            // debug: view the first element of func_final_output
-            func_final_output.first().view { tuple ->
-                "DEBUG [FUNC_APPLY_TRANSFORMS: func_final_output]: ${tuple}"
+            // // debug: view the first element of func_apply_reg
+            // func_apply_reg.first().view { tuple ->
+            //     "DEBUG [FUNC_APPLY_TRANSFORMS: func_apply_reg]: ${tuple}"
             }
-        }
 
         // QC for functional - individual steps (conditionally enabled)
         // QC_MOTION_CORRECTION: needs motion params + input file
@@ -937,16 +1031,22 @@ except Exception as e:
 
         // QC_REGISTRATION_FUNC: needs registered file
         if (anat_registration_enabled) {
-            // Extract registered tmean from combined channel
-            func_final_output
-                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template ->
-                    [sub, ses, task, run, registered_tmean]
+            // Extract registered boldref (tmean) from combined channel
+            // func_apply_reg: [sub, ses, task, run, bold_file, boldref_file, bids_template] (7 elements)
+            // func_apply_reg_reference: [sub, ses, task, run, reference_file] (5 elements)
+            // Join produces: [sub, ses, task, run, bold_file, boldref_file, bids_template, reference_file] (8 elements)
+            // Process expects: [sub, ses, task, run, registered_file, reference_file] (6 elements)
+            func_apply_reg
+                .join(func_apply_reg_reference, by: [0, 1, 2, 3])
+                .map { sub, ses, task, run, bold_file, registered_boldref, bids_template, reference_file ->
+                    // Use boldref_file (index 5) as the registered_file for QC
+                    [sub, ses, task, run, registered_boldref, reference_file]
                 }
                 .set { func_reg_qc_input }
             QC_REGISTRATION_FUNC(func_reg_qc_input, config_file)
-        }        
-    }
-    
+        }      
+    }  
+
     // ============================================
     // QC REPORT GENERATION (per subject)
     // ============================================

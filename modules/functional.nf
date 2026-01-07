@@ -778,7 +778,11 @@ process FUNC_REGISTRATION {
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*space-*boldref.nii.gz"), val(bids_naming_template), emit: output
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*from-bold_to-*_mode-image_xfm.h5"), emit: transforms
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*from-*_to-bold_mode-image_xfm.h5"), emit: inverse_transforms
-    path "*.json", emit: metadata
+    // Reference file used for registration (resampled target if keep_func_resolution=True)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*target_res-func_for_registration.nii.gz"), emit: reference
+    // Metadata file: contains target_type and target2template (tab-separated)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("registration_metadata.txt"), emit: metadata
+    path "*.json", emit: metadata_json
     
     script:
     def template_name = params.output_space.split(':')[0]
@@ -857,6 +861,10 @@ else:
     anat_brain_path = Path(anat_brain_path_str)
     has_anat = anat_brain_path.exists()
 
+# Determine target based on registration pipeline and check if output_space is native
+output_space = config.get('template', {}).get('output_space', '') or config.get('general', {}).get('output_space', '')
+is_native_space = output_space and output_space.lower() == 'native'
+
 # Determine target based on registration pipeline
 # FUNC_REGISTRATION registers functional tmean/brain to anatomical skull-stripped brain
 if registration_pipeline == 'func2template' or not has_anat:
@@ -864,6 +872,7 @@ if registration_pipeline == 'func2template' or not has_anat:
     target_file = Path(resolve_template('${params.output_space}'))
     target_type = 'template'
     target_name = template_name
+    target2template = False
     if not has_anat:
         print(f"INFO: No anatomical data available, registering directly to template", file=sys.stderr)
 elif registration_pipeline == 'func2anat':
@@ -872,12 +881,14 @@ elif registration_pipeline == 'func2anat':
         target_file = Path(resolve_template('${params.output_space}'))
         target_type = 'template'
         target_name = template_name
+        target2template = False
         print(f"INFO: No anatomical data available for func2anat pipeline, using template instead", file=sys.stderr)
     else:
         # Use anatomical skull-stripped brain as target
         target_file = anat_brain_path
         target_type = 'anat'
         target_name = 'anat'  # Registering to anatomical brain (not in template space yet)
+        target2template = False
         if is_fallback:
             print(f"WARNING: Using anatomical from session {anat_session_id} for functional session {func_session_id}", file=sys.stderr)
 else:  # func2anat2template
@@ -886,12 +897,14 @@ else:  # func2anat2template
         target_file = Path(resolve_template('${params.output_space}'))
         target_type = 'template'
         target_name = template_name
+        target2template = False
         print(f"INFO: No anatomical data available for func2anat2template pipeline, using template instead", file=sys.stderr)
     else:
         # First register to anatomical skull-stripped brain
         target_file = anat_brain_path
         target_type = 'anat'
         target_name = 'anat'  # Registering to anatomical brain (not in template space yet)
+        target2template = not is_native_space  # True if not native space, False if native
         if is_fallback:
             print(f"WARNING: Using anatomical from session {anat_session_id} for functional session {func_session_id}", file=sys.stderr)
 
@@ -983,8 +996,42 @@ for key, f in result.additional_files.items():
     else:
         create_output_link(f, f.name)
 
-# Save metadata
+# Save reference file if it was created (for apply transforms and QC)
+working_dir = Path('work')
+reference_file = working_dir / "target_res-func_for_registration.nii.gz"
+reference_output_name = f"{bids_prefix}_target_res-func_for_registration.nii.gz"
+keep_func_resolution = config.get("registration.keep_func_resolution", True)
+
+if reference_file.exists():
+    # Check if file is empty
+    file_size = reference_file.stat().st_size
+    if file_size == 0:
+        if keep_func_resolution:
+            raise ValueError(f"Reference file exists but is empty: {reference_file}. This may indicate an error during resampling.")
+        else:
+            # Empty file is expected when keep_func_resolution is False
+            Path(reference_output_name).touch()
+            print(f"Output: reference file is empty (keep_func_resolution=False)", file=sys.stderr)
+    else:
+        # Copy reference file to output directory with BIDS-compliant name
+        shutil.copy2(reference_file, reference_output_name)
+        print(f"Output: reference file saved: {reference_output_name}, size: {file_size} bytes", file=sys.stderr)
+elif keep_func_resolution:
+    # If keep_func_resolution is True, the file should have been created
+    raise FileNotFoundError(f"Reference file should have been created but is missing: {reference_file}. This may indicate an error during resampling.")
+else:
+    # Create empty file as placeholder (Nextflow requires output) when keep_func_resolution is False
+    Path(reference_output_name).touch()
+    print(f"Output: no reference file created (keep_func_resolution=False)", file=sys.stderr)
+
+# Save metadata JSON
 save_metadata(result.metadata)
+
+# Output metadata for Nextflow tuple channel
+# Write target_type and target2template to a single file (tab-separated)
+with open('registration_metadata.txt', 'w') as f:
+    f.write(f"{target_type}\t{target2template}")
+print(f"Metadata: target_type={target_type}, target2template={target2template}", file=sys.stderr)
 EOF
     """
 }
@@ -998,14 +1045,17 @@ process FUNC_APPLY_TRANSFORMS {
         pattern: '*.{nii.gz,h5}'
     
     input:
-    // Stage tmean_registered with a different name to avoid conflict with output filename
-    // Only forward transform is needed (from-bold_to-template)
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(tmean_registered, stageAs: 'tmean_reference.nii.gz'), path("*from-bold_to-*_mode-image_xfm.h5"), val(bids_naming_template)
+    // Input structure: [sub, ses, task, run, tmean_registered, func2target_transform, anat2template_transform, bids_template, target_type, target2template, reference_file]
+    // For sequential: anat2template_transform is real file
+    // For single: anat2template_transform is dummy file
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(tmean_registered, stageAs: 'tmean_reference.nii.gz'), path("*from-bold_to-*_mode-image_xfm.h5"), path(anat2template_transform), val(bids_naming_template), val(target_type), val(target2template), path(reference_file)
     path(func_4d_file)  // Original 4D BOLD file
     path config_file
     
     output:
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*space-*desc-preproc_bold.nii.gz"), path("*space-*desc-preproc_boldref.nii.gz"), val(bids_naming_template), emit: output
+    // Reference file for QC: final target reference at appropriate resolution
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*target_final.nii.gz"), emit: reference
     path "*.json", emit: metadata
     
     script:
@@ -1038,20 +1088,244 @@ process FUNC_APPLY_TRANSFORMS {
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
     
-    # Get transform files (staged in work directory)
-    # Only forward transform is needed (from-bold_to-template)
-    transform_files = [Path(f) for f in glob.glob('*from-bold_to-*_mode-image_xfm.h5')]
+    # Get input parameters
+    target_type = '${target_type}'
+    target2template = '${target2template}' == 'true'
+    # Get func2target transform from glob (from-bold_to-*)
+    func2target_transform_files = [Path(f) for f in glob.glob('*from-bold_to-*_mode-image_xfm.h5')]
+    if not func2target_transform_files:
+        raise FileNotFoundError("No func2target transform file found")
+    func2target_transform = func2target_transform_files[0]
     
-    # Use tmean as reference (staged as 'tmean_reference.nii.gz' to avoid filename conflict with output)
-    reference_file = Path('tmean_reference.nii.gz')
+    # Handle anat2template_transform - may be a single file or space-separated string
+    anat2template_transform_str = '${anat2template_transform}'
+    if ' ' in anat2template_transform_str:
+        # Multiple files - get the forward transform (from-T1w_to-*)
+        anat2template_files = [Path(f.strip()) for f in anat2template_transform_str.split() if f.strip()]
+        anat2template_transform_path = None
+        for f in anat2template_files:
+            if 'from-T1w_to-' in str(f) or 'from-anat_to-' in str(f):
+                anat2template_transform_path = f
+                break
+        if anat2template_transform_path is None:
+            anat2template_transform_path = anat2template_files[0] if anat2template_files else Path('')
+    else:
+        anat2template_transform_path = Path(anat2template_transform_str)
     
-    # Use template name directly from params (already extracted as template_name in script preamble)
-    target_name = '${template_name}'
+    reference_file_input = Path('${reference_file}')
+    template_name = '${template_name}'
+    func_4d_input = Path('${func_4d_file}')
     
-    # Create step input
-    input_obj = StepInput(
-        input_file=Path('${func_4d_file}'),
-        working_dir=Path('work'),
+    # Check if anat2template_transform is a dummy file
+    is_dummy_anat2template = '.dummy' in str(anat2template_transform_path) or not anat2template_transform_path.exists() or anat2template_transform_path == Path('')
+    
+    # Determine if sequential transforms are needed
+    is_sequential = target2template and target_type == 'anat' and not is_dummy_anat2template
+    
+    # Import additional modules needed for sequential transforms
+    from macacaMRIprep.operations.registration import ants_apply_transforms as ants_apply_transforms_op
+    from macacaMRIprep.utils.templates import resolve_template
+    from macacaMRIprep.utils import get_image_resolution
+    import numpy as np
+    from macacaMRIprep.utils import run_command
+    import sys
+    import logging
+    
+    # Create logger for functions that require it
+    logger = logging.getLogger(__name__)
+    if not logger.handlers:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setLevel(logging.INFO)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+    
+    working_dir = Path('work')
+    working_dir.mkdir(parents=True, exist_ok=True)
+    
+    if is_sequential:
+        # Sequential transforms: func2anat then anat2template
+        print("INFO: Applying sequential transforms: func2anat then anat2template", file=sys.stderr)
+        
+        # Validate reference file exists and is valid
+        if not reference_file_input.exists():
+            raise FileNotFoundError(f"Reference file does not exist: {reference_file_input}")
+        file_size = reference_file_input.stat().st_size
+        if file_size == 0:
+            raise ValueError(f"Reference file is empty: {reference_file_input}")
+        print(f"INFO: Reference file exists: {reference_file_input}, size: {file_size} bytes", file=sys.stderr)
+        
+        # Step 1: Apply func2anat transform
+        anat_target_name = "T1w"
+        anat_fixedf = reference_file_input  # Use reference from registration (resampled anat if available)
+        
+        # Prepare resampled anat for reference if needed
+        if config.get("registration.keep_func_resolution", True):
+            anat_reff = reference_file_input
+            print(f"INFO: Using resampled anat from registration for apply transforms", file=sys.stderr)
+        else:
+            # Need to get original anat file - this should be passed, but for now use reference
+            anat_reff = reference_file_input
+        
+        # Apply func2anat transform to 4D BOLD
+        result_anat = ants_apply_transforms_op(
+            movingf=str(func_4d_input),
+            moving_type=3,  # 3D time series
+            interpolation=config.get("registration", {}).get("interpolation", "LanczosWindowedSinc"),
+            outputf_name="func2anat.nii.gz",
+            fixedf=str(anat_reff),
+            transformf=[str(func2target_transform)],
+            reff=str(anat_reff),
+            working_dir=str(working_dir),
+          generate_tmean=True,
+          logger=logger
+        )
+        
+        func_all_anat = Path(result_anat["imagef_registered"])
+        func_tmean_anat = Path(result_anat.get("imagef_registered_tmean", func_all_anat))
+        
+        # Save functional data in anat space
+        func_anat_output_name = create_bids_output_filename(
+            original_file_path=bids_naming_template,
+            suffix=f'space-{anat_target_name}_desc-preproc',
+            modality='bold'
+        )
+        create_output_link(func_all_anat, func_anat_output_name)
+        
+        # Save boldref in anat space
+        func_anat_boldref_name = create_bids_output_filename(
+            original_file_path=bids_naming_template,
+            suffix=f'space-{anat_target_name}_desc-preproc',
+            modality='boldref'
+        )
+        create_output_link(func_tmean_anat, func_anat_boldref_name)
+        
+        # Step 2: Apply anat2template transform
+        template_fixedf = Path(resolve_template('${params.output_space}'))
+        
+        # Resample template to func resolution if needed
+        if config.get("registration.keep_func_resolution", True):
+            template_reff = working_dir / "template_res-func_for_apply_transforms.nii.gz"
+            func_res = np.round(get_image_resolution(str(func_all_anat), logger=logger), 1)
+            cmd_resample = ['3dresample', 
+                            '-input', str(template_fixedf), '-prefix', str(template_reff), 
+                            '-rmode', 'Cu',
+                            '-dxyz', str(func_res[0]), str(func_res[1]), str(func_res[2])]
+            run_command(cmd_resample, step_logger=logger)
+            print(f"INFO: Template resampled to func resolution", file=sys.stderr)
+        else:
+            template_reff = template_fixedf
+        
+        # Apply anat2template transform to 4D BOLD
+        result_template = ants_apply_transforms_op(
+            movingf=str(func_all_anat),
+            moving_type=3,  # 3D time series
+            interpolation=config.get("registration", {}).get("interpolation", "LanczosWindowedSinc"),
+            outputf_name="func2template.nii.gz",
+            fixedf=str(template_fixedf),
+            transformf=[str(anat2template_transform_path)],
+            reff=str(template_reff),
+            working_dir=str(working_dir),
+            generate_tmean=True,
+            logger=logger
+        )
+        
+        func_all_template = Path(result_template["imagef_registered"])
+        func_tmean_template = Path(result_template.get("imagef_registered_tmean", func_all_template))
+        
+        # Save functional data in template space (final output)
+        func_template_output_name = create_bids_output_filename(
+            original_file_path=bids_naming_template,
+            suffix=f'space-{template_name}_desc-preproc',
+            modality='bold'
+        )
+        create_output_link(func_all_template, func_template_output_name)
+        
+        # Save boldref in template space (final output)
+        func_template_boldref_name = create_bids_output_filename(
+            original_file_path=bids_naming_template,
+            suffix=f'space-{template_name}_desc-preproc',
+            modality='boldref'
+        )
+        create_output_link(func_tmean_template, func_template_boldref_name)
+        
+        # Output final reference file for QC: template at appropriate resolution
+        # Sequential transforms: final space is template
+        bids_prefix = get_filename_stem(bids_naming_template).replace('_bold', '')
+        target_final_output = f"{bids_prefix}_target_final.nii.gz"
+        target_final_path = Path(target_final_output)
+        
+        # Determine final reference based on keep_func_resolution
+        # If keep_func_resolution=True: use template_reff (resampled to func resolution)
+        # If keep_func_resolution=False: use template_fixedf (original template)
+        if config.get("registration.keep_func_resolution", True):
+            # Use resampled template (already created above)
+            if template_reff.exists() and template_reff != template_fixedf:
+                if template_reff.resolve() != target_final_path.resolve():
+                    shutil.copy2(template_reff, target_final_output)
+                    print(f"INFO: Created target_final.nii.gz from resampled template (func resolution)", file=sys.stderr)
+                else:
+                    # Same file - read and write to create a new file
+                    data = template_reff.read_bytes()
+                    target_final_path.write_bytes(data)
+                    print(f"INFO: Created target_final.nii.gz from resampled template (func resolution)", file=sys.stderr)
+            else:
+                raise FileNotFoundError(f"Resampled template reference not found: {template_reff}")
+        else:
+            # Use original template
+            if template_fixedf.exists():
+                if template_fixedf.resolve() != target_final_path.resolve():
+                    shutil.copy2(template_fixedf, target_final_output)
+                    print(f"INFO: Created target_final.nii.gz from original template (native resolution)", file=sys.stderr)
+                else:
+                    # Same file - read and write to create a new file
+                    data = template_fixedf.read_bytes()
+                    target_final_path.write_bytes(data)
+                    print(f"INFO: Created target_final.nii.gz from original template (native resolution)", file=sys.stderr)
+            else:
+                raise FileNotFoundError(f"Template file not found: {template_fixedf}")
+        
+        # Ensure file exists
+        if not target_final_path.exists():
+            raise FileNotFoundError(f"Failed to create target_final.nii.gz: {target_final_path}")
+        print(f"INFO: target_final.nii.gz created, size: {target_final_path.stat().st_size} bytes", file=sys.stderr)
+        
+        # Final outputs are in template space
+        final_output_file = func_all_template
+        final_boldref_file = func_tmean_template
+        final_space_name = template_name
+        
+    else:
+        # Single transform: func2anat or func2template
+        print(f"INFO: Applying single transform: func2{target_type}", file=sys.stderr)
+        
+        if target_type == 'anat':
+            target_name = "T1w"
+        else:
+            target_name = template_name
+        
+        # Prepare reference file
+        if config.get("registration.keep_func_resolution", True):
+            reff = reference_file_input
+        else:
+            if target_type == 'anat':
+                reff = reference_file_input  # Should be original anat file, but use reference for now
+            else:
+                reff = Path(resolve_template('${params.output_space}'))
+        
+        # Validate reference file exists and is valid (if not template)
+        if reff == reference_file_input:
+            if not reference_file_input.exists():
+                raise FileNotFoundError(f"Reference file does not exist: {reference_file_input}")
+            file_size = reference_file_input.stat().st_size
+            if file_size == 0:
+                raise ValueError(f"Reference file is empty: {reference_file_input}")
+            print(f"INFO: Reference file exists: {reference_file_input}, size: {file_size} bytes", file=sys.stderr)
+        
+        # Apply single transform
+        result = func_apply_transforms(
+            StepInput(
+                input_file=func_4d_input,
+                working_dir=working_dir,
         config=config,
         output_name='func_registered.nii.gz',
         metadata={
@@ -1060,38 +1334,125 @@ process FUNC_APPLY_TRANSFORMS {
             'task': '${task_name}',
             'run': '${run}'
         }
-    )
-    
-    # Run step
-    result = func_apply_transforms(
-        input_obj,
-        transform_files=transform_files,
-        reference_file=reference_file
-    )
-    
-    # Generate BIDS-compliant output filename with space entity
-    # Format: space-{target_name}_desc-preproc_bold.nii.gz
-    bids_output_filename = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix=f'space-{target_name}_desc-preproc',
-        modality='bold'
-    )
-    
-    # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
-    create_output_link(result.output_file, bids_output_filename)
-    
-    # Generate BIDS-compliant output filename for tmean (boldref)
-    # Format: space-{target_name}_desc-preproc_boldref.nii.gz
-    if "tmean" in result.additional_files:
-        bids_boldref_filename = create_bids_output_filename(
+            ),
+            transform_files=[func2target_transform],
+            reference_file=reff
+        )
+        
+        # Generate BIDS-compliant output filename with space entity
+        bids_output_filename = create_bids_output_filename(
             original_file_path=bids_naming_template,
             suffix=f'space-{target_name}_desc-preproc',
-            modality='boldref'
+            modality='bold'
         )
-        create_output_link(result.additional_files["tmean"], bids_boldref_filename)
+        create_output_link(result.output_file, bids_output_filename)
+        
+        # Generate BIDS-compliant output filename for tmean (boldref)
+        if "tmean" in result.additional_files:
+            bids_boldref_filename = create_bids_output_filename(
+                original_file_path=bids_naming_template,
+                suffix=f'space-{target_name}_desc-preproc',
+                modality='boldref'
+            )
+            create_output_link(result.additional_files["tmean"], bids_boldref_filename)
+        
+        # Output final reference file for QC: target at appropriate resolution
+        bids_prefix = get_filename_stem(bids_naming_template).replace('_bold', '')
+        target_final_output = f"{bids_prefix}_target_final.nii.gz"
+        target_final_path = Path(target_final_output)
+        
+        # Determine final reference based on keep_func_resolution and target_type
+        keep_func_resolution = config.get("registration.keep_func_resolution", True)
+        
+        if target_type == 'anat':
+            # func2anat: final space is anatomical
+            if keep_func_resolution:
+                # Use resampled anat from registration (reference_file_input)
+                if reference_file_input.exists():
+                    if reference_file_input.resolve() != target_final_path.resolve():
+                        shutil.copy2(reference_file_input, target_final_output)
+                        print(f"INFO: Created target_final.nii.gz from resampled anat (func resolution)", file=sys.stderr)
+                    else:
+                        # Same file - read and write to create a new file
+                        data = reference_file_input.read_bytes()
+                        target_final_path.write_bytes(data)
+                        print(f"INFO: Created target_final.nii.gz from resampled anat (func resolution)", file=sys.stderr)
+                else:
+                    raise FileNotFoundError(f"Resampled anat reference not found: {reference_file_input}")
+            else:
+                # Use original anat (reff should be original anat, but we use reference_file_input as fallback)
+                # Note: In practice, if keep_func_resolution=False, reference_file_input might still be resampled
+                # This is a limitation - we'd need the original anat file passed in
+                if reff.exists() and reff != Path(resolve_template('${params.output_space}')):
+                    if reff.resolve() != target_final_path.resolve():
+                        shutil.copy2(reff, target_final_output)
+                        print(f"INFO: Created target_final.nii.gz from original anat (native resolution)", file=sys.stderr)
+                    else:
+                        data = reff.read_bytes()
+                        target_final_path.write_bytes(data)
+                        print(f"INFO: Created target_final.nii.gz from original anat (native resolution)", file=sys.stderr)
+                else:
+                    # Fallback: use reference_file_input (might be resampled, but better than nothing)
+                    if reference_file_input.exists():
+                        shutil.copy2(reference_file_input, target_final_output)
+                        print(f"INFO: Created target_final.nii.gz from reference (fallback, may be resampled)", file=sys.stderr)
+                    else:
+                        raise FileNotFoundError(f"Anatomical reference file not found for target_final.nii.gz")
+        else:
+            # func2template: final space is template
+            template_fixedf = Path(resolve_template('${params.output_space}'))
+            if keep_func_resolution:
+                # Resample template to func resolution
+                template_reff = working_dir / "template_res-func_for_apply_transforms.nii.gz"
+                func_res = np.round(get_image_resolution(str(func_4d_input), logger=logger), 1)
+                cmd_resample = ['3dresample', 
+                                '-input', str(template_fixedf), '-prefix', str(template_reff), 
+                                '-rmode', 'Cu',
+                                '-dxyz', str(func_res[0]), str(func_res[1]), str(func_res[2])]
+                run_command(cmd_resample, step_logger=logger)
+                print(f"INFO: Template resampled to func resolution for target_final.nii.gz", file=sys.stderr)
+                
+                if template_reff.exists():
+                    if template_reff.resolve() != target_final_path.resolve():
+                        shutil.copy2(template_reff, target_final_output)
+                        print(f"INFO: Created target_final.nii.gz from resampled template (func resolution)", file=sys.stderr)
+                    else:
+                        data = template_reff.read_bytes()
+                        target_final_path.write_bytes(data)
+                        print(f"INFO: Created target_final.nii.gz from resampled template (func resolution)", file=sys.stderr)
+                else:
+                    raise FileNotFoundError(f"Failed to resample template for target_final.nii.gz")
+            else:
+                # Use original template
+                if template_fixedf.exists():
+                    if template_fixedf.resolve() != target_final_path.resolve():
+                        shutil.copy2(template_fixedf, target_final_output)
+                        print(f"INFO: Created target_final.nii.gz from original template (native resolution)", file=sys.stderr)
+                    else:
+                        data = template_fixedf.read_bytes()
+                        target_final_path.write_bytes(data)
+                        print(f"INFO: Created target_final.nii.gz from original template (native resolution)", file=sys.stderr)
+                else:
+                    raise FileNotFoundError(f"Template file not found: {template_fixedf}")
+        
+        # Ensure file exists
+        if not target_final_path.exists():
+            raise FileNotFoundError(f"Failed to create target_final.nii.gz: {target_final_path}")
+        print(f"INFO: target_final.nii.gz created, size: {target_final_path.stat().st_size} bytes", file=sys.stderr)
+        
+        final_output_file = result.output_file
+        final_boldref_file = result.additional_files.get("tmean", result.output_file)
+        final_space_name = target_name
 
     # Save metadata
-    save_metadata(result.metadata)
+    save_metadata({
+        "step": "apply_transforms",
+        "modality": "func",
+        "target_type": target_type,
+        "target2template": target2template,
+        "is_sequential": is_sequential,
+        "space": final_space_name
+    })
     EOF
     """
 }

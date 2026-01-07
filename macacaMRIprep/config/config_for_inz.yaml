@@ -89,7 +89,7 @@ registration:
   anat2template_xfm_type: affine
   func2anat_xfm_type: rigid
   func2template_xfm_type: affine
-  keep_original_func_resolution: true
+  keep_func_resolution: true
   interpolation: LanczosWindowedSinc
   output_registered_image: true
   output_inverse_registered_image: false

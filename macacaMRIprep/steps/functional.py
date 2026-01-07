@@ -423,7 +423,7 @@ def func_registration(
     
     # Resample target to functional resolution if requested
     fixedf = str(target_file)
-    if input.config.get("registration.keep_original_func_resolution", True):
+    if input.config.get("registration.keep_func_resolution", True):
         func_res = np.round(get_image_resolution(str(input.input_file), logger=logger), 1)
         reff = input.working_dir / "target_res-func_for_registration.nii.gz"
         cmd_resample = [

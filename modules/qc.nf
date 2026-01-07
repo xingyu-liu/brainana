@@ -722,7 +722,7 @@ process QC_REGISTRATION_FUNC {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(registered_file)
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path(registered_file), path(reference_file)
     path config_file
     
     output:
@@ -733,27 +733,47 @@ process QC_REGISTRATION_FUNC {
     """
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.qc import qc_registration
-from macacaMRIprep.utils.templates import resolve_template
 from pathlib import Path
 import glob
+import os
 
 # Load config
 from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from macacaMRIprep.utils.templates import resolve_template
 config = load_config('${config_file}')
 
-# Resolve template
-template_file = Path(resolve_template('${params.output_space}'))
+# Get registered file and reference file
+# Handle case where registered_file might contain multiple files (space-separated)
+registered_file_str = '${registered_file}'
+reference_file = Path('${reference_file}')
 
-# Find the registered file (handle glob pattern)
-registered_files = glob.glob('*.nii.gz')
-if not registered_files:
-    raise FileNotFoundError("No registered file found")
-registered_file = Path(registered_files[0])
+# If registered_file contains spaces, it means multiple files were matched
+# Select the file in the final template space (not intermediate T1w space)
+if ' ' in registered_file_str:
+    # Split by space to get individual file paths
+    file_paths = registered_file_str.split()
+    # Get template name from output_space (e.g., "NMT2Sym:res-1" -> "NMT2Sym")
+    template_name = '${params.output_space}'.split(':')[0]
+    # Find the file in template space (final registered file)
+    registered_file = None
+    for fp in file_paths:
+        if f'space-{template_name}' in fp:
+            registered_file = Path(fp)
+            break
+    # Fallback: if not found, use the last file (should be template space)
+    if registered_file is None or not registered_file.exists():
+        registered_file = Path(file_paths[-1])
+else:
+    registered_file = Path(registered_file_str)
+
+# Verify file exists
+if not registered_file.exists():
+    raise FileNotFoundError(f"Registered file not found: {registered_file}")
 
 # Extract BIDS entities from registered filename
 from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename
 entities = parse_bids_entities(registered_file.name)
-entities['desc'] = 'func2template'
+entities['desc'] = 'func2target'
 qc_output_filename = create_bids_filename(
     entities=entities,
     suffix='bold',
@@ -763,9 +783,9 @@ qc_output_filename = create_bids_filename(
 # Generate QC
 result = qc_registration(
     image_file=registered_file,
-    template_file=template_file,
+    template_file=reference_file,
     output_path=Path(qc_output_filename),
-    modality='func2template',
+    modality='func2target',
     config=config
 )
 

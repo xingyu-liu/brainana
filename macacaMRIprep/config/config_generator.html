@@ -633,8 +633,8 @@
             </div>
             <div class="form-group">
                 <div class="checkbox-group">
-                    <input type="checkbox" id="registration_keep_original_func_resolution" name="registration_keep_original_func_resolution" checked>
-                    <label for="registration_keep_original_func_resolution">keep_original_func_resolution</label>
+                    <input type="checkbox" id="registration_keep_func_resolution" name="registration_keep_func_resolution" checked>
+                    <label for="registration_keep_func_resolution">keep_func_resolution</label>
                 </div>
                 <div class="help-text">(keep original functional image resolution after registration)</div>
             </div>
@@ -774,7 +774,7 @@
                 anat2template_xfm_type: "syn",
                 func2anat_xfm_type: "syn",
                 func2template_xfm_type: "syn",
-                keep_original_func_resolution: true,
+                keep_func_resolution: true,
                 interpolation: "LanczosWindowedSinc",
                 output_registered_image: true,
                 output_inverse_registered_image: false
@@ -1154,7 +1154,7 @@
             config.registration.anat2template_xfm_type = document.getElementById('registration_anat2template_xfm_type').value;
             config.registration.func2anat_xfm_type = document.getElementById('registration_func2anat_xfm_type').value;
             config.registration.func2template_xfm_type = document.getElementById('registration_func2template_xfm_type').value;
-            config.registration.keep_original_func_resolution = document.getElementById('registration_keep_original_func_resolution').checked;
+            config.registration.keep_func_resolution = document.getElementById('registration_keep_func_resolution').checked;
             config.registration.interpolation = document.getElementById('registration_interpolation').value;
             config.registration.output_registered_image = document.getElementById('registration_output_registered_image').checked;
             config.registration.output_inverse_registered_image = document.getElementById('registration_output_inverse_registered_image').checked;
