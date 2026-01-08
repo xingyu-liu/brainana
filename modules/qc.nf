@@ -269,7 +269,10 @@ from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_meta
 config = load_config('${config_file}')
 
 # Resolve template
-template_file = Path(resolve_template('${params.output_space}'))
+# Get effective output_space (CLI > YAML > default)
+from macacaMRIprep.utils.nextflow import get_effective_output_space
+effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+template_file = Path(resolve_template(effective_output_space))
 
 # Find the registered file (handle glob pattern)
 registered_files = glob.glob('*.nii.gz')
@@ -753,7 +756,10 @@ if ' ' in registered_file_str:
     # Split by space to get individual file paths
     file_paths = registered_file_str.split()
     # Get template name from output_space (e.g., "NMT2Sym:res-1" -> "NMT2Sym")
-    template_name = '${params.output_space}'.split(':')[0]
+    # Get effective output_space (CLI > YAML > default)
+    from macacaMRIprep.utils.nextflow import get_effective_output_space
+    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+    template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
     # Find the file in template space (final registered file)
     registered_file = None
     for fp in file_paths:

@@ -305,7 +305,99 @@ def conform_to_template(
     logger.info(f"System: working directory - {work_dir}")
     
     try:
-        # Step 1: Pad the template to ensure input image is fully contained
+        # ------------------------------------------------------------
+        # Step 1: Skullstrip the input image using NHPskullstripNN (or skip if already skullstripped)
+        brain_f = work_dir / 'brain_for_conform.nii.gz'
+        if skip_skullstripping:
+            logger.info(f"Step: skipping skullstripping - assuming input is already skullstripped")
+            # Use input image directly as brain-extracted image
+            # Copy to expected location for consistency
+            shutil.copy2(str(image_path), str(brain_f))
+            logger.info(f"Using input image directly as brain-extracted image: {brain_f}")
+        else:
+            logger.info(f"Step: skullstripping input image for registration")
+            
+            try:
+                skull_result = apply_skullstripping(
+                    imagef=str(image_path),
+                    modal=modal,
+                    working_dir=str(work_dir),
+                    output_name='brain_for_conform.nii.gz',
+                    config=None,  # Use defaults (gpu_device='auto')
+                    logger=logger
+                )
+                
+                # Get the brain mask and brain-extracted image paths
+                mask_output = skull_result.get('brain_mask')
+                brain_extracted = skull_result.get('imagef_skullstripped')
+                
+                if not mask_output or not os.path.exists(mask_output):
+                    raise RuntimeError(f"Skullstripping failed: mask file not found at {mask_output}")
+                if not brain_extracted or not os.path.exists(brain_extracted):
+                    raise RuntimeError(f"Skullstripping failed: brain-extracted image not found at {brain_extracted}")
+                
+                # Move brain-extracted image to expected location
+                if brain_extracted != str(brain_f):
+                    shutil.move(brain_extracted, str(brain_f))
+                
+                logger.info(f"Brain-extracted image saved to: {brain_f}")
+            except Exception as e:
+                logger.error(f"Error during skullstripping: {e}")
+                raise RuntimeError(
+                    f"Conform step failed during skullstripping: {e}. "
+                    f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
+                )
+
+        # ------------------------------------------------------------
+        # Step 2: prepare template for registration and xfm application
+        # Step 2.1: Resample template to the same resolution as the input, serves as the reference
+        # Resample template to the same resolution as the input
+        template_f_xfm_ref = work_dir / 'template_res-input.nii.gz'
+        
+        if template_f_xfm_ref.exists():
+            template_f_xfm_ref.unlink()
+            logger.debug(f"Removed existing template resampled file: {template_f_xfm_ref}")
+        
+        # Load the input image to determine target voxel sizes
+        brain_affine = nib.load(brain_f).affine
+        
+        orig_brain_voxel_sizes = np.sqrt(np.sum(brain_affine[:3, :3] ** 2, axis=0))
+        logger.info(f"Input voxel sizes: {np.array2string(orig_brain_voxel_sizes, precision=4, suppress_small=True)} mm")
+        
+        # Resample to isotropic using minimum voxel size
+        brain_voxel_sizes = np.round(np.min(orig_brain_voxel_sizes), 2)
+        if brain_voxel_sizes <= 0:
+            raise ValueError(f"Invalid target voxel size: {brain_voxel_sizes} mm")
+        target_voxel_sizes = np.full((3,), brain_voxel_sizes)
+        
+        logger.info(f"Target voxel sizes: {target_voxel_sizes} mm")
+        
+        cmd = [
+            '3dresample',
+            '-dxyz', str(target_voxel_sizes[0]), str(target_voxel_sizes[1]), str(target_voxel_sizes[2]),
+            '-input', str(template_path),
+            '-prefix', str(template_f_xfm_ref)
+        ]
+        logger.debug(f"Command: {' '.join(cmd)}")
+        try:
+            returncode, stdout, stderr = run_command(cmd, step_logger=logger)
+            if returncode != 0:
+                raise RuntimeError(f"3dresample failed (exit code {returncode}): {stderr}")
+            
+            # Validate resampled template exists
+            validate_output_file(template_f_xfm_ref, logger)
+            logger.info(f"Template resampled to: {template_f_xfm_ref}")
+        except Exception as e:
+            logger.error(f"Error during template resampling: {e}")
+            raise RuntimeError(
+                f"Conform step failed during template resampling: {e}. "
+                f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
+            )
+        
+        logger.info(f"Step: resampling template to input resolution")
+
+        # Step 2.2: prepare template for registration
+        # Step 2.2.1: Pad the template to ensure input image is fully contained
         logger.info(f"Step: padding template (padding_percentage={padding_percentage})")
         img = nib.load(template_path)
         data = img.get_fdata()
@@ -356,60 +448,60 @@ def conform_to_template(
         new_img.header.set_xyzt_units('mm', 'sec')
         
         # Save the padded template
-        zeropadded_f = work_dir / 'template_padded.nii.gz'
-        logger.info(f"Saving zero-padded template: {zeropadded_f}")
-        nib.save(new_img, zeropadded_f)
+        template_f_padded = work_dir / 'template_padded.nii.gz'
+        logger.info(f"Saving zero-padded template: {template_f_padded}")
+        nib.save(new_img, template_f_padded)
         
         # Validate the saved file exists
-        validate_output_file(zeropadded_f, logger)
+        validate_output_file(template_f_padded, logger)
         logger.info(f"Step: template padding completed")
-        
+
         # Update template path for next steps
-        template_f = str(zeropadded_f)
+        template_f = str(template_f_padded)
         
-        # Step 2: Skullstrip the input image using NHPskullstripNN (or skip if already skullstripped)
-        brain_f = work_dir / 'conform_brain.nii.gz'
+        # Step 2.2.2: Downsample the template if needed
+        # To save computational cost and improve registration, downsample the template if:
+        # a) if any template voxel size < brain target voxel size, downsample template to match brain resolution
+        # b) if brain resolution < downsample_voxel_size threshold, cap at downsample_voxel_size
+        orig_template_voxel_sizes = np.sqrt(np.sum(nib.load(template_f).affine[:3, :3] ** 2, axis=0))
+        downsample_voxel_size_threshold = 1.0  # Minimum voxel size threshold (mm)
         
-        if skip_skullstripping:
-            logger.info(f"Step: skipping skullstripping - assuming input is already skullstripped")
-            # Use input image directly as brain-extracted image
-            # Copy to expected location for consistency
-            shutil.copy2(str(image_path), str(brain_f))
-            logger.info(f"Using input image directly as brain-extracted image: {brain_f}")
-        else:
-            logger.info(f"Step: skullstripping input image for registration")
-            
+        should_downsample = False
+        downsample_voxel_sizes = None
+        # Give 0.01 mm tolerance for floating point comparison
+        if any(orig_template_voxel_sizes < target_voxel_sizes - 0.01):
+            should_downsample = True
+            downsample_voxel_sizes = target_voxel_sizes.copy()
+            # If brain resolution is finer than threshold, cap downsampling at threshold
+            if any(target_voxel_sizes < downsample_voxel_size_threshold - 0.01):
+                downsample_voxel_sizes = np.full((3,), downsample_voxel_size_threshold)
+                logger.info(f"Brain resolution ({target_voxel_sizes[0]:.3f} mm) is finer than threshold ({downsample_voxel_size_threshold} mm), capping downsampling at {downsample_voxel_size_threshold} mm")
+
+        if should_downsample:
+            template_f_downsampled = Path(str(template_f_padded).split('.nii.gz')[0] + '_downsampled.nii.gz')
+            logger.info(f"Template voxel sizes: {np.array2string(orig_template_voxel_sizes, precision=4, suppress_small=True)} mm")
+            logger.info(f"Downsampling template to: {np.array2string(downsample_voxel_sizes, precision=4, suppress_small=True)} mm")
+            cmd = [
+                '3dresample',
+                '-dxyz', str(downsample_voxel_sizes[0]), str(downsample_voxel_sizes[1]), str(downsample_voxel_sizes[2]),
+                '-input', template_f,
+                '-prefix', str(template_f_downsampled),
+                '-rmode', 'Cu'
+            ]
+            logger.debug(f"Command: {' '.join(cmd)}")
             try:
-                skull_result = apply_skullstripping(
-                    imagef=str(image_path),
-                    modal=modal,
-                    working_dir=str(work_dir),
-                    output_name='conform_brain.nii.gz',
-                    config=None,  # Use defaults (gpu_device='auto')
-                    logger=logger
-                )
-                
-                # Get the brain mask and brain-extracted image paths
-                mask_output = skull_result.get('brain_mask')
-                brain_extracted = skull_result.get('imagef_skullstripped')
-                
-                if not mask_output or not os.path.exists(mask_output):
-                    raise RuntimeError(f"Skullstripping failed: mask file not found at {mask_output}")
-                if not brain_extracted or not os.path.exists(brain_extracted):
-                    raise RuntimeError(f"Skullstripping failed: brain-extracted image not found at {brain_extracted}")
-                
-                # Move brain-extracted image to expected location
-                if brain_extracted != str(brain_f):
-                    shutil.move(brain_extracted, str(brain_f))
-                
-                logger.info(f"Brain-extracted image saved to: {brain_f}")
+                returncode, stdout, stderr = run_command(cmd, step_logger=logger)
+                if returncode != 0:
+                    raise RuntimeError(f"3dresample failed (exit code {returncode}): {stderr}")
             except Exception as e:
-                logger.error(f"Error during skullstripping: {e}")
-                raise RuntimeError(
-                    f"Conform step failed during skullstripping: {e}. "
-                    f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
-                )
-        
+                logger.error(f"Error during template downsampling: {e}")
+                raise RuntimeError(f"Conform step failed during template downsampling: {e}.")
+            validate_output_file(template_f_downsampled, logger)
+            logger.info(f"Step: template downsampled to {downsample_voxel_sizes[0]:.3f} mm")
+
+            template_f = str(template_f_downsampled)
+
+        # ------------------------------------------------------------
         # Step 3: FLIRT rigid registration from brain-extracted input to padded template
         try:
             # Set modality-specific FLIRT parameters
@@ -451,65 +543,15 @@ def conform_to_template(
             logger.error(f"Error during FLIRT registration: {e}")
             raise RuntimeError(
                 f"Conform step failed during FLIRT registration: {e}. "
-                f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
             )
         
-        # Step 4.1: Resample template to the same resolution as the input
-        logger.info(f"Step: resampling template to input resolution")
-        
-        # Load the input image to determine target voxel sizes
-        img_input = nib.load(image_path)
-        original_affine = img_input.affine
-        
-        original_voxel_sizes = np.sqrt(np.sum(original_affine[:3, :3] ** 2, axis=0))
-        logger.info(f"Input voxel sizes: {np.array2string(original_voxel_sizes, precision=4, suppress_small=True)} mm")
-        
-        # Resample to isotropic using minimum voxel size
-        target_voxel_size = np.round(np.min(original_voxel_sizes), 2)
-        if target_voxel_size <= 0:
-            raise ValueError(f"Invalid target voxel size: {target_voxel_size} mm")
-        target_voxel_sizes = np.full((3,), target_voxel_size)
-        
-        logger.info(f"Target voxel sizes: {target_voxel_sizes} mm")
-        
-        # Resample template using 3dresample
-        template_resampled_f = work_dir / 'template_res-input.nii.gz'
-        
-        if template_resampled_f.exists():
-            template_resampled_f.unlink()
-            logger.debug(f"Removed existing template resampled file: {template_resampled_f}")
-        
-        cmd = [
-            '3dresample',
-            '-dxyz', str(target_voxel_sizes[0]), str(target_voxel_sizes[1]), str(target_voxel_sizes[2]),
-            '-input', template_f,
-            '-prefix', str(template_resampled_f)
-        ]
-        logger.debug(f"Command: {' '.join(cmd)}")
-        try:
-            returncode, stdout, stderr = run_command(cmd, step_logger=logger)
-            if returncode != 0:
-                raise RuntimeError(f"3dresample failed (exit code {returncode}): {stderr}")
-            
-            # Validate resampled template exists
-            validate_output_file(template_resampled_f, logger)
-            logger.info(f"Template resampled to: {template_resampled_f}")
-        except Exception as e:
-            logger.error(f"Error during template resampling: {e}")
-            raise RuntimeError(
-                f"Conform step failed during template resampling: {e}. "
-                f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
-            )
-        
-        # Update template path for final step
-        template_f = str(template_resampled_f)
-        
-        # Step 4.2: Apply the affine transformation to the input image
+        # ------------------------------------------------------------
+        # Step 4: Apply the affine transformation to the input image
         try:
             apply_result = flirt_apply_transforms(
                 movingf=str(image_path),
                 outputf_name=output_name,
-                reff=template_f,
+                reff=str(template_f_xfm_ref),
                 working_dir=str(work_dir),
                 transformf=str(xfm_forward_f),
                 logger=logger,
@@ -529,7 +571,7 @@ def conform_to_template(
         # Build return dictionary
         result = {
             "imagef_conformed": str(conformed_f),
-            "template_f": template_f,
+            "template_f": str(template_f_xfm_ref),
             "forward_xfm": str(xfm_forward_f)
         }
         

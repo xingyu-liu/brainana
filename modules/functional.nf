@@ -49,10 +49,14 @@ process FUNC_REORIENT {
     # Get BIDS naming template (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
     
+    # Get effective output_space (CLI > YAML > default)
+    from macacaMRIprep.utils.nextflow import get_effective_output_space
+    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+    
     # Resolve template if needed
     template_file = None
-    if '${params.output_space}':
-        template_file = Path(resolve_template('${params.output_space}'))
+    if effective_output_space:
+        template_file = Path(resolve_template(effective_output_space))
     
     # Create step input
     input_obj = StepInput(
@@ -559,9 +563,13 @@ process FUNC_CONFORM {
     anat_brain_path_str = '${anat_brain_file}'
     has_anat_brain = anat_brain_path_str and anat_brain_path_str.strip() != '' and '.dummy' not in anat_brain_path_str
     
+    # Get effective output_space (CLI > YAML > default)
+    from macacaMRIprep.utils.nextflow import get_effective_output_space
+    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+    
     if registration_pipeline == 'func2template':
         # Always use template for func2template pipeline
-        target_file = Path(resolve_template('${params.output_space}'))
+        target_file = Path(resolve_template(effective_output_space))
     elif registration_pipeline in ['func2anat', 'func2anat2template']:
         # Use anatomical brain if available, otherwise fallback to template
         if has_anat_brain:
@@ -570,13 +578,13 @@ process FUNC_CONFORM {
                 target_file = anat_brain_path
             else:
                 # Anatomical file doesn't exist, use template
-                target_file = Path(resolve_template('${params.output_space}'))
+                target_file = Path(resolve_template(effective_output_space))
         else:
             # No anatomical brain provided, use template
-            target_file = Path(resolve_template('${params.output_space}'))
+            target_file = Path(resolve_template(effective_output_space))
     else:
         # Default: use template
-        target_file = Path(resolve_template('${params.output_space}'))
+        target_file = Path(resolve_template(effective_output_space))
     
     # Create step input for tmean (used for conform registration)
     tmean_input_obj = StepInput(
@@ -848,15 +856,16 @@ else:
     anat_brain_path = Path(anat_brain_path_str)
     has_anat = anat_brain_path.exists()
 
-# Determine target based on registration pipeline and check if output_space is native
-output_space = config.get('template', {}).get('output_space', '') or config.get('general', {}).get('output_space', '')
-is_native_space = output_space and output_space.lower() == 'native'
+# Get effective output_space (CLI > YAML > default)
+from macacaMRIprep.utils.nextflow import get_effective_output_space
+effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+is_native_space = effective_output_space and effective_output_space.lower() == 'native'
 
 # Determine target based on registration pipeline
 # FUNC_REGISTRATION registers functional tmean/brain to anatomical skull-stripped brain
 if registration_pipeline == 'func2template' or not has_anat:
     # Direct to template registration (no anatomical needed)
-    target_file = Path(resolve_template('${params.output_space}'))
+    target_file = Path(resolve_template(effective_output_space))
     target_type = 'template'
     target_name = template_name
     target2template = False
@@ -865,7 +874,7 @@ if registration_pipeline == 'func2template' or not has_anat:
 elif registration_pipeline == 'func2anat':
     if not has_anat:
         # Fallback to template if no anatomical data
-        target_file = Path(resolve_template('${params.output_space}'))
+        target_file = Path(resolve_template(effective_output_space))
         target_type = 'template'
         target_name = template_name
         target2template = False
@@ -881,7 +890,7 @@ elif registration_pipeline == 'func2anat':
 else:  # func2anat2template
     if not has_anat:
         # Fallback to template if no anatomical data
-        target_file = Path(resolve_template('${params.output_space}'))
+        target_file = Path(resolve_template(effective_output_space))
         target_type = 'template'
         target_name = template_name
         target2template = False
@@ -1046,17 +1055,29 @@ process FUNC_APPLY_TRANSFORMS {
     path "*.json", emit: metadata
     
     script:
-    def template_name = params.output_space.split(':')[0]
     """
+    # Get effective output_space (CLI > YAML > default) for template_name
+    EFFECTIVE_OUTPUT_SPACE=\$(\${PYTHON:-python3} <<'PYTHON_OUTPUT_SPACE'
+from macacaMRIprep.utils.nextflow import get_effective_output_space
+effective = get_effective_output_space('${params.output_space}', '${config_file}')
+print(effective)
+PYTHON_OUTPUT_SPACE
+    )
+    TEMPLATE_NAME=\$(echo "\$EFFECTIVE_OUTPUT_SPACE" | cut -d':' -f1)
+    
     \${PYTHON:-python3} <<EOF
     from macacaMRIprep.steps.functional import func_apply_transforms
     from macacaMRIprep.steps.types import StepInput
     from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, get_effective_output_space
     from pathlib import Path
     import glob
     import shutil
     import os
+    
+    # Get effective output_space (CLI > YAML > default)
+    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+    template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
     
     # Initialize command log file
     init_cmd_log_for_nextflow(
@@ -1187,7 +1208,7 @@ process FUNC_APPLY_TRANSFORMS {
         create_output_link(func_tmean_anat, func_anat_boldref_name)
         
         # Step 2: Apply anat2template transform
-        template_fixedf = Path(resolve_template('${params.output_space}'))
+        template_fixedf = Path(resolve_template(effective_output_space))
         
         # Resample template to func resolution if needed
         if config.get("registration.keep_func_resolution", True):
@@ -1297,7 +1318,7 @@ process FUNC_APPLY_TRANSFORMS {
             if target_type == 'anat':
                 reff = reference_file_input  # Should be original anat file, but use reference for now
             else:
-                reff = Path(resolve_template('${params.output_space}'))
+                reff = Path(resolve_template(effective_output_space))
         
         # Validate reference file exists and is valid (if not template)
         if reff == reference_file_input:
@@ -1370,7 +1391,7 @@ process FUNC_APPLY_TRANSFORMS {
                 # Use original anat (reff should be original anat, but we use reference_file_input as fallback)
                 # Note: In practice, if keep_func_resolution=False, reference_file_input might still be resampled
                 # This is a limitation - we'd need the original anat file passed in
-                if reff.exists() and reff != Path(resolve_template('${params.output_space}')):
+                if reff.exists() and reff != Path(resolve_template(effective_output_space)):
                     if reff.resolve() != target_final_path.resolve():
                         shutil.copy2(reff, target_final_output)
                         print(f"INFO: Created target_final.nii.gz from original anat (native resolution)", file=sys.stderr)
@@ -1387,7 +1408,7 @@ process FUNC_APPLY_TRANSFORMS {
                         raise FileNotFoundError(f"Anatomical reference file not found for target_final.nii.gz")
         else:
             # func2template: final space is template
-            template_fixedf = Path(resolve_template('${params.output_space}'))
+            template_fixedf = Path(resolve_template(effective_output_space))
             if keep_func_resolution:
                 # Resample template to func resolution
                 template_reff = working_dir / "template_res-func_for_apply_transforms.nii.gz"

@@ -184,6 +184,8 @@ elif [ "$1" = "run" ]; then
     fi
     
     # Execute Nextflow
+    # Debug: uncomment to see final command
+    # echo "DEBUG: Running Nextflow with args: ${remaining_args[*]}" >&2
     exec "$NEXTFLOW" "${CMD_ARGS[@]}" run "$workflow_file" "${remaining_args[@]}"
 else
     # Other Nextflow commands (info, clean, etc.) - pass through as-is

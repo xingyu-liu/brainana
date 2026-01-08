@@ -157,10 +157,14 @@ bids_naming_template = Path('${bids_naming_template}')
 # Determine modality from BIDS naming template filename
 modality = detect_modality(bids_naming_template)
 
+# Get effective output_space (CLI > YAML > default)
+from macacaMRIprep.utils.nextflow import get_effective_output_space
+effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+
 # Resolve template if needed
 template_file = None
-if '${params.output_space}':
-    template_file = Path(resolve_template('${params.output_space}'))
+if effective_output_space:
+    template_file = Path(resolve_template(effective_output_space))
 
 # Create step input
 input_obj = StepInput(
@@ -243,8 +247,12 @@ bids_naming_template = Path('${bids_naming_template}')
 # Determine modality from BIDS naming template filename
 modality = detect_modality(bids_naming_template)
 
+# Get effective output_space (CLI > YAML > default)
+from macacaMRIprep.utils.nextflow import get_effective_output_space
+effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+
 # Resolve template
-template_file = Path(resolve_template('${params.output_space}'))
+template_file = Path(resolve_template(effective_output_space))
 
 # Create step input
 input_obj = StepInput(
@@ -627,8 +635,16 @@ process ANAT_REGISTRATION {
     path "*.json", emit: metadata
     
     script:
-    def template_name = params.output_space.split(':')[0]
     """
+    # Get effective output_space (CLI > YAML > default) for template_name
+    EFFECTIVE_OUTPUT_SPACE=\$(\${PYTHON:-python3} <<'PYTHON_OUTPUT_SPACE'
+from macacaMRIprep.utils.nextflow import get_effective_output_space
+effective = get_effective_output_space('${params.output_space}', '${config_file}')
+print(effective)
+PYTHON_OUTPUT_SPACE
+    )
+    TEMPLATE_NAME=\$(echo "\$EFFECTIVE_OUTPUT_SPACE" | cut -d':' -f1)
+    
     # Set thread environment variables from config
     THREADS=\$(\${PYTHON:-python3} <<'PYTHON'
 import yaml
@@ -677,9 +693,13 @@ bids_naming_template = Path('${bids_naming_template}')
 # Determine modality from BIDS naming template filename
 modality = detect_modality(bids_naming_template)
 
+# Get effective output_space (CLI > YAML > default)
+from macacaMRIprep.utils.nextflow import get_effective_output_space
+effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
+
 # Resolve template
-template_file = Path(resolve_template('${params.output_space}'))
-template_name = '${template_name}'
+template_file = Path(resolve_template(effective_output_space))
 
 # Create step input
 input_obj = StepInput(
@@ -997,12 +1017,20 @@ process ANAT_REGISTRATION_PASSTHROUGH {
     path "*.json", emit: metadata
     
     script:
-    def template_name = params.output_space.split(':')[0]
     """
+    # Get effective output_space (CLI > YAML > default) for template_name
+    EFFECTIVE_OUTPUT_SPACE=\$(\${PYTHON:-python3} <<'PYTHON_OUTPUT_SPACE'
+from macacaMRIprep.utils.nextflow import get_effective_output_space
+effective = get_effective_output_space('${params.output_space}', '${config_file}')
+print(effective)
+PYTHON_OUTPUT_SPACE
+    )
+    TEMPLATE_NAME=\$(echo "\$EFFECTIVE_OUTPUT_SPACE" | cut -d':' -f1)
+    
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from macacaMRIprep.utils.templates import resolve_template
-from macacaMRIprep.utils.nextflow import detect_modality, save_metadata
+from macacaMRIprep.utils.nextflow import detect_modality, save_metadata, get_effective_output_space
 from pathlib import Path
 import os
 import subprocess
@@ -1015,7 +1043,9 @@ bids_naming_template = Path('${bids_naming_template}')
 modality = detect_modality(bids_naming_template)
 original_stem = get_filename_stem(bids_naming_template)
 
-template_name = '${template_name}'
+# Get effective output_space (CLI > YAML > default)
+effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
 
 # Pass through input file (create symlink with space entity)
 bids_output_filename = create_bids_output_filename(
@@ -1028,9 +1058,13 @@ os.symlink(Path('${input_file}').resolve(), bids_output_filename)
 # Generate BIDS prefix
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 
+# Get effective output_space (CLI > YAML > default)
+from macacaMRIprep.utils.nextflow import get_effective_output_space
+effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+
 # Create identity transform using ANTs
 # Create identity affine transform file first
-template_file = Path(resolve_template('${params.output_space}'))
+template_file = Path(resolve_template(effective_output_space))
 input_file = Path('${input_file}')
 
 # Forward transform: from-{modality}_to-{template_name}

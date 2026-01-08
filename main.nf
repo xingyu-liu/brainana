@@ -91,28 +91,32 @@ workflow {
         try {
             def default_str = default_bool ? 'true' : 'false'
             // Create a simple Python script that properly handles nested dictionary access
+            // Use command-line arguments to avoid embedding long paths in the script string
             def temp_script = File.createTempFile("read_yaml_", ".py")
             temp_script.text = """import yaml
 import sys
 try:
-    with open('${config_path}') as f:
+    config_file = sys.argv[1]
+    key_path = sys.argv[2]
+    default_bool = sys.argv[3] == 'true'
+    with open(config_file, 'r') as f:
         config = yaml.safe_load(f) or {}
-    keys = '${key_path}'.split('.')
+    keys = key_path.split('.')
     value = config
     for k in keys:
         if isinstance(value, dict):
             value = value.get(k, {})
         else:
-            value = ${default_bool}
+            value = default_bool
             break
     # If we ended up with a dict, use default; otherwise use the value
-    result = value if not isinstance(value, dict) else ${default_bool}
+    result = value if not isinstance(value, dict) else default_bool
     print('true' if result else 'false')
 except Exception as e:
     print('${default_str}')
     sys.exit(0)
 """
-            def proc = ["python3", temp_script.absolutePath].execute()
+            def proc = ["python3", temp_script.absolutePath, config_path, key_path, default_str].execute()
             def output = new StringBuffer()
             def error = new StringBuffer()
             proc.consumeProcessOutput(output, error)
@@ -129,7 +133,48 @@ except Exception as e:
         }
     }
     
-    // Read config values
+    // Note: output_space priority is handled by processes themselves:
+    // 1. CLI argument (--output_space) - highest priority
+    // 2. YAML config file (template.output_space) - medium priority  
+    // 3. Nextflow config default (NMT2Sym:res-05) - lowest priority
+    // Processes use get_effective_output_space() utility function to determine the correct value.
+    
+    // Calculate effective output_space for display (same logic as processes)
+    def default_output_space = 'NMT2Sym:res-05'
+    def effective_output_space = default_output_space
+    if (params.output_space != default_output_space) {
+        // CLI explicitly set, use it
+        effective_output_space = params.output_space
+    } else {
+        // Read from YAML config file
+        try {
+            def python_code = """import yaml, sys
+try:
+    with open('${config_file_path}', 'r') as f:
+        config = yaml.safe_load(f) or {}
+    value = config.get('template', {}).get('output_space', '')
+    if value and isinstance(value, str) and value.strip():
+        print(value.strip(), end='')
+    else:
+        print('${default_output_space}', end='')
+except:
+    print('${default_output_space}', end='')
+"""
+            def temp_script = File.createTempFile("get_output_space_", ".py")
+            temp_script.text = python_code
+            def proc = ["python3", temp_script.absolutePath].execute()
+            def output = proc.text.trim()
+            proc.waitFor()
+            temp_script.delete()
+            if (proc.exitValue() == 0 && output) {
+                effective_output_space = output
+            }
+        } catch (Exception e) {
+            // Fallback to default
+            effective_output_space = default_output_space
+        }
+    }
+    
     // Strategy: If --anat_only is explicitly set to true, use it. Otherwise, read from config file.
     // This allows command-line to force true, while config file controls the default/false case.
     def anat_only_from_config = readYamlBool(config_file_path, "general.anat_only", false)
@@ -172,7 +217,7 @@ except Exception as e:
     println "============================================"
     println "BIDS directory: ${params.bids_dir}"
     println "Output directory: ${params.output_dir}"
-    println "Output space: ${params.output_space}"
+    println "Output space: ${effective_output_space}"
     if (subjects_str) println "Subjects filter: ${subjects_str}"
     if (sessions_str) println "Sessions filter: ${sessions_str}"
     if (tasks_str) println "Tasks filter: ${tasks_str}"
@@ -1054,17 +1099,17 @@ except Exception as e:
             QC_MOTION_CORRECTION(motion_qc_input, config_file)
         }
         
-        // QC_BIAS_CORRECTION_FUNC: needs original (from DESPIKE) + corrected (from BIAS_CORRECTION)
-        if (func_bias_correction_enabled) {
-            func_after_despike
-                .join(func_after_bias, by: [0, 1, 2, 3])
-                .map { sub, ses, task, run, bold1, tmean1, bids1, bold2, tmean2, bids2 ->
-                    // Extract tmean files for QC (before and after bias correction)
-                    [sub, ses, task, run, tmean1, tmean2, bids2]
-                }
-                .set { func_bias_qc_input }
-            QC_BIAS_CORRECTION_FUNC(func_bias_qc_input, config_file)
-        }
+        // // QC_BIAS_CORRECTION_FUNC: needs original (from DESPIKE) + corrected (from BIAS_CORRECTION)
+        // if (func_bias_correction_enabled) {
+        //     func_after_despike
+        //         .join(func_after_bias, by: [0, 1, 2, 3])
+        //         .map { sub, ses, task, run, bold1, tmean1, bids1, bold2, tmean2, bids2 ->
+        //             // Extract tmean files for QC (before and after bias correction)
+        //             [sub, ses, task, run, tmean1, tmean2, bids2]
+        //         }
+        //         .set { func_bias_qc_input }
+        //     QC_BIAS_CORRECTION_FUNC(func_bias_qc_input, config_file)
+        // }
         
         // QC_CONFORM_FUNC: needs conformed file + template_resampled (same space as conformed image)
         if (func_conform_enabled) {
@@ -1152,9 +1197,9 @@ except Exception as e:
         if (func_motion_correction_enabled) {
             func_qc_channels = func_qc_channels.mix(QC_MOTION_CORRECTION.out.metadata)
         }
-        if (func_bias_correction_enabled) {
-            func_qc_channels = func_qc_channels.mix(QC_BIAS_CORRECTION_FUNC.out.metadata)
-        }
+        // if (func_bias_correction_enabled) {
+        //     func_qc_channels = func_qc_channels.mix(QC_BIAS_CORRECTION_FUNC.out.metadata)
+        // }
         if (func_conform_enabled) {
             func_qc_channels = func_qc_channels.mix(QC_CONFORM_FUNC.out.metadata)
         }
