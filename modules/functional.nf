@@ -214,10 +214,7 @@ process FUNC_MOTION_CORRECTION {
     
     output:
     // Combined channel: [sub, ses, task, run, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-motion_bold.nii.gz"), path("*desc-motion_boldref.nii.gz"), val(bids_naming_template), emit: combined
-    // Keep separate outputs for backward compatibility
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-motion_bold.nii.gz"), val(bids_naming_template), emit: output
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-motion_boldref.nii.gz"), val(bids_naming_template), emit: tmean
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-motion_bold.nii.gz"), path("*desc-motion_boldref.nii.gz"), val(bids_naming_template), emit: output
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-confounds_timeseries.tsv"), emit: motion_params
     path "*.json", emit: metadata
     
@@ -317,10 +314,7 @@ process FUNC_DESPIKE {
     
     output:
     // Combined channel: [sub, ses, task, run, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-despike_bold.nii.gz"), path("*desc-despike_boldref.nii.gz"), val(bids_naming_template), emit: combined
-    // Keep separate outputs for backward compatibility
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-despike_bold.nii.gz"), val(bids_naming_template), emit: output
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-despike_boldref.nii.gz"), val(bids_naming_template), emit: tmean
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-despike_bold.nii.gz"), path("*desc-despike_boldref.nii.gz"), val(bids_naming_template), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -416,9 +410,7 @@ process FUNC_BIAS_CORRECTION {
     
     output:
     // Combined channel: [sub, ses, task, run, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("bold_inherited.nii.gz"), path("*desc-biasCorrection_boldref.nii.gz"), val(bids_naming_template), emit: combined
-    // Keep separate output for backward compatibility
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-biasCorrection_boldref.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("bold_inherited.nii.gz"), path("*desc-biasCorrection_boldref.nii.gz"), val(bids_naming_template), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -521,15 +513,12 @@ process FUNC_CONFORM {
     input:
     // Combined channel: [sub, ses, task, run, bold_file, tmean_file, bids_template]
     tuple val(subject_id), val(session_id), val(task_name), val(run), path(bold_file), path(tmean_file), val(bids_naming_template)
-    path(anat_brain_file)  // Optional anatomical brain file (skull-stripped) to use as target
+    path(anat_brain_file)
     path config_file
     
     output:
     // Combined channel: [sub, ses, task, run, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-conform_bold.nii.gz"), path("*desc-conform_boldref.nii.gz"), val(bids_naming_template), emit: combined
-    // Keep separate outputs for backward compatibility
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-conform_bold.nii.gz"), val(bids_naming_template), emit: output
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-conform_boldref.nii.gz"), val(bids_naming_template), emit: tmean
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-conform_bold.nii.gz"), path("*desc-conform_boldref.nii.gz"), val(bids_naming_template), emit: output
     path "*.mat", emit: transforms
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("template_resampled.nii.gz"), val(bids_naming_template), emit: template_resampled
     path "*.json", emit: metadata
@@ -673,7 +662,7 @@ process FUNC_SKULLSTRIPPING {
     output:
     // Combined channel: 7 elements [sub, ses, task, run, bold_file, tmean_file (brain_file), bids_template]
     // brain mask channel: 6 elements [sub, ses, task, run, mask_file, bids_template]
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("bold_inherited.nii.gz"), path("*_boldref_brain.nii.gz"), val(bids_naming_template), emit: combined
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("bold_inherited.nii.gz"), path("*_boldref_brain.nii.gz"), val(bids_naming_template), emit: output
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*desc-brain_mask.nii.gz"), val(bids_naming_template), emit: brain_mask
     path "*.json", emit: metadata
     
@@ -773,9 +762,7 @@ process FUNC_REGISTRATION {
     
     output:
     // Combined channel: [sub, ses, task, run, bold_file, registered_tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("bold_inherited.nii.gz"), path("*space-*boldref.nii.gz"), val(bids_naming_template), emit: combined
-    // Keep separate outputs for backward compatibility
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path("*space-*boldref.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), val(task_name), val(run), path("bold_inherited.nii.gz"), path("*space-*boldref.nii.gz"), val(bids_naming_template), emit: output
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*from-bold_to-*_mode-image_xfm.h5"), emit: transforms
     tuple val(subject_id), val(session_id), val(task_name), val(run), path("*from-*_to-bold_mode-image_xfm.h5"), emit: inverse_transforms
     // Reference file used for registration (resampled target if keep_func_resolution=True)

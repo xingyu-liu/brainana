@@ -263,6 +263,7 @@ def mris_place_surface(
     threads: int = 1,
     log_file: Optional[Path] = None,
     subject_dir: Optional[Path] = None,
+    subjects_dir: Optional[Path] = None,
     **kwargs,
 ) -> Path:
     """
@@ -297,6 +298,8 @@ def mris_place_surface(
         Log file path
     subject_dir : Path, optional
         Subject directory. If provided, converts paths to relative from subject_dir.
+    subjects_dir : Path, optional
+        SUBJECTS_DIR path. If None, uses environment variable or derives from subject_dir.
     **kwargs
         Additional arguments:
         - rip_label: cortex label file
@@ -326,6 +329,11 @@ def mris_place_surface(
         aseg = to_relative_path(aseg, subject_dir)
         if adgws_in:
             adgws_in = to_relative_path(adgws_in, subject_dir)
+    
+    # Derive subjects_dir from subject_dir if not provided
+    if subjects_dir is None and subject_dir:
+        # subject_dir is typically subjects_dir / subject_id, so parent is subjects_dir
+        subjects_dir = subject_dir.parent
     
     cmd = ["mris_place_surface"]
     
@@ -376,7 +384,12 @@ def mris_place_surface(
     if "--i" not in cmd:
         cmd.extend(["--i", str(input_surf)])
     
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    # Set SUBJECTS_DIR in environment if provided
+    env = None
+    if subjects_dir:
+        env = {"SUBJECTS_DIR": str(subjects_dir)}
+    
+    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir, env=env)
     return output_surf
 
 

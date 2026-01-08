@@ -79,6 +79,7 @@ class WhitePreaparc(HemisphereStage):
             nsmooth=3,
             log_file=self.config.log_file,
             subject_dir=self.sd.subject_dir,
+            subjects_dir=self.config.subjects_dir,
         )
 
     

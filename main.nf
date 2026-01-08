@@ -297,6 +297,8 @@ except Exception as e:
         }
         .set { anat_synthesis_input }
     
+    // ------------------------------------------------------------
+    // ANAT_SYNTHESIS
     // Run synthesis process for all anatomical modalities (T1w, T2w, etc.)
     ANAT_SYNTHESIS(anat_synthesis_input, config_file)
     
@@ -356,13 +358,14 @@ except Exception as e:
         .mix(anat_single_jobs)
         // NOTE: T2w-with-T1w NOT included here - they have their own pipeline
     
-    // ============================================
+    // ------------------------------------------------------------
+    // ANAT_PROCESSING
     // Anatomical processing steps
-    // Note: The dependency is correctly enforced:
     // - Files requiring synthesis wait for ANAT_SYNTHESIS to complete
     // - Single files (no synthesis) proceed immediately
     
-    // REORIENT step (conditionally enabled) - processes normal anatomical files
+    // ------------------------------------------------------------
+    // ANAT_REORIENT
     def anat_after_reorient_normal = anat_input_ch
     if (anat_reorient_enabled) {
         ANAT_REORIENT(anat_input_ch, config_file)
@@ -372,7 +375,9 @@ except Exception as e:
         anat_after_reorient_normal = anat_input_ch.map(passThroughAnat)
     }
     
-    // CONFORM step (conditionally enabled) - only for normal processing (not T2w-with-T1w)
+    // ------------------------------------------------------------
+    // ANAT_CONFORM
+    // only for normal processing (not T2w-with-T1w)
     def anat_after_conform = anat_after_reorient_normal
     def anat_conform_transforms = Channel.empty()
     def anat_conform_template_resampled = Channel.empty()
@@ -389,7 +394,8 @@ except Exception as e:
         anat_conform_template_resampled = ANAT_CONFORM_PASSTHROUGH.out.template_resampled
     }
     
-    // BIAS_CORRECTION step (conditionally enabled)
+    // ------------------------------------------------------------
+    // ANAT_BIAS_CORRECTION
     def anat_after_bias = anat_after_conform
     if (anat_bias_correction_enabled) {
         ANAT_BIAS_CORRECTION(anat_after_conform, config_file)
@@ -400,7 +406,8 @@ except Exception as e:
         anat_after_bias = ANAT_BIAS_CORRECTION_PASSTHROUGH.out.output
     }
     
-    // SKULLSTRIPPING step (conditionally enabled)
+    // ------------------------------------------------------------
+    // ANAT_SKULLSTRIPPING
     def anat_after_skull = anat_after_bias
     def anat_skull_mask = Channel.empty()
     def anat_skull_seg = Channel.empty()
@@ -414,7 +421,8 @@ except Exception as e:
         anat_after_skull = anat_after_bias.map(passThroughAnat)
     }
     
-    // REGISTRATION step (conditionally enabled)
+    // ------------------------------------------------------------
+    // ANAT_REGISTRATION
     def anat_after_reg = anat_after_skull
     def anat_reg_transforms = Channel.empty()
     if (anat_registration_enabled) {
@@ -428,8 +436,10 @@ except Exception as e:
         anat_reg_transforms = ANAT_REGISTRATION_PASSTHROUGH.out.transforms
     }
     
-    // QC for individual steps (conditionally enabled)
-    // QC_CONFORM: needs conformed file + resampled template (same space as conformed image)
+    // ============================================
+    // QC for anatomical pipeline
+    // ============================================
+    // ANAT_QC_CONFORM
     if (anat_conform_enabled) {
         anat_after_conform
             .join(anat_conform_template_resampled, by: [0, 1])
@@ -480,6 +490,9 @@ except Exception as e:
         QC_REGISTRATION(ANAT_REGISTRATION.out.output, config_file)
     }    
     
+    // ============================================
+    // SURFACE RECONSTRUCTION
+    // ============================================
     // Surface reconstruction: needs non-skullstripped T1w file, segmentation, and brain mask
     // Skip if skullstripping is disabled (no mask/segmentation available)
     def surf_recon_input = Channel.empty()
@@ -585,14 +598,14 @@ except Exception as e:
     // Split into separate channels using multiMap
     t2w_t1w_joined
         .multiMap { sub, ses, t2w_file, t2w_bids_template, t1w_file, t1w_bids_template ->
-            tuple: [sub, ses, t2w_file, t2w_bids_template]
+            combined: [sub, ses, t2w_file, t2w_bids_template]
             reference: t1w_file
         }
         .set { t2w_reg_multi }
     
     // Step 4: Run T2w→T1w registration
     // Process signature: (tuple, t1w_reference, config_file)
-    ANAT_T2W_TO_T1W_REGISTRATION(t2w_reg_multi.tuple, t2w_reg_multi.reference, config_file)
+    ANAT_T2W_TO_T1W_REGISTRATION(t2w_reg_multi.combined, t2w_reg_multi.reference, config_file)
     def t2w_after_reg_to_t1w = ANAT_T2W_TO_T1W_REGISTRATION.out.output
     
     // Step 5: BIAS_CORRECTION for registered T2w (using aliased process)
@@ -607,7 +620,7 @@ except Exception as e:
     
     // QC for T2w→T1w registration
     // Join bias-corrected T2w output with skull-stripped T1w brain reference (for overlaid contour)
-    // Process expects: tuple [sub, ses, registered_t2w_file, t1w_reference_file], bids_naming_template, config_file
+    // Process expects: combined [sub, ses, registered_t2w_file, t1w_reference_file], bids_naming_template, config_file
     // Get skull-stripped T1w brain files from the main pipeline for overlay contours
     def t1w_skullstripped = anat_after_skull
         .filter(isT1wFile)
@@ -616,21 +629,21 @@ except Exception as e:
     t2w_after_bias_final
         .join(t1w_skullstripped, by: [0, 1])
         .multiMap { sub, ses, t2w_file, t2w_bids_template, t1w_file, t1w_bids_template ->
-            tuple: [sub, ses, t2w_file, t1w_file]
+            combined: [sub, ses, t2w_file, t1w_file]
             bids_template: t2w_bids_template
         }
         .set { t2w_qc_channels }
     
     // QC_T2W_TO_T1W_REGISTRATION
-    QC_T2W_TO_T1W_REGISTRATION(t2w_qc_channels.tuple, t2w_qc_channels.bids_template, config_file)
+    QC_T2W_TO_T1W_REGISTRATION(t2w_qc_channels.combined, t2w_qc_channels.bids_template, config_file)
 
     // ============================================
     // FUNCTIONAL PIPELINE
     // ============================================
     if (!anat_only) {
         // Functional processing steps (conditionally enabled)
-
-        // SLICE_TIMING step
+        // ------------------------------------------------------------
+        // SLICE_TIMING
         def func_after_slice = func_jobs_ch
         if (func_slice_timing_enabled) {
             FUNC_SLICE_TIMING(func_jobs_ch, config_file)
@@ -639,7 +652,8 @@ except Exception as e:
             func_after_slice = func_jobs_ch.map(passThroughFunc)
         }
 
-        // REORIENT step
+        // ------------------------------------------------------------
+        // REORIENT
         def func_after_reorient = func_after_slice
         if (func_reorient_enabled) {
             FUNC_REORIENT(func_after_slice, config_file)
@@ -649,12 +663,13 @@ except Exception as e:
             func_after_reorient = func_after_slice.map(passThroughFunc)
         }
         
-        // MOTION_CORRECTION step
+        // ------------------------------------------------------------
+        // MOTION_CORRECTION
         def func_after_motion = func_after_reorient
         def func_motion_params = Channel.empty()
         if (func_motion_correction_enabled) {
             FUNC_MOTION_CORRECTION(func_after_reorient, config_file)
-            func_after_motion = FUNC_MOTION_CORRECTION.out.combined  // Combined channel: [sub, ses, task, run, bold, tmean, bids_template]
+            func_after_motion = FUNC_MOTION_CORRECTION.out.output  // Combined channel: [sub, ses, task, run, bold, tmean, bids_template]
             func_motion_params = FUNC_MOTION_CORRECTION.out.motion_params
         } else {
             // Create combined channel from single input (use same file for both BOLD and tmean)
@@ -663,91 +678,212 @@ except Exception as e:
             }
         }
         
-        // DESPIKE step
+        // ------------------------------------------------------------
+        // DESPIKE
         def func_after_despike = func_after_motion
         if (func_despike_enabled) {
             FUNC_DESPIKE(func_after_motion, config_file)
-            func_after_despike = FUNC_DESPIKE.out.combined  // Combined channel: [sub, ses, task, run, bold, tmean, bids_template]
+            func_after_despike = FUNC_DESPIKE.out.output  // Combined channel: [sub, ses, task, run, bold, tmean, bids_template]
         } else {
             // Pass through combined channel unchanged
             func_after_despike = func_after_motion
         }
         
-        // BIAS_CORRECTION step (operates on tmean, inherits BOLD)
+        // ------------------------------------------------------------
+        // BIAS_CORRECTION
+        // operates on tmean, inherits BOLD
         def func_after_bias = func_after_despike
         if (func_bias_correction_enabled) {
             FUNC_BIAS_CORRECTION(func_after_despike, config_file)
-            func_after_bias = FUNC_BIAS_CORRECTION.out.combined  // Combined channel: [sub, ses, task, run, bold, tmean, bids_template]
+            func_after_bias = FUNC_BIAS_CORRECTION.out.output  // Combined channel: [sub, ses, task, run, bold, tmean, bids_template]
         } else {
             // Pass through combined channel unchanged
             func_after_bias = func_after_despike
         }
         
-        // CONFORM step (conditionally enabled - processes both BOLD and tmean)
+        // ------------------------------------------------------------
+        // ANATOMICAL SELECTION
+        // runs before CONFORM and REGISTRATION
+        //
+        // Strategy: Determine case for each functional job first, then select anatomical data
+        // Case 1: Within-session anatomical data (exact match by subject AND session)
+        // Case 2: Across-session anatomical data (same subject, different session)
+        // Case 3: No anatomical data (use dummy file, Python code will fallback to template)
+
+        // Get T1w skull-stripped brain files from anatomical pipeline
+        // 4 elements: [sub, ses, anat_file, bids_template]
+        def anat_for_func = anat_after_skull
+            .filter(isT1wFile)
+        
+        // Step 1: Build lookup structures for anatomical data
+        // Lookup 1: Same-session map - structure: [sub, ses, anat_file, bids_template]
+        // (flattened for combine by [0, 1])
+        def anat_same_ses_lookup = anat_for_func
+            .map { sub, ses, anat_file, bids_template ->
+                [sub, ses, anat_file, bids_template]
+            }
+            .unique { sub, ses, anat_file, bids_template ->
+                [sub, ses]  // Deduplicate by [sub, ses] - take first if multiple
+            }
+        
+        // Lookup 2: Across-session fallback map sub -> [ses, anat_file] (first session per subject)
+        def anat_across_ses_lookup = anat_for_func
+            .map { sub, ses, anat_file, bids_template ->
+                [sub, ses, anat_file]
+            }
+            .groupTuple(by: 0)  // Group by subject_id
+            .map { sub, ses_list, file_list ->
+                def sessions = [ses_list, file_list].transpose()
+                def sorted_sessions = sessions.sort { a, b ->
+                    def ses_a = a[0] ?: ''
+                    def ses_b = b[0] ?: ''
+                    ses_a <=> ses_b
+                }
+                def first_session = sorted_sessions[0]
+                [sub, first_session[0], first_session[1]]  // [sub, ses, anat_file]
+            }
+        
+        // Step 2: For each functional job, determine case and select anatomical data
+        // Strategy: Try cases in order (1 -> 2 -> 3), track matched jobs, process remaining
+        
+        // Case 1: Same-session match (exact match by [sub, ses])
+        def func_with_anat_same_ses = func_after_bias
+            .combine(anat_same_ses_lookup, by: [0, 1])  // Combine by [sub, ses]
+            .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_file, anat_bids_template ->
+                // Case 1: same session, is_cross_ses = false
+                [sub, ses, task, run, anat_file, ses, false]
+            }
+        
+        // Get keys that matched Case 1 (for filtering out from subsequent cases)
+        def func_matched_case1 = func_with_anat_same_ses
+            .map { sub, ses, task, run, anat_file, anat_ses, is_cross_ses ->
+                [sub, ses, task, run]  // Key format for matching
+            }
+            .unique()
+        
+        // Case 2: Across-session match (for jobs not matched in Case 1)
+        // Get all func job keys, then find which ones are NOT in Case 1
+        // Use mix + groupTuple to identify unmatched jobs
+        def all_func_keys = func_after_bias
+            .map { sub, ses, task, run, bold_file, tmean_file, bids_template ->
+                [sub, ses, task, run]
+            }
+            .unique()
+        
+        // Find func jobs that didn't match Case 1
+        // Mix matched and all keys, then group by entire key tuple
+        def func_unmatched_case1_keys = func_matched_case1
+            .map { sub, ses, task, run -> [[sub, ses, task, run], 'matched'] }
+            .mix(all_func_keys.map { sub, ses, task, run -> [[sub, ses, task, run], 'all'] })
+            .groupTuple()
+            .filter { key, flags ->
+                // Keep only keys that appear once with 'all' flag (not matched)
+                flags.size() == 1 && flags[0] == 'all'
+            }
+            .map { key, flags ->
+                key  // Return just the key [sub, ses, task, run]
+            }
+        
+        // Get func jobs for Case 2 (those not matched in Case 1)
+        def func_for_case2 = func_after_bias
+            .map { sub, ses, task, run, bold_file, tmean_file, bids_template ->
+                [[sub, ses, task, run], [sub, ses, task, run, bold_file, tmean_file, bids_template]]
+            }
+            .combine(func_unmatched_case1_keys.map { key -> [key, true] }.groupTuple(), by: 0)
+            .map { key, func_data, matched_flags ->
+                func_data  // Extract original functional job data
+            }
+        
+        // Try to match remaining jobs with across-session anatomical data
+        def func_with_anat_across_ses = func_for_case2
+            .combine(anat_across_ses_lookup, by: 0)  // Combine by subject_id only
+            .map { sub, ses_func, task, run, bold_file, tmean_file, bids_template, ses_anat, anat_file ->
+                // Case 2: different session, is_cross_ses = true
+                [sub, ses_func, task, run, anat_file, ses_anat, true]
+            }
+        
+        // Get keys that matched Case 2 (for filtering out from Case 3)
+        def func_matched_case2 = func_with_anat_across_ses
+            .map { sub, ses, task, run, anat_file, anat_ses, is_cross_ses ->
+                [sub, ses, task, run]  // Key format for matching
+            }
+            .unique()
+        
+        // Case 3: No anatomical data (for jobs not matched in Case 1 or 2)
+        // Find func jobs that didn't match Case 2 (from func_unmatched_case1_keys)
+        def func_matched_case1_or_2 = func_matched_case1
+            .mix(func_matched_case2)
+            .unique()
+        
+        def func_unmatched_case2_keys = func_matched_case1_or_2
+            .map { sub, ses, task, run -> [[sub, ses, task, run], 'matched'] }
+            .mix(all_func_keys.map { sub, ses, task, run -> [[sub, ses, task, run], 'all'] })
+            .groupTuple()
+            .filter { key, flags ->
+                // Keep only keys that appear once with 'all' flag (not matched in Case 1 or 2)
+                flags.size() == 1 && flags[0] == 'all'
+            }
+            .map { key, flags ->
+                key  // Return just the key [sub, ses, task, run]
+            }
+        
+        // Get func jobs for Case 3 (those not matched in Case 1 or 2)
+        def func_for_case3 = func_after_bias
+            .map { sub, ses, task, run, bold_file, tmean_file, bids_template ->
+                [[sub, ses, task, run], [sub, ses, task, run, bold_file, tmean_file, bids_template]]
+            }
+            .combine(func_unmatched_case2_keys.map { key -> [key, true] }.groupTuple(), by: 0)
+            .map { key, func_data, matched_flags ->
+                func_data  // Extract original functional job data
+            }
+            .map { sub, ses, task, run, bold_file, tmean_file, bids_template ->
+                // Case 3: no anatomical data, use dummy file
+                def dummy_anat = file("${workDir}/dummy_anat.dummy")
+                // anat_ses = ses_func (functional session), is_cross_ses = false
+                [sub, ses, task, run, dummy_anat, ses, false]
+            }
+        
+        // Step 3: Combine all cases (each job appears in exactly one case)
+        func_anat_selection = func_with_anat_same_ses
+            .mix(func_with_anat_across_ses)
+            .mix(func_for_case3)
+
+        
+        // ------------------------------------------------------------
+        // CONFORM 
+        // processes both BOLD and tmean
         def func_after_conform = func_after_bias
         def func_conform_transforms = Channel.empty()
         if (func_conform_enabled) {
-            // Get T1w skull-stripped brain files from anatomical pipeline
-            def anat_for_func_conform = anat_after_skull
-                .filter(isT1wFile)
-
-            // // debug: view the first element of anat_for_func_conform
-            // anat_for_func_conform.first().view { tuple ->
-            //     "DEBUG [CONFORM: anat_for_func_conform]: ${tuple}"
-            // }
-            
-            // func_after_bias: [sub, ses, task, run, bold_file, tmean_file, bids_template] (7 elements)
-            // anat_for_func_conform: [sub, ses, anat_file, bids_naming_template] (4 elements)
-            // 
-            def func_conform_joined = func_after_bias
-                .combine(anat_for_func_conform, by: [0, 1])
-                .map { sub, ses, task, run, bold_file, tmean_file, func_bids_template, anat_file, anat_bids_template ->
-                    [sub, ses, task, run, bold_file, tmean_file, func_bids_template, anat_file]
+            // Join functional data with anatomical selection to get anatomical file
+            def func_conform_with_anat = func_after_bias
+                .join(func_anat_selection, by: [0, 1, 2, 3])  // Join by [sub, ses, task, run]
+                .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_file, anat_ses, is_cross_ses ->
+                    [sub, ses, task, run, bold_file, tmean_file, bids_template, anat_file]
                 }
             
-            // // debug: view the first element of func_conform_joined
-            // func_conform_joined.first().view { tuple ->
-            //     "DEBUG [CONFORM: func_conform_joined]: ${tuple}"
-            // }
-            
-            // Split into combined channel and anat_brain_file using multiMap
-            func_conform_joined
+            def func_conform_tuple = func_conform_with_anat
                 .multiMap { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_file ->
                     combined: [sub, ses, task, run, bold_file, tmean_file, bids_template]
                     reference: anat_file
                 }
                 .set { func_conform_multi }
-
-            // // debug: view the first element of func_conform_multi
-            // func_conform_multi.combined.first().view { tuple ->
-            //     "DEBUG [CONFORM: func_conform_multi.combined]: ${tuple}"
-            // }
-            // func_conform_multi.reference.first().view { tuple ->
-            //     "DEBUG [CONFORM: func_conform_multi.reference]: ${tuple}"
-            // }
             
             FUNC_CONFORM(func_conform_multi.combined, func_conform_multi.reference, config_file)
-            func_after_conform = FUNC_CONFORM.out.combined  // Combined channel: [sub, ses, task, run, bold, tmean, bids_template]
+            func_after_conform = FUNC_CONFORM.out.output  
             func_conform_transforms = FUNC_CONFORM.out.transforms
-
-            // // debug: view the first element of func_after_conform
-            // func_after_conform.first().view { tuple ->
-            //     "DEBUG [CONFORM: func_after_conform]: ${tuple}"
-            // }
-            // // debug: view the first element of func_conform_transforms
-            // func_conform_transforms.first().view { tuple ->
-            //     "DEBUG [CONFORM: func_conform_transforms]: ${tuple}"
-            // }
         }
         
-        // SKULLSTRIPPING step (operates on tmean → brain, inherits BOLD)
+        // ------------------------------------------------------------
+        // SKULLSTRIPPING 
+        // operates on tmean → brain, inherits BOLD
         def func_after_skull_processed = Channel.empty()
         def func_after_skull_passthrough = Channel.empty()
         def func_mask = Channel.empty()
         
         if (func_skullstripping_enabled) {
             FUNC_SKULLSTRIPPING(func_after_conform, config_file)
-            func_after_skull_processed = FUNC_SKULLSTRIPPING.out.combined
+            func_after_skull_processed = FUNC_SKULLSTRIPPING.out.output
             func_mask = FUNC_SKULLSTRIPPING.out.brain_mask
 
             // // debug: view the first element of func_after_skull_processed
@@ -767,110 +903,33 @@ except Exception as e:
         // processed channel should be 7 elements: [sub, ses, task, run, bold_file, tmean_file (brain_file), bids_template
         def func_after_skull = func_after_skull_processed.mix(func_after_skull_passthrough)
 
-        // REGISTRATION step (conditionally enabled)
-        // FUNC_REGISTRATION registers functional tmean/brain to anatomical skull-stripped brain OR template
+        // ------------------------------------------------------------
+        // FUNC_REGISTRATION 
+        // registers functional tmean/brain to anatomical skull-stripped brain OR template
         def func_after_reg = func_after_skull
         def func_reg_transforms = Channel.empty()
         def func_reg_reference = Channel.empty()
         def func_reg_metadata = Channel.empty()  // [sub, ses, task, run, target_type, target2template]
         
         if (anat_registration_enabled) {
-            // Normal case: Join functional data with anatomical skull-stripped brain by subject AND session (exact match)
-            def anat_ch = anat_after_skull
-                .filter(isT1wFile)
-                .map { sub, ses, anat_file, bids_template ->
-                    [sub, ses, anat_file]
+            // Join functional data with anatomical selection (reuse selection from before CONFORM)
+            def func_reg_with_anat = func_after_skull
+                .join(func_anat_selection, by: [0, 1, 2, 3])  // Join by [sub, ses, task, run]
+                .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_file, anat_ses, is_cross_ses ->
+                    // FUNC_REGISTRATION expects is_fallback (same as is_cross_ses)
+                    [sub, ses, task, run, bold_file, tmean_file, bids_template, anat_file, anat_ses, is_cross_ses]
                 }
             
-            def func_anat_same_ses = func_after_skull
-                .join(anat_ch, by: [0, 1])  // Join by [subject_id, session_id] - normal case
-                .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain ->
-                    [sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, ses, false]  // Last two: anat_ses, is_fallback
-                }
-
-            // Edge case fallback: For functional sessions without exact anatomical match (different sessions)
-            def anat_ch_across_ses = anat_after_skull
-                .filter(isT1wFile)
-                .map { sub, ses, anat_file, bids_template ->
-                    [sub, ses, anat_file]
-                }
-            
-            // Create a map of subject -> first anatomical session for fallback
-            // Group by subject and take the first session (sorted by session_id)
-            def anat_ch_sub = anat_ch_across_ses
-                .groupTuple(by: 0)  // Group by subject_id (index 0)
-                .map { sub, ses_list, file_list ->
-                    // groupTuple produces parallel lists: [sub, [ses1,ses2,...], [file1,file2,...]]
-                    // Transpose to get list of [ses, file] tuples
-                    def sessions = [ses_list, file_list].transpose()
-                    // Sort by session_id (handle null as empty string) and take the first one
-                    def sorted_sessions = sessions.sort { a, b ->
-                        def ses_a = a[0] ?: ''
-                        def ses_b = b[0] ?: ''
-                        ses_a <=> ses_b
-                    }
-                    def first_session = sorted_sessions[0]
-                    [sub, first_session[0], first_session[1]]  // [sub, ses, anat_brain_file]
-                }
-                    
-            def func_anat_across_sess = func_after_skull
-                .combine(anat_ch_sub, by: 0)  // Combine by subject_id only
-                .filter { sub, ses_func, task, run, bold_file, tmean_file, bids_template, ses_anat, anat_brain ->
-                    // Only keep if functional session doesn't match anatomical session (fallback case)
-                    ses_func != ses_anat
-                }
-                .map { sub, ses_func, task, run, bold_file, tmean_file, bids_template, ses_anat, anat_brain ->
-                    // Ensure we have exactly 9 elements from combine, then rearrange to 10 elements
-                    // Using anatomical from different session - add warning flag
-                    [sub, ses_func, task, run, bold_file, tmean_file, bids_template, anat_brain, ses_anat, true]  // Last two: anat_ses, is_fallback
-                }
-            
-            // Handle functional sessions with NO anatomical data (func2template case)
-            // Get all functional sessions that were matched (same_ses or across_ses)
-            def func_matched_keys = func_anat_same_ses
-                .mix(func_anat_across_sess)
-                .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback ->
-                    [sub, ses, task, run]  // Key for filtering
-                }
-                .unique()
-            
-            // Find functional sessions without any anatomical match
-            // Use combine to find unmatched sessions, then filter
-            def func_no_anat = func_after_skull
-                .combine(func_matched_keys.groupTuple(), by: [0, 1, 2, 3])
-                .filter { sub, ses, task, run, bold_file, tmean_file, bids_template, matched_list ->
-                    // matched_list is empty if no match found
-                    matched_list == null || matched_list.isEmpty()
-                }
-                .map { sub, ses, task, run, bold_file, tmean_file, bids_template ->
-                    // Create dummy anatomical file path (will be detected by Python code)
-                    def dummy_anat = file("${workDir}/dummy_anat.dummy")
-                    [sub, ses, task, run, bold_file, tmean_file, bids_template, dummy_anat, ses, false]  // Last two: anat_ses, is_fallback
-                }
-            
-            // Combine exact matches (normal case: same session, handles multiple runs), fallbacks (edge case: different sessions), and no-anat cases (func2template)
-            def func_anat_joined = func_anat_same_ses
-                .mix(func_anat_across_sess)
-                .mix(func_no_anat)
-
             // Split using multiMap
-            func_anat_joined
+            func_reg_with_anat
                 .multiMap { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback ->
                     combined: [sub, ses, task, run, bold_file, tmean_file, bids_template, anat_ses, is_fallback]
                     reference: anat_brain
                 }
                 .set { func_reg_multi }
-            
-            // // debug: view the first element of func_reg_multi
-            // func_reg_multi.combined.first().view { tuple ->
-            //     "DEBUG [FUNC_REGISTRATION: func_reg_multi.combined]: ${tuple}"
-            // }
-            // func_reg_multi.reference.first().view { tuple ->
-            //     "DEBUG [FUNC_REGISTRATION: func_reg_multi.reference]: ${tuple}"
-            // }
 
             FUNC_REGISTRATION(func_reg_multi.combined, func_reg_multi.reference, config_file)
-            func_after_reg = FUNC_REGISTRATION.out.combined
+            func_after_reg = FUNC_REGISTRATION.out.output
             func_reg_transforms = FUNC_REGISTRATION.out.transforms
             func_reg_reference = FUNC_REGISTRATION.out.reference
             func_reg_metadata = FUNC_REGISTRATION.out.metadata
@@ -879,7 +938,9 @@ except Exception as e:
             func_after_reg = func_after_skull
         }
         
-        // APPLY_TRANSFORMS step (only if registration was enabled)
+        // ------------------------------------------------------------
+        // APPLY_TRANSFORMS
+        // only if registration was enabled
         def func_apply_reg = func_after_reg
         def func_apply_reg_reference = Channel.empty()  // Reference files for QC
         if (anat_registration_enabled) {
@@ -964,22 +1025,24 @@ except Exception as e:
             // Prepare for FUNC_APPLY_TRANSFORMS
             func_all_for_apply
                 .multiMap { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
-                    reg_tuple: [sub, ses, task, run, registered_tmean, forward_transform, anat2template_transform, bids_template, target_type, target2template, reference_file]
+                    reg_combined: [sub, ses, task, run, registered_tmean, forward_transform, anat2template_transform, bids_template, target_type, target2template, reference_file]
                     func_4d_file: bold_file
                 }
                 .set { func_apply_multi }
             
-            FUNC_APPLY_TRANSFORMS(func_apply_multi.reg_tuple, func_apply_multi.func_4d_file, config_file)
+            FUNC_APPLY_TRANSFORMS(func_apply_multi.reg_combined, func_apply_multi.func_4d_file, config_file)
             func_apply_reg = FUNC_APPLY_TRANSFORMS.out.output
             func_apply_reg_reference = FUNC_APPLY_TRANSFORMS.out.reference
 
             // // debug: view the first element of func_apply_reg
             // func_apply_reg.first().view { tuple ->
             //     "DEBUG [FUNC_APPLY_TRANSFORMS: func_apply_reg]: ${tuple}"
-            }
+        }
 
-        // QC for functional - individual steps (conditionally enabled)
-        // QC_MOTION_CORRECTION: needs motion params + input file
+        // ============================================
+        // QC for functional - individual steps
+        // ============================================
+        // FUNC_QC_MOTION_CORRECTION
         if (func_motion_correction_enabled) {
             func_after_motion
                 .join(func_motion_params, by: [0, 1, 2, 3])
@@ -1006,7 +1069,7 @@ except Exception as e:
         // QC_CONFORM_FUNC: needs conformed file + template_resampled (same space as conformed image)
         if (func_conform_enabled) {
             // Join conform output with template_resampled
-            FUNC_CONFORM.out.combined
+            FUNC_CONFORM.out.output
                 .join(FUNC_CONFORM.out.template_resampled, by: [0, 1, 2, 3])
                 .map { sub, ses, task, run, bold_file, tmean_file, bids_template, template_file, template_bids_naming ->
                     // Extract tmean (conformed) for QC

@@ -349,6 +349,7 @@ from macacaMRIprep.utils.nextflow import (
 from pathlib import Path
 import shutil
 import os
+import json
 
 # Initialize command log file
 init_cmd_log_for_nextflow(

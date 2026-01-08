@@ -23,22 +23,23 @@ SNAPSHOT_MAPPINGS = {
     'skullStripping': {'key': 'skullstripping_overlay', 'description': 'Skullstripping'},
     'atlasSegmentation': {'key': 'atlas_segmentation_overlay', 'description': 'Atlas segmentation'},
     'anat2template': {'key': 'anat2template_registration_overlay', 'description': 'Structural to template registration'},
-    'func2anat': {'key': 'func2anat_registration_overlay', 'description': 'Functional to structural registration'},
-    'func2template': {'key': 'func2template_registration_overlay', 'description': 'Functional to template registration'},
+    'func2target': {'key': 'func2target_registration_overlay', 'description': 'Functional to target registration'},
     'T2w2T1w': {'key': 'T2w2T1w_registration_overlay', 'description': 'T2w to T1w coregistration'},
     'motion': {'key': 'motion_parameters', 'description': 'Motion parameters'},
     'surfReconTissueSeg': {'key': 'surf_recon_tissue_seg_overlay', 'description': 'Surface reconstruction tissue segmentation'},
     'corticalSurfAndMeasures': {'key': 'cortical_surf_and_measures_overlay', 'description': 'Cortical surface and measures'},
 }
 
+
 SNAPSHOT_ORDER = [
-    'conform_overlay', 'bias_correction_comparison', 
+    'conform_overlay', 
+    'bias_correction_comparison', 
     'skullstripping_overlay', 'atlas_segmentation_overlay', 
     'surf_recon_tissue_seg_overlay', 'cortical_surf_and_measures_overlay',
     'anat2template_registration_overlay', 
     'T2w2T1w_registration_overlay', 
-    'func2anat_registration_overlay', 
-    'func2template_registration_overlay', 'motion_parameters'
+    'func2target_registration_overlay', 
+    'motion_parameters'
 ]
 
 SNAPSHOT_ORDER_INDEX = {key: index for index, key in enumerate(SNAPSHOT_ORDER)}
@@ -56,7 +57,7 @@ class BidsEntityProcessor:
             for value in level_data.values():
                 if isinstance(value, dict):
                     if 'entities' in value:
-                        entities = {k: v for k, v in value['entities'].items() if k not in ['sub', 'desc']}
+                        entities = {k: v for k, v in value['entities'].items() if k not in ['sub', 'desc', 'space']}
                         if entities and entities not in entities_list:
                             entities_list.append(entities)
                     else:
@@ -483,7 +484,7 @@ please refer to the macacaMRIprep configuration files in your preprocessing dire
         # Group by entity combinations, with special handling for T1w/T2w separation
         groups = {}
         for snapshot in all_snapshots:
-            entities = {k: v for k, v in snapshot['entities'].items() if k not in ['sub', 'desc']}
+            entities = {k: v for k, v in snapshot['entities'].items() if k not in ['sub', 'desc', 'space']}
             base_group_key = BidsEntityProcessor.create_display_text(entities) or 'ungrouped'
             
             # For anatomical snapshots, separate T1w and T2w into different groups

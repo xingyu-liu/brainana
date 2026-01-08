@@ -344,59 +344,6 @@ def qc_motion_correction(
         )
 
 
-def qc_generate_report(
-    snapshot_dir: Path,
-    report_path: Path,
-    config: Dict[str, Any],
-    snapshot_paths: Optional[list] = None
-) -> StepOutput:
-    """
-    Generate comprehensive QC report from snapshots.
-    
-    Args:
-        snapshot_dir: Directory containing QC snapshots
-        report_path: Output path for HTML report
-        config: Configuration dictionary
-        snapshot_paths: Optional list of specific snapshot paths (None = auto-discover)
-        
-    Returns:
-        StepOutput with report file
-    """
-    if not config.get("quality_control", {}).get("enabled", True):
-        logger.info("QC: report generation skipped (disabled in configuration)")
-        return StepOutput(
-            output_file=report_path,
-            metadata={"step": "qc_report", "skipped": True}
-        )
-    
-    try:
-        result = generate_qc_report(
-            snapshot_dir=str(snapshot_dir),
-            report_path=str(report_path),
-            config=config,
-            logger=logger,
-            snapshot_paths=snapshot_paths,
-            pipeline_state=None  # Can be enhanced later
-        )
-        
-        report_file = Path(result.get("report_file", report_path))
-        
-        return StepOutput(
-            output_file=report_file,
-            metadata={
-                "step": "qc_report",
-                "num_snapshots": result.get("num_snapshots", 0)
-            },
-            qc_files=[report_file]
-        )
-    except Exception as e:
-        logger.warning(f"QC: report generation failed - {e}")
-        return StepOutput(
-            output_file=report_path,
-            metadata={"step": "qc_report", "error": str(e)}
-        )
-
-
 def qc_surf_recon_tissue_seg(
     fs_subject_dir: Path,
     output_path: Path,
@@ -500,5 +447,57 @@ def qc_cortical_surf_and_measures(
         return StepOutput(
             output_file=output_path,
             metadata={"step": "qc_cortical_surf_and_measures", "error": str(e)}
+        )
+
+def qc_generate_report(
+    snapshot_dir: Path,
+    report_path: Path,
+    config: Dict[str, Any],
+    snapshot_paths: Optional[list] = None
+) -> StepOutput:
+    """
+    Generate comprehensive QC report from snapshots.
+    
+    Args:
+        snapshot_dir: Directory containing QC snapshots
+        report_path: Output path for HTML report
+        config: Configuration dictionary
+        snapshot_paths: Optional list of specific snapshot paths (None = auto-discover)
+        
+    Returns:
+        StepOutput with report file
+    """
+    if not config.get("quality_control", {}).get("enabled", True):
+        logger.info("QC: report generation skipped (disabled in configuration)")
+        return StepOutput(
+            output_file=report_path,
+            metadata={"step": "qc_report", "skipped": True}
+        )
+    
+    try:
+        result = generate_qc_report(
+            snapshot_dir=str(snapshot_dir),
+            report_path=str(report_path),
+            config=config,
+            logger=logger,
+            snapshot_paths=snapshot_paths,
+            pipeline_state=None  # Can be enhanced later
+        )
+        
+        report_file = Path(result.get("report_file", report_path))
+        
+        return StepOutput(
+            output_file=report_file,
+            metadata={
+                "step": "qc_report",
+                "num_snapshots": result.get("num_snapshots", 0)
+            },
+            qc_files=[report_file]
+        )
+    except Exception as e:
+        logger.warning(f"QC: report generation failed - {e}")
+        return StepOutput(
+            output_file=report_path,
+            metadata={"step": "qc_report", "error": str(e)}
         )
 

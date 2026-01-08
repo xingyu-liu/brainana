@@ -78,6 +78,7 @@ class SurfacePlacement(HemisphereStage):
                 aparc=aparc if aparc.exists() else None,
                 log_file=self.config.log_file,
                 subject_dir=self.sd.subject_dir,
+                subjects_dir=self.config.subjects_dir,
             )
         
         # Step 2: Place pial surface
@@ -103,6 +104,7 @@ class SurfacePlacement(HemisphereStage):
                 aparc=aparc if aparc.exists() else None,
                 log_file=self.config.log_file,
                 subject_dir=self.sd.subject_dir,
+                subjects_dir=self.config.subjects_dir,
             )
         
         # Copy pial.T1 to pial (standard naming convention)

@@ -379,7 +379,7 @@ def create_atlas_segmentation_qc(
     atlas_file: str,
     save_f: Union[str, Path],
     modality: str = "anat",
-    num_slices: int = 5,
+    num_slices: int = 6,
     logger: Optional[logging.Logger] = None,
     
     **kwargs
@@ -530,7 +530,7 @@ def create_surf_recon_tissue_seg_qc(
     fs_subject_dir: Union[str, Path],
     save_f: Union[str, Path],
     modality: str = "anat",
-    num_slices: int = 5,
+    num_slices: int = 6,
     logger: Optional[logging.Logger] = None,
     **kwargs
 ) -> Dict[str, str]:
