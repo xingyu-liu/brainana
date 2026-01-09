@@ -771,7 +771,7 @@ except:
                 [sub, ses]  // Deduplicate by [sub, ses] - take first if multiple
             }
         
-        // Lookup 2: Across-session fallback map sub -> [ses, anat_file] (first session per subject)
+        // Lookup 2: Across-session map sub -> [ses, anat_file] (first session per subject)
         def anat_across_ses_lookup = anat_for_func
             .map { sub, ses, anat_file, bids_template ->
                 [sub, ses, anat_file]
@@ -893,7 +893,6 @@ except:
             .mix(func_with_anat_across_ses)
             .mix(func_for_case3)
 
-        
         // ------------------------------------------------------------
         // CONFORM 
         // processes both BOLD and tmean
@@ -960,15 +959,14 @@ except:
             // Join functional data with anatomical selection (reuse selection from before CONFORM)
             def func_reg_with_anat = func_after_skull
                 .join(func_anat_selection, by: [0, 1, 2, 3])  // Join by [sub, ses, task, run]
-                .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_file, anat_ses, is_cross_ses ->
-                    // FUNC_REGISTRATION expects is_fallback (same as is_cross_ses)
-                    [sub, ses, task, run, bold_file, tmean_file, bids_template, anat_file, anat_ses, is_cross_ses]
+                .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_cross_ses ->
+                    [sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_cross_ses]
                 }
             
             // Split using multiMap
             func_reg_with_anat
-                .multiMap { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_fallback ->
-                    combined: [sub, ses, task, run, bold_file, tmean_file, bids_template, anat_ses, is_fallback]
+                .multiMap { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_cross_ses ->
+                    combined: [sub, ses, task, run, bold_file, tmean_file, bids_template, anat_ses, is_cross_ses]
                     reference: anat_brain
                 }
                 .set { func_reg_multi }
@@ -978,6 +976,7 @@ except:
             func_reg_transforms = FUNC_REGISTRATION.out.transforms
             func_reg_reference = FUNC_REGISTRATION.out.reference
             func_reg_metadata = FUNC_REGISTRATION.out.metadata
+            func_reg_anat_session = FUNC_REGISTRATION.out.anat_session
         } else {
             // Pass through combined channel unchanged
             func_after_reg = func_after_skull
@@ -1010,70 +1009,159 @@ except:
                 .join(func_reg_transforms, by: [0, 1, 2, 3])
                 .join(func_reg_metadata_parsed, by: [0, 1, 2, 3])
                 .join(func_reg_reference, by: [0, 1, 2, 3])
-                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file ->
-                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file]
+                .join(func_reg_anat_session, by: [0, 1, 2, 3])
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
+                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses]
                 }
+            
+            // DEBUG: Count func_reg_complete
+            func_reg_complete
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
+                    "DEBUG [func_reg_complete]: ${sub}_${ses}_${task}_${run} | target_type=${target_type}, target2template=${target2template}, anat_ses=${anat_ses}"
+                }
+                .view()
             
             // Split into sequential transforms (func2anat2template) and single transform cases
             def func_sequential = func_reg_complete
-                .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file ->
+                .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
                     target2template && target_type == 'anat'  // Sequential: func2anat then anat2template
                 }
             
+            // DEBUG: Count func_sequential
+            func_sequential
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
+                    "DEBUG [func_sequential]: ${sub}_${ses}_${task}_${run} | anat_ses=${anat_ses}"
+                }
+                .view()
+            
             def func_single = func_reg_complete
-                .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file ->
+                .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
                     !(target2template && target_type == 'anat')  // Single transform: func2anat or func2template
                 }
+            
+            // DEBUG: Count func_single
+            func_single
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
+                    "DEBUG [func_single]: ${sub}_${ses}_${task}_${run}"
+                }
+                .view()
             
             // Handle sequential transforms: need anat2template transform
             // Create dummy empty file for single transforms (anat2template not needed)
             def dummy_anat2template = file("${workDir}/dummy_anat2template.dummy")
             
+            // DEBUG: Check anat_reg_transforms
+            anat_reg_transforms
+                .map { sub, ses, transform_file ->
+                    "DEBUG [anat_reg_transforms]: ${sub}_${ses}"
+                }
+                .view()
+            
             // Join sequential transforms with anatomical registration transforms
-            // First, try to join with anat_reg_transforms
+            // Join by [sub, anat_ses] to match the exact anatomical session used for registration
+            // This ensures each functional run uses the transform from the anatomical session it was registered to
+            // anat_reg_transforms structure: [sub, ses, transform_file]
+            // func_sequential structure: [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses]
+            // We need to join where func_sequential.anat_ses == anat_reg_transforms.ses
             def func_sequential_joined = func_sequential
-                .join(anat_reg_transforms, by: [0, 1])  // Join by subject and session
-                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat2template_transform ->
-                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file]
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
+                    // Rearrange for join: [sub, anat_ses, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file]
+                    [sub, anat_ses, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file]
+                }
+                .join(anat_reg_transforms.map { sub, ses, transform_file -> [sub, ses, transform_file] }, by: [0, 1])  // Join by [sub, anat_ses] where anat_ses == ses
+                .map { sub, anat_ses, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, transform_file ->
+                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, transform_file, target_type, target2template, reference_file]
                 }
             
-            // Find sequential transforms that didn't match (shouldn't happen, but handle gracefully)
-            def func_sequential_keys = func_sequential_joined
+            // DEBUG: Count func_sequential_joined
+            func_sequential_joined
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
+                    "DEBUG [func_sequential_joined]: ${sub}_${ses}_${task}_${run}"
+                }
+                .view()
+            
+            // Find items in func_sequential that didn't join (shouldn't happen normally, but handle gracefully)
+            def func_sequential_joined_keys = func_sequential_joined
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
                     [sub, ses, task, run]
                 }
                 .unique()
             
+            // Items that didn't join get dummy transform
             def func_sequential_no_match = func_sequential
-                .combine(func_sequential_keys.groupTuple(), by: [0, 1, 2, 3])
-                .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, matched_list ->
-                    matched_list == null || matched_list.isEmpty()
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
+                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file]
+                }
+                .combine(func_sequential_joined_keys.groupTuple(), by: [0, 1, 2, 3])
+                .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, matched_keys ->
+                    !matched_keys || matched_keys.isEmpty()
                 }
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file ->
-                    // No anat2template transform found - use dummy (shouldn't happen in normal flow)
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, dummy_anat2template, target_type, target2template, reference_file]
                 }
+            
+            // DEBUG: Count func_sequential_no_match
+            func_sequential_no_match
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
+                    "DEBUG [func_sequential_no_match]: ${sub}_${ses}_${task}_${run}"
+                }
+                .view()
             
             def func_sequential_with_anat2template = func_sequential_joined
                 .mix(func_sequential_no_match)
             
+            // DEBUG: Count func_sequential_with_anat2template
+            func_sequential_with_anat2template
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
+                    "DEBUG [func_sequential_with_anat2template]: ${sub}_${ses}_${task}_${run}"
+                }
+                .view()
+            
             // Add dummy anat2template for single transforms
             def func_single_with_dummy = func_single
-                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file ->
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, dummy_anat2template, target_type, target2template, reference_file]
                 }
+            
+            // DEBUG: Count func_single_with_dummy
+            func_single_with_dummy
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
+                    "DEBUG [func_single_with_dummy]: ${sub}_${ses}_${task}_${run}"
+                }
+                .view()
             
             // Combine all (sequential and single) with consistent structure
             def func_all_for_apply = func_sequential_with_anat2template
                 .mix(func_single_with_dummy)
             
+            // DEBUG: Count func_all_for_apply (final count before multiMap)
+            func_all_for_apply
+                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
+                    "DEBUG [func_all_for_apply]: ${sub}_${ses}_${task}_${run}"
+                }
+                .view()
+            
             // Prepare for FUNC_APPLY_TRANSFORMS
+            // Use multiMap to split into two channels - they will be aligned by index
             func_all_for_apply
                 .multiMap { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
                     reg_combined: [sub, ses, task, run, registered_tmean, forward_transform, anat2template_transform, bids_template, target_type, target2template, reference_file]
                     func_4d_file: bold_file
                 }
                 .set { func_apply_multi }
+            
+            // DEBUG: Count channels after multiMap
+            func_apply_multi.reg_combined
+                .map { sub, ses, task, run, registered_tmean, forward_transform, anat2template_transform, bids_template, target_type, target2template, reference_file ->
+                    "DEBUG [func_apply_multi.reg_combined]: ${sub}_${ses}_${task}_${run}"
+                }
+                .view()
+            
+            func_apply_multi.func_4d_file
+                .map { bold_file ->
+                    "DEBUG [func_apply_multi.func_4d_file]: ${bold_file}"
+                }
+                .view()
             
             FUNC_APPLY_TRANSFORMS(func_apply_multi.reg_combined, func_apply_multi.func_4d_file, config_file)
             func_apply_reg = FUNC_APPLY_TRANSFORMS.out.output

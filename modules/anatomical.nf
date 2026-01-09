@@ -900,6 +900,7 @@ from pathlib import Path
 import shutil
 import os
 import numpy as np
+import json
 
 # Get BIDS naming template
 bids_naming_template = Path('${bids_naming_template}')

@@ -261,11 +261,11 @@ def conform_to_template(
     """Conform input image to template space using FLIRT rigid registration.
     
     This function performs the following steps:
-    1. Pads the template to ensure input image is fully contained
-    2. Skullstrips the input image using NHPskullstripNN (unless skip_skullstripping=True)
-    3. Performs FLIRT rigid registration (brain-extracted input to padded template)
-    4. Resamples template to input resolution (isotropic, min voxel size)
-    5. Applies transformation to conform input to resampled template space
+    1. Skullstrips the input image using NHPskullstripNN (unless skip_skullstripping=True)
+    2. prepare template for registration
+    3. Performs FLIRT rigid registration
+    4. prepare template for xfm application
+    5. Applies transformation
     
     Args:
         imagef: Input image file (anatomical or functional)
@@ -348,56 +348,8 @@ def conform_to_template(
                     f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
                 )
 
-        # ------------------------------------------------------------
-        # Step 2: prepare template for registration and xfm application
-        # Step 2.1: Resample template to the same resolution as the input, serves as the reference
-        # Resample template to the same resolution as the input
-        template_f_xfm_ref = work_dir / 'template_res-input.nii.gz'
-        
-        if template_f_xfm_ref.exists():
-            template_f_xfm_ref.unlink()
-            logger.debug(f"Removed existing template resampled file: {template_f_xfm_ref}")
-        
-        # Load the input image to determine target voxel sizes
-        brain_affine = nib.load(brain_f).affine
-        
-        orig_brain_voxel_sizes = np.sqrt(np.sum(brain_affine[:3, :3] ** 2, axis=0))
-        logger.info(f"Input voxel sizes: {np.array2string(orig_brain_voxel_sizes, precision=4, suppress_small=True)} mm")
-        
-        # Resample to isotropic using minimum voxel size
-        brain_voxel_sizes = np.round(np.min(orig_brain_voxel_sizes), 2)
-        if brain_voxel_sizes <= 0:
-            raise ValueError(f"Invalid target voxel size: {brain_voxel_sizes} mm")
-        target_voxel_sizes = np.full((3,), brain_voxel_sizes)
-        
-        logger.info(f"Target voxel sizes: {target_voxel_sizes} mm")
-        
-        cmd = [
-            '3dresample',
-            '-dxyz', str(target_voxel_sizes[0]), str(target_voxel_sizes[1]), str(target_voxel_sizes[2]),
-            '-input', str(template_path),
-            '-prefix', str(template_f_xfm_ref)
-        ]
-        logger.debug(f"Command: {' '.join(cmd)}")
-        try:
-            returncode, stdout, stderr = run_command(cmd, step_logger=logger)
-            if returncode != 0:
-                raise RuntimeError(f"3dresample failed (exit code {returncode}): {stderr}")
-            
-            # Validate resampled template exists
-            validate_output_file(template_f_xfm_ref, logger)
-            logger.info(f"Template resampled to: {template_f_xfm_ref}")
-        except Exception as e:
-            logger.error(f"Error during template resampling: {e}")
-            raise RuntimeError(
-                f"Conform step failed during template resampling: {e}. "
-                f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
-            )
-        
-        logger.info(f"Step: resampling template to input resolution")
-
-        # Step 2.2: prepare template for registration
-        # Step 2.2.1: Pad the template to ensure input image is fully contained
+        # Step 2: prepare template for registration
+        # Step 2.1: Pad the template to ensure input image is fully contained
         logger.info(f"Step: padding template (padding_percentage={padding_percentage})")
         img = nib.load(template_path)
         data = img.get_fdata()
@@ -457,15 +409,28 @@ def conform_to_template(
         logger.info(f"Step: template padding completed")
 
         # Update template path for next steps
-        template_f = str(template_f_padded)
+        template_f_for_reg = str(template_f_padded)
         
-        # Step 2.2.2: Downsample the template if needed
+        # Step 2.2: Downsample the template if needed
         # To save computational cost and improve registration, downsample the template if:
         # a) if any template voxel size < brain target voxel size, downsample template to match brain resolution
         # b) if brain resolution < downsample_voxel_size threshold, cap at downsample_voxel_size
-        orig_template_voxel_sizes = np.sqrt(np.sum(nib.load(template_f).affine[:3, :3] ** 2, axis=0))
-        downsample_voxel_size_threshold = 1.0  # Minimum voxel size threshold (mm)
+        orig_template_voxel_sizes = np.sqrt(np.sum(nib.load(template_f_for_reg).affine[:3, :3] ** 2, axis=0))
+        downsample_voxel_size_threshold = 0.5  # Minimum voxel size threshold (mm)
         
+        # Load the input image to determine target voxel sizes
+        brain_affine = nib.load(brain_f).affine
+        
+        orig_brain_voxel_sizes = np.sqrt(np.sum(brain_affine[:3, :3] ** 2, axis=0))
+        logger.info(f"Input voxel sizes: {np.array2string(orig_brain_voxel_sizes, precision=4, suppress_small=True)} mm")
+        
+        brain_voxel_sizes = np.round(np.min(orig_brain_voxel_sizes), 2)
+        if brain_voxel_sizes <= 0:
+            raise ValueError(f"Invalid target voxel size: {brain_voxel_sizes} mm")
+        target_voxel_sizes = np.full((3,), brain_voxel_sizes)
+        logger.info(f"Target voxel sizes: {target_voxel_sizes} mm")
+
+        # determine if downsampling is needed
         should_downsample = False
         downsample_voxel_sizes = None
         # Give 0.01 mm tolerance for floating point comparison
@@ -484,7 +449,7 @@ def conform_to_template(
             cmd = [
                 '3dresample',
                 '-dxyz', str(downsample_voxel_sizes[0]), str(downsample_voxel_sizes[1]), str(downsample_voxel_sizes[2]),
-                '-input', template_f,
+                '-input', template_f_for_reg,
                 '-prefix', str(template_f_downsampled),
                 '-rmode', 'Cu'
             ]
@@ -499,10 +464,10 @@ def conform_to_template(
             validate_output_file(template_f_downsampled, logger)
             logger.info(f"Step: template downsampled to {downsample_voxel_sizes[0]:.3f} mm")
 
-            template_f = str(template_f_downsampled)
+            template_f_for_reg = str(template_f_downsampled)
 
         # ------------------------------------------------------------
-        # Step 3: FLIRT rigid registration from brain-extracted input to padded template
+        # Step 3: FLIRT rigid registration
         try:
             # Set modality-specific FLIRT parameters
             if modal == 'anat':
@@ -529,7 +494,7 @@ def conform_to_template(
                 }
             
             registration_result = flirt_register(
-                fixedf=template_f,
+                fixedf=template_f_for_reg,
                 movingf=str(brain_f),
                 working_dir=str(work_dir),
                 output_prefix='conform_scanner2native',
@@ -544,14 +509,48 @@ def conform_to_template(
             raise RuntimeError(
                 f"Conform step failed during FLIRT registration: {e}. "
             )
-        
+
         # ------------------------------------------------------------
-        # Step 4: Apply the affine transformation to the input image
+        # Step 4: prepare template for xfm application
+        # Resample template to the same resolution as the input, serves as the reference
+        template_f_for_xfm = work_dir / 'template_for_xfm.nii.gz'
+        
+        if template_f_for_xfm.exists():
+            template_f_for_xfm.unlink()
+            logger.debug(f"Removed existing template resampled file: {template_f_for_xfm}")
+
+        # Resample to isotropic using minimum brain_voxel_sizes (target voxel size)
+        cmd = [
+            '3dresample',
+            '-dxyz', str(target_voxel_sizes[0]), str(target_voxel_sizes[1]), str(target_voxel_sizes[2]),
+            '-input', str(template_f_for_reg),
+            '-prefix', str(template_f_for_xfm)
+        ]
+        logger.debug(f"Command: {' '.join(cmd)}")
+        try:
+            returncode, stdout, stderr = run_command(cmd, step_logger=logger)
+            if returncode != 0:
+                raise RuntimeError(f"3dresample failed (exit code {returncode}): {stderr}")
+            
+            # Validate resampled template exists
+            validate_output_file(template_f_for_xfm, logger)
+            logger.info(f"Template resampled to: {template_f_for_xfm}")
+        except Exception as e:
+            logger.error(f"Error during template resampling: {e}")
+            raise RuntimeError(
+                f"Conform step failed during template resampling: {e}. "
+                f"If this issue persists, consider disabling conform by setting 'anat.conform.enabled: false' in your configuration."
+            )
+        
+        logger.info(f"Step: resampling template to input resolution")
+
+        # ------------------------------------------------------------
+        # Step 5: Apply the affine transformation to the input image
         try:
             apply_result = flirt_apply_transforms(
                 movingf=str(image_path),
                 outputf_name=output_name,
-                reff=str(template_f_xfm_ref),
+                reff=str(template_f_for_xfm),
                 working_dir=str(work_dir),
                 transformf=str(xfm_forward_f),
                 logger=logger,
@@ -571,7 +570,7 @@ def conform_to_template(
         # Build return dictionary
         result = {
             "imagef_conformed": str(conformed_f),
-            "template_f": str(template_f_xfm_ref),
+            "template_f": str(template_f_for_xfm),
             "forward_xfm": str(xfm_forward_f)
         }
         
