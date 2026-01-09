@@ -7,6 +7,29 @@
  * BIDS discovery is performed by a Python script BEFORE this workflow runs.
  * The discovery script validates the BIDS dataset, discovers all jobs, and
  * saves JSON files that this workflow reads to create channels.
+ * 
+ * ============================================
+ * CHANNEL STRUCTURE DOCUMENTATION
+ * ============================================
+ * 
+ * Standard channel structures used throughout the workflow:
+ * 
+ * Anatomical channels:
+ *   - [sub, ses, file, bids_template] (4 elements) - standard anatomical tuple
+ *   - [sub, ses, file_paths, needs_synth, suffix, needs_t1w_reg] (6 elements) - from discovery
+ * 
+ * Functional channels:
+ *   - [sub, ses, task, run, file, bids_template] (6 elements) - initial functional tuple
+ *   - [sub, ses, task, run, bold_file, tmean_file, bids_template] (7 elements) - after MOTION_CORRECTION
+ *   - [sub, ses, task, run, anat_file, anat_ses, is_cross_ses] (7 elements) - anatomical selection result
+ * 
+ * Transform channels:
+ *   - [sub, ses, transform_file] (3 elements) - anatomical transforms
+ *   - [sub, ses, task, run, transform_file] (5 elements) - functional transforms
+ * 
+ * QC channels:
+ *   - [sub, ses, metadata_file] (3 elements) - QC metadata
+ *   - [sub, ses, task, run, metadata_file] (5 elements) - functional QC metadata
  */
 
 nextflow.enable.dsl=2
@@ -86,51 +109,87 @@ workflow {
         error "Config file not found: ${config_file_path}"
     }
     
-    // Helper function to read YAML config boolean values using Python
-    def readYamlBool = { config_path, key_path, default_bool ->
-        try {
-            def default_str = default_bool ? 'true' : 'false'
-            // Create a simple Python script that properly handles nested dictionary access
-            // Use command-line arguments to avoid embedding long paths in the script string
-            def temp_script = File.createTempFile("read_yaml_", ".py")
-            temp_script.text = """import yaml
-import sys
-try:
-    config_file = sys.argv[1]
-    key_path = sys.argv[2]
-    default_bool = sys.argv[3] == 'true'
-    with open(config_file, 'r') as f:
-        config = yaml.safe_load(f) or {}
-    keys = key_path.split('.')
-    value = config
-    for k in keys:
-        if isinstance(value, dict):
-            value = value.get(k, {})
-        else:
-            value = default_bool
-            break
-    # If we ended up with a dict, use default; otherwise use the value
-    result = value if not isinstance(value, dict) else default_bool
-    print('true' if result else 'false')
-except Exception as e:
-    print('${default_str}')
-    sys.exit(0)
-"""
-            def proc = ["python3", temp_script.absolutePath, config_path, key_path, default_str].execute()
-            def output = new StringBuffer()
-            def error = new StringBuffer()
-            proc.consumeProcessOutput(output, error)
-            proc.waitFor()
-            def result_str = output.toString().trim()
-            temp_script.delete()
-            if (proc.exitValue() != 0 && error.toString().trim()) {
-                println "Warning: Error reading ${key_path} from config: ${error.toString().trim()}"
+    // Read all config values in a single batch call for efficiency
+    // This avoids spawning multiple Python processes during initialization
+    def batch_script = "${projectDir}/macacaMRIprep/nextflow_scripts/read_yaml_config.py"
+    def config_keys = [
+        "general.anat_only",
+        "anat.surface_reconstruction.enabled",
+        "anat.reorient.enabled",
+        "anat.conform.enabled",
+        "anat.bias_correction.enabled",
+        "anat.skullstripping_segmentation.enabled",
+        "registration.enabled",
+        "func.reorient.enabled",
+        "func.slice_timing_correction.enabled",
+        "func.motion_correction.enabled",
+        "func.despike.enabled",
+        "func.bias_correction.enabled",
+        "func.conform.enabled",
+        "func.skullstripping.enabled",
+        "template.output_space"
+    ]
+    def config_defaults = [
+        "false", "true", "true", "true", "true", "true", "true",
+        "true", "true", "true", "true", "true", "true", "true",
+        "NMT2Sym:res-05"
+    ]
+    
+    def config_values = [:]
+    try {
+        def cmd = ["python3", batch_script, config_file_path] + config_keys + ["--defaults=" + config_defaults.join(",")]
+        def proc = cmd.execute()
+        def output = new StringBuffer()
+        def error = new StringBuffer()
+        proc.consumeProcessOutput(output, error)
+        proc.waitFor()
+        
+        if (proc.exitValue() == 0) {
+            def results = output.toString().trim().split('\t')
+            config_keys.eachWithIndex { key, idx ->
+                def value = (idx < results.length && results[idx]) ? results[idx] : config_defaults[idx]
+                if (idx < 14) {  // Boolean values (first 14)
+                    config_values[key] = value == "true"
+                } else {  // String value (last one)
+                    config_values[key] = value
+                }
             }
-            return result_str == "true"
-        } catch (Exception e) {
-            println "Warning: Could not read ${key_path} from config: ${e.message}, using default: ${default_bool}"
-            return default_bool
+        } else {
+            // Fallback to defaults on error
+            config_keys.eachWithIndex { key, idx ->
+                if (idx < 14) {
+                    config_values[key] = config_defaults[idx] == "true"
+                } else {
+                    config_values[key] = config_defaults[idx]
+                }
+            }
+            if (error.toString().trim()) {
+                println "Warning: Error reading config: ${error.toString().trim()}, using defaults"
+            }
         }
+    } catch (Exception e) {
+        println "Warning: Could not read config: ${e.message}, using defaults"
+        // Fallback to defaults
+        config_keys.eachWithIndex { key, idx ->
+            if (idx < 14) {
+                config_values[key] = config_defaults[idx] == "true"
+            } else {
+                config_values[key] = config_defaults[idx]
+            }
+        }
+    }
+    
+    // Helper function for reading individual values (uses cached config_values)
+    def readYamlBool = { key_path, default_bool ->
+        return config_values.get(key_path, default_bool) as Boolean
+    }
+    
+    def readYamlValue = { key_path, default_value, value_type = 'str' ->
+        def value = config_values.get(key_path, default_value)
+        if (value_type == 'bool') {
+            return value as Boolean
+        }
+        return value.toString()
     }
     
     // Note: output_space priority is handled by processes themselves:
@@ -146,55 +205,30 @@ except Exception as e:
         // CLI explicitly set, use it
         effective_output_space = params.output_space
     } else {
-        // Read from YAML config file
-        try {
-            def python_code = """import yaml, sys
-try:
-    with open('${config_file_path}', 'r') as f:
-        config = yaml.safe_load(f) or {}
-    value = config.get('template', {}).get('output_space', '')
-    if value and isinstance(value, str) and value.strip():
-        print(value.strip(), end='')
-    else:
-        print('${default_output_space}', end='')
-except:
-    print('${default_output_space}', end='')
-"""
-            def temp_script = File.createTempFile("get_output_space_", ".py")
-            temp_script.text = python_code
-            def proc = ["python3", temp_script.absolutePath].execute()
-            def output = proc.text.trim()
-            proc.waitFor()
-            temp_script.delete()
-            if (proc.exitValue() == 0 && output) {
-                effective_output_space = output
-            }
-        } catch (Exception e) {
-            // Fallback to default
-            effective_output_space = default_output_space
-        }
+        // Use cached value from batch read
+        effective_output_space = readYamlValue("template.output_space", default_output_space, 'str')
     }
     
     // Strategy: If --anat_only is explicitly set to true, use it. Otherwise, read from config file.
     // This allows command-line to force true, while config file controls the default/false case.
-    def anat_only_from_config = readYamlBool(config_file_path, "general.anat_only", false)
+    def anat_only_from_config = readYamlBool("general.anat_only", false)
     def anat_only = params.anat_only == true ? true : anat_only_from_config
-    def surf_recon_enabled = readYamlBool(config_file_path, "anat.surface_reconstruction.enabled", true)
+    def surf_recon_enabled = readYamlBool("anat.surface_reconstruction.enabled", true)
     
-    // Read all step enabled flags
-    def anat_reorient_enabled = readYamlBool(config_file_path, "anat.reorient.enabled", true)
-    def anat_conform_enabled = readYamlBool(config_file_path, "anat.conform.enabled", true)
-    def anat_bias_correction_enabled = readYamlBool(config_file_path, "anat.bias_correction.enabled", true)
-    def anat_skullstripping_enabled = readYamlBool(config_file_path, "anat.skullstripping_segmentation.enabled", true)
-    def anat_registration_enabled = readYamlBool(config_file_path, "registration.enabled", true)
+    // Read all step enabled flags from cached config_values
+    def anat_reorient_enabled = readYamlBool("anat.reorient.enabled", true)
+    def anat_conform_enabled = readYamlBool("anat.conform.enabled", true)
+    def anat_bias_correction_enabled = readYamlBool("anat.bias_correction.enabled", true)
+    def anat_skullstripping_enabled = readYamlBool("anat.skullstripping_segmentation.enabled", true)
+    def anat_registration_enabled = readYamlBool("registration.enabled", true)
     
-    def func_reorient_enabled = readYamlBool(config_file_path, "func.reorient.enabled", true)
-    def func_slice_timing_enabled = readYamlBool(config_file_path, "func.slice_timing_correction.enabled", true)
-    def func_motion_correction_enabled = readYamlBool(config_file_path, "func.motion_correction.enabled", true)
-    def func_despike_enabled = readYamlBool(config_file_path, "func.despike.enabled", true)
-    def func_bias_correction_enabled = readYamlBool(config_file_path, "func.bias_correction.enabled", true)
-    def func_conform_enabled = readYamlBool(config_file_path, "func.conform.enabled", true)
-    def func_skullstripping_enabled = readYamlBool(config_file_path, "func.skullstripping.enabled", true)
+    def func_reorient_enabled = readYamlBool("func.reorient.enabled", true)
+    def func_slice_timing_enabled = readYamlBool("func.slice_timing_correction.enabled", true)
+    def func_motion_correction_enabled = readYamlBool("func.motion_correction.enabled", true)
+    def func_despike_enabled = readYamlBool("func.despike.enabled", true)
+    def func_bias_correction_enabled = readYamlBool("func.bias_correction.enabled", true)
+    def func_conform_enabled = readYamlBool("func.conform.enabled", true)
+    def func_skullstripping_enabled = readYamlBool("func.skullstripping.enabled", true)
     
     // Ensure boolean type
     anat_only = anat_only as Boolean
@@ -361,22 +395,6 @@ except:
     anat_branched.t2w_with_t1w
         .map(mapSingleFileJob)
         .set { anat_t2w_with_t1w_jobs }
-    
-    // Check if T2w files exist by getting first item (if any)
-    // Split channel to check without consuming: use into to split, then first() on check branch
-    // Use multiMap to split the channel (more reliable than into for empty channels)
-    anat_t2w_with_t1w_jobs
-        .multiMap { item ->
-            processing: item
-            check: item
-        }
-        .set { anat_t2w_split }
-    
-    def anat_t2w_with_t1w_jobs_for_processing = anat_t2w_split.processing
-    def anat_t2w_with_t1w_jobs_for_check = anat_t2w_split.check
-    
-    // Check if T2w files exist - if first() emits, we know there are T2w files
-    def t2w_has_items = anat_t2w_with_t1w_jobs_for_check.first()
     
     // T2w-only files (no T1w in session - process normally)
     anat_branched.t2w_only
@@ -598,29 +616,15 @@ except:
     // Workflow: REORIENT → REGISTER_TO_T1W → BIAS_CORRECTION
     // Skip: CONFORM, SKULLSTRIPPING, template REGISTRATION
     // These files use separate process aliases (ANAT_REORIENT_T2W, ANAT_BIAS_CORRECTION_T2W)
-    // Only process if T2w files exist (t2w_has_items emits a value)
-    
-    // Gate processing: only process if t2w_has_items emits (meaning T2w files exist)
-    // Use combine to create a gated channel - only emits when both channels have items
-    // If t2w_has_items is empty, t2w_processing_enabled will be empty, and all processes will be skipped
-    // t2w_has_items: [sub, ses, file, bids_template] (4 elements)
-    // anat_t2w_with_t1w_jobs_for_processing: [sub, ses, file, bids_template] (4 elements)
-    // combine creates cartesian product, so we need to extract the actual job item
-    def t2w_processing_enabled = t2w_has_items
-        .combine(anat_t2w_with_t1w_jobs_for_processing, by: [0, 1])  // Combine by subject and session to match items
-        .map { sub, ses, file1, bids_template1, file2, bids_template2 ->
-            // Use the actual job item (file2, bids_template2) from anat_t2w_with_t1w_jobs_for_processing
-            [sub, ses, file2, bids_template2]
-        }
     
     // Step 1: REORIENT T2w files (using aliased process)
-    def t2w_after_reorient = t2w_processing_enabled
+    def t2w_after_reorient = anat_t2w_with_t1w_jobs
     if (anat_reorient_enabled) {
-        ANAT_REORIENT_T2W(t2w_processing_enabled, config_file)
+        ANAT_REORIENT_T2W(anat_t2w_with_t1w_jobs, config_file)
         t2w_after_reorient = ANAT_REORIENT_T2W.out.output
     } else {
         // Pass through: create channel with same structure
-        t2w_after_reorient = t2w_processing_enabled.map(passThroughAnat)
+        t2w_after_reorient = anat_t2w_with_t1w_jobs.map(passThroughAnat)
     }
     
     // Step 2: Get T1w bias-corrected output to use as reference
@@ -748,150 +752,83 @@ except:
         
         // ------------------------------------------------------------
         // ANATOMICAL SELECTION
-        // runs before CONFORM and REGISTRATION
-        //
-        // Strategy: Determine case for each functional job first, then select anatomical data
-        // Case 1: Within-session anatomical data (exact match by subject AND session)
-        // Case 2: Across-session anatomical data (same subject, different session)
-        // Case 3: No anatomical data (use dummy file, Python code will fallback to template)
-
-        // Get T1w skull-stripped brain files from anatomical pipeline
-        // 4 elements: [sub, ses, anat_file, bids_template]
-        def anat_for_func = anat_after_skull
-            .filter(isT1wFile)
+        // Select anatomical reference for each functional job with priority:
+        // 1. Same session (exact match by [sub, ses])
+        // 2. Different session (same subject, first available session)
+        // 3. No anatomical data (dummy file, Python will fallback to template)
         
-        // Step 1: Build lookup structures for anatomical data
-        // Lookup 1: Same-session map - structure: [sub, ses, anat_file, bids_template]
-        // (flattened for combine by [0, 1])
-        def anat_same_ses_lookup = anat_for_func
-            .map { sub, ses, anat_file, bids_template ->
-                [sub, ses, anat_file, bids_template]
-            }
-            .unique { sub, ses, anat_file, bids_template ->
-                [sub, ses]  // Deduplicate by [sub, ses] - take first if multiple
-            }
+        def anat_for_func = anat_after_skull.filter(isT1wFile)
         
-        // Lookup 2: Across-session map sub -> [ses, anat_file] (first session per subject)
-        def anat_across_ses_lookup = anat_for_func
-            .map { sub, ses, anat_file, bids_template ->
-                [sub, ses, anat_file]
-            }
-            .groupTuple(by: 0)  // Group by subject_id
+        // Build lookup: same-session anatomical data [sub, ses, anat_file]
+        def anat_same_ses = anat_for_func
+            .map { sub, ses, anat_file, bids_template -> [sub, ses, anat_file] }
+            .unique { sub, ses, anat_file -> [sub, ses] }  // Deduplicate by [sub, ses]
+        
+        // Build lookup: across-session anatomical data [sub, ses, anat_file] (first session per subject)
+        def anat_across_ses = anat_for_func
+            .map { sub, ses, anat_file, bids_template -> [sub, ses, anat_file] }
+            .groupTuple(by: 0)
             .map { sub, ses_list, file_list ->
-                def sessions = [ses_list, file_list].transpose()
-                def sorted_sessions = sessions.sort { a, b ->
-                    def ses_a = a[0] ?: ''
-                    def ses_b = b[0] ?: ''
-                    ses_a <=> ses_b
-                }
-                def first_session = sorted_sessions[0]
-                [sub, first_session[0], first_session[1]]  // [sub, ses, anat_file]
+                def first = [ses_list, file_list].transpose().sort { a, b -> (a[0] ?: '') <=> (b[0] ?: '') }[0]
+                [sub, first[0], first[1]]
             }
         
-        // Step 2: For each functional job, determine case and select anatomical data
-        // Strategy: Try cases in order (1 -> 2 -> 3), track matched jobs, process remaining
-        
-        // Case 1: Same-session match (exact match by [sub, ses])
-        def func_with_anat_same_ses = func_after_bias
-            .combine(anat_same_ses_lookup, by: [0, 1])  // Combine by [sub, ses]
-            .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_file, anat_bids_template ->
-                // Case 1: same session, is_cross_ses = false
-                [sub, ses, task, run, anat_file, ses, false]
-            }
-        
-        // Get keys that matched Case 1 (for filtering out from subsequent cases)
-        def func_matched_case1 = func_with_anat_same_ses
-            .map { sub, ses, task, run, anat_file, anat_ses, is_cross_ses ->
-                [sub, ses, task, run]  // Key format for matching
-            }
-            .unique()
-        
-        // Case 2: Across-session match (for jobs not matched in Case 1)
-        // Get all func job keys, then find which ones are NOT in Case 1
-        // Use mix + groupTuple to identify unmatched jobs
-        def all_func_keys = func_after_bias
-            .map { sub, ses, task, run, bold_file, tmean_file, bids_template ->
+        // Helper: find unmatched functional jobs (jobs not in matched_keys)
+        def findUnmatched = { func_channel, matched_keys ->
+            def all_keys = func_channel.map { sub, ses, task, run, bold_file, tmean_file, bids_template ->
                 [sub, ses, task, run]
-            }
-            .unique()
+            }.unique()
+            
+            matched_keys.map { key -> [key, 'matched'] }
+                .mix(all_keys.map { key -> [key, 'all'] })
+                .groupTuple()
+                .filter { key, flags -> flags.size() == 1 && flags[0] == 'all' }
+                .map { key, flags -> key }
+        }
         
-        // Find func jobs that didn't match Case 1
-        // Mix matched and all keys, then group by entire key tuple
-        def func_unmatched_case1_keys = func_matched_case1
-            .map { sub, ses, task, run -> [[sub, ses, task, run], 'matched'] }
-            .mix(all_func_keys.map { sub, ses, task, run -> [[sub, ses, task, run], 'all'] })
-            .groupTuple()
-            .filter { key, flags ->
-                // Keep only keys that appear once with 'all' flag (not matched)
-                flags.size() == 1 && flags[0] == 'all'
-            }
-            .map { key, flags ->
-                key  // Return just the key [sub, ses, task, run]
+        // Case 1: Same-session match
+        def func_same_ses = func_after_bias
+            .combine(anat_same_ses, by: [0, 1])
+            .map { sub, ses, task, run, bold_file, tmean_file, bids_template, anat_file ->
+                [sub, ses, task, run, anat_file, ses, false]  // [sub, ses, task, run, anat_file, anat_ses, is_cross_ses]
             }
         
-        // Get func jobs for Case 2 (those not matched in Case 1)
-        def func_for_case2 = func_after_bias
+        def matched_same_ses = func_same_ses.map { sub, ses, task, run, anat_file, anat_ses, is_cross_ses ->
+            [sub, ses, task, run]
+        }.unique()
+        
+        // Case 2: Across-session match (for unmatched jobs)
+        def unmatched_for_case2 = findUnmatched(func_after_bias, matched_same_ses)
+        def func_across_ses = func_after_bias
             .map { sub, ses, task, run, bold_file, tmean_file, bids_template ->
                 [[sub, ses, task, run], [sub, ses, task, run, bold_file, tmean_file, bids_template]]
             }
-            .combine(func_unmatched_case1_keys.map { key -> [key, true] }.groupTuple(), by: 0)
-            .map { key, func_data, matched_flags ->
-                func_data  // Extract original functional job data
-            }
-        
-        // Try to match remaining jobs with across-session anatomical data
-        def func_with_anat_across_ses = func_for_case2
-            .combine(anat_across_ses_lookup, by: 0)  // Combine by subject_id only
+            .combine(unmatched_for_case2.map { key -> [key, true] }.groupTuple(), by: 0)
+            .map { key, func_data, flags -> func_data }
+            .combine(anat_across_ses, by: 0)
             .map { sub, ses_func, task, run, bold_file, tmean_file, bids_template, ses_anat, anat_file ->
-                // Case 2: different session, is_cross_ses = true
                 [sub, ses_func, task, run, anat_file, ses_anat, true]
             }
         
-        // Get keys that matched Case 2 (for filtering out from Case 3)
-        def func_matched_case2 = func_with_anat_across_ses
-            .map { sub, ses, task, run, anat_file, anat_ses, is_cross_ses ->
-                [sub, ses, task, run]  // Key format for matching
-            }
-            .unique()
+        def matched_across_ses = func_across_ses.map { sub, ses, task, run, anat_file, anat_ses, is_cross_ses ->
+            [sub, ses, task, run]
+        }.unique()
         
-        // Case 3: No anatomical data (for jobs not matched in Case 1 or 2)
-        // Find func jobs that didn't match Case 2 (from func_unmatched_case1_keys)
-        def func_matched_case1_or_2 = func_matched_case1
-            .mix(func_matched_case2)
-            .unique()
-        
-        def func_unmatched_case2_keys = func_matched_case1_or_2
-            .map { sub, ses, task, run -> [[sub, ses, task, run], 'matched'] }
-            .mix(all_func_keys.map { sub, ses, task, run -> [[sub, ses, task, run], 'all'] })
-            .groupTuple()
-            .filter { key, flags ->
-                // Keep only keys that appear once with 'all' flag (not matched in Case 1 or 2)
-                flags.size() == 1 && flags[0] == 'all'
-            }
-            .map { key, flags ->
-                key  // Return just the key [sub, ses, task, run]
-            }
-        
-        // Get func jobs for Case 3 (those not matched in Case 1 or 2)
-        def func_for_case3 = func_after_bias
+        // Case 3: No anatomical data (for remaining unmatched jobs)
+        def unmatched_for_case3 = findUnmatched(func_after_bias, matched_same_ses.mix(matched_across_ses).unique())
+        def dummy_anat = file("${workDir}/dummy_anat.dummy")
+        def func_no_anat = func_after_bias
             .map { sub, ses, task, run, bold_file, tmean_file, bids_template ->
                 [[sub, ses, task, run], [sub, ses, task, run, bold_file, tmean_file, bids_template]]
             }
-            .combine(func_unmatched_case2_keys.map { key -> [key, true] }.groupTuple(), by: 0)
-            .map { key, func_data, matched_flags ->
-                func_data  // Extract original functional job data
-            }
+            .combine(unmatched_for_case3.map { key -> [key, true] }.groupTuple(), by: 0)
+            .map { key, func_data, flags -> func_data }
             .map { sub, ses, task, run, bold_file, tmean_file, bids_template ->
-                // Case 3: no anatomical data, use dummy file
-                def dummy_anat = file("${workDir}/dummy_anat.dummy")
-                // anat_ses = ses_func (functional session), is_cross_ses = false
                 [sub, ses, task, run, dummy_anat, ses, false]
             }
         
-        // Step 3: Combine all cases (each job appears in exactly one case)
-        func_anat_selection = func_with_anat_same_ses
-            .mix(func_with_anat_across_ses)
-            .mix(func_for_case3)
+        // Combine all cases: [sub, ses, task, run, anat_file, anat_ses, is_cross_ses]
+        func_anat_selection = func_same_ses.mix(func_across_ses).mix(func_no_anat)
 
         // ------------------------------------------------------------
         // CONFORM 
@@ -930,13 +867,6 @@ except:
             func_after_skull_processed = FUNC_SKULLSTRIPPING.out.output
             func_mask = FUNC_SKULLSTRIPPING.out.brain_mask
 
-            // // debug: view the first element of func_after_skull_processed
-            // func_after_skull_processed.first().view { tuple ->
-            //     "DEBUG [FUNC_SKULLSTRIPPING: func_after_skull_processed]: ${tuple}"
-            // }
-            // // debug: view the first element of func_mask
-            // func_mask.first().view { tuple ->
-            //     "DEBUG [FUNC_SKULLSTRIPPING: func_mask]: ${tuple}"
 
         } else {
             // Only assign passthrough when skullstripping is disabled
@@ -1011,165 +941,150 @@ except:
                 .join(func_reg_reference, by: [0, 1, 2, 3])
                 .join(func_reg_anat_session, by: [0, 1, 2, 3])
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
+                    // DEBUG: Print all jobs in func_reg_complete
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_reg_complete: sub=${sub} ses=${ses} task=${task} run=${run} target_type=${target_type} target2template=${target2template} anat_ses=${anat_ses}"
+                    }
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses]
                 }
-            
-            // DEBUG: Count func_reg_complete
-            func_reg_complete
-                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
-                    "DEBUG [func_reg_complete]: ${sub}_${ses}_${task}_${run} | target_type=${target_type}, target2template=${target2template}, anat_ses=${anat_ses}"
-                }
-                .view()
             
             // Split into sequential transforms (func2anat2template) and single transform cases
             def func_sequential = func_reg_complete
                 .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_sequential filter: sub=${sub} ses=${ses} task=${task} run=${run} target2template=${target2template} target_type=${target_type} -> ${target2template && target_type == 'anat'}"
+                    }
                     target2template && target_type == 'anat'  // Sequential: func2anat then anat2template
                 }
-            
-            // DEBUG: Count func_sequential
-            func_sequential
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
-                    "DEBUG [func_sequential]: ${sub}_${ses}_${task}_${run} | anat_ses=${anat_ses}"
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_sequential: sub=${sub} ses=${ses} task=${task} run=${run} anat_ses=${anat_ses}"
+                    }
+                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses]
                 }
-                .view()
             
             def func_single = func_reg_complete
                 .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_single filter: sub=${sub} ses=${ses} task=${task} run=${run} target2template=${target2template} target_type=${target_type} -> ${!(target2template && target_type == 'anat')}"
+                    }
                     !(target2template && target_type == 'anat')  // Single transform: func2anat or func2template
                 }
-            
-            // DEBUG: Count func_single
-            func_single
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
-                    "DEBUG [func_single]: ${sub}_${ses}_${task}_${run}"
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_single: sub=${sub} ses=${ses} task=${task} run=${run}"
+                    }
+                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses]
                 }
-                .view()
             
             // Handle sequential transforms: need anat2template transform
             // Create dummy empty file for single transforms (anat2template not needed)
             def dummy_anat2template = file("${workDir}/dummy_anat2template.dummy")
             
-            // DEBUG: Check anat_reg_transforms
-            anat_reg_transforms
-                .map { sub, ses, transform_file ->
-                    "DEBUG [anat_reg_transforms]: ${sub}_${ses}"
-                }
-                .view()
-            
             // Join sequential transforms with anatomical registration transforms
             // Join by [sub, anat_ses] to match the exact anatomical session used for registration
-            // This ensures each functional run uses the transform from the anatomical session it was registered to
-            // anat_reg_transforms structure: [sub, ses, transform_file]
-            // func_sequential structure: [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses]
-            // We need to join where func_sequential.anat_ses == anat_reg_transforms.ses
+            // Use combine() to allow multiple functional runs to match with the same anatomical transform
+            def anat_reg_transforms_for_join = anat_reg_transforms
+                .map { sub, ses, transform_file -> 
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] anat_reg_transforms: sub=${sub} ses=${ses}"
+                    }
+                    [sub, ses, transform_file] 
+                }
+            
             def func_sequential_joined = func_sequential
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
-                    // Rearrange for join: [sub, anat_ses, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file]
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_sequential before join: sub=${sub} ses=${ses} task=${task} run=${run} anat_ses=${anat_ses} (joining by [sub=${sub}, anat_ses=${anat_ses}])"
+                    }
                     [sub, anat_ses, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file]
                 }
-                .join(anat_reg_transforms.map { sub, ses, transform_file -> [sub, ses, transform_file] }, by: [0, 1])  // Join by [sub, anat_ses] where anat_ses == ses
+                .combine(anat_reg_transforms_for_join, by: [0, 1])
                 .map { sub, anat_ses, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, transform_file ->
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_sequential_joined: sub=${sub} ses=${ses} task=${task} run=${run} anat_ses=${anat_ses} MATCHED"
+                    }
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, transform_file, target_type, target2template, reference_file]
                 }
             
-            // DEBUG: Count func_sequential_joined
-            func_sequential_joined
-                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
-                    "DEBUG [func_sequential_joined]: ${sub}_${ses}_${task}_${run}"
-                }
-                .view()
-            
-            // Find items in func_sequential that didn't join (shouldn't happen normally, but handle gracefully)
+            // Handle unmatched sequential transforms (shouldn't happen normally, but handle gracefully)
             def func_sequential_joined_keys = func_sequential_joined
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_sequential_joined_keys: sub=${sub} ses=${ses} task=${task} run=${run}"
+                    }
                     [sub, ses, task, run]
                 }
                 .unique()
             
-            // Items that didn't join get dummy transform
             def func_sequential_no_match = func_sequential
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_sequential_no_match before combine: sub=${sub} ses=${ses} task=${task} run=${run}"
+                    }
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file]
                 }
                 .combine(func_sequential_joined_keys.groupTuple(), by: [0, 1, 2, 3])
                 .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, matched_keys ->
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_sequential_no_match filter: sub=${sub} ses=${ses} task=${task} run=${run} matched_keys=${matched_keys} isEmpty=${!matched_keys || matched_keys.isEmpty()}"
+                    }
                     !matched_keys || matched_keys.isEmpty()
                 }
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file ->
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_sequential_no_match: sub=${sub} ses=${ses} task=${task} run=${run} UNMATCHED (using dummy)"
+                    }
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, dummy_anat2template, target_type, target2template, reference_file]
                 }
             
-            // DEBUG: Count func_sequential_no_match
-            func_sequential_no_match
+            def func_sequential_final = func_sequential_joined.mix(func_sequential_no_match)
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
-                    "DEBUG [func_sequential_no_match]: ${sub}_${ses}_${task}_${run}"
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_sequential_final: sub=${sub} ses=${ses} task=${task} run=${run}"
+                    }
+                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file]
                 }
-                .view()
             
-            def func_sequential_with_anat2template = func_sequential_joined
-                .mix(func_sequential_no_match)
-            
-            // DEBUG: Count func_sequential_with_anat2template
-            func_sequential_with_anat2template
-                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
-                    "DEBUG [func_sequential_with_anat2template]: ${sub}_${ses}_${task}_${run}"
-                }
-                .view()
-            
-            // Add dummy anat2template for single transforms
-            def func_single_with_dummy = func_single
+            // Single transforms: add dummy anat2template (not needed for single transform)
+            def func_single_final = func_single
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, dummy_anat2template, target_type, target2template, reference_file]
                 }
             
-            // DEBUG: Count func_single_with_dummy
-            func_single_with_dummy
+            // Combine all transforms with consistent structure: [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file]
+            def func_all_for_apply = func_sequential_final.mix(func_single_final)
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
-                    "DEBUG [func_single_with_dummy]: ${sub}_${ses}_${task}_${run}"
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_all_for_apply: sub=${sub} ses=${ses} task=${task} run=${run}"
+                    }
+                    [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file]
                 }
-                .view()
             
-            // Combine all (sequential and single) with consistent structure
-            def func_all_for_apply = func_sequential_with_anat2template
-                .mix(func_single_with_dummy)
-            
-            // DEBUG: Count func_all_for_apply (final count before multiMap)
-            func_all_for_apply
-                .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
-                    "DEBUG [func_all_for_apply]: ${sub}_${ses}_${task}_${run}"
-                }
-                .view()
-            
-            // Prepare for FUNC_APPLY_TRANSFORMS
-            // Use multiMap to split into two channels - they will be aligned by index
+            // Split into channels for FUNC_APPLY_TRANSFORMS
             func_all_for_apply
                 .multiMap { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] func_apply_multi.reg_combined: sub=${sub} ses=${ses} task=${task} run=${run} -> SENDING TO FUNC_APPLY_TRANSFORMS"
+                    }
                     reg_combined: [sub, ses, task, run, registered_tmean, forward_transform, anat2template_transform, bids_template, target_type, target2template, reference_file]
                     func_4d_file: bold_file
                 }
                 .set { func_apply_multi }
             
-            // DEBUG: Count channels after multiMap
+            // DEBUG: Print final channel before FUNC_APPLY_TRANSFORMS
             func_apply_multi.reg_combined
                 .map { sub, ses, task, run, registered_tmean, forward_transform, anat2template_transform, bids_template, target_type, target2template, reference_file ->
-                    "DEBUG [func_apply_multi.reg_combined]: ${sub}_${ses}_${task}_${run}"
+                    if (true) {
+                        println "[DEBUG APPLY_XFM] FINAL CHECK before FUNC_APPLY_TRANSFORMS: sub=${sub} ses=${ses} task=${task} run=${run}"
+                    }
+                    [sub, ses, task, run, registered_tmean, forward_transform, anat2template_transform, bids_template, target_type, target2template, reference_file]
                 }
-                .view()
+                .set { func_apply_multi_reg_combined_debug }
             
-            func_apply_multi.func_4d_file
-                .map { bold_file ->
-                    "DEBUG [func_apply_multi.func_4d_file]: ${bold_file}"
-                }
-                .view()
-            
-            FUNC_APPLY_TRANSFORMS(func_apply_multi.reg_combined, func_apply_multi.func_4d_file, config_file)
+            FUNC_APPLY_TRANSFORMS(func_apply_multi_reg_combined_debug, func_apply_multi.func_4d_file, config_file)
             func_apply_reg = FUNC_APPLY_TRANSFORMS.out.output
             func_apply_reg_reference = FUNC_APPLY_TRANSFORMS.out.reference
-
-            // // debug: view the first element of func_apply_reg
-            // func_apply_reg.first().view { tuple ->
-            //     "DEBUG [FUNC_APPLY_TRANSFORMS: func_apply_reg]: ${tuple}"
         }
 
         // ============================================
@@ -1294,9 +1209,9 @@ except:
         if (func_skullstripping_enabled) {
             func_qc_channels = func_qc_channels.mix(QC_SKULLSTRIPPING_FUNC.out.metadata)
         }
-        if (anat_registration_enabled) {
-            func_qc_channels = func_qc_channels.mix(QC_REGISTRATION_FUNC.out.metadata)
-        }
+        // if (anat_registration_enabled) {
+        //     func_qc_channels = func_qc_channels.mix(QC_REGISTRATION_FUNC.out.metadata)
+        // }
         
         def func_qc_completion = func_qc_channels
             .last()  // Wait for last functional QC to complete

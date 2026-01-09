@@ -97,7 +97,7 @@ run_bids_discovery() {
     local runs=$(extract_param "runs" "${args[@]}")
     
     # Build discovery command
-    local discovery_script="$SCRIPT_DIR/macacaMRIprep/scripts/discover_bids_for_nextflow.py"
+    local discovery_script="$SCRIPT_DIR/macacaMRIprep/nextflow_scripts/discover_bids_for_nextflow.py"
     
     if [ ! -f "$discovery_script" ]; then
         echo "Warning: Discovery script not found: $discovery_script" >&2

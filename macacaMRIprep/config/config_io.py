@@ -241,3 +241,40 @@ def get_output_space(config: Union[Dict[str, Any], Any]) -> str:
         if isinstance(template_dict, dict):
             output_space = template_dict.get("output_space", "")
     return output_space or ""
+
+
+def get_nested_config_value(config: Dict[str, Any], key_path: str, default: Any = None) -> Any:
+    """
+    Get nested value from configuration dictionary using dot-separated key path.
+    
+    This is a utility function for reading nested config values (e.g., "general.anat_only").
+    Used by both the CLI script and Python code.
+    
+    Args:
+        config: Configuration dictionary
+        key_path: Dot-separated path (e.g., "general.anat_only", "template.output_space")
+        default: Default value if key not found
+    
+    Returns:
+        Value at key path or default
+    
+    Examples:
+        >>> config = {"general": {"anat_only": True}, "template": {"output_space": "NMT2Sym:res-1"}}
+        >>> get_nested_config_value(config, "general.anat_only", False)
+        True
+        >>> get_nested_config_value(config, "template.output_space", "NMT2Sym:res-05")
+        'NMT2Sym:res-1'
+        >>> get_nested_config_value(config, "nonexistent.key", "default")
+        'default'
+    """
+    keys = key_path.split('.')
+    value = config
+    
+    for k in keys:
+        if isinstance(value, dict):
+            value = value.get(k, {})
+        else:
+            return default
+    
+    # If we ended up with a dict, return default; otherwise return the value
+    return value if not isinstance(value, dict) else default

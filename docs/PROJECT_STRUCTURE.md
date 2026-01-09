@@ -25,7 +25,8 @@ The project follows a modular architecture with the following main components:
   - `modules/functional.nf` - Functional processing modules
   - `modules/qc.nf` - Quality control modules
 - **Discovery Script**:
-  - `macacaMRIprep/scripts/discover_bids_for_nextflow.py` - BIDS dataset discovery (runs before Nextflow)
+  - `macacaMRIprep/nextflow_scripts/discover_bids_for_nextflow.py` - BIDS dataset discovery (runs before Nextflow)
+  - `macacaMRIprep/nextflow_scripts/read_yaml_config.py` - YAML config reader utility for Nextflow workflow
 - **Purpose**: Orchestrates preprocessing with maximum parallelization through per-step processing
 
 #### 2. **Step Functions**

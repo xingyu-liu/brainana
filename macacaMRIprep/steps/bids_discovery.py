@@ -16,6 +16,51 @@ from ..utils.bids import parse_bids_entities
 logger = logging.getLogger(__name__)
 
 
+def _normalize_to_list(value):
+    """
+    Normalize a value to a list of strings.
+    
+    Handles None, single values (int, str), and lists.
+    Converts all values to strings to preserve formatting.
+    
+    Args:
+        value: Value to normalize (can be None, int, str, or list)
+        
+    Returns:
+        List of strings, or None if input was None
+    """
+    if value is None:
+        return None
+    if isinstance(value, list):
+        # Convert all items in list to strings
+        return [str(item) for item in value]
+    # Handle single value - convert to string
+    return [str(value)]
+
+
+def _normalize_bids_id(value, prefix):
+    """
+    Normalize a BIDS ID by removing prefix if present.
+    
+    Handles both 'prefix-032102' and '032102' formats.
+    Preserves None values. Value should already be a string.
+    
+    Args:
+        value: ID value (should be str, but handles int/None for safety)
+        prefix: Prefix to remove (e.g., 'sub-', 'ses-', 'task-', 'run-')
+        
+    Returns:
+        Normalized ID as string (without prefix), or None if input was None
+    """
+    if value is None:
+        return None
+    # Convert to string (should already be string from _normalize_to_list)
+    value_str = str(value)
+    if value_str.startswith(prefix):
+        return value_str[len(prefix):]
+    return value_str
+
+
 def discover_bids_dataset(
     bids_dir: Path,
     config: Dict[str, Any],
@@ -78,17 +123,35 @@ def discover_bids_dataset(
     if runs is None:
         runs = bids_filtering.get("runs")
     
+    # Normalize to lists and remove prefixes
+    subjects = _normalize_to_list(subjects)
+    sessions = _normalize_to_list(sessions)
+    tasks = _normalize_to_list(tasks)
+    runs = _normalize_to_list(runs)
+    
+    # Normalize IDs (remove prefixes if present)
+    if subjects is not None:
+        subjects = [_normalize_bids_id(s, 'sub-') for s in subjects]
+    if sessions is not None:
+        sessions = [_normalize_bids_id(s, 'ses-') for s in sessions]
+    if tasks is not None:
+        tasks = [_normalize_bids_id(t, 'task-') for t in tasks]
+    if runs is not None:
+        runs = [_normalize_bids_id(r, 'run-') for r in runs]
+    
     # Get all subjects
     all_subjects = layout.get_subjects()
     if subjects is None:
         target_subjects = all_subjects
     else:
-        # Normalize subject IDs (remove 'sub-' prefix if present)
-        normalized_subs = [s[4:] if s.startswith('sub-') else s for s in subjects]
-        target_subjects = [s for s in normalized_subs if s in all_subjects]
-        if len(target_subjects) != len(normalized_subs):
-            missing = set(normalized_subs) - set(target_subjects)
-            logger.warning(f"Some requested subjects not found: {missing}")
+        target_subjects = [s for s in subjects if s in all_subjects]
+        if len(target_subjects) != len(subjects):
+            missing = set(subjects) - set(target_subjects)
+            logger.warning(
+                f"Some requested subjects not found: {missing}. "
+                f"If your config has unquoted numbers (e.g., '032102'), YAML may parse them incorrectly. "
+                f"Please quote the values in your YAML config (e.g., subjects: \"032102\" or subjects: [\"032102\"])."
+            )
     
     anatomical_jobs = []
     functional_jobs = []

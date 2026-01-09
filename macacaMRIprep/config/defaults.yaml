@@ -10,10 +10,10 @@ general:
   anat_only: false  # bool: process only anatomical data
 
 bids_filtering:
-  subjects: null  # list of str or null: filter by subject IDs (e.g., ["01", "02"])
-  sessions: null  # list of str or null: filter by session IDs (e.g., ["01", "02"])
-  tasks: null  # list of str or null: filter by task names (e.g., ["rest", "task"])
-  runs: null  # list of str or null: filter by run numbers (e.g., ["01", "02"])
+  subjects: null  # list of str (have to be quoted) or null: filter by subject IDs (e.g., ["01", "02"])
+  sessions: null  # list of str (have to be quoted) or null: filter by session IDs (e.g., ["01", "02"])
+  tasks: null  # list of str (have to be quoted) or null: filter by task names (e.g., ["rest", "task"])
+  runs: null  # list of str (have to be quoted) or null: filter by run numbers (e.g., ["01", "02"])
 
 template:
   output_space: "NMT2Sym:res-05"  # str: template space in format "TEMPLATE_NAME:[:DESCRIPTION]" (e.g., "NMT2Sym:res-1", "native")
