@@ -941,39 +941,23 @@ workflow {
                 .join(func_reg_reference, by: [0, 1, 2, 3])
                 .join(func_reg_anat_session, by: [0, 1, 2, 3])
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
-                    // DEBUG: Print all jobs in func_reg_complete
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_reg_complete: sub=${sub} ses=${ses} task=${task} run=${run} target_type=${target_type} target2template=${target2template} anat_ses=${anat_ses}"
-                    }
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses]
                 }
             
             // Split into sequential transforms (func2anat2template) and single transform cases
             def func_sequential = func_reg_complete
                 .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_sequential filter: sub=${sub} ses=${ses} task=${task} run=${run} target2template=${target2template} target_type=${target_type} -> ${target2template && target_type == 'anat'}"
-                    }
                     target2template && target_type == 'anat'  // Sequential: func2anat then anat2template
                 }
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_sequential: sub=${sub} ses=${ses} task=${task} run=${run} anat_ses=${anat_ses}"
-                    }
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses]
                 }
             
             def func_single = func_reg_complete
                 .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_single filter: sub=${sub} ses=${ses} task=${task} run=${run} target2template=${target2template} target_type=${target_type} -> ${!(target2template && target_type == 'anat')}"
-                    }
                     !(target2template && target_type == 'anat')  // Single transform: func2anat or func2template
                 }
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_single: sub=${sub} ses=${ses} task=${task} run=${run}"
-                    }
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses]
                 }
             
@@ -986,63 +970,39 @@ workflow {
             // Use combine() to allow multiple functional runs to match with the same anatomical transform
             def anat_reg_transforms_for_join = anat_reg_transforms
                 .map { sub, ses, transform_file -> 
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] anat_reg_transforms: sub=${sub} ses=${ses}"
-                    }
                     [sub, ses, transform_file] 
                 }
             
             def func_sequential_joined = func_sequential
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_sequential before join: sub=${sub} ses=${ses} task=${task} run=${run} anat_ses=${anat_ses} (joining by [sub=${sub}, anat_ses=${anat_ses}])"
-                    }
                     [sub, anat_ses, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file]
                 }
                 .combine(anat_reg_transforms_for_join, by: [0, 1])
                 .map { sub, anat_ses, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, transform_file ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_sequential_joined: sub=${sub} ses=${ses} task=${task} run=${run} anat_ses=${anat_ses} MATCHED"
-                    }
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, transform_file, target_type, target2template, reference_file]
                 }
             
             // Handle unmatched sequential transforms (shouldn't happen normally, but handle gracefully)
             def func_sequential_joined_keys = func_sequential_joined
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_sequential_joined_keys: sub=${sub} ses=${ses} task=${task} run=${run}"
-                    }
                     [sub, ses, task, run]
                 }
                 .unique()
             
             def func_sequential_no_match = func_sequential
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_sequential_no_match before combine: sub=${sub} ses=${ses} task=${task} run=${run}"
-                    }
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file]
                 }
                 .combine(func_sequential_joined_keys.groupTuple(), by: [0, 1, 2, 3])
                 .filter { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, matched_keys ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_sequential_no_match filter: sub=${sub} ses=${ses} task=${task} run=${run} matched_keys=${matched_keys} isEmpty=${!matched_keys || matched_keys.isEmpty()}"
-                    }
                     !matched_keys || matched_keys.isEmpty()
                 }
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_sequential_no_match: sub=${sub} ses=${ses} task=${task} run=${run} UNMATCHED (using dummy)"
-                    }
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, dummy_anat2template, target_type, target2template, reference_file]
                 }
             
             def func_sequential_final = func_sequential_joined.mix(func_sequential_no_match)
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_sequential_final: sub=${sub} ses=${ses} task=${task} run=${run}"
-                    }
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file]
                 }
             
@@ -1055,18 +1015,12 @@ workflow {
             // Combine all transforms with consistent structure: [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file]
             def func_all_for_apply = func_sequential_final.mix(func_single_final)
                 .map { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_all_for_apply: sub=${sub} ses=${ses} task=${task} run=${run}"
-                    }
                     [sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file]
                 }
             
             // Split into channels for FUNC_APPLY_TRANSFORMS
             func_all_for_apply
                 .multiMap { sub, ses, task, run, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] func_apply_multi.reg_combined: sub=${sub} ses=${ses} task=${task} run=${run} -> SENDING TO FUNC_APPLY_TRANSFORMS"
-                    }
                     reg_combined: [sub, ses, task, run, registered_tmean, forward_transform, anat2template_transform, bids_template, target_type, target2template, reference_file]
                     func_4d_file: bold_file
                 }
@@ -1075,9 +1029,6 @@ workflow {
             // DEBUG: Print final channel before FUNC_APPLY_TRANSFORMS
             func_apply_multi.reg_combined
                 .map { sub, ses, task, run, registered_tmean, forward_transform, anat2template_transform, bids_template, target_type, target2template, reference_file ->
-                    if (true) {
-                        println "[DEBUG APPLY_XFM] FINAL CHECK before FUNC_APPLY_TRANSFORMS: sub=${sub} ses=${ses} task=${task} run=${run}"
-                    }
                     [sub, ses, task, run, registered_tmean, forward_transform, anat2template_transform, bids_template, target_type, target2template, reference_file]
                 }
                 .set { func_apply_multi_reg_combined_debug }

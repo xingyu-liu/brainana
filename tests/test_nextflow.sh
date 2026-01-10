@@ -25,12 +25,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
-BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_easy"
-OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_nextflow_v3"
+# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_easy"
+# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_nextflow_v3"
 # BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_2pass"
 # OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_2pass_nextflow"
-# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_multiple"
-# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_multiple_nextflow_v1"
+BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_multiple"
+OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_multiple_nextflow_v1"
 
 # CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_affine.yaml"
 CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_easy.yaml"
