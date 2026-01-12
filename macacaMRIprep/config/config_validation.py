@@ -34,6 +34,7 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
     func_config = validated_config.get("func", {})
     anat_config = validated_config.get("anat", {})
     
+    validate_func_config(func_config)
     validate_slice_timing_config(func_config.get("slice_timing_correction", {}))
     validate_motion_correction_config(func_config.get("motion_correction", {}))
     validate_despike_config(func_config.get("despike", {}))
@@ -47,6 +48,37 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
     validate_orientation_mismatch_correction_config(validated_config.get("orientation_mismatch_correction", {}))
     
     return validated_config
+
+
+def validate_func_config(config: Dict[str, Any]) -> None:
+    """Validate top-level functional configuration parameters.
+    
+    Args:
+        config: Functional configuration dictionary
+        
+    Raises:
+        ValueError: If configuration is invalid
+    """
+    # Validate registration_pipeline
+    if "registration_pipeline" in config:
+        valid_pipelines = ["func2anat2template", "func2anat", "func2template"]
+        pipeline = config["registration_pipeline"]
+        if pipeline not in valid_pipelines:
+            raise ValueError(
+                f"Configuration error in func: "
+                f"registration_pipeline must be one of {valid_pipelines}, got {pipeline}. "
+                f"Please fix this in your configuration file."
+            )
+    
+    # Validate coreg_runs_within_session
+    if "coreg_runs_within_session" in config:
+        coreg_enabled = config["coreg_runs_within_session"]
+        if not isinstance(coreg_enabled, bool):
+            raise ValueError(
+                f"Configuration error in func: "
+                f"coreg_runs_within_session must be a boolean, got {type(coreg_enabled).__name__}. "
+                f"Please fix this in your configuration file."
+            )
 
 
 def validate_slice_timing_config(config: Dict[str, Any]) -> None:

@@ -32,14 +32,14 @@ from FastSurferCNN.utils.constants import (
 
 # Directory containing input mask volumes
 root_dir = Path(
-    "/mnt/DataDrive3/xliu/monkey_training_groundtruth/training_data/EPI_brainmask/labels_arcaro_manualcorrected"
+    "/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/histology_test/surf"
 )
 
 # If set to a relative path (starting with '/'), only that file will be processed,
 # using the *same* morphological parameters as the FastSurferCNN `create_mask` pipeline.
 # Example (relative to root_dir): "/site-arcaro_sub-baby1_ses-120916_task-vision_run-09_EPI_brainmask_manual.nii.gz"
 # If set to None, all *.nii.gz files under root_dir will be processed.
-input_f = 'site-arcaro_sub-baby18_ses-190504_task-somatotopy_run-22_EPI_brainmask_manual.nii.gz' 
+input_f = 'mask_improved_fullbrain.nii.gz' 
 output_suffix = "_improved"
 
 # If False, existing improved masks are not overwritten

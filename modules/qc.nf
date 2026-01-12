@@ -507,14 +507,14 @@ EOF
 
 process QC_CONFORM_FUNC {
     label 'cpu'
-    tag "${subject_id}_${session_id}_${task_name}_${run}"
+    tag "${subject_id}_${session_id}_${run_identifier}"
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(conformed_file), val(bids_naming_template), path(template_resampled_file, stageAs: 'template.nii.gz')
+    tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_file), val(bids_naming_template), path(template_resampled_file, stageAs: 'template.nii.gz')
     path config_file
     
     output:
@@ -563,14 +563,14 @@ EOF
 
 process QC_MOTION_CORRECTION {
     label 'cpu'
-    tag "${subject_id}_${session_id}_${task_name}_${run}"
+    tag "${subject_id}_${session_id}_${run_identifier}"
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(motion_params_file), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(motion_params_file), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -614,14 +614,14 @@ EOF
 
 process QC_BIAS_CORRECTION_FUNC {
     label 'cpu'
-    tag "${subject_id}_${session_id}_${task_name}_${run}"
+    tag "${subject_id}_${session_id}_${run_identifier}"
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(original_file), path(corrected_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(original_file), path(corrected_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -666,14 +666,14 @@ EOF
 
 process QC_SKULLSTRIPPING_FUNC {
     label 'cpu'
-    tag "${subject_id}_${session_id}_${task_name}_${run}"
+    tag "${subject_id}_${session_id}_${run_identifier}"
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(brain_file), path(mask_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(brain_file), path(mask_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -718,14 +718,14 @@ EOF
 
 process QC_REGISTRATION_FUNC {
     label 'cpu'
-    tag "${subject_id}_${session_id}_${task_name}_${run}"
+    tag "${subject_id}_${session_id}_${run_identifier}"
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(task_name), val(run), path(registered_file), path(reference_file)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(registered_file), path(reference_file)
     path config_file
     
     output:
@@ -792,6 +792,64 @@ result = qc_registration(
     template_file=reference_file,
     output_path=Path(qc_output_filename),
     modality='func2target',
+    config=config
+)
+
+# Save metadata
+save_metadata(result.metadata)
+EOF
+    """
+}
+
+process QC_WITHIN_SES_COREG {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}/figures",
+        mode: 'copy',
+        pattern: '*.png'
+    
+    input:
+    tuple val(subject_id), val(session_id), path(tmean_run1), path(tmean_averaged), val(bids_naming_template)
+    path config_file
+    
+    output:
+    path "*.png", emit: qc_files
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.steps.qc import qc_within_ses_coreg
+from macacaMRIprep.utils.bids import create_bids_output_filename, parse_bids_entities, create_bids_filename
+from pathlib import Path
+
+# Load config
+from macacaMRIprep.utils.nextflow import load_config, save_metadata
+config = load_config('${config_file}')
+
+# Get original file path (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Generate BIDS-compliant QC output filename
+# Remove task and run keys, add desc-coreg, ends with _boldref
+# Parse the original filename to get entities
+parsed = parse_bids_entities(str(bids_naming_template))
+# Remove task and run entities
+if 'task' in parsed:
+    del parsed['task']
+if 'run' in parsed:
+    del parsed['run']
+# Add desc entity
+parsed['desc'] = 'coreg'
+# Rebuild filename with suffix 'boldref' and extension '.png'
+qc_output_filename = create_bids_filename(parsed, 'boldref', extension='.png')
+
+# Generate QC
+result = qc_within_ses_coreg(
+    tmean_run1=Path('${tmean_run1}'),
+    tmean_averaged=Path('${tmean_averaged}'),
+    output_path=Path(qc_output_filename),
     config=config
 )
 

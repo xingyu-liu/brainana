@@ -19,6 +19,7 @@ from ..quality_control import (
     create_surf_recon_tissue_seg_qc,
     create_cortical_surf_and_measures_qc
 )
+from ..quality_control.snapshots import _create_before_after_comparison
 from ..quality_control.reports import generate_qc_report
 
 logger = logging.getLogger(__name__)
@@ -499,5 +500,78 @@ def qc_generate_report(
         return StepOutput(
             output_file=report_path,
             metadata={"step": "qc_report", "error": str(e)}
+        )
+
+
+def qc_within_ses_coreg(
+    tmean_run1: Path,
+    tmean_averaged: Path,
+    output_path: Path,
+    config: Optional[Dict[str, Any]] = None
+) -> StepOutput:
+    """
+    Generate within-session coregistration QC snapshot.
+    
+    Shows comparison: first row = single run (tmean of run 1), 
+    second row = coregistered average tmean.
+    
+    Args:
+        tmean_run1: Tmean from first run (reference)
+        tmean_averaged: Averaged tmean after coregistration
+        output_path: Output path for QC snapshot
+        config: Configuration dictionary (optional)
+        
+    Returns:
+        StepOutput with QC file
+    """
+    if not config or not config.get("quality_control", {}).get("enabled", True):
+        logger.info("QC: within-session coregistration QC skipped (disabled in configuration)")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_within_ses_coreg", "skipped": True}
+        )
+    
+    try:
+        # Validate inputs
+        if not tmean_run1.exists():
+            logger.error(f"QC: tmean_run1 file not found - {tmean_run1}")
+            return StepOutput(
+                output_file=output_path,
+                metadata={"step": "qc_within_ses_coreg", "error": "tmean_run1 not found"}
+            )
+        
+        if not tmean_averaged.exists():
+            logger.error(f"QC: tmean_averaged file not found - {tmean_averaged}")
+            return StepOutput(
+                output_file=output_path,
+                metadata={"step": "qc_within_ses_coreg", "error": "tmean_averaged not found"}
+            )
+        
+        # Ensure the parent directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Create before/after comparison (run1 vs averaged)
+        _create_before_after_comparison(
+            str(tmean_run1),  # Original: single run
+            str(tmean_averaged),  # Corrected: averaged after coreg
+            num_cols=6,
+            perspectives=["axial"],
+            save_f=str(output_path),
+            logger=logger
+        )
+        
+        return StepOutput(
+            output_file=output_path,
+            metadata={
+                "step": "qc_within_ses_coreg",
+                "modality": "func"
+            },
+            qc_files=[output_path]
+        )
+    except Exception as e:
+        logger.warning(f"QC: within-session coregistration QC failed - {e}")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_within_ses_coreg", "error": str(e)}
         )
 

@@ -394,6 +394,14 @@
                 <span class="help-text">("func2anat2template", "func2anat", or "func2template")</span>
             </div>
             
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="func_coreg_runs_within_session" name="func_coreg_runs_within_session" checked>
+                    <label for="func_coreg_runs_within_session">coreg_runs_within_session</label>
+                </div>
+                <span class="help-text">(coregister runs within session before processing)</span>
+            </div>
+            
             <div class="sub-section">
                 <h3>reorient</h3>
                 <div class="form-group">
@@ -732,6 +740,7 @@
             },
             func: {
                 registration_pipeline: "func2anat2template",
+                coreg_runs_within_session: true,
                 reorient: { enabled: true },
                 slice_timing_correction: {
                     enabled: true,
@@ -1111,6 +1120,7 @@
             
             // Functional
             config.func.registration_pipeline = document.getElementById('func_registration_pipeline').value;
+            config.func.coreg_runs_within_session = document.getElementById('func_coreg_runs_within_session').checked;
             config.func.reorient.enabled = document.getElementById('func_reorient_enabled').checked;
             config.func.conform.enabled = document.getElementById('func_conform_enabled').checked;
             

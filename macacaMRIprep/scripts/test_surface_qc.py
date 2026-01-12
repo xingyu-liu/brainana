@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Test directory
-fs_subject_dir = Path("/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_reorient_upright/fastsurfer/sub-baby31")
+fs_subject_dir = Path("/mnt/DataDrive2/macaque/data_raw/macaque_histology/Ugly/test_surf/sub-ugly")
 output_dir = fs_subject_dir / "tmp"
 output_dir.mkdir(parents=True, exist_ok=True)
 

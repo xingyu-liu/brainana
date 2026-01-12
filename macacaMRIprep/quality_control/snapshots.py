@@ -571,8 +571,10 @@ def create_surf_recon_tissue_seg_qc(
         
         # Validate inputs
         for file_path, name in [
-            (t1w_brain_file, "T1w"), (white_surf_lh, "white_lh"), (white_surf_rh, "white_rh"),
-            (pial_surf_lh, "pial_lh"), (pial_surf_rh, "pial_rh")
+            (t1w_brain_file, "T1w"), 
+            (white_surf_lh, "white_lh"), (pial_surf_lh, "pial_lh"), 
+            (pial_surf_rh, "pial_rh"), (white_surf_rh, "white_rh")
+            
         ]:
             if not file_path.exists():
                 logger.error(f"QC: {name} file not found - {file_path}")

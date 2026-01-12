@@ -49,11 +49,11 @@ from fastsurfer_recon.stages import (
 
 # Stop at this step (e.g., "s07", "s12", "s21")
 # Pipeline will run all steps up to and including this step
-STOP_STEP = "s15"
+STOP_STEP = "s21"
 
 # Test subject
-subject_root = Path("/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon")
-subject_dir = subject_root / "NMT2Sym_separate" / f"sub-NMT2Sym_stage"
+subject_root = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/histology_test/surf")
+subject_dir = subject_root / "sub-histology"
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 

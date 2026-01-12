@@ -19,10 +19,11 @@ from ..operations.preprocessing import (
     conform_to_template,
     apply_skullstripping
 )
-from ..operations.registration import ants_register, ants_apply_transforms, flirt_apply_transforms
+from ..operations.registration import ants_register, ants_apply_transforms, flirt_apply_transforms, flirt_register, flirt_register
 from ..utils import get_image_resolution, calculate_func_tmean
 from ..utils import run_command
 import numpy as np
+import nibabel as nib
 
 logger = logging.getLogger(__name__)
 
@@ -524,5 +525,220 @@ def func_apply_transforms(
             "num_transforms": len(transform_files)
         },
         additional_files=additional_files
+    )
+
+
+def func_within_ses_coreg(
+    input: StepInput,
+    reference_tmean: Path,
+    reference_run: str,
+    current_run: str,
+    bold_file: Path
+) -> StepOutput:
+    """
+    Coregister a functional run to a reference run within the same session.
+    
+    This is used when multiple runs exist in a session. Later runs are
+    coregistered to the first run using tmean images, then the transform
+    is applied to the BOLD file.
+    
+    Args:
+        input: StepInput with input_file (tmean to be coregistered), working_dir, config, metadata
+        reference_tmean: Path to reference tmean (from first run)
+        reference_run: Run identifier for reference (e.g., "01")
+        current_run: Run identifier for current run (e.g., "02")
+        bold_file: Path to BOLD file to be coregistered
+        
+    Returns:
+        StepOutput with coregistered tmean, coregistered BOLD, and transform files
+    """
+    # Set FLIRT parameters for functional coregistration (rigid registration)
+    flirt_config = {
+        "registration": {
+            "flirt": {
+                "cost": "mutualinfo",
+                "searchcost": "mutualinfo",
+                "coarsesearch": 40,
+                "finesearch": 15
+            }
+        }
+    }
+    
+    # Step 1: FLIRT rigid registration from current run tmean to reference run tmean
+    try:
+        registration_result = flirt_register(
+            fixedf=str(reference_tmean),
+            movingf=str(input.input_file),  # Current run tmean
+            working_dir=str(input.working_dir),
+            output_prefix=f"run{current_run}_to_run{reference_run}_coreg",
+            config=flirt_config,
+            logger=logger,
+            dof=6  # Use rigid registration for within-session coregistration
+        )
+        xfm_forward_f = Path(registration_result['forward_transform'])
+        xfm_inverse_f = Path(registration_result.get('inverse_transform')) if 'inverse_transform' in registration_result else None
+    except Exception as e:
+        logger.error(f"Error during FLIRT registration for run {current_run} to run {reference_run}: {e}")
+        raise RuntimeError(
+            f"Within-session coregistration failed during FLIRT registration: {e}"
+        )
+    
+    # Step 2: Apply the affine transformation to the tmean image
+    try:
+        apply_result = flirt_apply_transforms(
+            movingf=str(input.input_file),
+            outputf_name=f"run{current_run}_to_run{reference_run}_tmean_coreg.nii.gz",
+            reff=str(reference_tmean),
+            working_dir=str(input.working_dir),
+            transformf=str(xfm_forward_f),
+            logger=logger,
+            interpolation='trilinear',
+            generate_tmean=False
+        )
+        tmean_coregistered = Path(apply_result['imagef_registered'])
+    except Exception as e:
+        logger.error(f"Error during tmean transformation application: {e}")
+        raise RuntimeError(
+            f"Within-session coregistration failed when applying transformation to tmean: {e}"
+        )
+    
+    # Step 3: Apply the same transform to the BOLD file
+    bold_coregistered = None
+    if bold_file and bold_file.exists():
+        try:
+            apply_result_bold = flirt_apply_transforms(
+                movingf=str(bold_file),
+                outputf_name=f"run{current_run}_to_run{reference_run}_bold_coreg.nii.gz",
+                reff=str(reference_tmean),  # Use tmean as reference for BOLD too
+                working_dir=str(input.working_dir),
+                transformf=str(xfm_forward_f),
+                logger=logger,
+                interpolation='trilinear',
+                generate_tmean=False
+            )
+            bold_coregistered = Path(apply_result_bold['imagef_registered'])
+        except Exception as e:
+            logger.error(f"Error during BOLD transformation application: {e}")
+            raise RuntimeError(
+                f"Within-session coregistration failed when applying transformation to BOLD: {e}"
+            )
+    
+    additional_files = {}
+    if xfm_forward_f.exists():
+        additional_files["forward_transform"] = xfm_forward_f
+    if xfm_inverse_f is not None and xfm_inverse_f.exists():
+        additional_files["inverse_transform"] = xfm_inverse_f
+    if bold_coregistered and bold_coregistered.exists():
+        additional_files["bold_coregistered"] = bold_coregistered
+    
+    return StepOutput(
+        output_file=tmean_coregistered,
+        metadata={
+            "step": "within_ses_coreg",
+            "modality": "func",
+            "reference_run": reference_run,
+            "current_run": current_run,
+            "xfm_type": "rigid"
+        },
+        additional_files=additional_files
+    )
+
+
+def func_average_tmean(tmean_files: List[Path], working_dir: Path, config: Dict[str, Any]) -> StepOutput:
+    """
+    Average multiple tmean files (typically after within-session coregistration).
+    
+    Args:
+        tmean_files: List of Path objects to tmean files to average
+        working_dir: Working directory for output
+        config: Configuration dictionary
+        
+    Returns:
+        StepOutput with averaged tmean file
+    """
+    if len(tmean_files) == 0:
+        raise ValueError("No tmean files provided for averaging")
+    
+    if len(tmean_files) == 1:
+        # Single file, just return it (no averaging needed)
+        logger.info("Only one tmean file provided, skipping averaging")
+        return StepOutput(
+            output_file=tmean_files[0],
+            metadata={
+                "step": "average_tmean",
+                "num_files": 1,
+                "skipped": True
+            }
+        )
+    
+    logger.info(f"Averaging {len(tmean_files)} tmean files")
+    
+    # Incremental mean calculation to avoid loading all images into memory at once
+    # Process images one by one: accumulate sum, then divide by count
+    sum_data = None
+    reference_img = None
+    valid_count = 0
+    
+    for tmean_file in tmean_files:
+        if not tmean_file.exists():
+            logger.warning(f"Tmean file does not exist: {tmean_file}, skipping")
+            continue
+        try:
+            img = nib.load(str(tmean_file))
+            img_data = img.get_fdata()
+            
+            # Initialize sum with first valid image
+            if sum_data is None:
+                sum_data = img_data.astype(np.float64)  # Use float64 for accumulation precision
+                reference_img = img  # Save first image for header/affine
+            else:
+                # Accumulate sum incrementally
+                sum_data += img_data
+            
+            valid_count += 1
+        except Exception as e:
+            logger.warning(f"Failed to load tmean file {tmean_file}: {e}, skipping")
+            continue
+    
+    if valid_count == 0:
+        raise ValueError("No valid tmean files could be loaded for averaging")
+    
+    if valid_count == 1:
+        logger.info("Only one valid tmean file after filtering, skipping averaging")
+        return StepOutput(
+            output_file=tmean_files[0],
+            metadata={
+                "step": "average_tmean",
+                "num_files": 1,
+                "skipped": True
+            }
+        )
+    
+    # Calculate mean by dividing accumulated sum by count
+    mean_data = (sum_data / valid_count).astype(np.float32)
+    
+    # Create averaged image using reference header
+    averaged_img = nib.Nifti1Image(
+        mean_data.astype(np.float32),
+        affine=reference_img.affine,
+        header=reference_img.header
+    )
+    
+    # Generate output filename
+    output_name = "func_tmean_averaged.nii.gz"
+    averaged_path = working_dir / output_name
+    
+    # Save averaged image
+    nib.save(averaged_img, str(averaged_path))
+    
+    logger.info(f"Averaged tmean saved: {averaged_path}")
+    
+    return StepOutput(
+        output_file=averaged_path,
+        metadata={
+            "step": "average_tmean",
+            "num_files": valid_count,
+            "input_files": [str(f) for f in tmean_files]
+        }
     )
 
