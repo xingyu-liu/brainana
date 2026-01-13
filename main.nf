@@ -66,6 +66,11 @@ include { FUNC_GENERATE_TMEAN } from './modules/functional.nf'
 include { FUNC_DESPIKE } from './modules/functional.nf'
 include { FUNC_BIAS_CORRECTION } from './modules/functional.nf'
 include { FUNC_CONFORM } from './modules/functional.nf'
+include { FUNC_COMPUTE_CONFORM } from './modules/functional.nf'
+include { FUNC_COMPUTE_BRAIN_MASK } from './modules/functional.nf'
+include { FUNC_COMPUTE_REGISTRATION } from './modules/functional.nf'
+include { FUNC_APPLY_CONFORM } from './modules/functional.nf'
+include { FUNC_APPLY_BRAIN_MASK } from './modules/functional.nf'
 include { FUNC_SKULLSTRIPPING } from './modules/functional.nf'
 include { FUNC_REGISTRATION } from './modules/functional.nf'
 include { FUNC_APPLY_TRANSFORMS } from './modules/functional.nf'
@@ -235,7 +240,7 @@ workflow {
     def anat_conform_enabled = readYamlBool("anat.conform.enabled", true)
     def anat_bias_correction_enabled = readYamlBool("anat.bias_correction.enabled", true)
     def anat_skullstripping_enabled = readYamlBool("anat.skullstripping_segmentation.enabled", true)
-    def anat_registration_enabled = readYamlBool("registration.enabled", true)
+    def registration_enabled = readYamlBool("registration.enabled", true)
     
     def func_reorient_enabled = readYamlBool("func.reorient.enabled", true)
     def func_slice_timing_enabled = readYamlBool("func.slice_timing_correction.enabled", true)
@@ -251,7 +256,7 @@ workflow {
     
     println "Processing mode: anat_only = ${anat_only}, surface_reconstruction = ${surf_recon_enabled}"
     println "Step enabled flags:"
-    println "  ANAT: reorient=${anat_reorient_enabled}, conform=${anat_conform_enabled}, bias_correction=${anat_bias_correction_enabled}, skullstripping=${anat_skullstripping_enabled}, registration=${anat_registration_enabled}"
+    println "  ANAT: reorient=${anat_reorient_enabled}, conform=${anat_conform_enabled}, bias_correction=${anat_bias_correction_enabled}, skullstripping=${anat_skullstripping_enabled}, registration=${registration_enabled}"
     if (!anat_only) {
         println "  FUNC: reorient=${func_reorient_enabled}, slice_timing=${func_slice_timing_enabled}, motion=${func_motion_correction_enabled}, despike=${func_despike_enabled}, bias_correction=${func_bias_correction_enabled}, conform=${func_conform_enabled}, skullstripping=${func_skullstripping_enabled}"
     }
@@ -492,7 +497,7 @@ workflow {
     // ANAT_REGISTRATION
     def anat_after_reg = anat_after_skull
     def anat_reg_transforms = Channel.empty()
-    if (anat_registration_enabled) {
+    if (registration_enabled) {
         ANAT_REGISTRATION(anat_after_skull, config_file)
         anat_after_reg = ANAT_REGISTRATION.out.output
         anat_reg_transforms = ANAT_REGISTRATION.out.transforms
@@ -551,7 +556,7 @@ workflow {
     }
     
     // QC_REGISTRATION: needs registered file only (transforms not used)
-    if (anat_registration_enabled) {
+    if (registration_enabled) {
         // Use ANAT_REGISTRATION output directly - it's already a 3-element tuple
         // tuple val(subject_id), val(session_id), path("*.nii.gz")
         QC_REGISTRATION(ANAT_REGISTRATION.out.output, config_file)
@@ -834,293 +839,377 @@ workflow {
         )
 
         // ------------------------------------------------------------
-        // CONFORM / SKULLSTRIPPING / REGISTRATION
-        // Branch: if coreg enabled, do session-level processing; otherwise per-run processing
-        def func_after_conform = Channel.empty()
-        def func_conform_transforms = Channel.empty()
-        def func_after_skull = Channel.empty()
-        def func_mask = Channel.empty()
-        def func_after_reg = Channel.empty()
-        def func_reg_transforms = Channel.empty()
-        def func_reg_reference = Channel.empty()
-        def func_reg_metadata = Channel.empty()
-        def func_reg_anat_session = Channel.empty()
+        // COMPUTE PHASE: CONFORM / SKULLSTRIPPING / REGISTRATION
+        // Compute transforms and masks on tmean (session-level or per-run)
+        // ------------------------------------------------------------
+        def func_compute_conform_output = Channel.empty()
+        def func_compute_mask_output = Channel.empty()
+        def func_compute_reg_output = Channel.empty()
         
         if (func_coreg_runs_within_session && func_coreg_success) {
             // ============================================
-            // SESSION-LEVEL PROCESSING PATH (when coreg enabled)
+            // SESSION-LEVEL COMPUTE PHASE (when coreg enabled)
             // ============================================
             // Use averaged tmean for session-level processing
+            // Prepare input: [sub, ses, "", dummy_bold, tmean_averaged, bids_template]
             
-            // Session-level CONFORM on averaged tmean (if enabled)
-            // func_tmean_averaged_ch: [sub, ses, tmean_averaged, bids_template]
-            func_after_conform = func_tmean_averaged_ch
-            func_conform_transforms = Channel.empty()
+            def func_compute_input = func_tmean_averaged_ch
+                .map { sub, ses, tmean, bids ->
+                    def dummy_bold = file("${workDir}/dummy_bold_${sub}_${ses}.dummy")
+                    [sub, ses, "", dummy_bold, tmean, bids]  // Empty string for run_identifier
+                }
+            
+            // COMPUTE_CONFORM
             if (func_conform_enabled) {
-                // Get anatomical file for conforming (use first available T1w from same session)
+                // Get anatomical file for conforming
                 def anat_for_conform = anat_after_skull
                     .filter(isT1wFile)
                     .map { sub, ses, anat_file, bids_template -> [sub, ses, anat_file] }
-                    .unique { sub, ses, anat_file -> [sub, ses] }  // One per session
+                    .unique { sub, ses, anat_file -> [sub, ses] }
                 
-                // Create dummy anatomical file for cases with no anatomical data
                 def dummy_anat_conform = file("${workDir}/dummy_anat_conform.dummy")
+                def dummy_anat_ch = func_compute_input
+                    .map { sub, ses, run_id, bold, tmean, bids -> [sub, ses, dummy_anat_conform] }
                 
-                // Create channel with dummy anatomical files for all sessions (fallback)
-                def dummy_anat_ch = func_tmean_averaged_ch
-                    .map { sub, ses, tmean, bids -> [sub, ses, dummy_anat_conform] }
-                
-                // Combine real anatomical files with dummy ones
-                // Use groupTuple to ensure we get real files when available, dummy otherwise
                 def anat_for_conform_with_fallback = anat_for_conform
                     .mix(dummy_anat_ch)
-                    .groupTuple(by: [0, 1])  // Group by [sub, ses]
+                    .groupTuple(by: [0, 1])
                     .map { sub, ses, anat_files ->
-                        // Use first non-dummy file if available, otherwise use dummy
                         def real_anat = anat_files.find { f -> !f.toString().contains('.dummy') }
                         [sub, ses, real_anat ?: dummy_anat_conform]
                     }
                 
-                // Join averaged tmean with anatomical file (will always succeed due to fallback)
-                def func_conform_with_anat = func_tmean_averaged_ch
-                    .join(anat_for_conform_with_fallback, by: [0, 1])  // Join by [sub, ses]
-                    .map { sub, ses, tmean, bids, anat_file ->
-                        // Create dummy structure for FUNC_CONFORM
-                        def dummy_bold = file("${workDir}/dummy_bold_${sub}_${ses}.dummy")
-                        def dummy_run_identifier = "session-01"
-                        [sub, ses, dummy_run_identifier, dummy_bold, tmean, bids, anat_file]
+                def func_compute_conform_input = func_compute_input
+                    .join(anat_for_conform_with_fallback, by: [0, 1])
+                    .map { sub, ses, run_id, bold, tmean, bids, anat_file ->
+                        [sub, ses, run_id, bold, tmean, bids, anat_file]
                     }
                 
-                def func_conform_session_tuple = func_conform_with_anat
-                    .multiMap { sub, ses, run_identifier, bold_file, tmean_file, bids_template, anat_file ->
-                        combined: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
+                func_compute_conform_input
+                    .multiMap { sub, ses, run_id, bold, tmean, bids, anat_file ->
+                        combined: [sub, ses, run_id, bold, tmean, bids]
                         reference: anat_file
                     }
-                    .set { func_conform_session_multi }
+                    .set { func_compute_conform_multi }
                 
-                FUNC_CONFORM(func_conform_session_multi.combined, func_conform_session_multi.reference, config_file)
-                // Extract session-level outputs: [sub, ses, tmean_conformed, bids]
-                // Note: session-level CONFORM outputs still have run_identifier, but we'll extract just tmean for next step
-                func_after_conform = FUNC_CONFORM.out.output
-                    .map { sub, ses, run_identifier, bold, tmean_conformed, bids ->
-                        [sub, ses, tmean_conformed, bids]
-                    }
-                // Transforms output is just path "*.mat" without tuple structure
-                // If transforms are needed with identifiers, they should be joined with output tuple elsewhere
-                // For now, just assign directly (transforms are published but may not be used downstream)
-                func_conform_transforms = FUNC_CONFORM.out.transforms
+                FUNC_COMPUTE_CONFORM(func_compute_conform_multi.combined, func_compute_conform_multi.reference, config_file)
+                // Output: [sub, ses, run_id, conformed_tmean, bids, conform_transform]
+                func_compute_conform_output = FUNC_COMPUTE_CONFORM.out.output
             } else {
-                // No conform - just pass through averaged tmean
-                func_after_conform = func_tmean_averaged_ch
-                    .map { sub, ses, tmean, bids ->
-                        [sub, ses, tmean, bids]
+                // No conform - pass through with empty transform
+                func_compute_conform_output = func_compute_input
+                    .map { sub, ses, run_id, bold, tmean, bids ->
+                        def dummy_transform = file("${workDir}/dummy_conform_transform.dummy")
+                        [sub, ses, run_id, tmean, bids, dummy_transform]
                     }
             }
             
-            // Session-level SKULLSTRIPPING on conformed/averaged tmean
-            // func_after_conform: [sub, ses, tmean_conformed, bids] or [sub, ses, tmean_averaged, bids]
+            // COMPUTE_BRAIN_MASK
             if (func_skullstripping_enabled) {
-                // FUNC_SKULLSTRIPPING expects: [sub, ses, run_identifier, bold, tmean, bids]
-                // Create dummy structure for session-level processing
-                def func_skull_session_input = func_after_conform
-                    .map { sub, ses, tmean, bids ->
-                        def dummy_bold = file("${workDir}/dummy_bold_${sub}_${ses}.dummy")
-                        def dummy_run_identifier = "session-01"
-                        [sub, ses, dummy_run_identifier, dummy_bold, tmean, bids]
+                // Input: [sub, ses, run_id, conformed_tmean, bids] (extract from compute_conform output)
+                def func_compute_mask_input = func_compute_conform_output
+                    .map { sub, ses, run_id, conformed_tmean, bids, transform ->
+                        [sub, ses, run_id, conformed_tmean, bids]
                     }
                 
-                FUNC_SKULLSTRIPPING(func_skull_session_input, config_file)
-                // Extract session-level outputs: [sub, ses, tmean_brain, bids]
-                func_after_skull = FUNC_SKULLSTRIPPING.out.output
-                    .map { sub, ses, run_identifier, bold, brain, bids ->
-                        [sub, ses, brain, bids]
-                    }
-                func_mask = FUNC_SKULLSTRIPPING.out.brain_mask
-                    .map { sub, ses, run_identifier, mask ->
-                        [sub, ses, mask]
-                    }
+                FUNC_COMPUTE_BRAIN_MASK(func_compute_mask_input, config_file)
+                // Output: [sub, ses, run_id, masked_tmean, bids, brain_mask]
+                func_compute_mask_output = FUNC_COMPUTE_BRAIN_MASK.out.output
             } else {
-                func_after_skull = func_after_conform
+                // No mask - pass through conformed tmean with empty mask
+                func_compute_mask_output = func_compute_conform_output
+                    .map { sub, ses, run_id, conformed_tmean, bids, transform ->
+                        def dummy_mask = file("${workDir}/dummy_brain_mask.dummy")
+                        [sub, ses, run_id, conformed_tmean, bids, dummy_mask]
+                    }
             }
             
-            // Session-level REGISTRATION on session tmean brain
-            if (anat_registration_enabled) {
-                // Create anat_same_ses from anat_after_skull: [sub, ses, anat_brain]
-                // anat_after_skull: [sub, ses, anat_file, bids_template]
-                def anat_same_ses = anat_after_skull
-                    .filter(isT1wFile)
-                    .map { sub, ses, anat_file, bids_template -> [sub, ses, anat_file] }
-                    .unique { sub, ses, anat_file -> [sub, ses] }  // One per session
-                
-                // Join session-level brain with anatomical selection
-                // func_after_skull: [sub, ses, tmean_brain, bids]
-                // anat_same_ses: [sub, ses, anat_brain]
-                def func_reg_session_input = func_after_skull
-                    .join(anat_same_ses, by: [0, 1])  // Join by [sub, ses]
-                    .map { sub, ses, tmean_brain, bids, anat_brain ->
-                        // Create dummy structure for FUNC_REGISTRATION
-                        def dummy_bold = file("${workDir}/dummy_bold_${sub}_${ses}.dummy")
-                        def dummy_run_identifier = "session-01"
-                        [sub, ses, dummy_run_identifier, dummy_bold, tmean_brain, bids, anat_brain, ses, false]
+            // COMPUTE_REGISTRATION
+            if (registration_enabled) {
+                // Input: [sub, ses, run_id, masked_tmean, bids] + anatomical selection
+                def func_compute_reg_input = func_compute_mask_output
+                    .map { sub, ses, run_id, masked_tmean, bids, mask ->
+                        [sub, ses, run_id, masked_tmean, bids]
+                    }
+                    .join(func_anat_selection, by: [0, 1])  // Join by [sub, ses] (run_id is "" for session-level)
+                    .map { sub, ses, run_id, masked_tmean, bids, anat_file, anat_ses, is_cross_ses ->
+                        [sub, ses, run_id, masked_tmean, bids, anat_file, anat_ses, is_cross_ses]
                     }
                 
-                func_reg_session_input
-                    .multiMap { sub, ses, run_identifier, bold, tmean_brain, bids, anat_brain, anat_ses, is_cross_ses ->
-                        combined: [sub, ses, run_identifier, bold, tmean_brain, bids, anat_ses, is_cross_ses]
-                        reference: anat_brain
+                func_compute_reg_input
+                    .multiMap { sub, ses, run_id, masked_tmean, bids, anat_file, anat_ses, is_cross_ses ->
+                        combined: [sub, ses, run_id, masked_tmean, bids, anat_ses, is_cross_ses]
+                        reference: anat_file
                     }
-                    .set { func_reg_session_multi }
+                    .set { func_compute_reg_multi }
                 
-                FUNC_REGISTRATION(func_reg_session_multi.combined, func_reg_session_multi.reference, config_file)
-                // Extract session-level outputs: [sub, ses, tmean_registered, bids]
-                func_after_reg = FUNC_REGISTRATION.out.output
-                    .map { sub, ses, run_identifier, bold, registered_tmean, bids ->
-                        [sub, ses, registered_tmean, bids]
-                    }
-                func_reg_transforms = FUNC_REGISTRATION.out.transforms
-                    .map { sub, ses, run_identifier, transform ->
-                        [sub, ses, transform]
-                    }
-                func_reg_reference = FUNC_REGISTRATION.out.reference
-                    .map { sub, ses, run_identifier, ref ->
-                        [sub, ses, ref]
-                    }
-                func_reg_metadata = FUNC_REGISTRATION.out.metadata
-                    .map { sub, ses, run_identifier, metadata ->
-                        [sub, ses, metadata]
-                    }
-                func_reg_anat_session = FUNC_REGISTRATION.out.anat_session
-                    .map { sub, ses, run_identifier, anat_ses ->
-                        [sub, ses, anat_ses]
-                    }
+                FUNC_COMPUTE_REGISTRATION(func_compute_reg_multi.combined, func_compute_reg_multi.reference, config_file)
+                // Output: [sub, ses, run_id, registered_tmean, bids, reg_transform, anat_ses, is_cross_ses]
+                func_compute_reg_output = FUNC_COMPUTE_REGISTRATION.out.output
             } else {
-                func_after_reg = func_after_skull
+                // No registration - pass through masked tmean with empty transform
+                func_compute_reg_output = func_compute_mask_output
+                    .map { sub, ses, run_id, masked_tmean, bids, mask ->
+                        def dummy_transform = file("${workDir}/dummy_reg_transform.dummy")
+                        [sub, ses, run_id, masked_tmean, bids, dummy_transform, "", false]
+                    }
             }
             
         } else {
             // ============================================
-            // PER-RUN PROCESSING PATH (normal workflow)
+            // PER-RUN COMPUTE PHASE (normal workflow)
             // ============================================
-            // CONFORM - processes both BOLD and tmean
-            func_after_conform = func_after_coreg
+            // Input: [sub, ses, run_identifier, bold_file, tmean_file, bids_template] from func_after_coreg
+            def func_compute_input = func_after_coreg
+            
+            // COMPUTE_CONFORM
             if (func_conform_enabled) {
-                // Join functional data with anatomical selection to get anatomical file
-                def func_conform_with_anat = func_after_coreg
+                def func_conform_with_anat = func_compute_input
                     .join(func_anat_selection, by: [0, 1, 2])  // Join by [sub, ses, run_identifier]
-                    .map { sub, ses, run_identifier, bold_file, tmean_file, bids_template, anat_file, anat_ses, is_cross_ses ->
-                        [sub, ses, run_identifier, bold_file, tmean_file, bids_template, anat_file]
+                    .map { sub, ses, run_id, bold, tmean, bids, anat_file, anat_ses, is_cross_ses ->
+                        [sub, ses, run_id, bold, tmean, bids, anat_file]
                     }
                 
-                def func_conform_tuple = func_conform_with_anat
-                    .multiMap { sub, ses, run_identifier, bold_file, tmean_file, bids_template, anat_file ->
-                        combined: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
+                func_conform_with_anat
+                    .multiMap { sub, ses, run_id, bold, tmean, bids, anat_file ->
+                        combined: [sub, ses, run_id, bold, tmean, bids]
                         reference: anat_file
                     }
-                    .set { func_conform_multi }
+                    .set { func_compute_conform_multi }
                 
-                FUNC_CONFORM(func_conform_multi.combined, func_conform_multi.reference, config_file)
-                func_after_conform = FUNC_CONFORM.out.output  
-                func_conform_transforms = FUNC_CONFORM.out.transforms
+                FUNC_COMPUTE_CONFORM(func_compute_conform_multi.combined, func_compute_conform_multi.reference, config_file)
+                // Output: [sub, ses, run_id, conformed_tmean, bids, conform_transform]
+                func_compute_conform_output = FUNC_COMPUTE_CONFORM.out.output
+            } else {
+                // No conform - pass through with empty transform
+                func_compute_conform_output = func_compute_input
+                    .map { sub, ses, run_id, bold, tmean, bids ->
+                        def dummy_transform = file("${workDir}/dummy_conform_transform.dummy")
+                        [sub, ses, run_id, tmean, bids, dummy_transform]
+                    }
             }
             
-            // SKULLSTRIPPING - operates on tmean → brain, inherits BOLD
-            def func_after_skull_processed = Channel.empty()
-            def func_after_skull_passthrough = Channel.empty()
-            
+            // COMPUTE_BRAIN_MASK
             if (func_skullstripping_enabled) {
-                FUNC_SKULLSTRIPPING(func_after_conform, config_file)
-                func_after_skull_processed = FUNC_SKULLSTRIPPING.out.output
-                func_mask = FUNC_SKULLSTRIPPING.out.brain_mask
-            } else {
-                func_after_skull_passthrough = func_after_conform
-            }
-            
-            func_after_skull = func_after_skull_processed.mix(func_after_skull_passthrough)
-            
-            // FUNC_REGISTRATION - registers functional tmean/brain to anatomical skull-stripped brain OR template
-            if (anat_registration_enabled) {
-                // Join functional data with anatomical selection
-                def func_reg_with_anat = func_after_skull
-                    .join(func_anat_selection, by: [0, 1, 2])  // Join by [sub, ses, run_identifier]
-                    .map { sub, ses, run_identifier, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_cross_ses ->
-                        [sub, ses, run_identifier, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_cross_ses]
+                def func_compute_mask_input = func_compute_conform_output
+                    .map { sub, ses, run_id, conformed_tmean, bids, transform ->
+                        [sub, ses, run_id, conformed_tmean, bids]
                     }
                 
-                func_reg_with_anat
-                    .multiMap { sub, ses, run_identifier, bold_file, tmean_file, bids_template, anat_brain, anat_ses, is_cross_ses ->
-                        combined: [sub, ses, run_identifier, bold_file, tmean_file, bids_template, anat_ses, is_cross_ses]
-                        reference: anat_brain
-                    }
-                    .set { func_reg_multi }
-
-                FUNC_REGISTRATION(func_reg_multi.combined, func_reg_multi.reference, config_file)
-                func_after_reg = FUNC_REGISTRATION.out.output
-                func_reg_transforms = FUNC_REGISTRATION.out.transforms
-                func_reg_reference = FUNC_REGISTRATION.out.reference
-                func_reg_metadata = FUNC_REGISTRATION.out.metadata
-                func_reg_anat_session = FUNC_REGISTRATION.out.anat_session
+                FUNC_COMPUTE_BRAIN_MASK(func_compute_mask_input, config_file)
+                // Output: [sub, ses, run_id, masked_tmean, bids, brain_mask]
+                func_compute_mask_output = FUNC_COMPUTE_BRAIN_MASK.out.output
             } else {
-                func_after_reg = func_after_skull
+                // No mask - pass through conformed tmean with empty mask
+                func_compute_mask_output = func_compute_conform_output
+                    .map { sub, ses, run_id, conformed_tmean, bids, transform ->
+                        def dummy_mask = file("${workDir}/dummy_brain_mask.dummy")
+                        [sub, ses, run_id, conformed_tmean, bids, dummy_mask]
+                    }
+            }
+            
+            // COMPUTE_REGISTRATION
+            if (registration_enabled) {
+                def func_compute_reg_input = func_compute_mask_output
+                    .map { sub, ses, run_id, masked_tmean, bids, mask ->
+                        [sub, ses, run_id, masked_tmean, bids]
+                    }
+                    .join(func_anat_selection, by: [0, 1, 2])  // Join by [sub, ses, run_identifier]
+                    .map { sub, ses, run_id, masked_tmean, bids, anat_file, anat_ses, is_cross_ses ->
+                        [sub, ses, run_id, masked_tmean, bids, anat_file, anat_ses, is_cross_ses]
+                    }
+                
+                func_compute_reg_input
+                    .multiMap { sub, ses, run_id, masked_tmean, bids, anat_file, anat_ses, is_cross_ses ->
+                        combined: [sub, ses, run_id, masked_tmean, bids, anat_ses, is_cross_ses]
+                        reference: anat_file
+                    }
+                    .set { func_compute_reg_multi }
+                
+                FUNC_COMPUTE_REGISTRATION(func_compute_reg_multi.combined, func_compute_reg_multi.reference, config_file)
+                // Output: [sub, ses, run_id, registered_tmean, bids, reg_transform, anat_ses, is_cross_ses]
+                func_compute_reg_output = FUNC_COMPUTE_REGISTRATION.out.output
+            } else {
+                // No registration - pass through masked tmean with empty transform
+                func_compute_reg_output = func_compute_mask_output
+                    .map { sub, ses, run_id, masked_tmean, bids, mask ->
+                        def dummy_transform = file("${workDir}/dummy_reg_transform.dummy")
+                        [sub, ses, run_id, masked_tmean, bids, dummy_transform, "", false]
+                    }
             }
         }
         
         // ------------------------------------------------------------
-        // APPLY_TRANSFORMS
-        def func_apply_reg = func_after_reg
-        def func_apply_reg_reference = Channel.empty()  // Reference files for QC
-        if (anat_registration_enabled) {
-            // Create dummy anatomical-to-template transform file
+        // APPLY PHASE: Apply transforms and masks to BOLD files
+        // ------------------------------------------------------------
+        // Start with BOLD files from func_after_coreg (or func_after_bias if no coreg)
+        def func_apply_bold_input = func_coreg_runs_within_session && func_coreg_success ? func_after_coreg : func_after_coreg
+        
+        // APPLY_CONFORM
+        def func_apply_conform_output = Channel.empty()
+        if (func_conform_enabled) {
+            // Join BOLD files with conform transform and conformed tmean reference
+            def func_apply_conform_input
+            if (func_coreg_runs_within_session && func_coreg_success) {
+                // Session-level: join by [sub, ses] (run_id is "" for session-level compute)
+                func_apply_conform_input = func_apply_bold_input
+                    .join(
+                        func_compute_conform_output
+                            .filter { sub, ses, run_id, conformed_tmean, bids, transform ->
+                                run_id == ""  // Session-level
+                            }
+                            .map { sub, ses, run_id, conformed_tmean, bids, transform ->
+                                [sub, ses, transform, conformed_tmean]
+                            },
+                        by: [0, 1]  // Join by [sub, ses]
+                    )
+                    .map { sub, ses, run_id, bold, tmean, bids, transform, conformed_tmean ->
+                        [sub, ses, run_id, bold, transform, conformed_tmean, bids]
+                    }
+            } else {
+                // Per-run: join by [sub, ses, run_identifier]
+                func_apply_conform_input = func_apply_bold_input
+                    .join(
+                        func_compute_conform_output
+                            .map { sub, ses, run_id, conformed_tmean, bids, transform ->
+                                [sub, ses, run_id, transform, conformed_tmean]
+                            },
+                        by: [0, 1, 2]  // Join by [sub, ses, run_identifier]
+                    )
+                    .map { sub, ses, run_id, bold, tmean, bids, transform, conformed_tmean ->
+                        [sub, ses, run_id, bold, transform, conformed_tmean, bids]
+                    }
+            }
+            
+            FUNC_APPLY_CONFORM(func_apply_conform_input, config_file)
+            // Output: [sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids]
+            func_apply_conform_output = FUNC_APPLY_CONFORM.out.output
+        } else {
+            // No conform - pass through BOLD files
+            func_apply_conform_output = func_apply_bold_input
+                .map { sub, ses, run_id, bold, tmean, bids ->
+                    def dummy_tmean_ref = file("${workDir}/dummy_tmean_ref.dummy")
+                    [sub, ses, run_id, bold, dummy_tmean_ref, bids]
+                }
+        }
+        
+        // APPLY_BRAIN_MASK
+        def func_apply_mask_output = Channel.empty()
+        if (func_skullstripping_enabled) {
+            // Join conformed BOLD with brain mask and masked tmean reference
+            def func_apply_mask_input
+            if (func_coreg_runs_within_session && func_coreg_success) {
+                // Session-level: join by [sub, ses]
+                func_apply_mask_input = func_apply_conform_output
+                    .join(
+                        func_compute_mask_output
+                            .filter { sub, ses, run_id, masked_tmean, bids, mask ->
+                                run_id == ""  // Session-level
+                            }
+                            .map { sub, ses, run_id, masked_tmean, bids, mask ->
+                                [sub, ses, mask, masked_tmean]
+                            },
+                        by: [0, 1]
+                    )
+                    .map { sub, ses, run_id, conformed_bold, conformed_tmean, bids, mask, masked_tmean ->
+                        [sub, ses, run_id, conformed_bold, mask, masked_tmean, bids]
+                    }
+            } else {
+                // Per-run: join by [sub, ses, run_identifier]
+                func_apply_mask_input = func_apply_conform_output
+                    .join(
+                        func_compute_mask_output
+                            .map { sub, ses, run_id, masked_tmean, bids, mask ->
+                                [sub, ses, run_id, mask, masked_tmean]
+                            },
+                        by: [0, 1, 2]
+                    )
+                    .map { sub, ses, run_id, conformed_bold, conformed_tmean, bids, mask, masked_tmean ->
+                        [sub, ses, run_id, conformed_bold, mask, masked_tmean, bids]
+                    }
+            }
+            
+            FUNC_APPLY_BRAIN_MASK(func_apply_mask_input, config_file)
+            // Output: [sub, ses, run_id, masked_bold, masked_tmean_ref, bids]
+            func_apply_mask_output = FUNC_APPLY_BRAIN_MASK.out.output
+        } else {
+            // No mask - pass through conformed BOLD
+            func_apply_mask_output = func_apply_conform_output
+        }
+        
+        // APPLY_REGISTRATION (using existing FUNC_APPLY_TRANSFORMS)
+        def func_apply_reg = func_apply_mask_output
+        def func_apply_reg_reference = Channel.empty()
+        if (registration_enabled) {
+            // Join masked BOLD with registration transform, registered tmean reference, and anat2template transform
+            // func_compute_reg_output: [sub, ses, run_id, registered_tmean, bids, reg_transform, anat_ses, is_cross_ses]
+            // FUNC_COMPUTE_REGISTRATION.out.reference: [sub, ses, run_id, registered_tmean, bids, target_final]
             def dummy_anat2template = file("${workDir}/dummy_anat2template.dummy")
             
-            def func_all_for_apply
+            def func_apply_reg_input
             if (func_coreg_runs_within_session && func_coreg_success) {
-                // Session-level processing
-                func_all_for_apply = funcChannels.prepareSessionLevelTransforms(
-                    func_after_reg,
-                    func_reg_transforms,
-                    func_reg_metadata,
-                    func_reg_reference,
-                    func_reg_anat_session,
-                    func_after_coreg,
-                    anat_reg_transforms,
-                    dummy_anat2template,
-                    Channel
-                )
+                // Session-level: join by [sub, ses]
+                // First join compute_reg_output with reference to get target_final
+                def func_compute_reg_with_ref = func_compute_reg_output
+                    .join(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1, 2])
+                    .map { sub, ses, run_id, registered_tmean, bids, reg_transform, anat_ses, is_cross_ses, registered_tmean2, bids2, target_final ->
+                        [sub, ses, registered_tmean, reg_transform, target_final, anat_ses, is_cross_ses]
+                    }
+                
+                // Then join with anat_reg_transforms to get anat2template transform
+                func_apply_reg_input = func_apply_mask_output
+                    .join(
+                        func_compute_reg_with_ref
+                            .join(
+                                anat_reg_transforms.map { sub, ses, transform -> [sub, ses, transform] },
+                                by: [0, 1]
+                            )
+                            .map { sub, ses, registered_tmean, reg_transform, target_final, anat_ses, is_cross_ses, anat2template_transform ->
+                                [sub, ses, registered_tmean, reg_transform, anat2template_transform, target_final, anat_ses, is_cross_ses]
+                            },
+                        by: [0, 1]
+                    )
+                    .map { sub, ses, run_id, masked_bold, masked_tmean, bids, registered_tmean, reg_transform, anat2template_transform, target_final, anat_ses, is_cross_ses ->
+                        // Determine target_type and target2template
+                        def target_type = 'anat'  // Always anat for func2anat2template
+                        def target2template = true
+                        [sub, ses, run_id, masked_bold, registered_tmean, reg_transform, anat2template_transform, bids, target_type, target2template, target_final]
+                    }
             } else {
-                // Per-run processing
-                func_all_for_apply = funcChannels.preparePerRunTransforms(
-                    func_after_reg,
-                    func_reg_transforms,
-                    func_reg_metadata,
-                    func_reg_reference,
-                    func_reg_anat_session,
-                    anat_reg_transforms,
-                    dummy_anat2template,
-                    Channel
-                )
+                // Per-run: join by [sub, ses, run_identifier]
+                def func_compute_reg_with_ref = func_compute_reg_output
+                    .join(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1, 2])
+                    .map { sub, ses, run_id, registered_tmean, bids, reg_transform, anat_ses, is_cross_ses, registered_tmean2, bids2, target_final ->
+                        [sub, ses, run_id, registered_tmean, reg_transform, target_final, anat_ses, is_cross_ses]
+                    }
+                
+                func_apply_reg_input = func_apply_mask_output
+                    .join(
+                        func_compute_reg_with_ref
+                            .join(
+                                anat_reg_transforms.map { sub, ses, transform -> [sub, ses, transform] },
+                                by: [0, 1]
+                            )
+                            .map { sub, ses, run_id, registered_tmean, reg_transform, target_final, anat_ses, is_cross_ses, anat2template_transform ->
+                                [sub, ses, run_id, registered_tmean, reg_transform, anat2template_transform, target_final, anat_ses, is_cross_ses]
+                            },
+                        by: [0, 1, 2]
+                    )
+                    .map { sub, ses, run_id, masked_bold, masked_tmean, bids, registered_tmean, reg_transform, anat2template_transform, target_final, anat_ses, is_cross_ses ->
+                        def target_type = 'anat'
+                        def target2template = true
+                        [sub, ses, run_id, masked_bold, registered_tmean, reg_transform, anat2template_transform, bids, target_type, target2template, target_final]
+                    }
             }
             
-            // multiMap must be done in workflow context
-            if (func_coreg_runs_within_session && func_coreg_success) {
-                // Session-level: prepareSessionLevelTransforms returns [sub, ses, run_identifier, registered_tmean, transform, anat2template_transform, bids, target_type, target2template, ref, bold]
-                func_all_for_apply
-                    .multiMap { sub, ses, run_identifier, registered_tmean, transform, anat2template_transform, bids_template, target_type, target2template, ref, bold ->
-                        reg_combined: [sub, ses, run_identifier, registered_tmean, transform, anat2template_transform, bids_template, target_type, target2template, ref]
-                        func_4d_file: bold
-                    }
-                    .set { func_apply_multi }
-            } else {
-                // Per-run: [sub, ses, run_identifier, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file]
-                func_all_for_apply
-                    .multiMap { sub, ses, run_identifier, bold_file, registered_tmean, bids_template, forward_transform, anat2template_transform, target_type, target2template, reference_file ->
-                        reg_combined: [sub, ses, run_identifier, registered_tmean, forward_transform, anat2template_transform, bids_template, target_type, target2template, reference_file]
-                        func_4d_file: bold_file
-                    }
-                    .set { func_apply_multi }
-            }
+            func_apply_reg_input
+                .multiMap { sub, ses, run_id, masked_bold, registered_tmean, reg_transform, anat2template_transform, bids, target_type, target2template, ref ->
+                    reg_combined: [sub, ses, run_id, registered_tmean, reg_transform, anat2template_transform, bids, target_type, target2template, ref]
+                    func_4d_file: masked_bold
+                }
+                .set { func_apply_reg_multi }
             
-            // Call process in workflow context
-            FUNC_APPLY_TRANSFORMS(func_apply_multi.reg_combined, func_apply_multi.func_4d_file, config_file)
+            FUNC_APPLY_TRANSFORMS(func_apply_reg_multi.reg_combined, func_apply_reg_multi.func_4d_file, config_file)
             func_apply_reg = FUNC_APPLY_TRANSFORMS.out.output
             func_apply_reg_reference = FUNC_APPLY_TRANSFORMS.out.reference
         }
@@ -1152,48 +1241,52 @@ workflow {
         //     QC_BIAS_CORRECTION_FUNC(func_bias_qc_input, config_file)
         // }
         
-        // QC_CONFORM_FUNC: needs conformed file + template_resampled (same space as conformed image)
-        // Run QC if FUNC_CONFORM was actually called (either per-run or session-level path)
+        // QC_CONFORM_FUNC: needs original (bias-corrected) tmean vs conformed tmean from apply step
+        // Compare before (bias-corrected) vs after (conformed from FUNC_APPLY_CONFORM)
+        // Note: Even for session-level, conform is applied per-run, so we compare per-run
         if (func_conform_enabled) {
-            if (func_coreg_runs_within_session && func_coreg_success) {
-                // Session-level: FUNC_CONFORM.out.output is [sub, ses, run_identifier, bold, tmean, bids]
-                // FUNC_CONFORM.out.template_resampled is [sub, ses, run_identifier, template_file, bids]
-                FUNC_CONFORM.out.output
-                    .join(FUNC_CONFORM.out.template_resampled, by: [0, 1, 2])
-                    .map { sub, ses, run_identifier, bold_file, tmean_file, bids_template, template_file, template_bids_naming ->
-                        // Extract tmean (conformed) for QC
-                        [sub, ses, run_identifier, tmean_file, bids_template, template_file]
-                    }
-                    .set { func_conform_qc_input }
-                QC_CONFORM_FUNC(func_conform_qc_input, config_file)
-            } else {
-                // Per-run: Join conform output with template_resampled
-                FUNC_CONFORM.out.output
-                    .join(FUNC_CONFORM.out.template_resampled, by: [0, 1, 2])
-                    .map { sub, ses, run_identifier, bold_file, tmean_file, bids_template, template_file, template_bids_naming ->
-                        // Extract tmean (conformed) for QC
-                        [sub, ses, run_identifier, tmean_file, bids_template, template_file]
-                    }
-                    .set { func_conform_qc_input }
-                QC_CONFORM_FUNC(func_conform_qc_input, config_file)
-            }
+            // Join apply output with bias-corrected tmean by [sub, ses, run_identifier]
+            def func_conform_qc_input = FUNC_APPLY_CONFORM.out.output
+                .map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids ->
+                    [sub, ses, run_id, conformed_tmean_ref, bids]
+                }
+                .join(
+                    func_after_bias
+                        .map { sub, ses, run_id, bold, tmean, bids ->
+                            [sub, ses, run_id, tmean]
+                        },
+                    by: [0, 1, 2]
+                )
+                .map { sub, ses, run_id, conformed_tmean_ref, bids, original_tmean ->
+                    [sub, ses, run_id, original_tmean, conformed_tmean_ref, bids]
+                }
+            QC_CONFORM_FUNC(func_conform_qc_input, config_file)
         }
         
-        // QC_SKULLSTRIPPING_FUNC: needs original (non-skullstripped) file + mask file
-        // Use conform output (input to skullstripping) as underlay, not the skullstripped brain
+        // QC_SKULLSTRIPPING_FUNC: needs pre-skull-stripping tmean (conformed) + brain mask
+        // Use conformed tmean from FUNC_APPLY_CONFORM (before skull stripping) + mask from FUNC_COMPUTE_BRAIN_MASK
         if (func_skullstripping_enabled) {
-            func_after_conform
-                .join(func_mask, by: [0, 1, 2])
-                .map { sub, ses, run_identifier, bold_file, tmean_file, bids_template, mask_file, bids_template_mask ->
-                    // Extract tmean (before skullstripping) for QC
-                    [sub, ses, run_identifier, tmean_file, mask_file, bids_template]
+            // Join conformed tmean (before skull stripping) with brain mask by [sub, ses, run_identifier]
+            // Note: Even for session-level, skull stripping is applied per-run, so we compare per-run
+            def func_skull_qc_input = func_apply_conform_output
+                .map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids ->
+                    [sub, ses, run_id, conformed_tmean_ref, bids]  // Extract conformed_tmean_ref (before skull stripping)
                 }
-                .set { func_skull_qc_input }
+                .join(
+                    FUNC_COMPUTE_BRAIN_MASK.out.output
+                        .map { sub, ses, run_id, masked_tmean, bids, brain_mask ->
+                            [sub, ses, run_id, brain_mask]  // Extract brain_mask
+                        },
+                    by: [0, 1, 2]
+                )
+                .map { sub, ses, run_id, conformed_tmean_ref, bids, brain_mask ->
+                    [sub, ses, run_id, conformed_tmean_ref, brain_mask, bids]
+                }
             QC_SKULLSTRIPPING_FUNC(func_skull_qc_input, config_file)
         }
 
         // QC_REGISTRATION_FUNC: needs registered file
-        if (anat_registration_enabled) {
+        if (registration_enabled) {
             // Extract registered boldref (tmean) from combined channel
             // func_apply_reg: [sub, ses, run_identifier, bold_file, boldref_file, bids_template] (6 elements)
             // func_apply_reg_reference: [sub, ses, run_identifier, reference_file] (4 elements)
@@ -1213,15 +1306,10 @@ workflow {
     // ============================================
     // QC REPORT GENERATION (per subject)
     // ============================================
-    // Ensure all QC processes complete before report generation
-    // Use QC_REGISTRATION outputs as the final dependency (since it runs last)
-    
+    // Ensure all QC processes complete before report generation    
     // Create completion signal - wait for all QC processes to complete
-    // Collect all QC metadata channels that are actually enabled
     def anat_qc_channels = Channel.empty()
-    
-    // Add QC channels based on enabled steps
-    if (anat_registration_enabled) {
+    if (registration_enabled) {
         anat_qc_channels = anat_qc_channels.mix(QC_REGISTRATION.out.metadata)
     }
     if (surf_recon_enabled && anat_skullstripping_enabled) {
@@ -1252,9 +1340,6 @@ workflow {
         if (func_motion_correction_enabled) {
             func_qc_channels = func_qc_channels.mix(QC_MOTION_CORRECTION.out.metadata)
         }
-        // if (func_bias_correction_enabled) {
-        //     func_qc_channels = func_qc_channels.mix(QC_BIAS_CORRECTION_FUNC.out.metadata)
-        // }
         // Add QC_CONFORM_FUNC metadata if it was actually called (either per-run or session-level path)
         if (func_conform_enabled) {
             func_qc_channels = func_qc_channels.mix(QC_CONFORM_FUNC.out.metadata)
@@ -1265,9 +1350,9 @@ workflow {
         if (func_coreg_runs_within_session) {
             func_qc_channels = func_qc_channels.mix(QC_WITHIN_SES_COREG.out.metadata)
         }
-        // if (anat_registration_enabled) {
-        //     func_qc_channels = func_qc_channels.mix(QC_REGISTRATION_FUNC.out.metadata)
-        // }
+        if (registration_enabled) {
+            func_qc_channels = func_qc_channels.mix(QC_REGISTRATION_FUNC.out.metadata)
+        }
         
         def func_qc_completion = func_qc_channels
             .last()  // Wait for last functional QC to complete

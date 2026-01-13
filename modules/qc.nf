@@ -514,7 +514,7 @@ process QC_CONFORM_FUNC {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_file), val(bids_naming_template), path(template_resampled_file, stageAs: 'template.nii.gz')
+    tuple val(subject_id), val(session_id), val(run_identifier), path(original_file), path(conformed_file), val(bids_naming_template)
     path config_file
     
     output:
@@ -524,7 +524,7 @@ process QC_CONFORM_FUNC {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_conform
+from macacaMRIprep.steps.qc import qc_bias_correction
 from macacaMRIprep.utils.bids import create_bids_output_filename
 from pathlib import Path
 
@@ -535,10 +535,6 @@ config = load_config('${config_file}')
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
-# Use the resampled template file from conform step (matches the conformed image space)
-# File is staged as 'template.nii.gz' to avoid filename collisions
-template_file = Path('template.nii.gz')
-
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
     original_file_path=bids_naming_template,
@@ -546,10 +542,10 @@ qc_output_filename = create_bids_output_filename(
     modality='bold'
 ).replace('.nii.gz', '.png')
 
-# Generate QC
-result = qc_conform(
-    conformed_file=Path('${conformed_file}'),
-    template_file=template_file,
+# Generate QC using before/after comparison (original bias-corrected vs conformed)
+result = qc_bias_correction(
+    original_file=Path('${original_file}'),
+    corrected_file=Path('${conformed_file}'),
     output_path=Path(qc_output_filename),
     modality='func',
     config=config

@@ -800,6 +800,576 @@ process FUNC_CONFORM {
     """
 }
 
+process FUNC_COMPUTE_CONFORM {
+    label 'cpu'
+    tag "${subject_id}_${session_id}_${run_identifier}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
+        mode: 'copy',
+        pattern: '*.{nii.gz,mat}',
+        saveAs: { filename -> filename == 'template_resampled.nii.gz' ? null : filename }
+    
+    input:
+    // Input: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
+    // bold_file is dummy for session-level operations
+    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(tmean_file), val(bids_naming_template)
+    path(anat_brain_file)
+    path config_file
+    
+    output:
+    // Output: [sub, ses, run_identifier, conformed_tmean, bids_template, conform_transform]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_boldref.nii.gz"), val(bids_naming_template), path("*from-scanner_to-bold_mode-image_xfm.mat"), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("template_resampled.nii.gz"), val(bids_naming_template), emit: template_resampled
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+    from macacaMRIprep.steps.functional import func_conform
+    from macacaMRIprep.steps.types import StepInput
+    from macacaMRIprep.utils.templates import resolve_template
+    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+    from pathlib import Path
+    import shutil
+    import os
+    import sys
+    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    
+    # Initialize command log file
+    run_identifier = '${run_identifier}'
+    import re
+    task_match = re.search(r'task-([^_]+)', run_identifier)
+    run_match = re.search(r'run-([^_]+)', run_identifier)
+    task_name = task_match.group(1) if task_match else None
+    run = run_match.group(1) if run_match else None
+    
+    init_cmd_log_for_nextflow(
+        output_dir='${params.output_dir}',
+        subject_id='${subject_id}',
+        session_id='${session_id}' if '${session_id}' else None,
+        step_name='FUNC_COMPUTE_CONFORM',
+        task_name=task_name,
+        run=run
+    )
+    
+    # Load config
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
+    
+    # Get original file path (for BIDS filename generation)
+    bids_naming_template = Path('${bids_naming_template}')
+    
+    # Determine target file (anatomical or template based on pipeline)
+    registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
+    
+    # Check if anatomical brain file is available
+    anat_brain_path_str = '${anat_brain_file}'
+    has_anat_brain = anat_brain_path_str and anat_brain_path_str.strip() != '' and '.dummy' not in anat_brain_path_str
+    
+    # Get effective output_space (CLI > YAML > default)
+    from macacaMRIprep.utils.nextflow import get_effective_output_space
+    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+    
+    if registration_pipeline == 'func2template':
+        target_file = Path(resolve_template(effective_output_space))
+    elif registration_pipeline in ['func2anat', 'func2anat2template']:
+        if has_anat_brain:
+            anat_brain_path = Path(anat_brain_path_str)
+            if anat_brain_path.exists():
+                target_file = anat_brain_path
+            else:
+                target_file = Path(resolve_template(effective_output_space))
+        else:
+            target_file = Path(resolve_template(effective_output_space))
+    else:
+        target_file = Path(resolve_template(effective_output_space))
+    
+    # Create step input for tmean (used for conform registration)
+    tmean_input_obj = StepInput(
+        input_file=Path('${tmean_file}'),
+        working_dir=Path('work'),
+        config=config,
+        output_name='func_tmean_conformed.nii.gz',
+        metadata={
+            'subject_id': '${subject_id}',
+            'session_id': '${session_id}',
+            'run_identifier': run_identifier
+        }
+    )
+    
+    # Run step (only conforms tmean, does not apply to BOLD)
+    result = func_conform(tmean_input_obj, target_file=target_file, bold_4d_file=None)
+    
+    # Generate BIDS-compliant output filename for conformed tmean
+    bids_output_filename_tmean = create_bids_output_filename(
+        original_file_path=bids_naming_template,
+        suffix='desc-conform',
+        modality='boldref'
+    )
+    
+    # Create BIDS-compliant symlink for conformed tmean
+    create_output_link(result.output_file, bids_output_filename_tmean)
+    
+    # Copy transform files with BIDS-compliant names
+    original_stem = get_filename_stem(bids_naming_template)
+    bids_prefix = original_stem.replace('_bold', '')
+    
+    conform_transform_path = None
+    for key, f in result.additional_files.items():
+        if key == 'forward_transform':
+            # Forward transform: from-scanner_to-bold
+            bids_transform_name = f"{bids_prefix}_from-scanner_to-bold_mode-image_xfm.mat"
+            shutil.copy2(f, bids_transform_name)
+            conform_transform_path = Path(bids_transform_name)
+        elif key == 'inverse_transform':
+            # Inverse transform: from-bold_to-scanner (not needed for compute, but save for completeness)
+            bids_transform_name = f"{bids_prefix}_from-bold_to-scanner_mode-image_xfm.mat"
+            shutil.copy2(f, bids_transform_name)
+        elif key == 'template_resampled':
+            # Create symlink at root level for Nextflow output pattern
+            template_resampled_dest = Path('template_resampled.nii.gz')
+            if template_resampled_dest.exists() or template_resampled_dest.is_symlink():
+                template_resampled_dest.unlink()
+            os.symlink(f.resolve(), template_resampled_dest)
+        else:
+            shutil.copy2(f, f.name)
+    
+    if conform_transform_path is None:
+        raise FileNotFoundError("Conform transform not found in result.additional_files")
+    
+    # Save metadata
+    save_metadata(result.metadata)
+    EOF
+    """
+}
+
+process FUNC_COMPUTE_BRAIN_MASK {
+    label 'gpu'
+    tag "${subject_id}_${session_id}_${run_identifier}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
+        mode: 'copy',
+        pattern: '*desc-brain_mask.nii.gz'
+    
+    input:
+    // Input: [sub, ses, run_identifier, conformed_tmean, bids_template]
+    tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_tmean), val(bids_naming_template)
+    path config_file
+    
+    output:
+    // Output: [sub, ses, run_identifier, masked_tmean, bids_template, brain_mask]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*_boldref_brain.nii.gz"), val(bids_naming_template), path("*desc-brain_mask.nii.gz"), emit: output
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+    from macacaMRIprep.steps.functional import func_skullstripping
+    from macacaMRIprep.steps.types import StepInput
+    from macacaMRIprep.utils.bids import get_filename_stem
+    from pathlib import Path
+    import shutil
+    import os
+    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    
+    # Initialize command log file
+    run_identifier = '${run_identifier}'
+    import re
+    task_match = re.search(r'task-([^_]+)', run_identifier)
+    run_match = re.search(r'run-([^_]+)', run_identifier)
+    task_name = task_match.group(1) if task_match else None
+    run = run_match.group(1) if run_match else None
+    
+    init_cmd_log_for_nextflow(
+        output_dir='${params.output_dir}',
+        subject_id='${subject_id}',
+        session_id='${session_id}' if '${session_id}' else None,
+        step_name='FUNC_COMPUTE_BRAIN_MASK',
+        task_name=task_name,
+        run=run
+    )
+    
+    # Load config
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
+    
+    # Get original file path (for BIDS filename generation)
+    bids_naming_template = Path('${bids_naming_template}')
+    
+    # Create step input (process conformed tmean → brain)
+    input_obj = StepInput(
+        input_file=Path('${conformed_tmean}'),
+        working_dir=Path('work'),
+        config=config,
+        output_name='func_brain.nii.gz',
+        metadata={
+            'subject_id': '${subject_id}',
+            'session_id': '${session_id}',
+            'run_identifier': run_identifier
+        }
+    )
+    
+    # Run step (processes conformed tmean to create brain)
+    result = func_skullstripping(input_obj)
+    
+    # Generate BIDS-compliant output filename for mask
+    original_stem = get_filename_stem(bids_naming_template)
+    bids_prefix_wobold = original_stem.replace("_bold", "").replace("_boldref", "")
+    
+    # Create symlink for mask with BIDS-compliant name
+    if "brain_mask" in result.additional_files:
+        bids_additional_name = f"{bids_prefix_wobold}_desc-brain_mask.nii.gz"
+        create_output_link(result.additional_files["brain_mask"], bids_additional_name)
+    
+    # Create symlink for brain file (masked tmean)
+    if result.output_file.exists():
+        bids_brain_name = f"{bids_prefix_wobold}_boldref_brain.nii.gz"
+        create_output_link(result.output_file, bids_brain_name)
+    
+    # Save metadata
+    save_metadata(result.metadata)
+    EOF
+    """
+}
+
+process FUNC_COMPUTE_REGISTRATION {
+    label 'cpu'
+    tag "${subject_id}_${session_id}_${run_identifier}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
+        mode: 'copy',
+        pattern: '*.{nii.gz,h5}'
+    
+    input:
+    // Input: [sub, ses, run_identifier, masked_tmean, bids_template] + anatomical selection
+    tuple val(subject_id), val(session_id), val(run_identifier), path(masked_tmean), val(bids_naming_template), path(anat_brain), val(anat_session_id), val(is_cross_ses)
+    path config_file
+    
+    output:
+    // Output: [sub, ses, run_identifier, registered_tmean, bids_template, reg_transform, anat_session_id, is_cross_ses]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*boldref.nii.gz"), val(bids_naming_template), path("*from-bold_to-*_mode-image_xfm.h5"), val(anat_session_id), val(is_cross_ses), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*boldref.nii.gz"), val(bids_naming_template), path("*target_final.nii.gz"), emit: reference
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+    from macacaMRIprep.steps.functional import func_registration
+    from macacaMRIprep.steps.types import StepInput
+    from macacaMRIprep.utils.templates import resolve_template
+    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, get_effective_output_space
+    from pathlib import Path
+    import shutil
+    import os
+    import sys
+    
+    # Initialize command log file
+    run_identifier = '${run_identifier}'
+    import re
+    task_match = re.search(r'task-([^_]+)', run_identifier)
+    run_match = re.search(r'run-([^_]+)', run_identifier)
+    task_name = task_match.group(1) if task_match else None
+    run = run_match.group(1) if run_match else None
+    
+    init_cmd_log_for_nextflow(
+        output_dir='${params.output_dir}',
+        subject_id='${subject_id}',
+        session_id='${session_id}' if '${session_id}' else None,
+        step_name='FUNC_COMPUTE_REGISTRATION',
+        task_name=task_name,
+        run=run
+    )
+    
+    # Load config
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
+    
+    # Get original file path (for BIDS filename generation)
+    bids_naming_template = Path('${bids_naming_template}')
+    
+    # Determine target file and type
+    registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
+    anat_brain_path_str = '${anat_brain}'
+    has_anat_brain = anat_brain_path_str and anat_brain_path_str.strip() != '' and '.dummy' not in anat_brain_path_str
+    
+    # Get effective output_space
+    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+    
+    if registration_pipeline == 'func2template':
+        target_file = Path(resolve_template(effective_output_space))
+        target_type = 'template'
+        target2template = False
+    elif registration_pipeline in ['func2anat', 'func2anat2template']:
+        if has_anat_brain:
+            anat_brain_path = Path(anat_brain_path_str)
+            if anat_brain_path.exists():
+                target_file = anat_brain_path
+                target_type = 'anat'
+                target2template = (registration_pipeline == 'func2anat2template')
+            else:
+                target_file = Path(resolve_template(effective_output_space))
+                target_type = 'template'
+                target2template = False
+        else:
+            target_file = Path(resolve_template(effective_output_space))
+            target_type = 'template'
+            target2template = False
+    else:
+        target_file = Path(resolve_template(effective_output_space))
+        target_type = 'template'
+        target2template = False
+    
+    # Create step input
+    input_obj = StepInput(
+        input_file=Path('${masked_tmean}'),
+        working_dir=Path('work'),
+        config=config,
+        output_name='func_registered.nii.gz',
+        metadata={
+            'subject_id': '${subject_id}',
+            'session_id': '${session_id}',
+            'run_identifier': run_identifier
+        }
+    )
+    
+    # Run registration
+    result = func_registration(input_obj, target_file=target_file, target_type=target_type)
+    
+    # Generate BIDS-compliant output filename
+    template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
+    bids_output_filename = create_bids_output_filename(
+        original_file_path=bids_naming_template,
+        suffix=f'space-{template_name}_desc-preproc',
+        modality='boldref'
+    )
+    
+    # Create symlink for registered tmean
+    create_output_link(result.output_file, bids_output_filename)
+    
+    # Copy transform files
+    original_stem = get_filename_stem(bids_naming_template)
+    bids_prefix = original_stem.replace('_bold', '')
+    
+    reg_transform_path = None
+    for key, f in result.additional_files.items():
+        if key == 'forward_transform':
+            # Find the transform file that matches the pattern
+            import glob
+            transform_files = glob.glob(str(f.parent / "*from-bold_to-*_mode-image_xfm.h5"))
+            if transform_files:
+                reg_transform_path = Path(transform_files[0])
+            else:
+                # Copy with BIDS-compliant name
+                bids_transform_name = f"{bids_prefix}_from-bold_to-{template_name}_mode-image_xfm.h5"
+                shutil.copy2(f, bids_transform_name)
+                reg_transform_path = Path(bids_transform_name)
+        elif key == 'target_final':
+            # Create symlink for target_final
+            target_final_dest = Path('target_final.nii.gz')
+            if target_final_dest.exists() or target_final_dest.is_symlink():
+                target_final_dest.unlink()
+            os.symlink(f.resolve(), target_final_dest)
+        else:
+            shutil.copy2(f, f.name)
+    
+    if reg_transform_path is None:
+        raise FileNotFoundError("Registration transform not found in result.additional_files")
+    
+    # Save metadata
+    save_metadata(result.metadata)
+    EOF
+    """
+}
+
+process FUNC_APPLY_CONFORM {
+    label 'cpu'
+    tag "${subject_id}_${session_id}_${run_identifier}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
+        mode: 'copy',
+        pattern: '*.nii.gz'
+    
+    input:
+    // Input: [sub, ses, run_identifier, bold_file, conform_transform, conformed_tmean_ref, bids_template]
+    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(conform_transform), path(conformed_tmean_ref), val(bids_naming_template)
+    path config_file
+    
+    output:
+    // Output: [sub, ses, run_identifier, conformed_bold, conformed_tmean_ref, bids_template]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_bold.nii.gz"), path("*desc-conform_boldref.nii.gz"), val(bids_naming_template), emit: output
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+    from macacaMRIprep.operations.registration import flirt_apply_transforms
+    from macacaMRIprep.utils.bids import create_bids_output_filename
+    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from pathlib import Path
+    import sys
+    
+    # Initialize command log file
+    run_identifier = '${run_identifier}'
+    import re
+    task_match = re.search(r'task-([^_]+)', run_identifier)
+    run_match = re.search(r'run-([^_]+)', run_identifier)
+    task_name = task_match.group(1) if task_match else None
+    run = run_match.group(1) if run_match else None
+    
+    init_cmd_log_for_nextflow(
+        output_dir='${params.output_dir}',
+        subject_id='${subject_id}',
+        session_id='${session_id}' if '${session_id}' else None,
+        step_name='FUNC_APPLY_CONFORM',
+        task_name=task_name,
+        run=run
+    )
+    
+    # Load config
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
+    
+    # Get original file path (for BIDS filename generation)
+    bids_naming_template = Path('${bids_naming_template}')
+    
+    # Apply conform transform to BOLD
+    bold_result = flirt_apply_transforms(
+        movingf=str(Path('${bold_file}')),
+        outputf_name='func_bold_conformed.nii.gz',
+        reff=str(Path('${conformed_tmean_ref}')),
+        working_dir='work',
+        transformf=str(Path('${conform_transform}')),
+        logger=None,
+        interpolation='trilinear',
+        generate_tmean=False
+    )
+    
+    if not bold_result.get("imagef_registered"):
+        raise FileNotFoundError("Failed to apply conform transform to BOLD")
+    
+    # Generate BIDS-compliant output filename
+    bids_output_filename_bold = create_bids_output_filename(
+        original_file_path=bids_naming_template,
+        suffix='desc-conform',
+        modality='bold'
+    )
+    
+    bids_output_filename_tmean = create_bids_output_filename(
+        original_file_path=bids_naming_template,
+        suffix='desc-conform',
+        modality='boldref'
+    )
+    
+    # Create symlinks
+    create_output_link(Path(bold_result["imagef_registered"]), bids_output_filename_bold)
+    create_output_link(Path('${conformed_tmean_ref}'), bids_output_filename_tmean)
+    
+    # Save metadata
+    save_metadata({
+        "step": "apply_conform",
+        "modality": "func",
+        "bold_file": str(Path('${bold_file}')),
+        "transform_file": str(Path('${conform_transform}'))
+    })
+    EOF
+    """
+}
+
+process FUNC_APPLY_BRAIN_MASK {
+    label 'cpu'
+    tag "${subject_id}_${session_id}_${run_identifier}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
+        mode: 'copy',
+        pattern: '*.nii.gz'
+    
+    input:
+    // Input: [sub, ses, run_identifier, conformed_bold, brain_mask, masked_tmean_ref, bids_template]
+    tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_bold), path(brain_mask), path(masked_tmean_ref), val(bids_naming_template)
+    path config_file
+    
+    output:
+    // Output: [sub, ses, run_identifier, masked_bold, masked_tmean_ref, bids_template]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_desc-brain_bold.nii.gz"), path("*_boldref_brain.nii.gz"), val(bids_naming_template), emit: output
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+    from macacaMRIprep.operations.preprocessing import apply_mask
+    from macacaMRIprep.utils.bids import create_bids_output_filename
+    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from pathlib import Path
+    import sys
+    
+    # Initialize command log file
+    run_identifier = '${run_identifier}'
+    import re
+    task_match = re.search(r'task-([^_]+)', run_identifier)
+    run_match = re.search(r'run-([^_]+)', run_identifier)
+    task_name = task_match.group(1) if task_match else None
+    run = run_match.group(1) if run_match else None
+    
+    init_cmd_log_for_nextflow(
+        output_dir='${params.output_dir}',
+        subject_id='${subject_id}',
+        session_id='${session_id}' if '${session_id}' else None,
+        step_name='FUNC_APPLY_BRAIN_MASK',
+        task_name=task_name,
+        run=run
+    )
+    
+    # Load config
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
+    
+    # Get original file path (for BIDS filename generation)
+    bids_naming_template = Path('${bids_naming_template}')
+    
+    # Apply brain mask to BOLD using fslmaths
+    from macacaMRIprep.utils import run_command
+    masked_bold_path = Path('work') / 'func_bold_masked.nii.gz'
+    command_apply = [
+        'fslmaths', str(Path('${conformed_bold}')),
+        '-mas', str(Path('${brain_mask}')),
+        str(masked_bold_path)
+    ]
+    returncode, stdout, stderr = run_command(command_apply, step_logger=None)
+    if returncode != 0:
+        raise RuntimeError(f"fslmaths failed (exit code {returncode}): {stderr}")
+    
+    if not masked_bold_path.exists():
+        raise FileNotFoundError("Failed to apply brain mask to BOLD")
+    
+    # Generate BIDS-compliant output filename
+    bids_output_filename_bold = create_bids_output_filename(
+        original_file_path=bids_naming_template,
+        suffix='desc-conform_desc-brain',
+        modality='bold'
+    )
+    
+    bids_output_filename_tmean = create_bids_output_filename(
+        original_file_path=bids_naming_template,
+        suffix='desc-brain',
+        modality='boldref'
+    )
+    
+    # Create symlinks
+    create_output_link(masked_bold_path, bids_output_filename_bold)
+    create_output_link(Path('${masked_tmean_ref}'), bids_output_filename_tmean)
+    
+    # Save metadata
+    save_metadata({
+        "step": "apply_brain_mask",
+        "modality": "func",
+        "bold_file": str(Path('${conformed_bold}')),
+        "mask_file": str(Path('${brain_mask}'))
+    })
+    EOF
+    """
+}
+
 process FUNC_SKULLSTRIPPING {
     label 'gpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
@@ -1777,6 +2347,42 @@ EOF
     """
 }
 
+process FUNC_WRITE_TMEAN_LIST {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    input:
+    val(tmean_files_json)  // JSON string of file paths
+    val(subject_id)
+    val(session_id)
+    
+    output:
+    path "tmean_files_list.json", emit: file_list
+    tuple val(subject_id), val(session_id), path("tmean_files_list.json"), emit: output
+    
+    script:
+    """
+    # Write JSON string directly to file (avoids string length limits in Nextflow compilation)
+    # Use Python to safely write JSON (handles escaping properly)
+    python3 << 'PYTHON_EOF'
+import json
+import sys
+
+# Read JSON string from Nextflow variable
+tmean_files_json = r'''${tmean_files_json}'''
+
+# Parse to validate it's valid JSON, then write to file
+try:
+    parsed = json.loads(tmean_files_json)
+    with open('tmean_files_list.json', 'w') as f:
+        json.dump(parsed, f)
+except json.JSONDecodeError as e:
+    print(f"Error: Invalid JSON: {e}", file=sys.stderr)
+    sys.exit(1)
+PYTHON_EOF
+    """
+}
+
 process FUNC_AVERAGE_TMEAN {
     label 'cpu'
     tag "${subject_id}_${session_id}"
@@ -1787,7 +2393,7 @@ process FUNC_AVERAGE_TMEAN {
         saveAs: { filename -> filename }
     
     input:
-    val(tmean_files)  // List of tmean file paths (as strings) - direct input, avoids staging name collisions and file list overhead
+    path(tmean_files_list)  // JSON file containing list of tmean file paths
     val(subject_id)
     val(session_id)
     val(bids_naming_template)
@@ -1827,31 +2433,18 @@ config = load_config('${config_file}')
 # Get BIDS naming template
 bids_naming_template = Path('${bids_naming_template}')
 
-# Parse tmean_files from Nextflow (passed as JSON string for reliable parsing)
-tmean_files_json = '${tmean_files}'
-tmean_files_list = []
+# Read tmean_files from JSON file (avoids string length limits in Nextflow compilation)
+tmean_files_list_path = Path('${tmean_files_list}')
+if not tmean_files_list_path.exists():
+    raise FileNotFoundError(f"Tmean files list not found: {tmean_files_list_path}")
 
-# Parse JSON (most reliable method)
-try:
-    parsed = json.loads(tmean_files_json)
-    if isinstance(parsed, list):
-        tmean_files_list = parsed
-    else:
-        # Single file wrapped in JSON
-        tmean_files_list = [parsed]
-except json.JSONDecodeError:
-    # Fallback: If JSON parsing fails, try ast.literal_eval (for backward compatibility)
-    try:
-        parsed = ast.literal_eval(tmean_files_json)
-        if isinstance(parsed, list):
-            tmean_files_list = parsed
-        else:
-            tmean_files_list = [parsed]
-    except:
-        # Last resort: treat as single file path
-        cleaned = tmean_files_json.strip().strip('"').strip("'")
-        if cleaned:
-            tmean_files_list = [cleaned]
+# Read and parse JSON file
+with open(tmean_files_list_path, 'r') as f:
+    tmean_files_list = json.load(f)
+    
+if not isinstance(tmean_files_list, list):
+    # Single file wrapped in JSON
+    tmean_files_list = [tmean_files_list]
 
 # Convert to Path objects and filter to only existing files
 tmean_file_paths = []
@@ -1872,7 +2465,7 @@ for file_path_str in tmean_files_list:
         print(f"Warning: Tmean file does not exist: {file_path}", file=sys.stderr)
 
 if len(tmean_file_paths) == 0:
-    raise ValueError(f"No valid tmean files found for averaging. Input was: {tmean_files_json}")
+    raise ValueError(f"No valid tmean files found for averaging. Read from file: {tmean_files_list_path}")
 
 # Create working directory if it doesn't exist
 work_dir = Path('work')
