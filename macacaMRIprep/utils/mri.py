@@ -65,6 +65,9 @@ def get_image_shape(
     Returns:
         List of integers representing image dimensions [x, y, z, t]
     """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
     # use 3dinfo to get the shape of the image
     command_3dinfo = [
         '3dinfo',
@@ -96,6 +99,9 @@ def get_image_resolution(
     Returns:
         List of floats representing image resolution [x, y, z]
     """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
     # use 3dinfo to get the resolution of the image
     command_3dinfo = [
         '3dinfo',

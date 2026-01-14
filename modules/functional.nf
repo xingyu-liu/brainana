@@ -1042,7 +1042,8 @@ process FUNC_COMPUTE_REGISTRATION {
     
     input:
     // Input: [sub, ses, run_identifier, masked_tmean, bids_template] + anatomical selection
-    tuple val(subject_id), val(session_id), val(run_identifier), path(masked_tmean), val(bids_naming_template), path(anat_brain), val(anat_session_id), val(is_cross_ses)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(masked_tmean), val(bids_naming_template), val(anat_session_id), val(is_cross_ses)
+    path(anat_brain)
     path config_file
     
     output:
@@ -1059,10 +1060,12 @@ process FUNC_COMPUTE_REGISTRATION {
     from macacaMRIprep.utils.templates import resolve_template
     from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
     from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, get_effective_output_space
+    from macacaMRIprep.utils import get_image_resolution, run_command
     from pathlib import Path
     import shutil
     import os
     import sys
+    import numpy as np
     
     # Initialize command log file
     run_identifier = '${run_identifier}'
@@ -1164,17 +1167,84 @@ process FUNC_COMPUTE_REGISTRATION {
                 bids_transform_name = f"{bids_prefix}_from-bold_to-{template_name}_mode-image_xfm.h5"
                 shutil.copy2(f, bids_transform_name)
                 reg_transform_path = Path(bids_transform_name)
-        elif key == 'target_final':
-            # Create symlink for target_final
-            target_final_dest = Path('target_final.nii.gz')
-            if target_final_dest.exists() or target_final_dest.is_symlink():
-                target_final_dest.unlink()
-            os.symlink(f.resolve(), target_final_dest)
         else:
             shutil.copy2(f, f.name)
     
     if reg_transform_path is None:
         raise FileNotFoundError("Registration transform not found in result.additional_files")
+    
+    # Create target_final.nii.gz for QC reference
+    # This is the target file at the appropriate resolution (func or native)
+    target_final_output = f"{bids_prefix}_target_final.nii.gz"
+    target_final_path = Path(target_final_output)
+    
+    # Determine final reference based on keep_func_resolution and target_type
+    keep_func_resolution = config.get("registration.keep_func_resolution", True)
+    
+    if target_type == 'anat':
+        # func2anat: final space is anatomical
+        if keep_func_resolution:
+            # Use resampled anat from registration (target_file was resampled during registration)
+            # The resampled file should be in the working directory
+            resampled_anat = input_obj.working_dir / "target_res-func_for_registration.nii.gz"
+            if resampled_anat.exists():
+                if resampled_anat.resolve() != target_final_path.resolve():
+                    shutil.copy2(resampled_anat, target_final_output)
+                    print(f"INFO: Created target_final.nii.gz from resampled anat (func resolution)", file=sys.stderr)
+                else:
+                    data = resampled_anat.read_bytes()
+                    target_final_path.write_bytes(data)
+                    print(f"INFO: Created target_final.nii.gz from resampled anat (func resolution)", file=sys.stderr)
+            else:
+                # Fallback: resample anat to func resolution
+                func_res = np.round(get_image_resolution(str(input_obj.input_file), logger=None), 1)
+                cmd_resample = ['3dresample', 
+                                '-input', str(target_file), '-prefix', str(target_final_path), 
+                                '-rmode', 'Cu',
+                                '-dxyz', str(func_res[0]), str(func_res[1]), str(func_res[2])]
+                run_command(cmd_resample, step_logger=None)
+                print(f"INFO: Created target_final.nii.gz from resampled anat (func resolution)", file=sys.stderr)
+        else:
+            # Use original anat
+            if target_file.exists():
+                if target_file.resolve() != target_final_path.resolve():
+                    shutil.copy2(target_file, target_final_output)
+                    print(f"INFO: Created target_final.nii.gz from original anat (native resolution)", file=sys.stderr)
+                else:
+                    data = target_file.read_bytes()
+                    target_final_path.write_bytes(data)
+                    print(f"INFO: Created target_final.nii.gz from original anat (native resolution)", file=sys.stderr)
+            else:
+                raise FileNotFoundError(f"Anatomical target file not found: {target_file}")
+    else:
+        # func2template: final space is template
+        template_fixedf = target_file
+        if keep_func_resolution:
+            # Resample template to func resolution
+            func_res = np.round(get_image_resolution(str(input_obj.input_file), logger=None), 1)
+            cmd_resample = ['3dresample', 
+                            '-input', str(template_fixedf), '-prefix', str(target_final_path), 
+                            '-rmode', 'Cu',
+                            '-dxyz', str(func_res[0]), str(func_res[1]), str(func_res[2])]
+            run_command(cmd_resample, step_logger=None)
+            print(f"INFO: Created target_final.nii.gz from resampled template (func resolution)", file=sys.stderr)
+        else:
+            # Use original template
+            if template_fixedf.exists():
+                if template_fixedf.resolve() != target_final_path.resolve():
+                    shutil.copy2(template_fixedf, target_final_output)
+                    print(f"INFO: Created target_final.nii.gz from original template (native resolution)", file=sys.stderr)
+                else:
+                    data = template_fixedf.read_bytes()
+                    target_final_path.write_bytes(data)
+                    print(f"INFO: Created target_final.nii.gz from original template (native resolution)", file=sys.stderr)
+            else:
+                raise FileNotFoundError(f"Template file not found: {template_fixedf}")
+    
+    # Ensure file exists
+    if not target_final_path.exists():
+        raise FileNotFoundError(f"Failed to create target_final.nii.gz: {target_final_path}")
+    print(f"INFO: target_final.nii.gz created, size: {target_final_path.stat().st_size} bytes", file=sys.stderr)
     
     # Save metadata
     save_metadata(result.metadata)
@@ -1192,7 +1262,8 @@ process FUNC_APPLY_CONFORM {
     
     input:
     // Input: [sub, ses, run_identifier, bold_file, conform_transform, conformed_tmean_ref, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(conform_transform), path(conformed_tmean_ref), val(bids_naming_template)
+    // Stage conformed_tmean_ref as reg_reference.nii.gz to avoid output pattern collision
+    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(conform_transform), path(conformed_tmean_ref, stageAs: 'reg_reference.nii.gz'), val(bids_naming_template)
     path config_file
     
     output:
@@ -1208,6 +1279,8 @@ process FUNC_APPLY_CONFORM {
     from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
     from pathlib import Path
     import sys
+    import os
+    import shutil
     
     # Initialize command log file
     run_identifier = '${run_identifier}'
@@ -1237,7 +1310,7 @@ process FUNC_APPLY_CONFORM {
     bold_result = flirt_apply_transforms(
         movingf=str(Path('${bold_file}')),
         outputf_name='func_bold_conformed.nii.gz',
-        reff=str(Path('${conformed_tmean_ref}')),
+        reff=str(Path('reg_reference.nii.gz')),
         working_dir='work',
         transformf=str(Path('${conform_transform}')),
         logger=None,
@@ -1261,9 +1334,53 @@ process FUNC_APPLY_CONFORM {
         modality='boldref'
     )
     
+    # Ensure bids_output_filename_tmean is just a filename (not a path)
+    # This is important for Nextflow pattern matching
+    bids_output_filename_tmean = Path(bids_output_filename_tmean).name
+    
     # Create symlinks
     create_output_link(Path(bold_result["imagef_registered"]), bids_output_filename_bold)
-    create_output_link(Path('${conformed_tmean_ref}'), bids_output_filename_tmean)
+    
+    # Ensure conformed_tmean_ref exists and copy it to output
+    # We must COPY (not symlink) to ensure Nextflow recognizes it as a valid output
+    # Nextflow excludes files that match input filenames if they're symlinks
+    conformed_tmean_ref_path = Path('reg_reference.nii.gz')
+    if not conformed_tmean_ref_path.exists():
+        raise FileNotFoundError(f"Conformed tmean reference file not found: {conformed_tmean_ref_path}")
+    
+    # Ensure bids_output_filename_tmean is a Path object in the current directory
+    target_path = Path(bids_output_filename_tmean)
+    
+    # Always copy the file (never symlink) to ensure Nextflow recognizes it as output
+    # Resolve any symlinks first to get the actual file
+    if conformed_tmean_ref_path.is_symlink():
+        # Resolve to the actual file (follows symlink chain)
+        actual_file_path = conformed_tmean_ref_path.resolve(strict=True)
+        if not actual_file_path.exists():
+            raise FileNotFoundError(f"Resolved conformed tmean reference file does not exist: {actual_file_path}")
+        source_file = actual_file_path
+    else:
+        source_file = conformed_tmean_ref_path
+    
+    # Remove target if it exists
+    if target_path.exists() or target_path.is_symlink():
+        target_path.unlink()
+    
+    # Copy the file to ensure it's a distinct output file
+    shutil.copy2(source_file, target_path)
+    
+    # Touch the file to ensure it has a new modification time
+    # This helps Nextflow recognize it as a new output file
+    target_path.touch()
+    
+    # Verify the output file was created and matches the expected pattern
+    if not target_path.exists():
+        raise FileNotFoundError(f"Failed to create output file: {target_path}")
+    
+    # Debug: Print the created filename to verify it matches the pattern *desc-conform_boldref.nii.gz
+    print(f"DEBUG: Created output file: {target_path} (exists: {target_path.exists()})", file=sys.stderr)
+    if not str(target_path).endswith('desc-conform_boldref.nii.gz'):
+        print(f"WARNING: Output filename does not end with 'desc-conform_boldref.nii.gz': {target_path}", file=sys.stderr)
     
     # Save metadata
     save_metadata({
@@ -2347,42 +2464,6 @@ EOF
     """
 }
 
-process FUNC_WRITE_TMEAN_LIST {
-    label 'cpu'
-    tag "${subject_id}_${session_id}"
-    
-    input:
-    val(tmean_files_json)  // JSON string of file paths
-    val(subject_id)
-    val(session_id)
-    
-    output:
-    path "tmean_files_list.json", emit: file_list
-    tuple val(subject_id), val(session_id), path("tmean_files_list.json"), emit: output
-    
-    script:
-    """
-    # Write JSON string directly to file (avoids string length limits in Nextflow compilation)
-    # Use Python to safely write JSON (handles escaping properly)
-    python3 << 'PYTHON_EOF'
-import json
-import sys
-
-# Read JSON string from Nextflow variable
-tmean_files_json = r'''${tmean_files_json}'''
-
-# Parse to validate it's valid JSON, then write to file
-try:
-    parsed = json.loads(tmean_files_json)
-    with open('tmean_files_list.json', 'w') as f:
-        json.dump(parsed, f)
-except json.JSONDecodeError as e:
-    print(f"Error: Invalid JSON: {e}", file=sys.stderr)
-    sys.exit(1)
-PYTHON_EOF
-    """
-}
-
 process FUNC_AVERAGE_TMEAN {
     label 'cpu'
     tag "${subject_id}_${session_id}"
@@ -2393,7 +2474,7 @@ process FUNC_AVERAGE_TMEAN {
         saveAs: { filename -> filename }
     
     input:
-    path(tmean_files_list)  // JSON file containing list of tmean file paths
+    val(tmean_files)  // List of tmean file paths (as strings) - direct input, avoids staging name collisions and file list overhead
     val(subject_id)
     val(session_id)
     val(bids_naming_template)
@@ -2433,18 +2514,31 @@ config = load_config('${config_file}')
 # Get BIDS naming template
 bids_naming_template = Path('${bids_naming_template}')
 
-# Read tmean_files from JSON file (avoids string length limits in Nextflow compilation)
-tmean_files_list_path = Path('${tmean_files_list}')
-if not tmean_files_list_path.exists():
-    raise FileNotFoundError(f"Tmean files list not found: {tmean_files_list_path}")
+# Parse tmean_files from Nextflow (passed as JSON string for reliable parsing)
+tmean_files_json = '${tmean_files}'
+tmean_files_list = []
 
-# Read and parse JSON file
-with open(tmean_files_list_path, 'r') as f:
-    tmean_files_list = json.load(f)
-    
-if not isinstance(tmean_files_list, list):
-    # Single file wrapped in JSON
-    tmean_files_list = [tmean_files_list]
+# Parse JSON (most reliable method)
+try:
+    parsed = json.loads(tmean_files_json)
+    if isinstance(parsed, list):
+        tmean_files_list = parsed
+    else:
+        # Single file wrapped in JSON
+        tmean_files_list = [parsed]
+except json.JSONDecodeError:
+    # Fallback: If JSON parsing fails, try ast.literal_eval (for backward compatibility)
+    try:
+        parsed = ast.literal_eval(tmean_files_json)
+        if isinstance(parsed, list):
+            tmean_files_list = parsed
+        else:
+            tmean_files_list = [parsed]
+    except:
+        # Last resort: treat as single file path
+        cleaned = tmean_files_json.strip().strip('"').strip("'")
+        if cleaned:
+            tmean_files_list = [cleaned]
 
 # Convert to Path objects and filter to only existing files
 tmean_file_paths = []
@@ -2465,7 +2559,7 @@ for file_path_str in tmean_files_list:
         print(f"Warning: Tmean file does not exist: {file_path}", file=sys.stderr)
 
 if len(tmean_file_paths) == 0:
-    raise ValueError(f"No valid tmean files found for averaging. Read from file: {tmean_files_list_path}")
+    raise ValueError(f"No valid tmean files found for averaging. Input was: {tmean_files_json}")
 
 # Create working directory if it doesn't exist
 work_dir = Path('work')
