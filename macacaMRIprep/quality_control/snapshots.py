@@ -447,8 +447,9 @@ def _create_before_after_comparison(
     before_data: Union[str, Path, np.ndarray],
     after_data: Union[str, Path, np.ndarray], 
     num_cols: int = 6,
-    perspectives: List[str] = ["axial"],
     save_f: Union[str, Path] = None,
+    perspectives: Optional[List[str]] = ["axial"],
+    before_after_labels: Optional[List[str]] = ["Before", "After"],
     logger: Optional[logging.Logger] = None,
 ) -> plt.Figure:
     """
@@ -481,7 +482,7 @@ def _create_before_after_comparison(
     temp_files = []
     saved_images = []
     
-    for fig, label in zip([fig_before, fig_after], ["Before", "After"]):
+    for fig, label in zip([fig_before, fig_after], before_after_labels):
         # Add label to figure
         if fig.axes:
             ax = fig.axes[0]

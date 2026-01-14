@@ -303,17 +303,17 @@ workflow ANAT_WF {
     // ANAT_CONFORM
     anat_after_conform = anat_after_reorient_normal
     anat_conform_transforms = Channel.empty()
-    anat_conform_template_resampled = Channel.empty()
+    anat_conform_reference = Channel.empty()
     if (anat_conform_enabled) {
         ANAT_CONFORM(anat_after_reorient_normal, config_file)
         anat_after_conform = ANAT_CONFORM.out.output
         anat_conform_transforms = ANAT_CONFORM.out.transforms
-        anat_conform_template_resampled = ANAT_CONFORM.out.template_resampled
+        anat_conform_reference = ANAT_CONFORM.out.reference
     } else {
         ANAT_CONFORM_PASSTHROUGH(anat_after_reorient_normal, config_file)
         anat_after_conform = ANAT_CONFORM_PASSTHROUGH.out.output
         anat_conform_transforms = ANAT_CONFORM_PASSTHROUGH.out.transforms
-        anat_conform_template_resampled = ANAT_CONFORM_PASSTHROUGH.out.template_resampled
+        anat_conform_reference = ANAT_CONFORM_PASSTHROUGH.out.reference
     }
     
     // ANAT_BIAS_CORRECTION
@@ -342,14 +342,17 @@ workflow ANAT_WF {
     // ANAT_REGISTRATION
     anat_after_reg = Channel.empty()
     anat_reg_transforms = Channel.empty()
+    anat_reg_reference = Channel.empty()
     if (registration_enabled) {
         ANAT_REGISTRATION(anat_after_skull, config_file)
         anat_after_reg = ANAT_REGISTRATION.out.output
         anat_reg_transforms = ANAT_REGISTRATION.out.transforms
+        anat_reg_reference = ANAT_REGISTRATION.out.reference
     } else {
         ANAT_REGISTRATION_PASSTHROUGH(anat_after_skull, config_file)
         anat_after_reg = ANAT_REGISTRATION_PASSTHROUGH.out.output
         anat_reg_transforms = ANAT_REGISTRATION_PASSTHROUGH.out.transforms
+        anat_reg_reference = ANAT_REGISTRATION_PASSTHROUGH.out.reference
     }
     
     // ============================================
@@ -357,9 +360,9 @@ workflow ANAT_WF {
     // ============================================
     if (anat_conform_enabled) {
         anat_after_conform
-            .join(anat_conform_template_resampled, by: [0, 1])
-            .map { sub, ses, anat_file, bids_naming_template, template_resampled ->
-                [sub, ses, anat_file, bids_naming_template, template_resampled]
+            .join(anat_conform_reference, by: [0, 1])
+            .map { sub, ses, anat_file, bids_naming_template, reference ->
+                [sub, ses, anat_file, bids_naming_template, reference]
             }
             .set { conform_qc_input }
         QC_CONFORM(conform_qc_input, config_file)
@@ -394,7 +397,14 @@ workflow ANAT_WF {
     }
     
     if (registration_enabled) {
-        QC_REGISTRATION(ANAT_REGISTRATION.out.output, config_file)
+        anat_after_reg
+            .join(anat_reg_reference, by: [0, 1])
+            .map { sub, ses, registered_file, bids_template, reference_file ->
+                [sub, ses, registered_file, reference_file, bids_template]
+            }
+            .set { registration_qc_input }
+
+        QC_REGISTRATION(registration_qc_input, config_file)
     }
     
     // ============================================
@@ -525,6 +535,7 @@ workflow ANAT_WF {
     emit:
     anat_after_skull
     anat_reg_transforms
+    anat_reg_reference
     anat_subjects_ch
     anat_qc_channels
     // Use the channel created earlier to ensure the value is properly bound

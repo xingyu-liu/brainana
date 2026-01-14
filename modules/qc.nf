@@ -249,7 +249,7 @@ process QC_REGISTRATION {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), path(registered_file)
+    tuple val(subject_id), val(session_id), path(registered_file, stageAs: 'registered.nii.gz'), path(reference_file, stageAs: 'reference.nii.gz'), val(bids_naming_template)
     path config_file
     
     output:
@@ -260,49 +260,40 @@ process QC_REGISTRATION {
     """
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.qc import qc_registration
-from macacaMRIprep.utils.templates import resolve_template
+from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename, create_bids_output_filename
 from pathlib import Path
-import glob
 
 # Load config
 from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
-# Resolve template
-# Get effective output_space (CLI > YAML > default)
-from macacaMRIprep.utils.nextflow import get_effective_output_space
-effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
-template_file = Path(resolve_template(effective_output_space))
+# Get the registered file and reference file directly from input
+# Files are staged with unique names to avoid collisions
+registered_file = Path('registered.nii.gz')
+if not registered_file.exists():
+    raise FileNotFoundError(f"Registered file not found: {registered_file}")
 
-# Find the registered file (handle glob pattern)
-registered_files = glob.glob('*.nii.gz')
-if not registered_files:
-    raise FileNotFoundError("No registered file found")
-registered_file = Path(registered_files[0])
+reference_file = Path('reference.nii.gz')
+if not reference_file.exists():
+    raise FileNotFoundError(f"Reference file not found: {reference_file}")
 
-# Extract modality from filename
-filename = registered_file.name
-modality_suffix = 'T1w'  # default
-if '_T2w' in filename:
-    modality_suffix = 'T2w'
-elif '_T1w' in filename:
-    modality_suffix = 'T1w'
+# Get BIDS naming template (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Determine modality from BIDS naming template filename
+modality = detect_modality(bids_naming_template)
 
 # Generate BIDS-compliant QC output filename
-# Extract BIDS entities from registered filename
-from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename
-entities = parse_bids_entities(registered_file.name)
-entities['desc'] = 'anat2template'
-qc_output_filename = create_bids_filename(
-    entities=entities,
-    suffix=modality_suffix,
-    extension='.png'
-)
+qc_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-anat2template',
+    modality=modality
+).replace('.nii.gz', '.png')
 
 # Generate QC
 result = qc_registration(
     image_file=registered_file,
-    template_file=template_file,
+    template_file=reference_file,  # Use reference file from registration output
     output_path=Path(qc_output_filename),
     modality='anat2template',
     config=config
@@ -505,62 +496,6 @@ EOF
 // FUNCTIONAL QC PROCESSES
 // ============================================
 
-process QC_CONFORM_FUNC {
-    label 'cpu'
-    tag "${subject_id}_${session_id}_${run_identifier}"
-    
-    publishDir "${params.output_dir}/sub-${subject_id}/figures",
-        mode: 'copy',
-        pattern: '*.png'
-    
-    input:
-    tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_file), val(bids_naming_template), path(template_resampled_file, stageAs: 'template.nii.gz')
-    path config_file
-    
-    output:
-    path "*.png", emit: qc_files
-    path "*.json", emit: metadata
-    
-    script:
-    """
-    \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_conform
-from macacaMRIprep.utils.bids import create_bids_output_filename
-from pathlib import Path
-
-# Load config
-from macacaMRIprep.utils.nextflow import load_config, save_metadata
-config = load_config('${config_file}')
-
-# Get original file path (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
-
-# Use the resampled template file from conform step (matches the conformed image space)
-# File is staged as 'template.nii.gz' to avoid filename collisions
-template_file = Path('template.nii.gz')
-
-# Generate BIDS-compliant QC output filename
-qc_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
-    suffix='desc-conform',
-    modality='bold'
-).replace('.nii.gz', '.png')
-
-# Generate QC
-result = qc_conform(
-    conformed_file=Path('${conformed_file}'),
-    template_file=template_file,
-    output_path=Path(qc_output_filename),
-    modality='func',
-    config=config
-)
-
-# Save metadata
-save_metadata(result.metadata)
-EOF
-    """
-}
-
 process QC_MOTION_CORRECTION {
     label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
@@ -653,6 +588,63 @@ qc_output_filename = create_bids_output_filename(
 result = qc_bias_correction(
     original_file=Path('${original_file}'),
     corrected_file=Path('${corrected_file}'),
+    output_path=Path(qc_output_filename),
+    modality='func',
+    config=config
+)
+
+# Save metadata
+save_metadata(result.metadata)
+EOF
+    """
+}
+
+
+process QC_CONFORM_FUNC {
+    label 'cpu'
+    tag "${subject_id}_${session_id}_${run_identifier}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}/figures",
+        mode: 'copy',
+        pattern: '*.png'
+    
+    input:
+    tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_file), val(bids_naming_template), path(template_resampled_file, stageAs: 'template.nii.gz')
+    path config_file
+    
+    output:
+    path "*.png", emit: qc_files
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.steps.qc import qc_conform
+from macacaMRIprep.utils.bids import create_bids_output_filename
+from pathlib import Path
+
+# Load config
+from macacaMRIprep.utils.nextflow import load_config, save_metadata
+config = load_config('${config_file}')
+
+# Get original file path (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Use the resampled template file from conform step (matches the conformed image space)
+# File is staged as 'template.nii.gz' to avoid filename collisions
+template_file = Path('template.nii.gz')
+
+# Generate BIDS-compliant QC output filename
+qc_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-conform',
+    modality='bold'
+).replace('.nii.gz', '.png')
+
+# Generate QC
+result = qc_conform(
+    conformed_file=Path('${conformed_file}'),
+    template_file=template_file,
     output_path=Path(qc_output_filename),
     modality='func',
     config=config

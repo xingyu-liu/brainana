@@ -278,7 +278,7 @@ def prepareSessionLevelTransforms = { func_after_reg, func_reg_transforms, func_
         }
     
     def anat_reg_transforms_for_join = anat_reg_transforms
-        .map { sub, ses, transform_file -> [sub, ses, transform_file] }
+        .map { sub, ses, forward_transform, inverse_transform -> [sub, ses, forward_transform] }
     
     def func_sequential_joined = func_sequential
         .map { sub, ses, run_identifier, registered_tmean, transform, target_type, target2template, ref, anat_ses, bold, bids ->
@@ -349,7 +349,7 @@ def preparePerRunTransforms = { func_after_reg, func_reg_transforms, func_reg_me
         }
     
     def anat_reg_transforms_for_join = anat_reg_transforms
-        .map { sub, ses, transform_file -> [sub, ses, transform_file] }
+        .map { sub, ses, forward_transform, inverse_transform -> [sub, ses, forward_transform] }
     
     def func_sequential_joined = func_sequential
         .map { sub, ses, run_identifier, bold_file, registered_tmean, bids_template, forward_transform, target_type, target2template, reference_file, anat_ses ->

@@ -56,6 +56,7 @@ workflow {
     FUNC_WF(
         ANAT_WF.out.anat_after_skull,
         ANAT_WF.out.anat_reg_transforms,
+        ANAT_WF.out.anat_reg_reference,
         ANAT_WF.out.anat_only_val
     )
     

@@ -16,6 +16,7 @@ from .validation import (
 from .preprocessing import (
     reorient,
     correct_orientation_mismatch,
+    apply_mask,
     slice_timing_correction,
     motion_correction,
     despike,
@@ -47,6 +48,7 @@ __all__ = [
     # Preprocessing (functional + anatomical)
     'reorient',
     'correct_orientation_mismatch',
+    'apply_mask',
     'slice_timing_correction',
     'motion_correction',
     'despike',

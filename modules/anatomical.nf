@@ -212,8 +212,10 @@ process ANAT_CONFORM {
     
     output:
     tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(bids_naming_template), emit: output
-    path "*.mat", emit: transforms
-    tuple val(subject_id), val(session_id), path("template_resampled.nii.gz"), emit: template_resampled
+    // Transforms: [sub, ses, forward_transform, inverse_transform]
+    tuple val(subject_id), val(session_id), path("*from-scanner_to-*_mode-image_xfm*"), path("*from-*_to-scanner_mode-image_xfm*"), emit: transforms
+    // Reference: [sub, ses, reference]
+    tuple val(subject_id), val(session_id), path("template_resampled.nii.gz"), emit: reference
     path "*.json", emit: metadata
     
     script:
@@ -294,15 +296,15 @@ if "inverse_transform" in result.additional_files:
     bids_transform_name = f"{bids_prefix}_from-{modality}_to-scanner_mode-image_xfm.mat"
     shutil.copy2(result.additional_files["inverse_transform"], bids_transform_name)
 
-# Create symlink to template_resampled file for QC (file is in work/ subdirectory, needs to be at root for Nextflow output)
+# Create symlink to reference file for QC (file is in work/ subdirectory, needs to be at root for Nextflow output)
 if "template_resampled" in result.additional_files:
-    template_resampled_src = result.additional_files["template_resampled"]
-    if template_resampled_src.exists():
+    reference_src = result.additional_files["template_resampled"]
+    if reference_src.exists():
         # Create symlink at root level so Nextflow output pattern can find it
-        template_resampled_dest = Path('template_resampled.nii.gz')
-        if os.path.exists(template_resampled_dest):
-            os.remove(template_resampled_dest)
-        os.symlink(template_resampled_src, template_resampled_dest)
+        reference_dest = Path('template_resampled.nii.gz')
+        if os.path.exists(reference_dest):
+            os.remove(reference_dest)
+        os.symlink(reference_src, reference_dest)
 
 # Save metadata
 save_metadata(result.metadata)
@@ -623,15 +625,20 @@ process ANAT_REGISTRATION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.{nii.gz,h5}'
+        pattern: '*.{nii.gz,h5,mat}'
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*.nii.gz"), emit: output
-    tuple val(subject_id), val(session_id), path("*.h5"), emit: transforms
+    // Output: [sub, ses, registered_file, bids_template]
+    tuple val(subject_id), val(session_id), path("*space-*.nii.gz"), val(bids_naming_template), emit: output
+    // Transforms: [sub, ses, forward_transform, inverse_transform]
+    // Use patterns that match the actual naming: forward starts with from-T1w_to- or from-T2w_to-, inverse ends with _to-T1w or _to-T2w
+    tuple val(subject_id), val(session_id), path("*from-T1w_to-*_mode-image_xfm*"), path("*from-*_to-T1w_mode-image_xfm*"), emit: transforms
+    // Reference: [sub, ses, reference_file]
+    tuple val(subject_id), val(session_id), path("*ref_from_anat_reg.nii.gz"), emit: reference
     path "*.json", emit: metadata
     
     script:
@@ -744,6 +751,25 @@ if "inverse_transform" in result.additional_files:
     bids_transform_name = f"{bids_prefix_wo_modality}_from-{template_name}_to-{modality}_mode-image_xfm.h5"
     shutil.copy2(result.additional_files["inverse_transform"], bids_transform_name)
 
+# Create ref_from_anat_reg.nii.gz for QC reference
+# This is the template file used as the reference for registration
+ref_from_anat_reg_path = Path(f"{bids_prefix_wo_modality}_ref_from_anat_reg.nii.gz")
+
+# Copy template file as reference (the actual template used during registration)
+if template_file.exists():
+    if template_file.resolve() != ref_from_anat_reg_path.resolve():
+        shutil.copy2(template_file, str(ref_from_anat_reg_path))
+    else:
+        # Same file - read and write to create a new file
+        data = template_file.read_bytes()
+        ref_from_anat_reg_path.write_bytes(data)
+else:
+    raise FileNotFoundError(f"Template file not found: {template_file}")
+
+# Ensure file exists
+if not ref_from_anat_reg_path.exists():
+    raise FileNotFoundError(f"Failed to create ref_from_anat_reg.nii.gz: {ref_from_anat_reg_path}")
+
 # Save metadata
 save_metadata(result.metadata)
 EOF
@@ -765,7 +791,8 @@ process ANAT_T2W_TO_T1W_REGISTRATION {
     
     output:
     tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_naming_template), emit: output
-    tuple val(subject_id), val(session_id), path("*.h5"), emit: transforms
+    // Transforms: [sub, ses, forward_transform, inverse_transform]
+    tuple val(subject_id), val(session_id), path("*from-T2w_to-T1w_mode-image_xfm*"), path("*from-T1w_to-T2w_mode-image_xfm*"), emit: transforms
     path "*.json", emit: metadata
     
     script:
@@ -887,8 +914,10 @@ process ANAT_CONFORM_PASSTHROUGH {
     
     output:
     tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(bids_naming_template), emit: output
-    path "*.mat", emit: transforms
-    tuple val(subject_id), val(session_id), path("template_resampled.nii.gz"), emit: template_resampled
+    // Transforms: [sub, ses, forward_transform, inverse_transform]
+    tuple val(subject_id), val(session_id), path("*from-scanner_to-*_mode-image_xfm*"), path("*from-*_to-scanner_mode-image_xfm*"), emit: transforms
+    // Reference: [sub, ses, reference]
+    tuple val(subject_id), val(session_id), path("reference.nii.gz"), emit: reference
     path "*.json", emit: metadata
     
     script:
@@ -932,9 +961,9 @@ np.savetxt(forward_transform_name, identity_matrix, fmt='%.6f', delimiter=' ')
 inverse_transform_name = f"{bids_prefix}_from-{modality}_to-scanner_mode-image_xfm.mat"
 np.savetxt(inverse_transform_name, identity_matrix, fmt='%.6f', delimiter=' ')
 
-# Create dummy template_resampled (copy of input for QC compatibility)
-template_resampled_name = 'template_resampled.nii.gz'
-shutil.copy2(Path('${input_file}'), template_resampled_name)
+# Create dummy reference (copy of input for QC compatibility)
+reference_name = 'reference.nii.gz'
+shutil.copy2(Path('${input_file}'), reference_name)
 
 # Save metadata
 metadata = {
@@ -1013,8 +1042,15 @@ process ANAT_REGISTRATION_PASSTHROUGH {
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*.nii.gz"), emit: output
-    tuple val(subject_id), val(session_id), path("*.h5"), emit: transforms
+    // Output: [sub, ses, registered_file, bids_template]
+    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_naming_template), emit: output
+    // Transforms: [sub, ses, forward_transform, inverse_transform]
+    // Forward: from-{modality}_to-{template} (e.g., from-T1w_to-NMT2Sym)
+    // Inverse: from-{template}_to-{modality} (e.g., from-NMT2Sym_to-T1w)
+    // Use patterns that match the actual naming: forward starts with from-T1w_to- or from-T2w_to-, inverse ends with _to-T1w or _to-T2w
+    tuple val(subject_id), val(session_id), path("*from-T1w_to-*_mode-image_xfm*"), path("*from-*_to-T1w_mode-image_xfm*"), emit: transforms
+    // Reference: [sub, ses, reference_file]
+    tuple val(subject_id), val(session_id), path("*ref_from_anat_reg.nii.gz"), emit: reference
     path "*.json", emit: metadata
     
     script:
@@ -1101,6 +1137,24 @@ except (subprocess.CalledProcessError, FileNotFoundError):
 # Inverse transform: from-{template_name}_to-{modality} (same as forward for identity)
 inverse_transform_name = f"{bids_prefix_wo_modality}_from-{template_name}_to-{modality}_mode-image_xfm.h5"
 shutil.copy2(forward_transform_name, inverse_transform_name)
+
+# Create ref_from_anat_reg.nii.gz for QC reference (same as in ANAT_REGISTRATION) 
+ref_from_anat_reg_path = Path(f"{bids_prefix_wo_modality}_ref_from_anat_reg.nii.gz")
+
+# Copy template file as reference
+if template_file.exists():
+    if template_file.resolve() != ref_from_anat_reg_path.resolve():
+        shutil.copy2(template_file, str(ref_from_anat_reg_path))
+    else:
+        # Same file - read and write to create a new file
+        data = template_file.read_bytes()
+        ref_from_anat_reg_path.write_bytes(data)
+else:
+    raise FileNotFoundError(f"Template file not found: {template_file}")
+
+# Ensure file exists
+if not ref_from_anat_reg_path.exists():
+    raise FileNotFoundError(f"Failed to create ref_from_anat_reg.nii.gz: {ref_from_anat_reg_path}")
 
 # Save metadata
 metadata = {

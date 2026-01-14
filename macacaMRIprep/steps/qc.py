@@ -556,6 +556,7 @@ def qc_within_ses_coreg(
             str(tmean_averaged),  # Corrected: averaged after coreg
             num_cols=6,
             perspectives=["axial"],
+            before_after_labels=["single run ref", "avg run after coreg"],
             save_f=str(output_path),
             logger=logger
         )

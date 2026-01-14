@@ -36,7 +36,6 @@ from FastSurferCNN.inference.segmentation import run_segmentation
 from NHPskullstripNN.inference.prediction import skullstripping
 
 # %%
-
 def correct_orientation_mismatch(
     imagef: Union[str, Path],
     working_dir: Union[str, Path],
@@ -1387,6 +1386,79 @@ def apply_skullstripping(
         "imagef_skullstripped": output_path,
         "brain_mask": brain_mask_path
     }
+
+
+def apply_mask(
+    imagef: Union[str, Path],
+    maskf: Union[str, Path],
+    working_dir: Union[str, Path],
+    output_name: str,
+    logger: Optional[logging.Logger] = None,
+    generate_tmean: bool = False,
+) -> Dict[str, Optional[str]]:
+    """Apply a mask to an image (3D or 4D) using FSL.
+
+    Shared helper for both the Python step wrappers and Nextflow inline scripts.
+    Uses ``fslmaths -mas`` and can optionally compute a temporal mean (tmean) for 4D data.
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    image_path = validate_input_file(imagef, logger)
+    mask_path = validate_input_file(maskf, logger)
+    work_dir = ensure_working_directory(working_dir, logger)
+
+    outputs: Dict[str, Optional[str]] = {
+        "imagef_masked": None,
+        "imagef_masked_tmean": None,
+        "mask_used": None,
+    }
+
+    output_path = work_dir / output_name
+    logger.info("Workflow: starting apply_mask")
+    logger.info(f"Data: input image - {os.path.basename(image_path)}")
+    logger.info(f"Data: input mask - {os.path.basename(mask_path)}")
+    logger.info(f"System: output path - {output_path}")
+
+    # Binarize mask
+    mask_to_use = Path(mask_path)
+    mask_binarized = work_dir / "mask_binarized.nii.gz"
+    cmd_mask_bin = [
+        "fslmaths",
+        str(mask_to_use),
+        "-abs",
+        "-bin",
+        str(mask_binarized),
+    ]
+    returncode, stdout, stderr = run_command(cmd_mask_bin, step_logger=logger)
+    if returncode != 0:
+        raise RuntimeError(f"Mask binarization failed (exit code {returncode}): {stderr}")
+    validate_output_file(mask_binarized, logger)
+    mask_to_use = mask_binarized
+
+    # Apply mask
+    cmd_apply = [
+        "fslmaths",
+        str(Path(image_path)),
+        "-mas",
+        str(mask_to_use),
+        str(output_path),
+    ]
+    returncode, stdout, stderr = run_command(cmd_apply, step_logger=logger)
+    if returncode != 0:
+        raise RuntimeError(f"fslmaths failed (exit code {returncode}): {stderr}")
+
+    validate_output_file(output_path, logger)
+    outputs["imagef_masked"] = str(output_path)
+    outputs["mask_used"] = str(mask_to_use)
+
+    if generate_tmean:
+        tmean_path = work_dir / (output_name.split(".nii")[0] + "_tmean.nii.gz")
+        calculate_func_tmean(str(output_path), str(tmean_path), logger)
+        outputs["imagef_masked_tmean"] = str(tmean_path)
+
+    logger.info("Workflow: apply_mask completed successfully")
+    return outputs
 
 def bias_correction(
     imagef: Union[str, Path],

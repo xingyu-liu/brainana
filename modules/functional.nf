@@ -636,170 +636,6 @@ EOF
     """
 }
 
-process FUNC_CONFORM {
-    label 'cpu'
-    tag "${subject_id}_${session_id}_${run_identifier}"
-    
-    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
-        mode: 'copy',
-        pattern: '*.{nii.gz,mat}',
-        saveAs: { filename -> filename == 'template_resampled.nii.gz' ? null : filename }
-    
-    input:
-    // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(tmean_file), val(bids_naming_template)
-    path(anat_brain_file)
-    path config_file
-    
-    output:
-    // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_bold.nii.gz"), path("*desc-conform_boldref.nii.gz"), val(bids_naming_template), emit: output
-    path "*.mat", emit: transforms
-    tuple val(subject_id), val(session_id), val(run_identifier), path("template_resampled.nii.gz"), val(bids_naming_template), emit: template_resampled
-    path "*.json", emit: metadata
-    
-    script:
-    """
-    \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.steps.functional import func_conform
-    from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.templates import resolve_template
-    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-    from pathlib import Path
-    import shutil
-    import os
-    import sys
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
-    
-    # Initialize command log file
-    # Extract task and run from run_identifier if needed
-    run_identifier = '${run_identifier}'
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_CONFORM',
-        task_name=task_name,
-        run=run
-    )
-    
-    # Load config
-    from macacaMRIprep.utils.nextflow import load_config
-    config = load_config('${config_file}')
-    
-    # Get original file path (for BIDS filename generation)
-    bids_naming_template = Path('${bids_naming_template}')
-    
-    # Determine target file (anatomical or template based on pipeline)
-    registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
-    
-    # Check if anatomical brain file is available
-    anat_brain_path_str = '${anat_brain_file}'
-    has_anat_brain = anat_brain_path_str and anat_brain_path_str.strip() != '' and '.dummy' not in anat_brain_path_str
-    
-    # Get effective output_space (CLI > YAML > default)
-    from macacaMRIprep.utils.nextflow import get_effective_output_space
-    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
-    
-    if registration_pipeline == 'func2template':
-        # Always use template for func2template pipeline
-        target_file = Path(resolve_template(effective_output_space))
-    elif registration_pipeline in ['func2anat', 'func2anat2template']:
-        # Use anatomical brain if available, otherwise fallback to template
-        if has_anat_brain:
-            anat_brain_path = Path(anat_brain_path_str)
-            if anat_brain_path.exists():
-                target_file = anat_brain_path
-            else:
-                # Anatomical file doesn't exist, use template
-                target_file = Path(resolve_template(effective_output_space))
-        else:
-            # No anatomical brain provided, use template
-            target_file = Path(resolve_template(effective_output_space))
-    else:
-        # Default: use template
-        target_file = Path(resolve_template(effective_output_space))
-    
-    # Create step input for tmean (used for conform registration)
-    tmean_input_obj = StepInput(
-        input_file=Path('${tmean_file}'),
-        working_dir=Path('work'),
-        config=config,
-        output_name='func_tmean_conformed.nii.gz',
-        metadata={
-            'subject_id': '${subject_id}',
-            'session_id': '${session_id}',
-            'run_identifier': run_identifier
-        }
-    )
-    
-    # Run step (conforms tmean and applies transform to 4D BOLD)
-    result = func_conform(tmean_input_obj, target_file=target_file, bold_4d_file=Path('${bold_file}'))
-    
-    # Generate BIDS-compliant output filenames
-    # Output 1: conformed tmean (boldref)
-    bids_output_filename_tmean = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix='desc-conform',
-        modality='boldref'
-    )
-    
-    # Output 2: conformed 4D BOLD (bold)
-    bids_output_filename_bold = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix='desc-conform',
-        modality='bold'
-    )
-    
-    # Create BIDS-compliant symlinks for Nextflow output and publishDir
-    create_output_link(result.output_file, bids_output_filename_tmean)
-    
-    # Handle 4D BOLD output if present
-    if 'bold_4d_conformed' in result.additional_files:
-        create_output_link(result.additional_files['bold_4d_conformed'], bids_output_filename_bold)
-    else:
-        # For session-level operations (e.g., when run_identifier is "session-01"),
-        # there may be no 4D BOLD file to conform. Create a symlink to tmean as placeholder
-        # to satisfy Nextflow output requirements. This dummy file will be ignored downstream
-        # when only tmean is needed.
-        # Use the conformed tmean file as source (result.output_file points to the actual file in work/)
-        create_output_link(result.output_file, bids_output_filename_bold)
-        print(f"INFO: Created dummy BOLD output (symlink to tmean) for session-level operation: {bids_output_filename_bold}", file=sys.stderr)
-    
-    # Copy additional files (e.g., transforms) with BIDS-compliant names
-    original_stem = get_filename_stem(bids_naming_template)
-    bids_prefix = original_stem.replace('_bold', '')
-    
-    for key, f in result.additional_files.items():
-        if key == 'forward_transform':
-            # Forward transform: from-scanner_to-bold
-            bids_transform_name = f"{bids_prefix}_from-scanner_to-bold_mode-image_xfm.mat"
-            shutil.copy2(f, bids_transform_name)
-        elif key == 'inverse_transform':
-            # Inverse transform: from-bold_to-scanner
-            bids_transform_name = f"{bids_prefix}_from-bold_to-scanner_mode-image_xfm.mat"
-            shutil.copy2(f, bids_transform_name)
-        elif key == 'template_resampled':
-            # Create symlink at root level for Nextflow output pattern
-            template_resampled_dest = Path('template_resampled.nii.gz')
-            if template_resampled_dest.exists() or template_resampled_dest.is_symlink():
-                template_resampled_dest.unlink()
-            os.symlink(f.resolve(), template_resampled_dest)
-        else:
-            shutil.copy2(f, f.name)
-    
-    # Save metadata
-    save_metadata(result.metadata)
-    EOF
-    """
-}
-
 process FUNC_COMPUTE_CONFORM {
     label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
@@ -817,9 +653,12 @@ process FUNC_COMPUTE_CONFORM {
     path config_file
     
     output:
-    // Output: [sub, ses, run_identifier, conformed_tmean, bids_template, conform_transform]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_boldref.nii.gz"), val(bids_naming_template), path("*from-scanner_to-bold_mode-image_xfm.mat"), emit: output
-    tuple val(subject_id), val(session_id), val(run_identifier), path("template_resampled.nii.gz"), val(bids_naming_template), emit: template_resampled
+    // Output: [sub, ses, run_identifier, conformed_tmean, bids_template]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_boldref.nii.gz"), val(bids_naming_template), emit: output
+    // Transforms: [sub, ses, run_identifier, forward_transform, inverse_transform]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*from-scanner_to-bold_mode-image_xfm.mat"), path("*from-bold_to-scanner_mode-image_xfm.mat"), emit: transforms
+    // Reference: [sub, ses, run_identifier, reference]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("template_resampled.nii.gz"), emit: reference
     path "*.json", emit: metadata
     
     script:
@@ -914,337 +753,38 @@ process FUNC_COMPUTE_CONFORM {
     original_stem = get_filename_stem(bids_naming_template)
     bids_prefix = original_stem.replace('_bold', '')
     
-    conform_transform_path = None
+    conform_forward_transform_path = None
+    conform_inverse_transform_path = None
     for key, f in result.additional_files.items():
         if key == 'forward_transform':
             # Forward transform: from-scanner_to-bold
             bids_transform_name = f"{bids_prefix}_from-scanner_to-bold_mode-image_xfm.mat"
             shutil.copy2(f, bids_transform_name)
-            conform_transform_path = Path(bids_transform_name)
+            conform_forward_transform_path = Path(bids_transform_name)
         elif key == 'inverse_transform':
-            # Inverse transform: from-bold_to-scanner (not needed for compute, but save for completeness)
+            # Inverse transform: from-bold_to-scanner
             bids_transform_name = f"{bids_prefix}_from-bold_to-scanner_mode-image_xfm.mat"
             shutil.copy2(f, bids_transform_name)
+            conform_inverse_transform_path = Path(bids_transform_name)
         elif key == 'template_resampled':
             # Create symlink at root level for Nextflow output pattern
-            template_resampled_dest = Path('template_resampled.nii.gz')
-            if template_resampled_dest.exists() or template_resampled_dest.is_symlink():
-                template_resampled_dest.unlink()
-            os.symlink(f.resolve(), template_resampled_dest)
+            reference_dest = Path('template_resampled.nii.gz')
+            if reference_dest.exists() or reference_dest.is_symlink():
+                reference_dest.unlink()
+            os.symlink(f.resolve(), reference_dest)
         else:
             shutil.copy2(f, f.name)
     
-    if conform_transform_path is None:
-        raise FileNotFoundError("Conform transform not found in result.additional_files")
+    if conform_forward_transform_path is None or not conform_forward_transform_path.exists():
+        raise FileNotFoundError("Forward conform transform not found or does not exist")
     
-    # Save metadata
-    save_metadata(result.metadata)
-    EOF
-    """
-}
-
-process FUNC_COMPUTE_BRAIN_MASK {
-    label 'gpu'
-    tag "${subject_id}_${session_id}_${run_identifier}"
-    
-    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
-        mode: 'copy',
-        pattern: '*desc-brain_mask.nii.gz'
-    
-    input:
-    // Input: [sub, ses, run_identifier, conformed_tmean, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_tmean), val(bids_naming_template)
-    path config_file
-    
-    output:
-    // Output: [sub, ses, run_identifier, masked_tmean, bids_template, brain_mask]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*_boldref_brain.nii.gz"), val(bids_naming_template), path("*desc-brain_mask.nii.gz"), emit: output
-    path "*.json", emit: metadata
-    
-    script:
-    """
-    \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.steps.functional import func_skullstripping
-    from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.bids import get_filename_stem
-    from pathlib import Path
-    import shutil
-    import os
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
-    
-    # Initialize command log file
-    run_identifier = '${run_identifier}'
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_COMPUTE_BRAIN_MASK',
-        task_name=task_name,
-        run=run
-    )
-    
-    # Load config
-    from macacaMRIprep.utils.nextflow import load_config
-    config = load_config('${config_file}')
-    
-    # Get original file path (for BIDS filename generation)
-    bids_naming_template = Path('${bids_naming_template}')
-    
-    # Create step input (process conformed tmean → brain)
-    input_obj = StepInput(
-        input_file=Path('${conformed_tmean}'),
-        working_dir=Path('work'),
-        config=config,
-        output_name='func_brain.nii.gz',
-        metadata={
-            'subject_id': '${subject_id}',
-            'session_id': '${session_id}',
-            'run_identifier': run_identifier
-        }
-    )
-    
-    # Run step (processes conformed tmean to create brain)
-    result = func_skullstripping(input_obj)
-    
-    # Generate BIDS-compliant output filename for mask
-    original_stem = get_filename_stem(bids_naming_template)
-    bids_prefix_wobold = original_stem.replace("_bold", "").replace("_boldref", "")
-    
-    # Create symlink for mask with BIDS-compliant name
-    if "brain_mask" in result.additional_files:
-        bids_additional_name = f"{bids_prefix_wobold}_desc-brain_mask.nii.gz"
-        create_output_link(result.additional_files["brain_mask"], bids_additional_name)
-    
-    # Create symlink for brain file (masked tmean)
-    if result.output_file.exists():
-        bids_brain_name = f"{bids_prefix_wobold}_boldref_brain.nii.gz"
-        create_output_link(result.output_file, bids_brain_name)
-    
-    # Save metadata
-    save_metadata(result.metadata)
-    EOF
-    """
-}
-
-process FUNC_COMPUTE_REGISTRATION {
-    label 'cpu'
-    tag "${subject_id}_${session_id}_${run_identifier}"
-    
-    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
-        mode: 'copy',
-        pattern: '*.{nii.gz,h5}'
-    
-    input:
-    // Input: [sub, ses, run_identifier, masked_tmean, bids_template] + anatomical selection
-    tuple val(subject_id), val(session_id), val(run_identifier), path(masked_tmean), val(bids_naming_template), val(anat_session_id), val(is_cross_ses)
-    path(anat_brain)
-    path config_file
-    
-    output:
-    // Output: [sub, ses, run_identifier, registered_tmean, bids_template, reg_transform, anat_session_id, is_cross_ses]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*boldref.nii.gz"), val(bids_naming_template), path("*from-bold_to-*_mode-image_xfm.h5"), val(anat_session_id), val(is_cross_ses), emit: output
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*boldref.nii.gz"), val(bids_naming_template), path("*target_final.nii.gz"), emit: reference
-    path "*.json", emit: metadata
-    
-    script:
-    """
-    \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.steps.functional import func_registration
-    from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.templates import resolve_template
-    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, get_effective_output_space
-    from macacaMRIprep.utils import get_image_resolution, run_command
-    from pathlib import Path
-    import shutil
-    import os
-    import sys
-    import numpy as np
-    
-    # Initialize command log file
-    run_identifier = '${run_identifier}'
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_COMPUTE_REGISTRATION',
-        task_name=task_name,
-        run=run
-    )
-    
-    # Load config
-    from macacaMRIprep.utils.nextflow import load_config
-    config = load_config('${config_file}')
-    
-    # Get original file path (for BIDS filename generation)
-    bids_naming_template = Path('${bids_naming_template}')
-    
-    # Determine target file and type
-    registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
-    anat_brain_path_str = '${anat_brain}'
-    has_anat_brain = anat_brain_path_str and anat_brain_path_str.strip() != '' and '.dummy' not in anat_brain_path_str
-    
-    # Get effective output_space
-    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
-    
-    if registration_pipeline == 'func2template':
-        target_file = Path(resolve_template(effective_output_space))
-        target_type = 'template'
-        target2template = False
-    elif registration_pipeline in ['func2anat', 'func2anat2template']:
-        if has_anat_brain:
-            anat_brain_path = Path(anat_brain_path_str)
-            if anat_brain_path.exists():
-                target_file = anat_brain_path
-                target_type = 'anat'
-                target2template = (registration_pipeline == 'func2anat2template')
-            else:
-                target_file = Path(resolve_template(effective_output_space))
-                target_type = 'template'
-                target2template = False
-        else:
-            target_file = Path(resolve_template(effective_output_space))
-            target_type = 'template'
-            target2template = False
-    else:
-        target_file = Path(resolve_template(effective_output_space))
-        target_type = 'template'
-        target2template = False
-    
-    # Create step input
-    input_obj = StepInput(
-        input_file=Path('${masked_tmean}'),
-        working_dir=Path('work'),
-        config=config,
-        output_name='func_registered.nii.gz',
-        metadata={
-            'subject_id': '${subject_id}',
-            'session_id': '${session_id}',
-            'run_identifier': run_identifier
-        }
-    )
-    
-    # Run registration
-    result = func_registration(input_obj, target_file=target_file, target_type=target_type)
-    
-    # Generate BIDS-compliant output filename
-    template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
-    bids_output_filename = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix=f'space-{template_name}_desc-preproc',
-        modality='boldref'
-    )
-    
-    # Create symlink for registered tmean
-    create_output_link(result.output_file, bids_output_filename)
-    
-    # Copy transform files
-    original_stem = get_filename_stem(bids_naming_template)
-    bids_prefix = original_stem.replace('_bold', '')
-    
-    reg_transform_path = None
-    for key, f in result.additional_files.items():
-        if key == 'forward_transform':
-            # Find the transform file that matches the pattern
-            import glob
-            transform_files = glob.glob(str(f.parent / "*from-bold_to-*_mode-image_xfm.h5"))
-            if transform_files:
-                reg_transform_path = Path(transform_files[0])
-            else:
-                # Copy with BIDS-compliant name
-                bids_transform_name = f"{bids_prefix}_from-bold_to-{template_name}_mode-image_xfm.h5"
-                shutil.copy2(f, bids_transform_name)
-                reg_transform_path = Path(bids_transform_name)
-        else:
-            shutil.copy2(f, f.name)
-    
-    if reg_transform_path is None:
-        raise FileNotFoundError("Registration transform not found in result.additional_files")
-    
-    # Create target_final.nii.gz for QC reference
-    # This is the target file at the appropriate resolution (func or native)
-    target_final_output = f"{bids_prefix}_target_final.nii.gz"
-    target_final_path = Path(target_final_output)
-    
-    # Determine final reference based on keep_func_resolution and target_type
-    keep_func_resolution = config.get("registration.keep_func_resolution", True)
-    
-    if target_type == 'anat':
-        # func2anat: final space is anatomical
-        if keep_func_resolution:
-            # Use resampled anat from registration (target_file was resampled during registration)
-            # The resampled file should be in the working directory
-            resampled_anat = input_obj.working_dir / "target_res-func_for_registration.nii.gz"
-            if resampled_anat.exists():
-                if resampled_anat.resolve() != target_final_path.resolve():
-                    shutil.copy2(resampled_anat, target_final_output)
-                    print(f"INFO: Created target_final.nii.gz from resampled anat (func resolution)", file=sys.stderr)
-                else:
-                    data = resampled_anat.read_bytes()
-                    target_final_path.write_bytes(data)
-                    print(f"INFO: Created target_final.nii.gz from resampled anat (func resolution)", file=sys.stderr)
-            else:
-                # Fallback: resample anat to func resolution
-                func_res = np.round(get_image_resolution(str(input_obj.input_file), logger=None), 1)
-                cmd_resample = ['3dresample', 
-                                '-input', str(target_file), '-prefix', str(target_final_path), 
-                                '-rmode', 'Cu',
-                                '-dxyz', str(func_res[0]), str(func_res[1]), str(func_res[2])]
-                run_command(cmd_resample, step_logger=None)
-                print(f"INFO: Created target_final.nii.gz from resampled anat (func resolution)", file=sys.stderr)
-        else:
-            # Use original anat
-            if target_file.exists():
-                if target_file.resolve() != target_final_path.resolve():
-                    shutil.copy2(target_file, target_final_output)
-                    print(f"INFO: Created target_final.nii.gz from original anat (native resolution)", file=sys.stderr)
-                else:
-                    data = target_file.read_bytes()
-                    target_final_path.write_bytes(data)
-                    print(f"INFO: Created target_final.nii.gz from original anat (native resolution)", file=sys.stderr)
-            else:
-                raise FileNotFoundError(f"Anatomical target file not found: {target_file}")
-    else:
-        # func2template: final space is template
-        template_fixedf = target_file
-        if keep_func_resolution:
-            # Resample template to func resolution
-            func_res = np.round(get_image_resolution(str(input_obj.input_file), logger=None), 1)
-            cmd_resample = ['3dresample', 
-                            '-input', str(template_fixedf), '-prefix', str(target_final_path), 
-                            '-rmode', 'Cu',
-                            '-dxyz', str(func_res[0]), str(func_res[1]), str(func_res[2])]
-            run_command(cmd_resample, step_logger=None)
-            print(f"INFO: Created target_final.nii.gz from resampled template (func resolution)", file=sys.stderr)
-        else:
-            # Use original template
-            if template_fixedf.exists():
-                if template_fixedf.resolve() != target_final_path.resolve():
-                    shutil.copy2(template_fixedf, target_final_output)
-                    print(f"INFO: Created target_final.nii.gz from original template (native resolution)", file=sys.stderr)
-                else:
-                    data = template_fixedf.read_bytes()
-                    target_final_path.write_bytes(data)
-                    print(f"INFO: Created target_final.nii.gz from original template (native resolution)", file=sys.stderr)
-            else:
-                raise FileNotFoundError(f"Template file not found: {template_fixedf}")
-    
-    # Ensure file exists
-    if not target_final_path.exists():
-        raise FileNotFoundError(f"Failed to create target_final.nii.gz: {target_final_path}")
-    print(f"INFO: target_final.nii.gz created, size: {target_final_path.stat().st_size} bytes", file=sys.stderr)
+    # Inverse transform should always be created if forward exists, but handle gracefully
+    if conform_inverse_transform_path is None or not conform_inverse_transform_path.exists():
+        raise FileNotFoundError(
+            f"Inverse conform transform not found or does not exist. "
+            f"Expected: {bids_prefix}_from-bold_to-scanner_mode-image_xfm.mat. "
+            f"This indicates a problem with the conform registration step."
+        )
     
     # Save metadata
     save_metadata(result.metadata)
@@ -1393,6 +933,95 @@ process FUNC_APPLY_CONFORM {
     """
 }
 
+process FUNC_COMPUTE_BRAIN_MASK {
+    label 'gpu'
+    tag "${subject_id}_${session_id}_${run_identifier}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
+        mode: 'copy',
+        pattern: '*desc-brain_mask.nii.gz'
+    
+    input:
+    // Input: [sub, ses, run_identifier, conformed_tmean, bids_template]
+    tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_tmean), val(bids_naming_template)
+    path config_file
+    
+    output:
+    // Output: [sub, ses, run_identifier, masked_tmean, bids_template, brain_mask]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*_boldref_brain.nii.gz"), val(bids_naming_template), path("*desc-brain_mask.nii.gz"), emit: output
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+    from macacaMRIprep.steps.functional import func_skullstripping
+    from macacaMRIprep.steps.types import StepInput
+    from macacaMRIprep.utils.bids import get_filename_stem
+    from pathlib import Path
+    import shutil
+    import os
+    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    
+    # Initialize command log file
+    run_identifier = '${run_identifier}'
+    import re
+    task_match = re.search(r'task-([^_]+)', run_identifier)
+    run_match = re.search(r'run-([^_]+)', run_identifier)
+    task_name = task_match.group(1) if task_match else None
+    run = run_match.group(1) if run_match else None
+    
+    init_cmd_log_for_nextflow(
+        output_dir='${params.output_dir}',
+        subject_id='${subject_id}',
+        session_id='${session_id}' if '${session_id}' else None,
+        step_name='FUNC_COMPUTE_BRAIN_MASK',
+        task_name=task_name,
+        run=run
+    )
+    
+    # Load config
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
+    
+    # Get original file path (for BIDS filename generation)
+    bids_naming_template = Path('${bids_naming_template}')
+    
+    # Create step input (process conformed tmean → brain)
+    input_obj = StepInput(
+        input_file=Path('${conformed_tmean}'),
+        working_dir=Path('work'),
+        config=config,
+        output_name='func_brain.nii.gz',
+        metadata={
+            'subject_id': '${subject_id}',
+            'session_id': '${session_id}',
+            'run_identifier': run_identifier
+        }
+    )
+    
+    # Run step (processes conformed tmean to create brain)
+    result = func_skullstripping(input_obj)
+    
+    # Generate BIDS-compliant output filename for mask
+    original_stem = get_filename_stem(bids_naming_template)
+    bids_prefix_wobold = original_stem.replace("_bold", "").replace("_boldref", "")
+    
+    # Create symlink for mask with BIDS-compliant name
+    if "brain_mask" in result.additional_files:
+        bids_additional_name = f"{bids_prefix_wobold}_desc-brain_mask.nii.gz"
+        create_output_link(result.additional_files["brain_mask"], bids_additional_name)
+    
+    # Create symlink for brain file (masked tmean)
+    if result.output_file.exists():
+        bids_brain_name = f"{bids_prefix_wobold}_boldref_brain.nii.gz"
+        create_output_link(result.output_file, bids_brain_name)
+    
+    # Save metadata
+    save_metadata(result.metadata)
+    EOF
+    """
+}
+
 process FUNC_APPLY_BRAIN_MASK {
     label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
@@ -1444,18 +1073,21 @@ process FUNC_APPLY_BRAIN_MASK {
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
     
-    # Apply brain mask to BOLD using fslmaths
-    from macacaMRIprep.utils import run_command
-    masked_bold_path = Path('work') / 'func_bold_masked.nii.gz'
-    command_apply = [
-        'fslmaths', str(Path('${conformed_bold}')),
-        '-mas', str(Path('${brain_mask}')),
-        str(masked_bold_path)
-    ]
-    returncode, stdout, stderr = run_command(command_apply, step_logger=None)
-    if returncode != 0:
-        raise RuntimeError(f"fslmaths failed (exit code {returncode}): {stderr}")
+    # Apply brain mask to BOLD using apply_mask function
+    import logging
+    logger = logging.getLogger(__name__)
     
+    masked_bold_path = Path('work') / 'func_bold_masked.nii.gz'
+    result = apply_mask(
+        imagef=str(Path('${conformed_bold}')),
+        maskf=str(Path('${brain_mask}')),
+        working_dir=Path('work'),
+        output_name='func_bold_masked.nii.gz',
+        logger=logger,
+        generate_tmean=False  # tmean is already provided as masked_tmean_ref input
+    )
+    
+    masked_bold_path = Path(result['imagef_masked'])
     if not masked_bold_path.exists():
         raise FileNotFoundError("Failed to apply brain mask to BOLD")
     
@@ -1487,40 +1119,46 @@ process FUNC_APPLY_BRAIN_MASK {
     """
 }
 
-process FUNC_SKULLSTRIPPING {
-    label 'gpu'
+
+process FUNC_COMPUTE_REGISTRATION {
+    label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*desc-brain_mask.nii.gz'  // Only publish mask, not brain (brain is intermediate)
+        pattern: '*.{nii.gz,h5}'
     
     input:
-    // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
-    // Use stageAs to automatically create bold_inherited.nii.gz symlink (avoids duplicate symlinks)
-    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file, stageAs: 'bold_inherited.nii.gz'), path(tmean_file), val(bids_naming_template)
+    // Input: [sub, ses, run_identifier, masked_tmean, bids_template] + anatomical selection
+    tuple val(subject_id), val(session_id), val(run_identifier), path(masked_tmean), val(bids_naming_template), val(anat_session_id), val(is_cross_ses)
+    path(anat_brain)
     path config_file
     
     output:
-    // Combined channel: 6 elements [sub, ses, run_identifier, bold_file, tmean_file (brain_file), bids_template]
-    // brain mask channel: 5 elements [sub, ses, run_identifier, mask_file, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("bold_inherited.nii.gz"), path("*_boldref_brain.nii.gz"), val(bids_naming_template), emit: output
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-brain_mask.nii.gz"), val(bids_naming_template), emit: brain_mask
+    // Output: [sub, ses, run_identifier, registered_tmean, bids_template, anat_session_id, is_cross_ses]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*boldref.nii.gz"), val(bids_naming_template), val(anat_session_id), val(is_cross_ses), emit: output
+    // Transforms: [sub, ses, run_identifier, forward_transform, inverse_transform]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*from-bold_to-*_mode-image_xfm*"), path("*from-*_to-bold_mode-image_xfm*"), emit: transforms
+    // Reference: [sub, ses, run_identifier, reference_file]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*ref_from_func_reg.nii.gz"), emit: reference
     path "*.json", emit: metadata
     
     script:
     """
     \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.steps.functional import func_skullstripping
+    from macacaMRIprep.steps.functional import func_registration
     from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.bids import get_filename_stem
+    from macacaMRIprep.utils.templates import resolve_template
+    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, get_effective_output_space
+    from macacaMRIprep.utils import get_image_resolution, run_command
     from pathlib import Path
     import shutil
     import os
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    import sys
+    import numpy as np
     
     # Initialize command log file
-    # Extract task and run from run_identifier if needed
     run_identifier = '${run_identifier}'
     import re
     task_match = re.search(r'task-([^_]+)', run_identifier)
@@ -1532,7 +1170,7 @@ process FUNC_SKULLSTRIPPING {
         output_dir='${params.output_dir}',
         subject_id='${subject_id}',
         session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_SKULLSTRIPPING',
+        step_name='FUNC_COMPUTE_REGISTRATION',
         task_name=task_name,
         run=run
     )
@@ -1544,20 +1182,44 @@ process FUNC_SKULLSTRIPPING {
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
     
-    # bold_inherited.nii.gz is automatically created by Nextflow via stageAs parameter
-    # No need to manually create symlink - Nextflow handles it
-    bold_inherited = Path('bold_inherited.nii.gz')
+    # Determine target file and type
+    registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
+    anat_brain_path_str = '${anat_brain}'
+    has_anat_brain = anat_brain_path_str and anat_brain_path_str.strip() != '' and '.dummy' not in anat_brain_path_str
     
-    # Verify the file exists (Nextflow should have staged it)
-    if not bold_inherited.exists():
-        raise FileNotFoundError(f"BOLD inherited file does not exist: {bold_inherited}. Nextflow stageAs may have failed.")
+    # Get effective output_space
+    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
     
-    # Create step input (process tmean → brain, inherit BOLD via symlink)
+    if registration_pipeline == 'func2template':
+        target_file = Path(resolve_template(effective_output_space))
+        target_type = 'template'
+        target2template = False
+    elif registration_pipeline in ['func2anat', 'func2anat2template']:
+        if has_anat_brain:
+            anat_brain_path = Path(anat_brain_path_str)
+            if anat_brain_path.exists():
+                target_file = anat_brain_path
+                target_type = 'anat'
+                target2template = (registration_pipeline == 'func2anat2template')
+            else:
+                target_file = Path(resolve_template(effective_output_space))
+                target_type = 'template'
+                target2template = False
+        else:
+            target_file = Path(resolve_template(effective_output_space))
+            target_type = 'template'
+            target2template = False
+    else:
+        target_file = Path(resolve_template(effective_output_space))
+        target_type = 'template'
+        target2template = False
+    
+    # Create step input
     input_obj = StepInput(
-        input_file=Path('${tmean_file}'),  # Process tmean → brain
+        input_file=Path('${masked_tmean}'),
         working_dir=Path('work'),
         config=config,
-        output_name='func_brain.nii.gz',
+        output_name='func_registered.nii.gz',
         metadata={
             'subject_id': '${subject_id}',
             'session_id': '${session_id}',
@@ -1565,320 +1227,69 @@ process FUNC_SKULLSTRIPPING {
         }
     )
     
-    # Run step (processes tmean to create brain)
-    result = func_skullstripping(input_obj)
+    # Run registration
+    result = func_registration(input_obj, target_file=target_file, target_type=target_type)
     
-    # Generate BIDS-compliant output filename for mask
-    # Format: {prefix}_desc-brain_mask.nii.gz
+    # Generate BIDS-compliant output filename
+    # Determine space name based on target_type:
+    # - If target_type == 'anat': space is T1w (func registered to anatomical space)
+    # - If target_type == 'template': space is template_name (func registered directly to template)
+    template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
+    if target_type == 'anat':
+        space_name = "T1w"
+    else:
+        space_name = template_name
+    
+    bids_output_filename = create_bids_output_filename(
+        original_file_path=bids_naming_template,
+        suffix=f'space-{space_name}_desc-preproc',
+        modality='boldref'
+    )
+    
+    # Create symlink for registered tmean
+    create_output_link(result.output_file, bids_output_filename)
+    
+    # Copy transform files with BIDS-compliant names (both forward and inverse)
     original_stem = get_filename_stem(bids_naming_template)
-    bids_prefix_wobold = original_stem.replace("_bold", "").replace("_boldref", "")
+    bids_prefix = original_stem.replace('_bold', '')
     
-    # Create symlink for mask with BIDS-compliant name (will be published)
-    if "brain_mask" in result.additional_files:
-        bids_additional_name = f"{bids_prefix_wobold}_desc-brain_mask.nii.gz"
-        # Create symlink from work directory to process output directory
-        create_output_link(result.additional_files["brain_mask"], bids_additional_name)
+    for key, f in result.additional_files.items():
+        if key == 'forward_transform':
+            # Forward transform: from-bold_to-{space_name}
+            bids_transform_name = f"{bids_prefix}_from-bold_to-{space_name}_mode-image_xfm.h5"
+            shutil.copy2(f, bids_transform_name)
+        elif key == 'inverse_transform':
+            # Inverse transform: from-{space_name}_to-bold
+            bids_transform_name = f"{bids_prefix}_from-{space_name}_to-bold_mode-image_xfm.h5"
+            shutil.copy2(f, bids_transform_name)
+        else:
+            shutil.copy2(f, f.name)
     
-    # Create symlink for brain file (in working dir, but not published to BIDS output)
-    # Format: {prefix}_boldref_brain.nii.gz
-    if result.output_file.exists():
-        bids_brain_name = f"{bids_prefix_wobold}_boldref_brain.nii.gz"
-        # Create symlink from work directory to process output directory
-        create_output_link(result.output_file, bids_brain_name)
+    # Emit the original target file used during registration
+    # The apply step will resample it if needed (based on keep_func_resolution)
+    # Create reference file for output
+    target_output = f"{bids_prefix}_ref_from_func_reg.nii.gz"
+    target_path = Path(target_output)
+    
+    if target_file.exists():
+        if target_file.resolve() != target_path.resolve():
+            shutil.copy2(target_file, target_output)
+            print(f"INFO: Emitted ref_from_func_reg from original target file", file=sys.stderr)
+        else:
+            data = target_file.read_bytes()
+            target_path.write_bytes(data)
+            print(f"INFO: Emitted ref_from_func_reg from original target file", file=sys.stderr)
+    else:
+        raise FileNotFoundError(f"Target file not found: {target_file}")
+    
+    # Ensure file exists
+    if not target_path.exists():
+        raise FileNotFoundError(f"Failed to emit ref_from_func_reg: {target_path}")
+    print(f"INFO: ref_from_func_reg emitted, size: {target_path.stat().st_size} bytes", file=sys.stderr)
     
     # Save metadata
     save_metadata(result.metadata)
     EOF
-    """
-}
-
-process FUNC_REGISTRATION {
-    label 'cpu'
-    tag "${subject_id}_${session_id}_${run_identifier}"
-    
-    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
-        mode: 'copy',
-        pattern: '*.{nii.gz,h5}'
-    
-    input:
-    // 3-input pattern - EXACTLY like T2W_TO_T1W_REGISTRATION: (tuple, path, path)
-    // Tuple: 8 elements [sub, ses, run_identifier, bold_file, tmean_file, bids_template, anat_session_id, is_across_ses]
-    // anat_brain: separate path input (like t1w_file in T2W)
-    // config_file: config path
-    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(tmean_file), val(bids_naming_template), val(anat_session_id), val(is_across_ses)
-    path(anat_brain)
-    path config_file
-    
-    output:
-    // Combined channel: [sub, ses, run_identifier, bold_file, registered_tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("bold_inherited.nii.gz"), path("*space-*boldref.nii.gz"), val(bids_naming_template), emit: output
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*from-bold_to-*_mode-image_xfm.h5"), emit: transforms
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*from-*_to-bold_mode-image_xfm.h5"), emit: inverse_transforms
-    // Reference file used for registration (resampled target if keep_func_resolution=True)
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*target_res-func_for_registration.nii.gz"), emit: reference
-    // Metadata file: contains target_type and target2template (tab-separated)
-    tuple val(subject_id), val(session_id), val(run_identifier), path("registration_metadata.txt"), emit: metadata
-    // Anatomical session ID used for registration (for matching with anat_reg_transforms)
-    tuple val(subject_id), val(session_id), val(run_identifier), val(anat_session_id), emit: anat_session
-    path "*.json", emit: metadata_json
-    
-    script:
-    def template_name = params.output_space.split(':')[0]
-    """
-    # Set thread environment variables from config
-    THREADS=\$(\${PYTHON:-python3} <<'PYTHON'
-import yaml
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
-threads = config.get('registration', {}).get('threads', 8)
-threads = min(threads, 32)  # Cap at 32 to prevent oversubscription
-print(threads)
-PYTHON
-    )
-    
-    export OMP_NUM_THREADS=\$THREADS
-    export MKL_NUM_THREADS=\$THREADS
-    export NUMEXPR_NUM_THREADS=\$THREADS
-    export OPENBLAS_NUM_THREADS=\$THREADS
-    export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=\$THREADS
-    
-    echo "Set thread environment variables to \$THREADS"
-    
-    # Check if using anatomical from different session
-    if [ "${is_across_ses}" = "true" ]; then
-        echo "WARNING: Functional session ${session_id} for subject ${subject_id} does not have anatomical data." >&2
-        echo "WARNING: Using anatomical data from session ${anat_session_id} instead." >&2
-        echo "WARNING: This may affect registration quality if sessions have different head positions." >&2
-    fi
-    
-    python3 <<EOF
-from macacaMRIprep.steps.functional import func_registration
-from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.templates import resolve_template
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from pathlib import Path
-import shutil
-import os
-import sys
-from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
-
-# Initialize command log file
-# Extract task and run from run_identifier if needed
-run_identifier = '${run_identifier}'
-import re
-task_match = re.search(r'task-([^_]+)', run_identifier)
-run_match = re.search(r'run-([^_]+)', run_identifier)
-task_name = task_match.group(1) if task_match else None
-run = run_match.group(1) if run_match else None
-
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='FUNC_REGISTRATION',
-    task_name=task_name,
-    run=run
-)
-
-# Load config
-from macacaMRIprep.utils.nextflow import load_config
-config = load_config('${config_file}')
-
-# Get original file path (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
-
-# Check if anatomical data is available
-is_across_ses = '${is_across_ses}' == 'true'
-anat_session_id = '${anat_session_id}'
-func_session_id = '${session_id}'
-
-# Determine target based on registration pipeline
-registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
-template_name = '${template_name}'
-
-# Check if anatomical brain file exists (handle missing anatomical data)
-anat_brain_path_str = '${anat_brain}'
-# Check if path is a dummy/placeholder (contains .dummy or is empty)
-is_dummy_anat = '.dummy' in anat_brain_path_str or not anat_brain_path_str or anat_brain_path_str.strip() == ''
-if is_dummy_anat:
-    has_anat = False
-    anat_brain_path = None
-else:
-    anat_brain_path = Path(anat_brain_path_str)
-    has_anat = anat_brain_path.exists()
-
-# Get effective output_space (CLI > YAML > default)
-from macacaMRIprep.utils.nextflow import get_effective_output_space
-effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
-is_native_space = effective_output_space and effective_output_space.lower() == 'native'
-
-# Determine target based on registration pipeline
-# FUNC_REGISTRATION registers functional tmean/brain to anatomical skull-stripped brain
-if registration_pipeline == 'func2template' or not has_anat:
-    # Direct to template registration (no anatomical needed)
-    target_file = Path(resolve_template(effective_output_space))
-    target_type = 'template'
-    target_name = template_name
-    target2template = False
-    if not has_anat:
-        print(f"INFO: No anatomical data available, registering directly to template", file=sys.stderr)
-elif registration_pipeline == 'func2anat':
-    if not has_anat:
-        # Fallback to template if no anatomical data
-        target_file = Path(resolve_template(effective_output_space))
-        target_type = 'template'
-        target_name = template_name
-        target2template = False
-        print(f"INFO: No anatomical data available for func2anat pipeline, using template instead", file=sys.stderr)
-    else:
-        # Use anatomical skull-stripped brain as target
-        target_file = anat_brain_path
-        target_type = 'anat'
-        target_name = 'anat'  # Registering to anatomical brain (not in template space yet)
-        target2template = False
-        if is_across_ses:
-            print(f"WARNING: Using anatomical from session {anat_session_id} for functional session {func_session_id}", file=sys.stderr)
-else:  # func2anat2template
-    if not has_anat:
-        # Fallback to template if no anatomical data
-        target_file = Path(resolve_template(effective_output_space))
-        target_type = 'template'
-        target_name = template_name
-        target2template = False
-        print(f"INFO: No anatomical data available for func2anat2template pipeline, using template instead", file=sys.stderr)
-    else:
-        # First register to anatomical skull-stripped brain
-        target_file = anat_brain_path
-        target_type = 'anat'
-        target_name = 'anat'  # Registering to anatomical brain (not in template space yet)
-        target2template = not is_native_space  # True if not native space, False if native
-        if is_across_ses:
-            print(f"WARNING: Using anatomical from session {anat_session_id} for functional session {func_session_id}", file=sys.stderr)
-
-# Create symlink to inherited BOLD file for output
-bold_input = Path('${bold_file}')
-bold_inherited = Path('bold_inherited.nii.gz')
-
-# Ensure source file exists
-if not bold_input.exists():
-    raise FileNotFoundError(f"BOLD input file does not exist: {bold_input}")
-
-# Check if input and output are the same file (resolve to check actual file)
-bold_input_resolved = bold_input.resolve()
-bold_inherited_resolved = bold_inherited.resolve()
-
-# If they're the same file, no need to create symlink - just use it
-if bold_input_resolved == bold_inherited_resolved:
-    # Input is already the output file - nothing to do
-    pass
-else:
-    # Remove existing symlink/file if present
-    if bold_inherited.exists() or bold_inherited.is_symlink():
-        bold_inherited.unlink()
-
-    # Create symlink using relative path (works better with Nextflow file staging)
-    # Get the relative path from bold_inherited's parent to bold_input
-    try:
-        # Use relative path for symlink (more reliable with Nextflow staging)
-        bold_input_rel = os.path.relpath(str(bold_input), str(bold_inherited.parent))
-        os.symlink(bold_input_rel, str(bold_inherited))
-    except OSError as e:
-        # If relative symlink fails, try absolute path
-        try:
-            os.symlink(str(bold_input_resolved), str(bold_inherited_resolved))
-        except OSError as e2:
-            # If symlink fails completely, try copying the file instead
-            print(f"WARNING: Symlink creation failed ({e2}), copying file instead", file=sys.stderr)
-            shutil.copy2(str(bold_input_resolved), str(bold_inherited_resolved))
-
-# Verify the output file exists
-if not bold_inherited.exists():
-    raise FileNotFoundError(f"Failed to create bold_inherited.nii.gz: symlink/copy failed")
-
-# Create step input
-input_obj = StepInput(
-    input_file=Path('${tmean_file}'),  # Process tmean → registered tmean, inherit BOLD via symlink
-    working_dir=Path('work'),
-    config=config,
-    output_name='func_tmean_registered.nii.gz',
-        metadata={
-            'subject_id': '${subject_id}',
-            'session_id': '${session_id}',
-            'run_identifier': run_identifier
-        }
-)
-
-# Run step
-result = func_registration(input_obj, target_file=target_file, target_type=target_type)
-
-# Generate BIDS-compliant output filename with space entity
-# Format: space-{target_name}_boldref.nii.gz (registered tmean/brain)
-# Remove _bold from original stem and add space entity with boldref suffix
-original_stem = get_filename_stem(bids_naming_template)
-bids_prefix_wo_modality = original_stem.replace('_bold', '')
-# For anatomical registration, use 'T1w' as space name (standard BIDS convention)
-if target_type == 'anat':
-    space_name = 'T1w'
-else:
-    space_name = target_name
-bids_output_filename = f"{bids_prefix_wo_modality}_space-{space_name}_boldref.nii.gz"
-
-# Create BIDS-compliant symlink for Nextflow output and publishDir
-create_output_link(result.output_file, bids_output_filename)
-
-# Copy additional files (e.g., transforms) with BIDS-compliant names
-bids_prefix = bids_prefix_wo_modality
-
-for key, f in result.additional_files.items():
-    if key == 'forward_transform':
-        # Forward transform: from-bold_to-{space_name}
-        # Use space_name (T1w for anatomical, template name for template)
-        bids_transform_name = f"{bids_prefix}_from-bold_to-{space_name}_mode-image_xfm.h5"
-        create_output_link(f, bids_transform_name)
-    elif key == 'inverse_transform':
-        # Inverse transform: from-{space_name}_to-bold
-        bids_transform_name = f"{bids_prefix}_from-{space_name}_to-bold_mode-image_xfm.h5"
-        create_output_link(f, bids_transform_name)
-    else:
-        create_output_link(f, f.name)
-
-# Save reference file if it was created (for apply transforms and QC)
-working_dir = Path('work')
-reference_file = working_dir / "target_res-func_for_registration.nii.gz"
-reference_output_name = f"{bids_prefix}_target_res-func_for_registration.nii.gz"
-keep_func_resolution = config.get("registration.keep_func_resolution", True)
-
-if reference_file.exists():
-    # Check if file is empty
-    file_size = reference_file.stat().st_size
-    if file_size == 0:
-        if keep_func_resolution:
-            raise ValueError(f"Reference file exists but is empty: {reference_file}. This may indicate an error during resampling.")
-        else:
-            # Empty file is expected when keep_func_resolution is False
-            Path(reference_output_name).touch()
-            print(f"Output: reference file is empty (keep_func_resolution=False)", file=sys.stderr)
-    else:
-        # Copy reference file to output directory with BIDS-compliant name
-        shutil.copy2(reference_file, reference_output_name)
-        print(f"Output: reference file saved: {reference_output_name}, size: {file_size} bytes", file=sys.stderr)
-elif keep_func_resolution:
-    # If keep_func_resolution is True, the file should have been created
-    raise FileNotFoundError(f"Reference file should have been created but is missing: {reference_file}. This may indicate an error during resampling.")
-else:
-    # Create empty file as placeholder (Nextflow requires output) when keep_func_resolution is False
-    Path(reference_output_name).touch()
-    print(f"Output: no reference file created (keep_func_resolution=False)", file=sys.stderr)
-
-# Save metadata JSON
-save_metadata(result.metadata)
-
-# Output metadata for Nextflow tuple channel
-# Write target_type and target2template to a single file (tab-separated)
-with open('registration_metadata.txt', 'w') as f:
-    f.write(f"{target_type}\t{target2template}")
-print(f"Metadata: target_type={target_type}, target2template={target2template}", file=sys.stderr)
-EOF
     """
 }
 
@@ -1891,11 +1302,12 @@ process FUNC_APPLY_TRANSFORMS {
         pattern: '*.{nii.gz,h5}'
     
     input:
-    // Input structure: [sub, ses, run_identifier, tmean_registered, func2target_transform, anat2template_transform, bids_template, target_type, target2template, reference_file]
-    // For sequential: anat2template_transform is real file
-    // For single: anat2template_transform is dummy file
-    tuple val(subject_id), val(session_id), val(run_identifier), path(tmean_registered, stageAs: 'tmean_reference.nii.gz'), path("*from-bold_to-*_mode-image_xfm.h5"), path(anat2template_transform), val(bids_naming_template), val(target_type), val(target2template), path(reference_file)
-    path(func_4d_file)  // Original 4D BOLD file
+    // Input structure: [sub, ses, run_identifier, bids_template, target_type, target2template, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
+    // For sequential: anat2template_xfm is real file, ref_from_anat_reg is real file
+    // For single: anat2template_xfm is dummy file, ref_from_anat_reg is dummy file
+    // ref_from_func_reg: original target file (anat or template) from func registration, will be resampled if needed
+    tuple val(subject_id), val(session_id), val(run_identifier), val(bids_naming_template), val(target_type), val(target2template), path(func2target_xfm), path(ref_from_func_reg), path(anat2template_xfm), path(ref_from_anat_reg)
+    path(func_4d_file)  // Original 4D BOLD file (conformed_bold)
     path config_file
     
     output:
@@ -1948,17 +1360,22 @@ bids_naming_template = Path('${bids_naming_template}')
 # Get input parameters
 target_type = '${target_type}'
 target2template = '${target2template}' == 'true'
+func_4d_input = Path('${func_4d_file}')
+
 # Get func2target transform from glob (from-bold_to-*)
 func2target_transform_files = [Path(f) for f in glob.glob('*from-bold_to-*_mode-image_xfm.h5')]
 if not func2target_transform_files:
     raise FileNotFoundError("No func2target transform file found")
 func2target_transform = func2target_transform_files[0]
 
-# Handle anat2template_transform - may be a single file or space-separated string
-anat2template_transform_str = '${anat2template_transform}'
-if ' ' in anat2template_transform_str:
+# ref_from_func_reg is the original target file from func registration
+ref_from_func_reg_input = Path('${ref_from_func_reg}')
+
+# Handle anat2template_xfm - may be a single file or space-separated string
+anat2template_xfm_str = '${anat2template_xfm}'
+if ' ' in anat2template_xfm_str:
     # Multiple files - get the forward transform (from-T1w_to-*)
-    anat2template_files = [Path(f.strip()) for f in anat2template_transform_str.split() if f.strip()]
+    anat2template_files = [Path(f.strip()) for f in anat2template_xfm_str.split() if f.strip()]
     anat2template_transform_path = None
     for f in anat2template_files:
         if 'from-T1w_to-' in str(f) or 'from-anat_to-' in str(f):
@@ -1967,13 +1384,15 @@ if ' ' in anat2template_transform_str:
     if anat2template_transform_path is None:
         anat2template_transform_path = anat2template_files[0] if anat2template_files else Path('')
 else:
-    anat2template_transform_path = Path(anat2template_transform_str)
+    anat2template_transform_path = Path(anat2template_xfm_str)
 
-reference_file_input = Path('${reference_file}')
-func_4d_input = Path('${func_4d_file}')
+ref_from_anat_reg_input = Path('${ref_from_anat_reg}')
 
-# Check if anat2template_transform is a dummy file
+# Check if anat2template_xfm is a dummy file
 is_dummy_anat2template = '.dummy' in str(anat2template_transform_path) or not anat2template_transform_path.exists() or anat2template_transform_path == Path('')
+
+# Check if anat_reg reference is a dummy file
+is_dummy_anat_reg = '.dummy' in str(ref_from_anat_reg_input) or not ref_from_anat_reg_input.exists()
 
 # Determine if sequential transforms are needed
 is_sequential = target2template and target_type == 'anat' and not is_dummy_anat2template
@@ -2002,25 +1421,39 @@ if is_sequential:
     # Sequential transforms: func2anat then anat2template
     print("INFO: Applying sequential transforms: func2anat then anat2template", file=sys.stderr)
     
-    # Validate reference file exists and is valid
-    if not reference_file_input.exists():
-        raise FileNotFoundError(f"Reference file does not exist: {reference_file_input}")
-    file_size = reference_file_input.stat().st_size
+    # Validate ref_from_func_reg file exists and is valid
+    if not ref_from_func_reg_input.exists():
+        raise FileNotFoundError(f"Ref from func reg file does not exist: {ref_from_func_reg_input}")
+    file_size = ref_from_func_reg_input.stat().st_size
     if file_size == 0:
-        raise ValueError(f"Reference file is empty: {reference_file_input}")
-    print(f"INFO: Reference file exists: {reference_file_input}, size: {file_size} bytes", file=sys.stderr)
+        raise ValueError(f"Ref from func reg file is empty: {ref_from_func_reg_input}")
+    print(f"INFO: Ref from func reg file exists: {ref_from_func_reg_input}, size: {file_size} bytes", file=sys.stderr)
+    
+    # Validate anat reg reference file exists and is valid
+    if is_dummy_anat_reg:
+        raise FileNotFoundError(f"Anat reg reference file is missing for sequential transforms: {ref_from_anat_reg_input}")
+    if not ref_from_anat_reg_input.exists():
+        raise FileNotFoundError(f"Anat reg reference file does not exist: {ref_from_anat_reg_input}")
+    file_size_anat = ref_from_anat_reg_input.stat().st_size
+    if file_size_anat == 0:
+        raise ValueError(f"Anat reg reference file is empty: {ref_from_anat_reg_input}")
+    print(f"INFO: Anat reg reference file exists: {ref_from_anat_reg_input}, size: {file_size_anat} bytes", file=sys.stderr)
     
     # Step 1: Apply func2anat transform
     anat_target_name = "T1w"
-    anat_fixedf = reference_file_input  # Use reference from registration (resampled anat if available)
-    
-    # Prepare resampled anat for reference if needed
+    # Resample ref_from_func_reg to func resolution if needed
     if config.get("registration.keep_func_resolution", True):
-        anat_reff = reference_file_input
-        print(f"INFO: Using resampled anat from registration for apply transforms", file=sys.stderr)
+        anat_reff = working_dir / "target_res-func_for_apply_transforms.nii.gz"
+        func_res = np.round(get_image_resolution(str(func_4d_input), logger=logger), 1)
+        cmd_resample = ['3dresample', 
+                        '-input', str(ref_from_func_reg_input), '-prefix', str(anat_reff), 
+                        '-rmode', 'Cu',
+                        '-dxyz', str(func_res[0]), str(func_res[1]), str(func_res[2])]
+        run_command(cmd_resample, step_logger=logger)
+        print(f"INFO: Resampled ref_from_func_reg to func resolution for func2anat transform", file=sys.stderr)
     else:
-        # Need to get original anat file - this should be passed, but for now use reference
-        anat_reff = reference_file_input
+        anat_reff = ref_from_func_reg_input
+        print(f"INFO: Using ref_from_func_reg at native resolution for func2anat transform", file=sys.stderr)
     
     # Apply func2anat transform to 4D BOLD
     result_anat = ants_apply_transforms_op(
@@ -2056,7 +1489,9 @@ if is_sequential:
     create_output_link(func_tmean_anat, func_anat_boldref_name)
     
     # Step 2: Apply anat2template transform
-    template_fixedf = Path(resolve_template(effective_output_space))
+    # Use ref_from_anat_reg (template file from anat registration)
+    template_fixedf = ref_from_anat_reg_input
+    print(f"INFO: Using ref_from_anat_reg (template) for anat2template transform", file=sys.stderr)
     
     # Resample template to func resolution if needed
     if config.get("registration.keep_func_resolution", True):
@@ -2106,39 +1541,24 @@ if is_sequential:
     
     # Output final reference file for QC: template at appropriate resolution
     # Sequential transforms: final space is template
+    # Reuse template_reff (already resampled if needed) instead of resampling again
     bids_prefix = get_filename_stem(bids_naming_template).replace('_bold', '')
     target_final_output = f"{bids_prefix}_target_final.nii.gz"
     target_final_path = Path(target_final_output)
     
-    # Determine final reference based on keep_func_resolution
-    # If keep_func_resolution=True: use template_reff (resampled to func resolution)
-    # If keep_func_resolution=False: use template_fixedf (original template)
-    if config.get("registration.keep_func_resolution", True):
-        # Use resampled template (already created above)
-        if template_reff.exists() and template_reff != template_fixedf:
-            if template_reff.resolve() != target_final_path.resolve():
-                shutil.copy2(template_reff, target_final_output)
-                print(f"INFO: Created target_final.nii.gz from resampled template (func resolution)", file=sys.stderr)
-            else:
-                # Same file - read and write to create a new file
-                data = template_reff.read_bytes()
-                target_final_path.write_bytes(data)
-                print(f"INFO: Created target_final.nii.gz from resampled template (func resolution)", file=sys.stderr)
+    # Use template_reff (already resampled to func resolution if keep_func_resolution=True)
+    # This avoids duplicate resampling - template_reff was already created above
+    if template_reff.exists():
+        if template_reff.resolve() != target_final_path.resolve():
+            shutil.copy2(template_reff, target_final_output)
+            print(f"INFO: Created target_final.nii.gz from template_reff (reused from transform)", file=sys.stderr)
         else:
-            raise FileNotFoundError(f"Resampled template reference not found: {template_reff}")
+            # Same file - read and write to create a new file
+            data = template_reff.read_bytes()
+            target_final_path.write_bytes(data)
+            print(f"INFO: Created target_final.nii.gz from template_reff (reused from transform)", file=sys.stderr)
     else:
-        # Use original template
-        if template_fixedf.exists():
-            if template_fixedf.resolve() != target_final_path.resolve():
-                shutil.copy2(template_fixedf, target_final_output)
-                print(f"INFO: Created target_final.nii.gz from original template (native resolution)", file=sys.stderr)
-            else:
-                # Same file - read and write to create a new file
-                data = template_fixedf.read_bytes()
-                target_final_path.write_bytes(data)
-                print(f"INFO: Created target_final.nii.gz from original template (native resolution)", file=sys.stderr)
-        else:
-            raise FileNotFoundError(f"Template file not found: {template_fixedf}")
+        raise FileNotFoundError(f"Template reference file not found: {template_reff}")
     
     # Ensure file exists
     if not target_final_path.exists():
@@ -2159,23 +1579,27 @@ else:
     else:
         target_name = template_name
     
-    # Prepare reference file
+    # Prepare reference file - resample ref_from_func_reg to func resolution if needed
     if config.get("registration.keep_func_resolution", True):
-        reff = reference_file_input
+        reff = working_dir / "target_res-func_for_apply_transforms.nii.gz"
+        func_res = np.round(get_image_resolution(str(func_4d_input), logger=logger), 1)
+        cmd_resample = ['3dresample', 
+                        '-input', str(ref_from_func_reg_input), '-prefix', str(reff), 
+                        '-rmode', 'Cu',
+                        '-dxyz', str(func_res[0]), str(func_res[1]), str(func_res[2])]
+        run_command(cmd_resample, step_logger=logger)
+        print(f"INFO: Resampled ref_from_func_reg to func resolution for transform", file=sys.stderr)
     else:
-        if target_type == 'anat':
-            reff = reference_file_input  # Should be original anat file, but use reference for now
-        else:
-            reff = Path(resolve_template(effective_output_space))
+        reff = ref_from_func_reg_input
+        print(f"INFO: Using ref_from_func_reg at native resolution for transform", file=sys.stderr)
     
-    # Validate reference file exists and is valid (if not template)
-    if reff == reference_file_input:
-        if not reference_file_input.exists():
-            raise FileNotFoundError(f"Reference file does not exist: {reference_file_input}")
-        file_size = reference_file_input.stat().st_size
-        if file_size == 0:
-            raise ValueError(f"Reference file is empty: {reference_file_input}")
-        print(f"INFO: Reference file exists: {reference_file_input}, size: {file_size} bytes", file=sys.stderr)
+    # Validate reference file exists and is valid
+    if not reff.exists():
+        raise FileNotFoundError(f"Reference file does not exist: {reff}")
+    file_size = reff.stat().st_size
+    if file_size == 0:
+        raise ValueError(f"Reference file is empty: {reff}")
+    print(f"INFO: Reference file exists: {reff}, size: {file_size} bytes", file=sys.stderr)
     
     # Apply single transform
     result = func_apply_transforms(
@@ -2212,83 +1636,23 @@ else:
         create_output_link(result.additional_files["tmean"], bids_boldref_filename)
     
     # Output final reference file for QC: target at appropriate resolution
+    # Use the same reference file that was used for the transform (already resampled if needed)
     bids_prefix = get_filename_stem(bids_naming_template).replace('_bold', '')
     target_final_output = f"{bids_prefix}_target_final.nii.gz"
     target_final_path = Path(target_final_output)
     
-    # Determine final reference based on keep_func_resolution and target_type
-    keep_func_resolution = config.get("registration.keep_func_resolution", True)
-    
-    if target_type == 'anat':
-        # func2anat: final space is anatomical
-        if keep_func_resolution:
-            # Use resampled anat from registration (reference_file_input)
-            if reference_file_input.exists():
-                if reference_file_input.resolve() != target_final_path.resolve():
-                    shutil.copy2(reference_file_input, target_final_output)
-                    print(f"INFO: Created target_final.nii.gz from resampled anat (func resolution)", file=sys.stderr)
-                else:
-                    # Same file - read and write to create a new file
-                    data = reference_file_input.read_bytes()
-                    target_final_path.write_bytes(data)
-                    print(f"INFO: Created target_final.nii.gz from resampled anat (func resolution)", file=sys.stderr)
-            else:
-                raise FileNotFoundError(f"Resampled anat reference not found: {reference_file_input}")
+    # Use the same reference file that was used for the transform (already resampled if needed)
+    if reff.exists():
+        if reff.resolve() != target_final_path.resolve():
+            shutil.copy2(reff, target_final_output)
+            print(f"INFO: Created target_final.nii.gz from reference (same as used for transform)", file=sys.stderr)
         else:
-            # Use original anat (reff should be original anat, but we use reference_file_input as fallback)
-            # Note: In practice, if keep_func_resolution=False, reference_file_input might still be resampled
-            # This is a limitation - we'd need the original anat file passed in
-            if reff.exists() and reff != Path(resolve_template(effective_output_space)):
-                if reff.resolve() != target_final_path.resolve():
-                    shutil.copy2(reff, target_final_output)
-                    print(f"INFO: Created target_final.nii.gz from original anat (native resolution)", file=sys.stderr)
-                else:
-                    data = reff.read_bytes()
-                    target_final_path.write_bytes(data)
-                    print(f"INFO: Created target_final.nii.gz from original anat (native resolution)", file=sys.stderr)
-            else:
-                # Fallback: use reference_file_input (might be resampled, but better than nothing)
-                if reference_file_input.exists():
-                    shutil.copy2(reference_file_input, target_final_output)
-                    print(f"INFO: Created target_final.nii.gz from reference (fallback, may be resampled)", file=sys.stderr)
-                else:
-                    raise FileNotFoundError(f"Anatomical reference file not found for target_final.nii.gz")
+            # Same file - read and write to create a new file
+            data = reff.read_bytes()
+            target_final_path.write_bytes(data)
+            print(f"INFO: Created target_final.nii.gz from reference (same as used for transform)", file=sys.stderr)
     else:
-        # func2template: final space is template
-        template_fixedf = Path(resolve_template(effective_output_space))
-        if keep_func_resolution:
-            # Resample template to func resolution
-            template_reff = working_dir / "template_res-func_for_apply_transforms.nii.gz"
-            func_res = np.round(get_image_resolution(str(func_4d_input), logger=logger), 1)
-            cmd_resample = ['3dresample', 
-                            '-input', str(template_fixedf), '-prefix', str(template_reff), 
-                            '-rmode', 'Cu',
-                            '-dxyz', str(func_res[0]), str(func_res[1]), str(func_res[2])]
-            run_command(cmd_resample, step_logger=logger)
-            print(f"INFO: Template resampled to func resolution for target_final.nii.gz", file=sys.stderr)
-            
-            if template_reff.exists():
-                if template_reff.resolve() != target_final_path.resolve():
-                    shutil.copy2(template_reff, target_final_output)
-                    print(f"INFO: Created target_final.nii.gz from resampled template (func resolution)", file=sys.stderr)
-                else:
-                    data = template_reff.read_bytes()
-                    target_final_path.write_bytes(data)
-                    print(f"INFO: Created target_final.nii.gz from resampled template (func resolution)", file=sys.stderr)
-            else:
-                raise FileNotFoundError(f"Failed to resample template for target_final.nii.gz")
-        else:
-            # Use original template
-            if template_fixedf.exists():
-                if template_fixedf.resolve() != target_final_path.resolve():
-                    shutil.copy2(template_fixedf, target_final_output)
-                    print(f"INFO: Created target_final.nii.gz from original template (native resolution)", file=sys.stderr)
-                else:
-                    data = template_fixedf.read_bytes()
-                    target_final_path.write_bytes(data)
-                    print(f"INFO: Created target_final.nii.gz from original template (native resolution)", file=sys.stderr)
-            else:
-                raise FileNotFoundError(f"Template file not found: {template_fixedf}")
+        raise FileNotFoundError(f"Reference file not found for target_final.nii.gz: {reff}")
     
     # Ensure file exists
     if not target_final_path.exists():
