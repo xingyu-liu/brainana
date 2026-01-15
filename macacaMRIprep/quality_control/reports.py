@@ -25,7 +25,7 @@ SNAPSHOT_MAPPINGS = {
     'anat2template': {'key': 'anat2template_registration_overlay', 'description': 'Structural to template registration'},
     'func2target': {'key': 'func2target_registration_overlay', 'description': 'Functional to target registration'},
     'T2w2T1w': {'key': 'T2w2T1w_registration_overlay', 'description': 'T2w to T1w coregistration'},
-    'coreg': {'key': 'func_coreg_overlay', 'description': 'Within-session functional coregistration'},
+    'func_coreg': {'key': 'func_coreg_overlay', 'description': 'Within-session functional coregistration'},
     'motion': {'key': 'motion_parameters', 'description': 'Motion parameters'},
     'surfReconTissueSeg': {'key': 'surf_recon_tissue_seg_overlay', 'description': 'Surface reconstruction tissue segmentation'},
     'corticalSurfAndMeasures': {'key': 'cortical_surf_and_measures_overlay', 'description': 'Cortical surface and measures'},
@@ -533,12 +533,12 @@ please refer to the macacaMRIprep configuration files in your preprocessing dire
         
         # Sort groups so that:
         # 1. T1w comes before T2w (for anatomical)
-        # 2. Within functional, session-only groups (coreg) come before session+task+run groups
-        # 3. Within the same session, coreg appears first
+        # 2. Within functional, session-only groups (func_coreg) come before session+task+run groups
+        # 3. Within the same session, func_coreg appears first
         def group_sort_key(group_item):
             group_name, snapshots = group_item
-            # Check if this is a coreg group (has coreg snapshots without task/run)
-            is_coreg = any(
+            # Check if this is a func_coreg group (has func_coreg snapshots without task/run)
+            is_func_coreg = any(
                 s.get('snapshot_type') == 'func_coreg_overlay' 
                 and 'task' not in s.get('entities', {})
                 and 'run' not in s.get('entities', {})
@@ -556,9 +556,9 @@ please refer to the macacaMRIprep configuration files in your preprocessing dire
                 return (0, 0, session_value or '', group_name)  # (anatomical, T1w, session, name)
             elif '(T2w)' in group_name:
                 return (0, 1, session_value or '', group_name)  # (anatomical, T2w, session, name)
-            # For functional snapshots, coreg (session-only) comes first within each session
-            elif is_coreg:
-                return (1, 0, session_value or '', group_name)  # (functional, coreg first, session, name)
+            # For functional snapshots, func_coreg (session-only) comes first within each session
+            elif is_func_coreg:
+                return (1, 0, session_value or '', group_name)  # (functional, func_coreg first, session, name)
             else:
                 return (1, 1, session_value or '', group_name)  # (functional, run-specific, session, name)
         

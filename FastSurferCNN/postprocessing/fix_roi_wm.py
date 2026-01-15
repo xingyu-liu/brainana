@@ -467,9 +467,9 @@ def fix_roi_wm(
         print(f"  Forward transform: {reg_outputs['forward_transform']}")
     
     # Apply transforms to template WM probability map
-    wm_roi_transformed_f = seg_roi_f.with_name(
-        seg_roi_f.stem + '_reversed_from_template_WM.nii.gz'
-    )
+    # Construct output path relative to reg_working_dir
+    wm_roi_transformed_filename = seg_roi_f.stem + '_reversed_from_template_WM.nii.gz'
+    wm_roi_transformed_f = reg_working_dir / wm_roi_transformed_filename
     
     if verbose:
         print(f"\nApplying transforms to template WM probability map...")
@@ -478,7 +478,7 @@ def fix_roi_wm(
         movingf=str(tpl_roi_wm_f),
         moving_type=0,
         interpolation='LanczosWindowedSinc',
-        outputf_name=str(wm_roi_transformed_f),
+        outputf_name=wm_roi_transformed_filename,  # Pass only filename, not full path
         fixedf=str(t1w_roi_f),
         working_dir=str(reg_working_dir),
         transformf=reg_outputs['forward_transform'],

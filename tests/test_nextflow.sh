@@ -32,7 +32,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_multiple"
 # OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_multiple_nextflow_v1"
 BIDS_DIR="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids"
-OUTPUT_DIR="/mnt/DataDrive2/macaque/data_preproc/macaque_mri/new_livingstone_test/preproc/bids_baby25_v1"
+OUTPUT_DIR="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_baby25_v1"
 
 # CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_affine.yaml"
 # CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_easy.yaml"
