@@ -1300,14 +1300,16 @@ process FUNC_APPLY_TRANSFORMS {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.{nii.gz,h5}'
+        pattern: '*.{nii.gz,h5}',
+        saveAs: { filename -> filename.contains('target_final.nii.gz') ? null : filename }
     
     input:
-    // Input structure: [sub, ses, run_identifier, bids_template, target_type, target2template, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
+    // Input structure: [sub, ses, run_identifier, bids_template, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
     // For sequential: anat2template_xfm is real file, ref_from_anat_reg is real file
     // For single: anat2template_xfm is dummy file, ref_from_anat_reg is dummy file
     // ref_from_func_reg: original target file (anat or template) from func registration, will be resampled if needed
-    tuple val(subject_id), val(session_id), val(run_identifier), val(bids_naming_template), val(target_type), val(target2template), path(func2target_xfm), path(ref_from_func_reg), path(anat2template_xfm), path(ref_from_anat_reg)
+    // target_type and target2template are now inferred from transform filename and validated against config
+    tuple val(subject_id), val(session_id), val(run_identifier), val(bids_naming_template), path(func2target_xfm), path(ref_from_func_reg), path(anat2template_xfm), path(ref_from_anat_reg)
     path(func_4d_file)  // Original 4D BOLD file (conformed_bold)
     path config_file  // Effective config file with all resolved parameters
     
@@ -1323,21 +1325,31 @@ process FUNC_APPLY_TRANSFORMS {
 from macacaMRIprep.steps.functional import func_apply_transforms
 from macacaMRIprep.steps.types import StepInput
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
 from pathlib import Path
 import glob
 import shutil
 import os
+import re
+import sys
+import logging
 
 # Get effective_output_space from effective config file
 config = load_config('${config_file}')
 effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
 template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
 
+# Create logger early for use in parsing
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(logging.INFO)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
 # Initialize command log file
 # Extract task and run from run_identifier if needed
 run_identifier = '${run_identifier}'
-import re
 task_match = re.search(r'task-([^_]+)', run_identifier)
 run_match = re.search(r'run-([^_]+)', run_identifier)
 task_name = task_match.group(1) if task_match else None
@@ -1352,16 +1364,11 @@ init_cmd_log_for_nextflow(
     run=run
 )
 
-# Load config
-from macacaMRIprep.utils.nextflow import load_config
-config = load_config('${config_file}')
-
+# Config already loaded above
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
 # Get input parameters
-target_type = '${target_type}'
-target2template = '${target2template}' == 'true'
 func_4d_input = Path('${func_4d_file}')
 
 # Get func2target transform from glob (from-bold_to-*)
@@ -1370,8 +1377,59 @@ if not func2target_transform_files:
     raise FileNotFoundError("No func2target transform file found")
 func2target_transform = func2target_transform_files[0]
 
-# ref_from_func_reg is the original target file from func registration
+# Parse target space from transform filename
+# Pattern: from-bold_to-{space}_mode-image_xfm.h5
+def extract_target_space_from_transform(transform_path: Path) -> str:
+    # Extract target space from transform filename
+    transform_name = transform_path.name
+    # Match pattern: from-bold_to-{space}_mode-image_xfm.h5
+    match = re.search(r'from-bold_to-([^_]+)_mode-image_xfm', transform_name)
+    if match:
+        return match.group(1)
+    else:
+        # Fallback: try to extract from any pattern
+        match = re.search(r'to-([^_]+)', transform_name)
+        if match:
+            return match.group(1)
+        raise ValueError(f"Could not parse target space from transform filename: {transform_name}")
+
+try:
+    target_space = extract_target_space_from_transform(func2target_transform)
+except (ValueError, AttributeError) as e:
+    # Fallback to config if parsing fails
+    registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
+    if registration_pipeline == 'func2template':
+        target_space = template_name
+    else:
+        target_space = 'T1w'  # Default for func2anat or func2anat2template
+    logger.warning(f"Failed to parse target space from transform filename, using config fallback: {target_space}. Error: {e}")
+
+# Validate against config
+registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
+def determine_expected_space(pipeline: str, has_anat: bool) -> str:
+    # Determine expected target space based on pipeline config.
+    if pipeline == 'func2template':
+        return template_name
+    elif pipeline in ['func2anat', 'func2anat2template']:
+        if has_anat:
+            return 'T1w'
+        else:
+            return template_name
+    else:
+        return template_name  # Default fallback
+
+# Check if anatomical brain was used (inferred from ref_from_func_reg)
+# If ref_from_func_reg is not a template file, it's likely anatomical
 ref_from_func_reg_input = Path('${ref_from_func_reg}')
+has_anat_brain = not ('.dummy' in str(ref_from_func_reg_input) or 'template' in str(ref_from_func_reg_input).lower())
+expected_space = determine_expected_space(registration_pipeline, has_anat_brain)
+
+if target_space != expected_space:
+    logger.warning(
+        f"Transform filename suggests target space '{target_space}', but config "
+        f"(registration_pipeline='{registration_pipeline}') expects '{expected_space}'. "
+        f"Using parsed space '{target_space}' from transform filename."
+    )
 
 # Handle anat2template_xfm - may be a single file or space-separated string
 anat2template_xfm_str = '${anat2template_xfm}'
@@ -1397,24 +1455,29 @@ is_dummy_anat2template = '.dummy' in str(anat2template_transform_path) or not an
 is_dummy_anat_reg = '.dummy' in str(ref_from_anat_reg_input) or not ref_from_anat_reg_input.exists()
 
 # Determine if sequential transforms are needed
-is_sequential = target2template and target_type == 'anat' and not is_dummy_anat2template
+# Sequential transforms: func2anat (to T1w) then anat2template (to template)
+# Conditions: target space is T1w AND both anat2template transform and reference exist
+is_sequential = (
+    target_space == 'T1w' and 
+    not is_dummy_anat2template and 
+    not is_dummy_anat_reg
+)
+
+# If expecting sequential but files are missing, warn and fallback to single transform
+if target_space == 'T1w' and (is_dummy_anat2template or is_dummy_anat_reg):
+    if registration_pipeline == 'func2anat2template':
+        logger.warning(
+            f"Expected func2anat2template pipeline but anat2template transform or reference is missing. "
+            f"Applying single transform to T1w only. "
+            f"anat2template_xfm dummy: {is_dummy_anat2template}, ref_from_anat_reg dummy: {is_dummy_anat_reg}"
+        )
+    is_sequential = False
 
 # Import additional modules needed for sequential transforms
 from macacaMRIprep.operations.registration import ants_apply_transforms as ants_apply_transforms_op
 from macacaMRIprep.utils.templates import resolve_template
-from macacaMRIprep.utils import get_image_resolution
+from macacaMRIprep.utils import get_image_resolution, run_command
 import numpy as np
-from macacaMRIprep.utils import run_command
-import sys
-import logging
-
-# Create logger for functions that require it
-logger = logging.getLogger(__name__)
-if not logger.handlers:
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setLevel(logging.INFO)
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
 
 working_dir = Path('work')
 working_dir.mkdir(parents=True, exist_ok=True)
@@ -1574,12 +1637,13 @@ if is_sequential:
     
 else:
     # Single transform: func2anat or func2template
-    print(f"INFO: Applying single transform: func2{target_type}", file=sys.stderr)
+    print(f"INFO: Applying single transform: func2{target_space}", file=sys.stderr)
     
-    if target_type == 'anat':
+    # Use parsed target space for BIDS naming
+    if target_space == 'T1w':
         target_name = "T1w"
     else:
-        target_name = template_name
+        target_name = target_space  # Should be template name
     
     # Prepare reference file - resample ref_from_func_reg to func resolution if needed
     if config.get("registration.keep_func_resolution", True):
@@ -1666,11 +1730,16 @@ else:
     final_space_name = target_name
 
 # Save metadata
+# Determine target_type for metadata (inferred from target_space)
+metadata_target_type = 'anat' if target_space == 'T1w' else 'template'
+metadata_target2template = is_sequential  # True if sequential transforms were applied
+
 save_metadata({
     "step": "apply_transforms",
     "modality": "func",
-    "target_type": target_type,
-    "target2template": target2template,
+    "target_type": metadata_target_type,
+    "target2template": metadata_target2template,
+    "target_space": target_space,  # Add parsed space for reference
     "is_sequential": is_sequential,
     "space": final_space_name
 })

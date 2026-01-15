@@ -209,11 +209,6 @@
                 <div class="help-text">(only generate QC reports from existing outputs)</div>
             </div>
             <div class="form-group">
-                <label for="general_n_procs">n_procs</label>
-                <input type="number" id="general_n_procs" name="general_n_procs" value="1" min="1" class="short">
-                <div class="help-text">(number of parallel processes, processor is assigned at session level)</div>
-            </div>
-            <div class="form-group">
                 <div class="checkbox-group">
                     <input type="checkbox" id="general_anat_only" name="general_anat_only">
                     <label for="general_anat_only">anat_only</label>
@@ -700,7 +695,6 @@
                 verbose: 2,
                 overwrite: false,
                 generate_report_only: false,
-                n_procs: 1,
                 anat_only: false
             },
             bids_filtering: {
@@ -804,11 +798,6 @@
         // Validation functions matching Python validation
         function validateConfig(config) {
             const errors = [];
-            
-            // Validate general
-            if (config.general.n_procs < 1) {
-                errors.push("general.n_procs must be >= 1");
-            }
             
             // Validate motion correction
             if (config.func.motion_correction.enabled) {
@@ -1083,7 +1072,6 @@
             config.general.verbose = parseInt(document.getElementById('general_verbose').value);
             config.general.overwrite = document.getElementById('general_overwrite').checked;
             config.general.generate_report_only = document.getElementById('general_generate_report_only').checked;
-            config.general.n_procs = parseInt(document.getElementById('general_n_procs').value);
             config.general.anat_only = document.getElementById('general_anat_only').checked;
             
             // BIDS filtering

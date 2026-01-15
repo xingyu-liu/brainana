@@ -6,7 +6,6 @@ general:
   verbose: 2  # int or bool: verbosity level (0=quiet/ERROR, 1=normal/INFO, 2=verbose/DEBUG).
   overwrite: false  # bool: overwrite existing outputs
   generate_report_only: false  # bool: only generate QC reports from existing outputs
-  n_procs: 3  # int: number of parallel processes (>= 1)
   anat_only: false  # bool: process only anatomical data
 
 bids_filtering:

@@ -21,7 +21,6 @@ def createParamResolver = {
         'output_space': 'template.output_space',
         'anat_only': 'general.anat_only',
         'overwrite': 'general.overwrite',
-        'n_procs': 'general.n_procs',
         'subjects': 'bids_filtering.subjects',
         'sessions': 'bids_filtering.sessions',
         'tasks': 'bids_filtering.tasks',

@@ -444,9 +444,7 @@ workflow FUNC_WF {
         def func_apply_reg = func_apply_conform_output
         def func_apply_reg_reference = Channel.empty()
         if (registration_enabled) {
-            def dummy_anat2template_xfm = file("${workDir}/dummy_anat2template_xfm.dummy")
-            def dummy_anat_reg_ref = file("${workDir}/dummy_anat_reg_ref.dummy")
-            
+
             // Create real anat_reg_all from anatomical workflow (session-level: [sub, ses, xfm, ref])
             // anat_reg_transforms is now: [sub, ses, anat2template_xfm, inverse_transform]
             // anat_reg_reference is now: [sub, ses, ref_from_anat_reg]
@@ -460,23 +458,59 @@ workflow FUNC_WF {
                 .map { sub, ses, anat2template_xfm, ref_from_anat_reg -> 
                 [sub, ses, anat2template_xfm, ref_from_anat_reg] }
             
-            // Create dummy anat_reg_all for all subjects/sessions (session-level: [sub, ses, dummy_xfm, dummy_ref])
+            // Extract session mapping from func_compute_reg_output
+            // Structure: [sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses]
+            // We need: [sub, ses_func, anat_ses, is_cross_ses] unique by [sub, ses_func]
+            def func_ses_mapping = func_compute_reg_output
+                .map { sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses ->
+                    [sub, ses, anat_ses, is_cross_ses]
+                }
+                .unique { sub, ses, anat_ses, is_cross_ses -> [sub, ses] }
+
+            // Split into same-session and cross-session cases
+            def func_ses_same = func_ses_mapping
+                .filter { sub, ses, anat_ses, is_cross_ses -> !is_cross_ses }
+                .map { sub, ses, anat_ses, is_cross_ses -> [sub, ses] }
+            
+            def func_ses_cross = func_ses_mapping
+                .filter { sub, ses, anat_ses, is_cross_ses -> is_cross_ses }
+                .map { sub, ses, anat_ses, is_cross_ses -> [sub, ses, anat_ses] }
+
+            // Case 1: Same-session - join anat_reg_all_real by [sub, ses]
+            def anat_reg_same_ses = func_ses_same
+                .join(anat_reg_all_real, by: [0, 1])
+                .map { sub, ses, xfm, ref -> [sub, ses, xfm, ref] }
+
+            // Case 2: Cross-session - join anat_reg_all_real by [sub, anat_ses], then map back to func ses
+            def anat_reg_cross_ses = func_ses_cross
+                .map { sub, ses_func, anat_ses -> [sub, anat_ses, ses_func] }  // [sub, anat_ses, ses_func] for joining
+                .join(anat_reg_all_real, by: [0, 1])
+                .map { sub, anat_ses, ses_func, xfm, ref -> [sub, ses_func, xfm, ref] }  // Map back to func session
+
+            // Create dummy anat_reg_all for all functional subjects/sessions
             def subjects_sessions = func_compute_reg_output
                 .map { sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses ->
                     [sub, ses]
                 }
                 .unique()
 
+            def dummy_anat2template_xfm = file("${workDir}/dummy_anat2template_xfm.dummy")
+            def dummy_anat_reg_ref = file("${workDir}/dummy_anat_reg_ref.dummy")
             def anat_reg_all_dummy = subjects_sessions
                 .map { sub, ses -> [sub, ses, dummy_anat2template_xfm, dummy_anat_reg_ref] }
 
-            // Mix channels and group by [sub, ses], then select real over dummy
-            // Add debug logging to show which subjects get real vs dummy data
-            def anat_reg_all = anat_reg_all_real
+            // Mix all channels (same-session real, cross-session real, and dummy), then group by [sub, ses]
+            // and select real over dummy
+            def anat_reg_all = anat_reg_same_ses
+                .mix(anat_reg_cross_ses)
                 .mix(anat_reg_all_dummy)
+                .map { sub, ses, xfm, ref ->
+                    // Wrap xfm and ref into a nested tuple so groupTuple preserves the pairing
+                    [sub, ses, [xfm, ref]]
+                }
                 .groupTuple(by: [0, 1])
                 .map { sub, ses, entries ->
-                    // entries is a list of [xfm, ref] tuples
+                    // entries is now a list of [xfm, ref] tuples
                     // Prefer first non-dummy entry, or first entry if all are dummy
                     def selected = entries.find { xfm, ref ->
                         !(xfm.toString().contains('.dummy') || ref.toString().contains('.dummy'))
@@ -488,111 +522,88 @@ workflow FUNC_WF {
                     [sub, ses, xfm, ref]
                 }
             
-            // debug print 
-            anat_reg_all.view { tuple ->
-                "DEBUG [FUNC_APPLY_TRANSFORMS: anat_reg_all]: ${tuple}"
-            }
-            
-            // def func_apply_reg_input
-            // if (func_coreg_runs_within_session && func_coreg_success) {
-            //     // Session-level compute outputs (run_id == "") joined with transforms and reference
-            //     // FUNC_COMPUTE_REGISTRATION.out.transforms is now: [sub, ses, run_id, func2target_xfm, inverse_transform]
-            //     // FUNC_COMPUTE_REGISTRATION.out.reference is now: [sub, ses, run_id, ref_from_anat_reg]
-            //     def func_reg_transforms_forward = FUNC_COMPUTE_REGISTRATION.out.transforms
-            //         .map { sub, ses, run_id, func2target_xfm, inverse_transform ->
-            //             [sub, ses, run_id, func2target_xfm]
-            //         }
-                
-            //     def func_reg_with_ref = func_compute_reg_output
-            //         .join(func_reg_transforms_forward, by: [0, 1])
-            //         .join(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1])
-            //         .map { sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses, func2target_xfm, ref_from_func_reg ->
-            //             [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg]
-            //         }
-
-            //     // debug print
-            //     func_reg_with_ref.first().view { tuple ->
-            //         "DEBUG [FUNC_COMPUTE_REGISTRATION: func_reg_with_ref]: ${tuple}"
-            //     }
-
-            //     // Single combine with anat_reg_all (replaces two separate joins)
-            //     def all_reg_with_ref = func_reg_with_ref
-            //         .combine(anat_reg_all, by: [0, 1])
-            //         .map { sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg ->
-            //             [sub, ses, run_id, registered_tmean, func2target_xfm, anat2template_xfm, ref_from_func_reg, ref_from_anat_reg]
-            //         }
-                
-            //     // debug print
-            //     all_reg_with_ref.first().view { tuple ->
-            //         "DEBUG [FUNC_COMPUTE_REGISTRATION: all_reg_with_ref]: ${tuple}"
-            //     }
-
-            //     def func_apply_reg_with_bold = func_apply_conform_output
-            //         .combine(
-            //             all_reg_with_ref,
-            //             by: [0, 1]
-            //         )
-            //         .map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids, registered_tmean, func2target_xfm, anat2template_xfm, ref_from_func_reg, ref_from_anat_reg, anat_ses, is_cross_ses ->
-            //             def target_type = 'anat'
-            //             def target2template = true
-            //             // Keep conformed_bold for multiMap extraction
-            //             [sub, ses, run_id, conformed_bold, bids, target_type, target2template, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
-            //         }
-                
-            //     func_apply_reg_with_bold
-            //         .multiMap { sub, ses, run_id, conformed_bold, bids, target_type, target2template, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg ->
-            //             reg_combined: [sub, ses, run_id, bids, target_type, target2template, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
-            //             func_4d_file: conformed_bold
-            //         }
-            //         .set { func_apply_reg_multi }
-                
-            //     // debug print
-            //     func_apply_reg_multi.reg_combined.first().view { tuple ->
-            //         "DEBUG [FUNC_COMPUTE_REGISTRATION: func_apply_reg_input]: ${tuple}"
-            //     }
-                
-            // } else {
-            //     // FUNC_COMPUTE_REGISTRATION.out.transforms is now: [sub, ses, run_id, func2target_xfm, inverse_transform]
-            //     // FUNC_COMPUTE_REGISTRATION.out.reference is now: [sub, ses, run_id, ref_from_anat_reg]
-            //     def func_reg_transforms_forward = FUNC_COMPUTE_REGISTRATION.out.transforms
-            //         .map { sub, ses, run_id, func2target_xfm, inverse_transform ->
-            //             [sub, ses, run_id, func2target_xfm]
-            //         }
-                
-            //     def func_reg_with_ref = func_compute_reg_output
-            //         .join(func_reg_transforms_forward, by: [0, 1, 2])
-            //         .join(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1, 2])
-            //         .map { sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses, func2target_xfm, ref_from_func_reg ->
-            //             [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat_ses, is_cross_ses]
-            //         }
-                
-            //     // Single combine with anat_reg_all (replaces two separate joins)
-            //     def func_reg_with_anat = func_reg_with_ref
-            //         .combine(anat_reg_all, by: [0, 1])
-            //         .map { sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat_ses, is_cross_ses, anat2template_xfm, ref_from_anat_reg ->
-            //             [sub, ses, run_id, registered_tmean, func2target_xfm, anat2template_xfm, ref_from_func_reg, ref_from_anat_reg, anat_ses, is_cross_ses]
-            //         }
-                
-            //     def func_apply_reg_with_bold = func_apply_conform_output
-            //         .join(func_reg_with_anat, by: [0, 1, 2])
-            //         .map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids, registered_tmean, func2target_xfm, anat2template_xfm, ref_from_func_reg, ref_from_anat_reg, anat_ses, is_cross_ses ->
-            //             def target_type = 'anat'
-            //             def target2template = true
-            //             // Keep conformed_bold for multiMap extraction
-            //             [sub, ses, run_id, conformed_bold, bids, target_type, target2template, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
-            //         }
-                
-            //     func_apply_reg_with_bold
-            //         .multiMap { sub, ses, run_id, conformed_bold, bids, target_type, target2template, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg ->
-            //             reg_combined: [sub, ses, run_id, bids, target_type, target2template, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
-            //             func_4d_file: conformed_bold
-            //         }
-            //         .set { func_apply_reg_multi }
+            // // debug print 
+            // anat_reg_all.view { tuple ->
+            //     "DEBUG [FUNC_APPLY_TRANSFORMS: anat_reg_all]: ${tuple}"
             // }
             
-            // FUNC_APPLY_TRANSFORMS(func_apply_reg_multi.reg_combined, func_apply_reg_multi.func_4d_file, config_file)
-            // func_apply_reg = FUNC_APPLY_TRANSFORMS.out.output
-            // func_apply_reg_reference = FUNC_APPLY_TRANSFORMS.out.reference
+            def func_apply_reg_input
+            def func_apply_reg_with_bold
+            if (func_coreg_runs_within_session && func_coreg_success) {
+                // Session-level compute outputs (run_id == "") joined with transforms and reference
+                // FUNC_COMPUTE_REGISTRATION.out.transforms is now: [sub, ses, run_id, func2target_xfm, inverse_transform]
+                // FUNC_COMPUTE_REGISTRATION.out.reference is now: [sub, ses, run_id, ref_from_anat_reg]                
+                def func_reg_with_ref = func_compute_reg_output
+                    .combine(FUNC_COMPUTE_REGISTRATION.out.transforms, by: [0, 1])
+                    .combine(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1])
+                    .map { sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses, run_id2, func2target_xfm, reverse_xfm, run_id3, ref_from_func_reg ->
+                        [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg]
+                    }
+
+                // Single combine with anat_reg_all (replaces two separate joins)
+                def all_reg_with_ref = func_reg_with_ref
+                    .combine(anat_reg_all, by: [0, 1])
+                    .map { sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg ->
+                        [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
+                    }
+
+
+                func_apply_reg_with_bold = func_apply_conform_output
+                    .combine(all_reg_with_ref, by: [0, 1])
+                    .map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids, run_id2, registered_tmean, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg ->
+                        [sub, ses, run_id, conformed_bold, bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
+                    }
+
+                // // debug print
+                // func_apply_reg_with_bold.first().view { tuple ->
+                //     "DEBUG [FUNC_COMPUTE_REGISTRATION: func_apply_reg_with_bold]: ${tuple}"
+                // }
+                
+            } else {
+                // FUNC_COMPUTE_REGISTRATION.out.transforms is now: [sub, ses, run_id, func2target_xfm, inverse_transform]
+                // FUNC_COMPUTE_REGISTRATION.out.reference is now: [sub, ses, run_id, ref_from_anat_reg]
+                def func_reg_transforms_forward = FUNC_COMPUTE_REGISTRATION.out.transforms
+                    .map { sub, ses, run_id, func2target_xfm, inverse_transform ->
+                        [sub, ses, run_id, func2target_xfm]
+                    }
+                
+                def func_reg_with_ref = func_compute_reg_output
+                    .join(func_reg_transforms_forward, by: [0, 1, 2])
+                    .join(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1, 2])
+                    .map { sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses, func2target_xfm, ref_from_func_reg ->
+                        [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat_ses, is_cross_ses]
+                    }
+                
+                // Single combine with anat_reg_all (replaces two separate joins)
+                def func_reg_with_anat = func_reg_with_ref
+                    .combine(anat_reg_all, by: [0, 1])
+                    .map { sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat_ses, is_cross_ses, anat2template_xfm, ref_from_anat_reg ->
+                        [sub, ses, run_id, registered_tmean, func2target_xfm, anat2template_xfm, ref_from_func_reg, ref_from_anat_reg, anat_ses, is_cross_ses]
+                    }
+                
+                func_apply_reg_with_bold = func_apply_conform_output
+                    .join(func_reg_with_anat, by: [0, 1, 2])
+                    .map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids, registered_tmean, func2target_xfm, anat2template_xfm, ref_from_func_reg, ref_from_anat_reg, anat_ses, is_cross_ses ->
+                        // Keep conformed_bold for multiMap extraction
+                        [sub, ses, run_id, conformed_bold, bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
+                    }
+            }
+
+            func_apply_reg_with_bold
+                .multiMap { sub, ses, run_id, conformed_bold, bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg ->
+                    reg_combined: [sub, ses, run_id, bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
+                    func_4d_file: conformed_bold
+                }
+                .set { func_apply_reg_multi }
+            
+            // // debug print
+            // func_apply_reg_multi.reg_combined.first().view { tuple ->
+            //     "DEBUG [FUNC_COMPUTE_REGISTRATION: func_apply_reg_input]: ${tuple}"
+            // }
+            
+            FUNC_APPLY_TRANSFORMS(func_apply_reg_multi.reg_combined, func_apply_reg_multi.func_4d_file, config_file)
+            func_apply_reg = FUNC_APPLY_TRANSFORMS.out.output
+            func_apply_reg_reference = FUNC_APPLY_TRANSFORMS.out.reference
         }
 
         // ================================
@@ -651,39 +662,37 @@ workflow FUNC_WF {
             QC_SKULLSTRIPPING_FUNC(func_skull_qc_input, config_file)
         }
 
-        // if (registration_enabled) {
-        //     func_apply_reg
-        //         .join(func_apply_reg_reference, by: [0, 1, 2])
-        //         .map { sub, ses, run_identifier, bold_file, registered_boldref, bids_template, reference_file ->
-        //             [sub, ses, run_identifier, registered_boldref, reference_file]
-        //         }
-        //         .set { func_reg_qc_input }
-        //     QC_REGISTRATION_FUNC(func_reg_qc_input, config_file)
-        // }
+        if (registration_enabled) {
+            func_apply_reg
+                .join(func_apply_reg_reference, by: [0, 1, 2])
+                .map { sub, ses, run_identifier, registered_bold, registered_boldref, bids_template, reference_file ->
+                    [sub, ses, run_identifier, registered_boldref, reference_file]
+                }
+                .set { func_reg_qc_input }
+            QC_REGISTRATION_FUNC(func_reg_qc_input, config_file)
+        }
     
     // Collect functional QC channels
     func_qc_channels = Channel.empty()
     func_jobs_ch_out = Channel.empty()
     
-    // if (!anat_only) {
-    //     func_jobs_ch_out = func_jobs_ch
-    //     if (func_motion_correction_enabled) {
-    //         func_qc_channels = func_qc_channels.mix(QC_MOTION_CORRECTION.out.metadata)
-    //     }
-    //     if (func_conform_enabled) {
-    //         func_qc_channels = func_qc_channels.mix(QC_CONFORM_FUNC.out.metadata)
-    //     }
-    //     if (func_skullstripping_enabled) {
-    //         func_qc_channels = func_qc_channels.mix(QC_SKULLSTRIPPING_FUNC.out.metadata)
-    //     }
-    //     if (func_coreg_runs_within_session) {
-    //         func_qc_channels = func_qc_channels.mix(QC_WITHIN_SES_COREG.out.metadata)
-    //     }
-    //     if (registration_enabled) {
-    //         func_qc_channels = func_qc_channels.mix(QC_REGISTRATION_FUNC.out.metadata)
-    //     }
-    // }
-    
+    func_jobs_ch_out = func_jobs_ch
+    if (func_motion_correction_enabled) {
+        func_qc_channels = func_qc_channels.mix(QC_MOTION_CORRECTION.out.metadata)
+    }
+    if (func_conform_enabled) {
+        func_qc_channels = func_qc_channels.mix(QC_CONFORM_FUNC.out.metadata)
+    }
+    if (func_skullstripping_enabled) {
+        func_qc_channels = func_qc_channels.mix(QC_SKULLSTRIPPING_FUNC.out.metadata)
+    }
+    if (func_coreg_runs_within_session) {
+        func_qc_channels = func_qc_channels.mix(QC_WITHIN_SES_COREG.out.metadata)
+    }
+    if (registration_enabled) {
+        func_qc_channels = func_qc_channels.mix(QC_REGISTRATION_FUNC.out.metadata)
+    }
+
     emit:
     func_qc_channels
     func_jobs_ch_out

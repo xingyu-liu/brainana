@@ -23,7 +23,6 @@ These parameters can be set via command-line and have corresponding YAML keys:
 | `--output_space` | `template.output_space` | Template space (e.g., "NMT2Sym:res-05") |
 | `--anat_only` | `general.anat_only` | Process only anatomical data |
 | `--overwrite` | `general.overwrite` | Overwrite existing outputs |
-| `--n_procs` | `general.n_procs` | Number of parallel processes |
 | `--subjects` | `bids_filtering.subjects` | Filter by subject IDs |
 | `--sessions` | `bids_filtering.sessions` | Filter by session IDs |
 | `--tasks` | `bids_filtering.tasks` | Filter by task names |
@@ -100,9 +99,6 @@ def output_space = paramResolver.getParamOutputSpace(params, 'output_space', 'NM
 
 // Get boolean parameter
 def anat_only = paramResolver.getParamBool(params, 'anat_only', false)
-
-// Get integer parameter
-def n_procs = paramResolver.getParamInt(params, 'n_procs', 3, 1, null)  // min=1, no max
 
 // Get list parameter
 def subjects = paramResolver.getParamList(params, 'subjects', null)

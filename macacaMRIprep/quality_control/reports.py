@@ -25,6 +25,7 @@ SNAPSHOT_MAPPINGS = {
     'anat2template': {'key': 'anat2template_registration_overlay', 'description': 'Structural to template registration'},
     'func2target': {'key': 'func2target_registration_overlay', 'description': 'Functional to target registration'},
     'T2w2T1w': {'key': 'T2w2T1w_registration_overlay', 'description': 'T2w to T1w coregistration'},
+    'coreg': {'key': 'func_coreg_overlay', 'description': 'Within-session functional coregistration'},
     'motion': {'key': 'motion_parameters', 'description': 'Motion parameters'},
     'surfReconTissueSeg': {'key': 'surf_recon_tissue_seg_overlay', 'description': 'Surface reconstruction tissue segmentation'},
     'corticalSurfAndMeasures': {'key': 'cortical_surf_and_measures_overlay', 'description': 'Cortical surface and measures'},
@@ -38,6 +39,7 @@ SNAPSHOT_ORDER = [
     'surf_recon_tissue_seg_overlay', 'cortical_surf_and_measures_overlay',
     'anat2template_registration_overlay', 
     'T2w2T1w_registration_overlay', 
+    'func_coreg_overlay',  # Within-session coregistration (appears before run-specific snapshots)
     'func2target_registration_overlay', 
     'motion_parameters'
 ]
@@ -529,15 +531,36 @@ please refer to the macacaMRIprep configuration files in your preprocessing dire
             
             groups[group_key].sort(key=sort_key)
         
-        # Sort groups so that T1w comes before T2w
+        # Sort groups so that:
+        # 1. T1w comes before T2w (for anatomical)
+        # 2. Within functional, session-only groups (coreg) come before session+task+run groups
+        # 3. Within the same session, coreg appears first
         def group_sort_key(group_item):
-            group_name = group_item[0]
+            group_name, snapshots = group_item
+            # Check if this is a coreg group (has coreg snapshots without task/run)
+            is_coreg = any(
+                s.get('snapshot_type') == 'func_coreg_overlay' 
+                and 'task' not in s.get('entities', {})
+                and 'run' not in s.get('entities', {})
+                for s in snapshots
+            )
+            
+            # Extract session from first snapshot's entities for consistent session ordering
+            session_value = None
+            if snapshots:
+                first_snapshot = snapshots[0]
+                session_value = first_snapshot.get('entities', {}).get('ses', '')
+            
+            # For anatomical snapshots, ensure T1w comes before T2w
             if '(T1w)' in group_name:
-                return (0, group_name)
+                return (0, 0, session_value or '', group_name)  # (anatomical, T1w, session, name)
             elif '(T2w)' in group_name:
-                return (1, group_name)
+                return (0, 1, session_value or '', group_name)  # (anatomical, T2w, session, name)
+            # For functional snapshots, coreg (session-only) comes first within each session
+            elif is_coreg:
+                return (1, 0, session_value or '', group_name)  # (functional, coreg first, session, name)
             else:
-                return (2, group_name)
+                return (1, 1, session_value or '', group_name)  # (functional, run-specific, session, name)
         
         return dict(sorted(groups.items(), key=group_sort_key))
     

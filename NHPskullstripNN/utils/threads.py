@@ -21,20 +21,8 @@ IMPORTANT: CPU Threads vs GPU Operations vs Process-Level Parallelism
 3. DataLoader num_workers: Separate parameter - these are separate PROCESSES
    for parallel data loading. Each worker can use CPU threads internally.
 
-4. n_procs (process-level parallelism): Number of separate Python processes
-   for processing multiple subjects/sessions in parallel. Each process:
-   * Is independent (created by ProcessPoolExecutor)
-   * Should set its own CPU threads (default 8)
-   * Total CPU usage: n_procs × threads_per_process ≤ total_cores
-   
-   Example: With 192 cores and n_procs=4:
-   - Each process uses 8 threads
-   - Total: 4 processes × 8 threads = 32 threads used
-   - Leaves resources for desktop and other processes
-
 So YES, use the same CPU thread count (default 8) for both CPU-only and GPU
 workflows, because GPU workflows still need CPU threads for data operations.
-Each worker process (from n_procs) should set its own CPU threads.
 """
 
 import os

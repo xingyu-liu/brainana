@@ -184,11 +184,6 @@ elif [ "$1" = "run" ]; then
     fi
     
     # Execute Nextflow
-    # Debug: show command if resume flag is present
-    if echo "${remaining_args[@]}" | grep -q "\-resume"; then
-        echo "DEBUG: Running Nextflow with resume flag" >&2
-        echo "DEBUG: Args: ${remaining_args[*]}" >&2
-    fi
     exec "$NEXTFLOW" "${CMD_ARGS[@]}" run "$workflow_file" "${remaining_args[@]}"
 else
     # Other Nextflow commands (info, clean, etc.) - pass through as-is

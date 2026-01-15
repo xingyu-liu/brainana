@@ -8,31 +8,6 @@
  * The discovery script validates the BIDS dataset, discovers all jobs, and
  * saves JSON files that this workflow reads to create channels.
  * 
- * ============================================
- * CHANNEL STRUCTURE DOCUMENTATION
- * ============================================
- * 
- * Standard channel structures used throughout the workflow:
- * 
- * Anatomical channels:
- *   - [sub, ses, file, bids_template] (4 elements) - standard anatomical tuple
- *   - [sub, ses, file_paths, needs_synth, suffix, needs_t1w_reg] (6 elements) - from discovery
- * 
- * Functional channels:
- *   - [sub, ses, run_identifier, file, bids_template] (5 elements) - initial functional tuple
- *   - [sub, ses, run_identifier, bold_file, tmean_file, bids_template] (6 elements) - after MOTION_CORRECTION
- *   - [sub, ses, run_identifier, anat_file, anat_ses, is_cross_ses] (6 elements) - anatomical selection result
- * 
- * Transform channels:
- *   - [sub, ses, transform_file] (3 elements) - anatomical transforms
- *   - [sub, ses, run_identifier, transform_file] (4 elements) - functional transforms
- * 
- * QC channels:
- *   - [sub, ses, metadata_file] (3 elements) - QC metadata
- *   - [sub, ses, run_identifier, metadata_file] (4 elements) - functional QC metadata
- * 
- * Note: run_identifier contains all non-sub/ses BIDS entities as a sorted string
- *       e.g., "acq-RevPol_task-rest_run-1" or "rec-realigned_task-rest_run-1"
  */
 
 nextflow.enable.dsl=2
@@ -85,63 +60,62 @@ workflow {
         )
     }
     
-    // // ============================================
-    // // QC REPORT GENERATION (per subject)
-    // // ============================================
-    // // Read anat_only directly from config/params (cannot extract from async channel in workflow block)
-    // def config_file_path = params.config_file ?: "${projectDir}/macacaMRIprep/config/defaults.yaml"
-    // def batch_script = "${projectDir}/macacaMRIprep/nextflow_scripts/read_yaml_config.py"
-    // def anat_only_from_config = false
-    // try {
-    //     def cmd = ["python3", batch_script, config_file_path, "general.anat_only", "--defaults=false"]
-    //     def proc = cmd.execute()
-    //     def output = new StringBuffer()
-    //     proc.consumeProcessOutput(output, new StringBuffer())
-    //     proc.waitFor()
-    //     if (proc.exitValue() == 0) {
-    //         anat_only_from_config = output.toString().trim() == "true"
-    //     }
-    // } catch (Exception e) {
-    //     // Use default if config read fails
-    // }
-    // def anat_only = (params.anat_only != null && params.anat_only == true) ? true : anat_only_from_config
+    // ============================================
+    // QC REPORT GENERATION (per subject)
+    // ============================================
+    // Read anat_only directly from config/params (cannot extract from async channel in workflow block)
+    def config_file_path = params.config_file ?: "${projectDir}/macacaMRIprep/config/defaults.yaml"
+    def batch_script = "${projectDir}/macacaMRIprep/nextflow_scripts/read_yaml_config.py"
+    def anat_only_from_config = false
+    try {
+        def cmd = ["python3", batch_script, config_file_path, "general.anat_only", "--defaults=false"]
+        def proc = cmd.execute()
+        def output = new StringBuffer()
+        proc.consumeProcessOutput(output, new StringBuffer())
+        proc.waitFor()
+        if (proc.exitValue() == 0) {
+            anat_only_from_config = output.toString().trim() == "true"
+        }
+    } catch (Exception e) {
+        // Use default if config read fails
+    }
+
+    // Wait for anatomical QC to complete
+    def anat_qc_completion = ANAT_WF.out.anat_qc_channels
+        .last()
     
-    // // Wait for anatomical QC to complete
-    // def anat_qc_completion = ANAT_WF.out.anat_qc_channels
-    //     .last()
-    
-    // // Create completion signal
-    // def qc_completion_signal = anat_qc_completion
-    // if (!anat_only) {
-    //     def func_qc_completion = FUNC_WF.out.func_qc_channels
-    //         .last()
+    // Create completion signal
+    def qc_completion_signal = anat_qc_completion
+    if (!anat_only) {
+        def func_qc_completion = FUNC_WF.out.func_qc_channels
+            .last()
         
-    //     qc_completion_signal = anat_qc_completion
-    //         .combine(func_qc_completion)
-    //         .map { anat_meta, func_meta -> true }
-    // }
+        qc_completion_signal = anat_qc_completion
+            .combine(func_qc_completion)
+            .map { anat_meta, func_meta -> true }
+    }
     
-    // // Get unique subjects
-    // def all_subjects = ANAT_WF.out.anat_subjects_ch
-    // if (!anat_only) {
-    //     all_subjects = all_subjects.mix(
-    //         FUNC_WF.out.func_jobs_ch_out
-    //             .map { sub, ses, run_identifier, file_path, bids_naming_template -> sub }
-    //             .unique()
-    //     )
-    // }
+    // Get unique subjects
+    def all_subjects = ANAT_WF.out.anat_subjects_ch
+    if (!anat_only) {
+        all_subjects = all_subjects.mix(
+            FUNC_WF.out.func_jobs_ch_out
+                .map { sub, ses, run_identifier, file_path, bids_naming_template -> sub }
+                .unique()
+        )
+    }
     
-    // // Load config file (reuse config_file_path from above)
-    // def config_file = file(config_file_path)
+    // Load config file (reuse config_file_path from above)
+    def config_file = file(config_file_path)
     
-    // // Create snapshot directory path for each subject
-    // def qc_report_input = all_subjects
-    //     .unique()
-    //     .combine(qc_completion_signal)
-    //     .map { sub, completion_signal ->
-    //         def snapshot_dir = file("${params.output_dir}/sub-${sub}/figures")
-    //         [sub, snapshot_dir, config_file]
-    //     }
+    // Create snapshot directory path for each subject
+    def qc_report_input = all_subjects
+        .unique()
+        .combine(qc_completion_signal)
+        .map { sub, completion_signal ->
+            def snapshot_dir = file("${params.output_dir}/sub-${sub}/figures")
+            [sub, snapshot_dir, config_file]
+        }
     
-    // QC_GENERATE_REPORT(qc_report_input)
+    QC_GENERATE_REPORT(qc_report_input)
 }
