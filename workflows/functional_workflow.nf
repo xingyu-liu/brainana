@@ -37,91 +37,49 @@ include { QC_WITHIN_SES_COREG } from '../modules/qc.nf'
 def channelHelpers = evaluate(new File("${projectDir}/workflows/channel_helpers.groovy").text)
 def funcChannels = evaluate(new File("${projectDir}/workflows/functional_channels.groovy").text)
 
+// Load parameter resolver
+def paramResolver = evaluate(new File("${projectDir}/workflows/param_resolver.groovy").text)
+
 workflow FUNC_WF {
     take:
     anat_after_skull  // channel from anatomical workflow
     anat_reg_transforms  // channel from anatomical workflow
     anat_reg_reference  // channel from anatomical workflow (target_final.nii.gz from ANAT_REGISTRATION)
-    anat_only_ch  // channel with anat_only boolean value (kept for API compatibility)
     
     main:
-    // Read anat_only directly from config/params instead of trying to extract from async channel
-    // Nextflow channels are asynchronous, so extracting values in workflow definition blocks
-    // returns DataflowVariable objects, not the actual values
-    def config_file_path = params.config_file ?: "${projectDir}/macacaMRIprep/config/defaults.yaml"
-    def batch_script = "${projectDir}/macacaMRIprep/nextflow_scripts/read_yaml_config.py"
-    
-    // Read anat_only from config
-    def anat_only_from_config = false
+    // Initialize parameter resolver (if not already initialized in main.nf)
+    // This is safe to call multiple times - it will only load configs once
     try {
-        def cmd = ["python3", batch_script, config_file_path, "general.anat_only", "--defaults=false"]
-        def proc = cmd.execute()
-        def output = new StringBuffer()
-        proc.consumeProcessOutput(output, new StringBuffer())
-        proc.waitFor()
-        if (proc.exitValue() == 0) {
-            anat_only_from_config = output.toString().trim() == "true"
-        }
+        paramResolver.initialize(params, projectDir)
     } catch (Exception e) {
-        // Use default if config read fails
+        error "Failed to initialize parameter resolver: ${e.message}"
     }
     
-    // params.anat_only takes precedence over config file
-    def anat_only = (params.anat_only != null && params.anat_only == true) ? true : anat_only_from_config
-    
-    // Read config file to get functional flags (reuse config_file_path and batch_script from above)
-    def func_config_keys = [
-        "func.reorient.enabled",
-        "func.slice_timing_correction.enabled",
-        "func.motion_correction.enabled",
-        "func.despike.enabled",
-        "func.bias_correction.enabled",
-        "func.conform.enabled",
-        "func.skullstripping.enabled",
-        "func.coreg_runs_within_session",
-        "registration.enabled"
-    ]
-    def func_config_defaults = ["true", "true", "true", "true", "true", "true", "true", "false", "true"]
-    
-    def func_config_values = [:]
-    try {
-        def cmd = ["python3", batch_script, config_file_path] + func_config_keys + ["--defaults=" + func_config_defaults.join(",")]
-        def proc = cmd.execute()
-        def output = new StringBuffer()
-        proc.consumeProcessOutput(output, new StringBuffer())
-        proc.waitFor()
-        if (proc.exitValue() == 0) {
-            def results = output.toString().trim().split('\t')
-            func_config_keys.eachWithIndex { key, idx ->
-                func_config_values[key] = results[idx] == "true"
-            }
-        } else {
-            func_config_keys.eachWithIndex { key, idx ->
-                func_config_values[key] = func_config_defaults[idx] == "true"
-            }
-        }
-    } catch (Exception e) {
-        func_config_keys.eachWithIndex { key, idx ->
-            func_config_values[key] = func_config_defaults[idx] == "true"
-        }
+    // Use effective config file (generated in main.nf)
+    // This contains all resolved parameters: CLI params → YAML config → defaults.yaml
+    def effective_config_path = "${params.output_dir}/nextflow_reports/config.yaml"
+    def config_file = file(effective_config_path)
+    if (!new File(effective_config_path).exists()) {
+        error "Effective config file not found: ${effective_config_path}. Make sure parameter resolver is initialized in main.nf"
     }
     
-    def readYamlBool = { key_path, default_bool ->
-        return func_config_values.get(key_path, default_bool) as Boolean
-    }
+    // ============================================
+    // RESOLVE PARAMETERS (for workflow logic)
+    // Priority: CLI params → YAML config → defaults.yaml
+    // All defaults come from defaults.yaml - no hardcoded values
+    // ============================================
     
-    def func_reorient_enabled = readYamlBool("func.reorient.enabled", true)
-    def func_slice_timing_enabled = readYamlBool("func.slice_timing_correction.enabled", true)
-    def func_motion_correction_enabled = readYamlBool("func.motion_correction.enabled", true)
-    def func_despike_enabled = readYamlBool("func.despike.enabled", true)
-    def func_bias_correction_enabled = readYamlBool("func.bias_correction.enabled", true)
-    def func_conform_enabled = readYamlBool("func.conform.enabled", true)
-    def func_skullstripping_enabled = readYamlBool("func.skullstripping.enabled", true)
-    def func_coreg_runs_within_session = readYamlBool("func.coreg_runs_within_session", false)
-    def registration_enabled = readYamlBool("registration.enabled", true)
-    
-    // Load config file (config_file_path already defined above)
-    def config_file = file(config_file_path)
+    // Resolve YAML-only boolean parameters
+    // All defaults come from defaults.yaml
+    def func_reorient_enabled = paramResolver.getYamlBool("func.reorient.enabled")
+    def func_slice_timing_enabled = paramResolver.getYamlBool("func.slice_timing_correction.enabled")
+    def func_motion_correction_enabled = paramResolver.getYamlBool("func.motion_correction.enabled")
+    def func_despike_enabled = paramResolver.getYamlBool("func.despike.enabled")
+    def func_bias_correction_enabled = paramResolver.getYamlBool("func.bias_correction.enabled")
+    def func_conform_enabled = paramResolver.getYamlBool("func.conform.enabled")
+    def func_skullstripping_enabled = paramResolver.getYamlBool("func.skullstripping.enabled")
+    def func_coreg_runs_within_session = paramResolver.getYamlBool("func.coreg_runs_within_session")
+    def registration_enabled = paramResolver.getYamlBool("registration.enabled")
     
     // Helper functions
     def isT1wFile = channelHelpers.isT1wFile
@@ -129,31 +87,25 @@ workflow FUNC_WF {
     def findUnmatched = channelHelpers.findUnmatched
     
     // Parse functional jobs JSON into channel
-    def func_jobs_ch
-    if (!anat_only) {
-        def func_jobs_file = file("${params.output_dir}/nextflow_reports/functional_jobs.json")
-        if (!new File(func_jobs_file.toString()).exists()) {
-            error "Discovery file not found: ${func_jobs_file}\n" +
-                  "Please run the discovery script before starting Nextflow."
-        }
-        
-        func_jobs_ch = Channel.fromPath(func_jobs_file)
-            .splitJson()
-            .map { job ->
-                def sub = job.subject_id.toString()
-                def ses = job.session_id ? job.session_id.toString() : null
-                def file_obj = file(job.file_path as String)
-                def bids_naming_template = file_obj.toString()
-                def run_identifier = channelHelpers.extractRunIdentifier(bids_naming_template)
-                [sub, ses, run_identifier, file_obj, bids_naming_template]
-            }
-    } else {
-        func_jobs_ch = Channel.empty()
+    def func_jobs_file = file("${params.output_dir}/nextflow_reports/functional_jobs.json")
+    if (!new File(func_jobs_file.toString()).exists()) {
+        error "Discovery file not found: ${func_jobs_file}\n" +
+              "Please run the discovery script before starting Nextflow."
     }
+    
+    def func_jobs_ch = Channel.fromPath(func_jobs_file)
+        .splitJson()
+        .map { job ->
+            def sub = job.subject_id.toString()
+            def ses = job.session_id ? job.session_id.toString() : null
+            def file_obj = file(job.file_path as String)
+            def bids_naming_template = file_obj.toString()
+            def run_identifier = channelHelpers.extractRunIdentifier(bids_naming_template)
+            [sub, ses, run_identifier, file_obj, bids_naming_template]
+        }
     
     def func_coreg_success = false
     
-    if (!anat_only) {
         // SLICE_TIMING
         def func_after_slice = func_jobs_ch
         if (func_slice_timing_enabled) {
@@ -708,7 +660,6 @@ workflow FUNC_WF {
         //         .set { func_reg_qc_input }
         //     QC_REGISTRATION_FUNC(func_reg_qc_input, config_file)
         // }
-    }
     
     // Collect functional QC channels
     func_qc_channels = Channel.empty()

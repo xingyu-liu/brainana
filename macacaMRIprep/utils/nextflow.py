@@ -100,45 +100,6 @@ def save_metadata(metadata_dict: Dict[str, Any], output_path: Union[str, Path] =
         json.dump(metadata_dict, f, indent=2)
 
 
-def get_effective_output_space(
-    params_output_space: str,
-    config_file_path: Union[str, Path],
-    default_output_space: str = 'NMT2Sym:res-05'
-) -> str:
-    """
-    Determine effective output_space with priority: CLI > YAML config > default.
-    
-    Priority order:
-    1. If params_output_space is not the default (explicitly set via CLI), use it
-    2. Otherwise, read from YAML config file (template.output_space)
-    3. Otherwise, use default_output_space
-    
-    Args:
-        params_output_space: Value from Nextflow params.output_space
-        config_file_path: Path to YAML configuration file
-        default_output_space: Default value if not found elsewhere (default: 'NMT2Sym:res-05')
-    
-    Returns:
-        Effective output_space string
-    """
-    # Priority 1: If explicitly set via CLI (not the default), use it
-    if params_output_space and params_output_space != default_output_space:
-        return params_output_space
-    
-    # Priority 2: Read from YAML config file
-    try:
-        config = load_config(config_file_path)
-        yaml_output_space = config.get('template', {}).get('output_space', '')
-        if yaml_output_space and isinstance(yaml_output_space, str) and yaml_output_space.strip():
-            return yaml_output_space.strip()
-    except Exception:
-        # If config file can't be read, fall through to default
-        pass
-    
-    # Priority 3: Use default
-    return default_output_space
-
-
 def init_cmd_log_for_nextflow(
     output_dir: str,
     subject_id: str,

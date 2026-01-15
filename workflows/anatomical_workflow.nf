@@ -40,6 +40,9 @@ include { QC_T2W_TO_T1W_REGISTRATION } from '../modules/qc.nf'
 // Load external Groovy files for channel operations
 def channelHelpers = evaluate(new File("${projectDir}/workflows/channel_helpers.groovy").text)
 
+// Load parameter resolver
+def paramResolver = evaluate(new File("${projectDir}/workflows/param_resolver.groovy").text)
+
 workflow ANAT_WF {
     main:
     if (!params.bids_dir) {
@@ -56,132 +59,69 @@ workflow ANAT_WF {
         error "BIDS directory not found: ${params.bids_dir}"
     }
     
-    // Load config file (default or provided)
-    def config_file_path = params.config_file ?: "${projectDir}/macacaMRIprep/config/defaults.yaml"
-    def config_file = file(config_file_path)
-    if (!new File(config_file_path).exists()) {
-        error "Config file not found: ${config_file_path}"
-    }
-    
-    // Read all config values in a single batch call for efficiency
-    def batch_script = "${projectDir}/macacaMRIprep/nextflow_scripts/read_yaml_config.py"
-    def config_keys = [
-        "general.anat_only",
-        "anat.surface_reconstruction.enabled",
-        "anat.reorient.enabled",
-        "anat.conform.enabled",
-        "anat.bias_correction.enabled",
-        "anat.skullstripping_segmentation.enabled",
-        "registration.enabled",
-        "func.reorient.enabled",
-        "func.slice_timing_correction.enabled",
-        "func.motion_correction.enabled",
-        "func.despike.enabled",
-        "func.bias_correction.enabled",
-        "func.conform.enabled",
-        "func.skullstripping.enabled",
-        "func.coreg_runs_within_session",
-        "template.output_space"
-    ]
-    def config_defaults = [
-        "false", "true", "true", "true", "true", "true", "true",
-        "true", "true", "true", "true", "true", "true", "true",
-        "false",
-        "NMT2Sym:res-05"
-    ]
-    
-    def config_values = [:]
+    // Initialize parameter resolver (if not already initialized in main.nf)
+    // This is safe to call multiple times - it will only load configs once
     try {
-        def cmd = ["python3", batch_script, config_file_path] + config_keys + ["--defaults=" + config_defaults.join(",")]
-        def proc = cmd.execute()
-        def output = new StringBuffer()
-        def error = new StringBuffer()
-        proc.consumeProcessOutput(output, error)
-        proc.waitFor()
-        
-        if (proc.exitValue() == 0) {
-            def results = output.toString().trim().split('\t')
-            config_keys.eachWithIndex { key, idx ->
-                def value = (idx < results.length && results[idx]) ? results[idx] : config_defaults[idx]
-                if (idx < 15) {
-                    config_values[key] = value == "true"
-                } else {
-                    config_values[key] = value
-                }
-            }
-        } else {
-            config_keys.eachWithIndex { key, idx ->
-                if (idx < 15) {
-                    config_values[key] = config_defaults[idx] == "true"
-                } else {
-                    config_values[key] = config_defaults[idx]
-                }
-            }
-            if (error.toString().trim()) {
-                println "Warning: Error reading config: ${error.toString().trim()}, using defaults"
-            }
-        }
+        paramResolver.initialize(params, projectDir)
     } catch (Exception e) {
-        println "Warning: Could not read config: ${e.message}, using defaults"
-        config_keys.eachWithIndex { key, idx ->
-            if (idx < 15) {
-                config_values[key] = config_defaults[idx] == "true"
-            } else {
-                config_values[key] = config_defaults[idx]
-            }
-        }
+        error "Failed to initialize parameter resolver: ${e.message}"
     }
     
-    // Helper function for reading individual values
-    def readYamlBool = { key_path, default_bool ->
-        return config_values.get(key_path, default_bool) as Boolean
+    // Use effective config file (generated in main.nf)
+    // This contains all resolved parameters: CLI params → YAML config → defaults.yaml
+    def effective_config_path = "${params.output_dir}/nextflow_reports/config.yaml"
+    def config_file = file(effective_config_path)
+    if (!new File(effective_config_path).exists()) {
+        error "Effective config file not found: ${effective_config_path}. Make sure parameter resolver is initialized in main.nf"
     }
     
-    def readYamlValue = { key_path, default_value, value_type = 'str' ->
-        def value = config_values.get(key_path, default_value)
-        if (value_type == 'bool') {
-            return value as Boolean
-        }
-        return value.toString()
-    }
+    // ============================================
+    // RESOLVE PARAMETERS (for workflow logic)
+    // Priority: CLI params → YAML config → defaults.yaml
+    // All defaults come from defaults.yaml - no hardcoded values
+    // ============================================
     
-    // Calculate effective output_space for display
-    def default_output_space = config_defaults[15]
-    def effective_output_space = default_output_space
-    if (params.output_space != default_output_space) {
-        effective_output_space = params.output_space
-    } else {
-        effective_output_space = readYamlValue("template.output_space", default_output_space, 'str')
-    }
+    // Resolve YAML-only boolean parameters
+    // All defaults come from defaults.yaml
+    def surf_recon_enabled = paramResolver.getYamlBool("anat.surface_reconstruction.enabled")
+    def anat_reorient_enabled = paramResolver.getYamlBool("anat.reorient.enabled")
+    def anat_conform_enabled = paramResolver.getYamlBool("anat.conform.enabled")
+    def anat_bias_correction_enabled = paramResolver.getYamlBool("anat.bias_correction.enabled")
+    def anat_skullstripping_enabled = paramResolver.getYamlBool("anat.skullstripping_segmentation.enabled")
+    def registration_enabled = paramResolver.getYamlBool("registration.enabled")
     
-    // Read config flags
-    def anat_only_from_config = readYamlBool("general.anat_only", false)
-    // Check if params.anat_only is explicitly set to true via command line
-    // If params.anat_only is explicitly true, use it; otherwise use config file value
-    // Note: params.anat_only defaults to false in nextflow.config, so we check if it's explicitly true
-    def anat_only = (params.anat_only != null && params.anat_only == true) ? true : anat_only_from_config
-    def surf_recon_enabled = readYamlBool("anat.surface_reconstruction.enabled", true)
-    def anat_reorient_enabled = readYamlBool("anat.reorient.enabled", true)
-    def anat_conform_enabled = readYamlBool("anat.conform.enabled", true)
-    def anat_bias_correction_enabled = readYamlBool("anat.bias_correction.enabled", true)
-    def anat_skullstripping_enabled = readYamlBool("anat.skullstripping_segmentation.enabled", true)
-    def registration_enabled = readYamlBool("registration.enabled", true)
+    // Resolve BIDS filtering parameters (CLI parameters)
+    // Defaults come from defaults.yaml (bids_filtering.*)
+    def subjects_list = paramResolver.getParamList(params, 'subjects', null)
+    def sessions_list = paramResolver.getParamList(params, 'sessions', null)
+    def tasks_list = paramResolver.getParamList(params, 'tasks', null)
+    def runs_list = paramResolver.getParamList(params, 'runs', null)
     
-    anat_only = anat_only as Boolean
+    // Convert lists to strings for display (backward compatibility with existing code)
+    def subjects_str = subjects_list ? subjects_list.join(' ') : ''
+    def sessions_str = sessions_list ? sessions_list.join(' ') : ''
+    def tasks_str = tasks_list ? tasks_list.join(' ') : ''
+    def runs_str = runs_list ? runs_list.join(' ') : ''
     
-    // Create the channel immediately after calculating the value to ensure it's properly bound
-    def anat_only_channel = Channel.value(anat_only as Boolean)
+    // Get output_space for display (from effective config)
+    def effective_output_space = paramResolver.getParamOutputSpace(params, 'output_space')
     
-    println "ANAT_WF: params.anat_only = ${params.anat_only}, anat_only_from_config = ${anat_only_from_config}, final anat_only = ${anat_only}"
-    println "Processing mode: anat_only = ${anat_only}, surface_reconstruction = ${surf_recon_enabled}"
+    println "Processing mode: surface_reconstruction = ${surf_recon_enabled}"
     println "Step enabled flags:"
     println "  ANAT: reorient=${anat_reorient_enabled}, conform=${anat_conform_enabled}, bias_correction=${anat_bias_correction_enabled}, skullstripping=${anat_skullstripping_enabled}, registration=${registration_enabled}"
     
-    // Parse filtering parameters
-    def subjects_str = params.subjects ?: ''
-    def sessions_str = params.sessions ?: ''
-    def tasks_str = params.tasks ?: ''
-    def runs_str = params.runs ?: ''
+    println "============================================"
+    println "banana Nextflow Pipeline - Anatomical"
+    println "============================================"
+    println "BIDS directory: ${params.bids_dir}"
+    println "Output directory: ${params.output_dir}"
+    println "Output space: ${effective_output_space}"
+    println "Effective config: ${effective_config_path}"
+    if (subjects_str) println "Subjects filter: ${subjects_str}"
+    if (sessions_str) println "Sessions filter: ${sessions_str}"
+    if (tasks_str) println "Tasks filter: ${tasks_str}"
+    if (runs_str) println "Runs filter: ${runs_str}"
+    println "============================================"
     
     println "============================================"
     println "banana Nextflow Pipeline - Anatomical"
@@ -538,7 +478,5 @@ workflow ANAT_WF {
     anat_reg_reference
     anat_subjects_ch
     anat_qc_channels
-    // Use the channel created earlier to ensure the value is properly bound
-    anat_only_val = anat_only_channel
 
 }

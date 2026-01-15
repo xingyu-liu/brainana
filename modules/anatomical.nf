@@ -157,9 +157,9 @@ bids_naming_template = Path('${bids_naming_template}')
 # Determine modality from BIDS naming template filename
 modality = detect_modality(bids_naming_template)
 
-# Get effective output_space (CLI > YAML > default)
-from macacaMRIprep.utils.nextflow import get_effective_output_space
-effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+# Get effective_output_space from effective config file
+config = load_config('${config_file}')
+effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
 
 # Resolve template if needed
 template_file = None
@@ -249,9 +249,9 @@ bids_naming_template = Path('${bids_naming_template}')
 # Determine modality from BIDS naming template filename
 modality = detect_modality(bids_naming_template)
 
-# Get effective output_space (CLI > YAML > default)
-from macacaMRIprep.utils.nextflow import get_effective_output_space
-effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+# Get effective_output_space from effective config file
+config = load_config('${config_file}')
+effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
 
 # Resolve template
 template_file = Path(resolve_template(effective_output_space))
@@ -629,7 +629,7 @@ process ANAT_REGISTRATION {
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
-    path config_file
+    path config_file  // Effective config file with all resolved parameters
     
     output:
     // Output: [sub, ses, registered_file, bids_template]
@@ -643,11 +643,12 @@ process ANAT_REGISTRATION {
     
     script:
     """
-    # Get effective output_space (CLI > YAML > default) for template_name
+    # Get effective_output_space from effective config file
     EFFECTIVE_OUTPUT_SPACE=\$(\${PYTHON:-python3} <<'PYTHON_OUTPUT_SPACE'
-from macacaMRIprep.utils.nextflow import get_effective_output_space
-effective = get_effective_output_space('${params.output_space}', '${config_file}')
-print(effective)
+from macacaMRIprep.utils.nextflow import load_config
+config = load_config('${config_file}')
+effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
+print(effective_output_space)
 PYTHON_OUTPUT_SPACE
     )
     TEMPLATE_NAME=\$(echo "\$EFFECTIVE_OUTPUT_SPACE" | cut -d':' -f1)
@@ -700,9 +701,9 @@ bids_naming_template = Path('${bids_naming_template}')
 # Determine modality from BIDS naming template filename
 modality = detect_modality(bids_naming_template)
 
-# Get effective output_space (CLI > YAML > default)
-from macacaMRIprep.utils.nextflow import get_effective_output_space
-effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+# Get effective_output_space from effective config file
+config = load_config('${config_file}')
+effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
 template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
 
 # Resolve template
@@ -910,7 +911,7 @@ process ANAT_CONFORM_PASSTHROUGH {
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
-    path config_file
+    path config_file  // Effective config file with all resolved parameters
     
     output:
     tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(bids_naming_template), emit: output
@@ -1039,7 +1040,7 @@ process ANAT_REGISTRATION_PASSTHROUGH {
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
-    path config_file
+    path config_file  // Effective config file with all resolved parameters
     
     output:
     // Output: [sub, ses, registered_file, bids_template]
@@ -1055,11 +1056,12 @@ process ANAT_REGISTRATION_PASSTHROUGH {
     
     script:
     """
-    # Get effective output_space (CLI > YAML > default) for template_name
+    # Get effective_output_space from effective config file
     EFFECTIVE_OUTPUT_SPACE=\$(\${PYTHON:-python3} <<'PYTHON_OUTPUT_SPACE'
-from macacaMRIprep.utils.nextflow import get_effective_output_space
-effective = get_effective_output_space('${params.output_space}', '${config_file}')
-print(effective)
+from macacaMRIprep.utils.nextflow import load_config
+config = load_config('${config_file}')
+effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
+print(effective_output_space)
 PYTHON_OUTPUT_SPACE
     )
     TEMPLATE_NAME=\$(echo "\$EFFECTIVE_OUTPUT_SPACE" | cut -d':' -f1)
@@ -1067,7 +1069,7 @@ PYTHON_OUTPUT_SPACE
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from macacaMRIprep.utils.templates import resolve_template
-from macacaMRIprep.utils.nextflow import detect_modality, save_metadata, get_effective_output_space
+from macacaMRIprep.utils.nextflow import detect_modality, save_metadata
 from pathlib import Path
 import os
 import subprocess
@@ -1080,8 +1082,9 @@ bids_naming_template = Path('${bids_naming_template}')
 modality = detect_modality(bids_naming_template)
 original_stem = get_filename_stem(bids_naming_template)
 
-# Get effective output_space (CLI > YAML > default)
-effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+# Get effective_output_space from effective config file
+config = load_config('${config_file}')
+effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
 template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
 
 # Pass through input file (create symlink with space entity)
@@ -1095,9 +1098,9 @@ os.symlink(Path('${input_file}').resolve(), bids_output_filename)
 # Generate BIDS prefix
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 
-# Get effective output_space (CLI > YAML > default)
-from macacaMRIprep.utils.nextflow import get_effective_output_space
-effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+# Get effective_output_space from effective config file
+config = load_config('${config_file}')
+effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
 
 # Create identity transform using ANTs
 # Create identity affine transform file first

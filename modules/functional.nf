@@ -15,7 +15,7 @@ process FUNC_REORIENT {
     
     input:
     tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_naming_template)
-    path config_file
+    path config_file  // Effective config file with all resolved parameters
     
     output:
     tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-reorient_bold.nii.gz"), val(bids_naming_template), emit: output
@@ -58,9 +58,9 @@ process FUNC_REORIENT {
     # Get BIDS naming template (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
     
-    # Get effective output_space (CLI > YAML > default)
-    from macacaMRIprep.utils.nextflow import get_effective_output_space
-    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+    # Get effective_output_space from effective config file
+    config = load_config('${config_file}')
+    effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
     
     # Resolve template if needed
     template_file = None
@@ -113,7 +113,7 @@ process FUNC_SLICE_TIMING {
     
     input:
     tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_naming_template)
-    path config_file
+    path config_file  // Effective config file with all resolved parameters
     
     output:
     tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-sliceTiming_bold.nii.gz"), val(bids_naming_template), emit: output
@@ -229,7 +229,7 @@ process FUNC_MOTION_CORRECTION {
     
     input:
     tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_naming_template)
-    path config_file
+    path config_file  // Effective config file with all resolved parameters
     
     output:
     // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
@@ -650,7 +650,7 @@ process FUNC_COMPUTE_CONFORM {
     // bold_file is dummy for session-level operations
     tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(tmean_file), val(bids_naming_template)
     path(anat_brain_file)
-    path config_file
+    path config_file  // Effective config file with all resolved parameters
     
     output:
     // Output: [sub, ses, run_identifier, conformed_tmean, bids_template]
@@ -705,9 +705,9 @@ process FUNC_COMPUTE_CONFORM {
     anat_brain_path_str = '${anat_brain_file}'
     has_anat_brain = anat_brain_path_str and anat_brain_path_str.strip() != '' and '.dummy' not in anat_brain_path_str
     
-    # Get effective output_space (CLI > YAML > default)
-    from macacaMRIprep.utils.nextflow import get_effective_output_space
-    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+    # Get effective_output_space from effective config file
+    config = load_config('${config_file}')
+    effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
     
     if registration_pipeline == 'func2template':
         target_file = Path(resolve_template(effective_output_space))
@@ -1132,7 +1132,7 @@ process FUNC_COMPUTE_REGISTRATION {
     // Input: [sub, ses, run_identifier, masked_tmean, bids_template] + anatomical selection
     tuple val(subject_id), val(session_id), val(run_identifier), path(masked_tmean), val(bids_naming_template), val(anat_session_id), val(is_cross_ses)
     path(anat_brain)
-    path config_file
+    path config_file  // Effective config file with all resolved parameters
     
     output:
     // Output: [sub, ses, run_identifier, registered_tmean, bids_template, anat_session_id, is_cross_ses]
@@ -1150,7 +1150,7 @@ process FUNC_COMPUTE_REGISTRATION {
     from macacaMRIprep.steps.types import StepInput
     from macacaMRIprep.utils.templates import resolve_template
     from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, get_effective_output_space
+    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
     from macacaMRIprep.utils import get_image_resolution, run_command
     from pathlib import Path
     import shutil
@@ -1187,8 +1187,9 @@ process FUNC_COMPUTE_REGISTRATION {
     anat_brain_path_str = '${anat_brain}'
     has_anat_brain = anat_brain_path_str and anat_brain_path_str.strip() != '' and '.dummy' not in anat_brain_path_str
     
-    # Get effective output_space
-    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+    # Get effective_output_space from effective config file
+    config = load_config('${config_file}')
+    effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
     
     if registration_pipeline == 'func2template':
         target_file = Path(resolve_template(effective_output_space))
@@ -1308,7 +1309,7 @@ process FUNC_APPLY_TRANSFORMS {
     // ref_from_func_reg: original target file (anat or template) from func registration, will be resampled if needed
     tuple val(subject_id), val(session_id), val(run_identifier), val(bids_naming_template), val(target_type), val(target2template), path(func2target_xfm), path(ref_from_func_reg), path(anat2template_xfm), path(ref_from_anat_reg)
     path(func_4d_file)  // Original 4D BOLD file (conformed_bold)
-    path config_file
+    path config_file  // Effective config file with all resolved parameters
     
     output:
     tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*desc-preproc_bold.nii.gz"), path("*space-*desc-preproc_boldref.nii.gz"), val(bids_naming_template), emit: output
@@ -1322,14 +1323,15 @@ process FUNC_APPLY_TRANSFORMS {
 from macacaMRIprep.steps.functional import func_apply_transforms
 from macacaMRIprep.steps.types import StepInput
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, get_effective_output_space
+from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
 from pathlib import Path
 import glob
 import shutil
 import os
 
-# Get effective output_space (CLI > YAML > default)
-effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+# Get effective_output_space from effective config file
+config = load_config('${config_file}')
+effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
 template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
 
 # Initialize command log file

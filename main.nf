@@ -44,21 +44,46 @@ include { FUNC_WF } from './workflows/functional_workflow.nf'
 // Include QC report generation
 include { QC_GENERATE_REPORT } from './modules/qc.nf'
 
+// Load parameter resolver
+def paramResolver = evaluate(new File("${projectDir}/workflows/param_resolver.groovy").text)
+
 workflow {
+    // ============================================
+    // INITIALIZE PARAMETER RESOLVER
+    // ============================================
+    // Initialize parameter resolver with priority: CLI params → YAML config → defaults.yaml
+    paramResolver.initialize(params, projectDir)
+    
+    // ============================================
+    // GENERATE EFFECTIVE CONFIG FILE
+    // ============================================
+    // Generate effective config.yaml that merges: CLI params → YAML config → defaults.yaml
+    // This file will be used by all processes instead of passing individual parameters
+    def effective_config_path = paramResolver.generateEffectiveConfig(params, projectDir, params.output_dir)
+    def effective_config_file = file(effective_config_path)
+    
+    // ============================================
+    // RESOLVE PARAMETERS (for workflow logic)
+    // ============================================
+    // Get anat_only parameter with priority: CLI → YAML → defaults.yaml
+    // No hardcoded default - must come from defaults.yaml
+    def anat_only = paramResolver.getParamBool(params, 'anat_only')
+    
     // ============================================
     // RUN ANATOMICAL WORKFLOW
     // ============================================
     ANAT_WF()
     
     // ============================================
-    // RUN FUNCTIONAL WORKFLOW
+    // RUN FUNCTIONAL WORKFLOW (conditionally)
     // ============================================
-    FUNC_WF(
-        ANAT_WF.out.anat_after_skull,
-        ANAT_WF.out.anat_reg_transforms,
-        ANAT_WF.out.anat_reg_reference,
-        ANAT_WF.out.anat_only_val
-    )
+    if (!anat_only) {
+        FUNC_WF(
+            ANAT_WF.out.anat_after_skull,
+            ANAT_WF.out.anat_reg_transforms,
+            ANAT_WF.out.anat_reg_reference
+        )
+    }
     
     // // ============================================
     // // QC REPORT GENERATION (per subject)

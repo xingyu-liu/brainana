@@ -718,7 +718,7 @@ process QC_REGISTRATION_FUNC {
     
     input:
     tuple val(subject_id), val(session_id), val(run_identifier), path(registered_file), path(reference_file)
-    path config_file
+    path config_file  // Effective config file with all resolved parameters
     
     output:
     path "*.png", emit: qc_files
@@ -748,9 +748,10 @@ if ' ' in registered_file_str:
     # Split by space to get individual file paths
     file_paths = registered_file_str.split()
     # Get template name from output_space (e.g., "NMT2Sym:res-1" -> "NMT2Sym")
-    # Get effective output_space (CLI > YAML > default)
-    from macacaMRIprep.utils.nextflow import get_effective_output_space
-    effective_output_space = get_effective_output_space('${params.output_space}', '${config_file}')
+    # Get effective_output_space from effective config file
+    from macacaMRIprep.utils.nextflow import load_config
+    config = load_config('${config_file}')
+    effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
     template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
     # Find the file in template space (final registered file)
     registered_file = None

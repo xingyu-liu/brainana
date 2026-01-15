@@ -77,6 +77,15 @@ cd "$PROJECT_ROOT"
 # Run Nextflow pipeline (--no-docker flag disables Docker)
 echo ""
 echo "Starting Nextflow pipeline..."
+if [ -n "$RESUME_FLAG" ]; then
+    echo "Resume enabled: $RESUME_FLAG"
+    echo "Work directory: $WORKING_DIR"
+    if [ -d "$WORKING_DIR" ] && [ "$(ls -A $WORKING_DIR 2>/dev/null)" ]; then
+        echo "Work directory contains previous tasks (resume should work)"
+    else
+        echo "Work directory is empty (no previous run to resume)"
+    fi
+fi
 echo ""
 
 "$PROJECT_ROOT/run_nextflow.sh" run main.nf \

@@ -73,7 +73,6 @@ def validate_bids(bids_dir: Path, skip_validation: bool) -> bool:
 def print_summary(
     anat_jobs: List[Dict[str, Any]],
     func_jobs: List[Dict[str, Any]],
-    output_dir: Path
 ) -> None:
     """
     Print a summary of discovered jobs.
@@ -241,7 +240,7 @@ def main():
         sys.exit(1)
     
     # Print summary
-    print_summary(anat_jobs, func_jobs, args.output_dir)
+    print_summary(anat_jobs, func_jobs)
     
     # Save JSON files
     anat_json_path = args.output_dir / 'nextflow_reports' / 'anatomical_jobs.json'
