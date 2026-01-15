@@ -40,6 +40,9 @@ def funcChannels = evaluate(new File("${projectDir}/workflows/functional_channel
 // Load parameter resolver
 def paramResolver = evaluate(new File("${projectDir}/workflows/param_resolver.groovy").text)
 
+// Load config helpers
+def configHelpers = evaluate(new File("${projectDir}/workflows/config_helpers.groovy").text)
+
 workflow FUNC_WF {
     take:
     anat_after_skull  // channel from anatomical workflow
@@ -49,19 +52,15 @@ workflow FUNC_WF {
     main:
     // Initialize parameter resolver (if not already initialized in main.nf)
     // This is safe to call multiple times - it will only load configs once
-    try {
-        paramResolver.initialize(params, projectDir)
-    } catch (Exception e) {
-        error "Failed to initialize parameter resolver: ${e.message}"
-    }
+    configHelpers.ensureParamResolverInitialized(paramResolver, params, projectDir)
     
     // Use effective config file (generated in main.nf)
     // This contains all resolved parameters: CLI params → YAML config → defaults.yaml
-    def effective_config_path = "${params.output_dir}/nextflow_reports/config.yaml"
-    def config_file = file(effective_config_path)
-    if (!new File(effective_config_path).exists()) {
-        error "Effective config file not found: ${effective_config_path}. Make sure parameter resolver is initialized in main.nf"
-    }
+    // Get path as string - Nextflow processes can accept string paths for 'path' inputs
+    def config_file_path = configHelpers.getEffectiveConfigPath(params, projectDir)
+    // Pass string path directly - Nextflow will convert to file object when process executes
+    // This avoids early validation issues with file() in workflow blocks
+    def config_file = config_file_path
     
     // ============================================
     // RESOLVE PARAMETERS (for workflow logic)
@@ -87,6 +86,7 @@ workflow FUNC_WF {
     def findUnmatched = channelHelpers.findUnmatched
     
     // Parse functional jobs JSON into channel
+    // Channel structure: [sub, ses, run_identifier, file_obj, bids_naming_template]
     def func_jobs_file = file("${params.output_dir}/nextflow_reports/functional_jobs.json")
     if (!new File(func_jobs_file.toString()).exists()) {
         error "Discovery file not found: ${func_jobs_file}\n" +
@@ -107,6 +107,7 @@ workflow FUNC_WF {
     def func_coreg_success = false
     
         // SLICE_TIMING
+        // Channel structure: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
         def func_after_slice = func_jobs_ch
         if (func_slice_timing_enabled) {
             FUNC_SLICE_TIMING(func_jobs_ch, config_file)
@@ -116,6 +117,7 @@ workflow FUNC_WF {
         }
 
         // REORIENT
+        // Channel structure: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
         def func_after_reorient = func_after_slice
         if (func_reorient_enabled) {
             FUNC_REORIENT(func_after_slice, config_file)
@@ -125,6 +127,7 @@ workflow FUNC_WF {
         }
         
         // MOTION_CORRECTION
+        // Channel structure: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
         def func_after_motion = func_after_reorient
         def func_motion_params = Channel.empty()
         if (func_motion_correction_enabled) {
@@ -145,22 +148,13 @@ workflow FUNC_WF {
             func_after_despike = func_after_motion
         }
         
-        // BIAS_CORRECTION
-        def func_after_bias = func_after_despike
-        if (func_bias_correction_enabled) {
-            FUNC_BIAS_CORRECTION(func_after_despike, config_file)
-            func_after_bias = FUNC_BIAS_CORRECTION.out.output
-        } else {
-            func_after_bias = func_after_despike
-        }
-        
         // WITHIN-SESSION COREGISTRATION
-        def func_after_coreg = func_after_bias
+        def func_after_coreg = func_after_despike
         def func_coreg_transforms_ch = Channel.empty()
         def func_tmean_averaged_ch = Channel.empty()
         
         if (func_coreg_runs_within_session) {
-            def coregChannels = funcChannels.prepareWithinSessionCoregChannels(func_after_bias, Channel)
+            def coregChannels = funcChannels.prepareWithinSessionCoregChannels(func_after_despike, Channel)
             
             coregChannels.func_later_runs
                 .multiMap { sub, ses, run_identifier, bold, tmean, bids, ref_tmean, ref_run_identifier ->
@@ -231,21 +225,29 @@ workflow FUNC_WF {
             // SESSION-LEVEL COMPUTE PHASE
             def func_compute_input = func_tmean_averaged_ch
                 .map { sub, ses, tmean, bids ->
-                    def dummy_bold = file("${workDir}/dummy_bold_${sub}_${ses}.dummy")
-                    [sub, ses, "", dummy_bold, tmean, bids]
+                    [sub, ses, "", tmean, bids]
                 }
+
+            // BIAS_CORRECTION
+            def func_after_bias = func_compute_input
+            if (func_bias_correction_enabled) {
+                FUNC_BIAS_CORRECTION(func_compute_input, config_file)
+                func_after_bias = FUNC_BIAS_CORRECTION.out.output
+            } else {
+                func_after_bias = func_compute_input
+            }
             
             if (func_conform_enabled) {
 
-                def func_conform_with_anat = func_compute_input
+                def func_conform_with_anat = func_after_bias
                     .join(func_anat_selection, by: [0, 1])
-                    .map { sub, ses, run_id, bold, tmean, bids, run_id2, anat_file, anat_ses, is_cross_ses ->
-                        [sub, ses, run_id, bold, tmean, bids, anat_file]
+                    .map { sub, ses, run_id, tmean, bids, run_id2, anat_file, anat_ses, is_cross_ses ->
+                        [sub, ses, run_id, tmean, bids, anat_file]
                     }
                 
                 func_conform_with_anat
-                    .multiMap { sub, ses, run_id, bold, tmean, bids, anat_file ->
-                        combined: [sub, ses, run_id, bold, tmean, bids]
+                    .multiMap { sub, ses, run_id, tmean, bids, anat_file ->
+                        combined: [sub, ses, run_id, tmean, bids]
                         reference: anat_file
                     }
                     .set { func_compute_conform_multi }
@@ -254,14 +256,14 @@ workflow FUNC_WF {
                 func_compute_conform_output = FUNC_COMPUTE_CONFORM.out.output
                 func_compute_conform_transforms = FUNC_COMPUTE_CONFORM.out.transforms
             } else {
-                func_compute_conform_output = func_compute_input
-                    .map { sub, ses, run_id, bold, tmean, bids ->
+                func_compute_conform_output = func_after_bias
+                    .map { sub, ses, run_id, tmean, bids ->
                         [sub, ses, run_id, tmean, bids]
                     }
                 def dummy_forward_transform = file("${workDir}/dummy_conform_forward_transform.dummy")
                 def dummy_inverse_transform = file("${workDir}/dummy_conform_inverse_transform.dummy")
-                func_compute_conform_transforms = func_compute_input
-                    .map { sub, ses, run_id, bold, tmean, bids ->
+                func_compute_conform_transforms = func_after_bias
+                    .map { sub, ses, run_id, tmean, bids ->
                         [sub, ses, run_id, dummy_forward_transform, dummy_inverse_transform]
                     }
             }
@@ -313,17 +315,29 @@ workflow FUNC_WF {
         } else {
             // PER-RUN COMPUTE PHASE
             def func_compute_input = func_after_coreg
+                .map { sub, ses, run_id, bold, tmean, bids ->
+                    [sub, ses, run_id, tmean, bids]
+                }
+
+            // BIAS_CORRECTION
+            def func_after_bias = func_compute_input
+            if (func_bias_correction_enabled) {
+                FUNC_BIAS_CORRECTION(func_compute_input, config_file)
+                func_after_bias = FUNC_BIAS_CORRECTION.out.output
+            } else {
+                func_after_bias = func_compute_input
+            }
             
             if (func_conform_enabled) {
-                def func_conform_with_anat = func_compute_input
+                def func_conform_with_anat = func_after_bias
                     .join(func_anat_selection, by: [0, 1, 2])
-                    .map { sub, ses, run_id, bold, tmean, bids, anat_file, anat_ses, is_cross_ses ->
-                        [sub, ses, run_id, bold, tmean, bids, anat_file]
+                    .map { sub, ses, run_id, tmean, bids, anat_file, anat_ses, is_cross_ses ->
+                        [sub, ses, run_id, tmean, bids, anat_file]
                     }
                 
                 func_conform_with_anat
-                    .multiMap { sub, ses, run_id, bold, tmean, bids, anat_file ->
-                        combined: [sub, ses, run_id, bold, tmean, bids]
+                    .multiMap { sub, ses, run_id, tmean, bids, anat_file ->
+                        combined: [sub, ses, run_id, tmean, bids]
                         reference: anat_file
                     }
                     .set { func_compute_conform_multi }
@@ -332,14 +346,14 @@ workflow FUNC_WF {
                 func_compute_conform_output = FUNC_COMPUTE_CONFORM.out.output
                 func_compute_conform_transforms = FUNC_COMPUTE_CONFORM.out.transforms
             } else {
-                func_compute_conform_output = func_compute_input
-                    .map { sub, ses, run_id, bold, tmean, bids ->
+                func_compute_conform_output = func_after_bias
+                    .map { sub, ses, run_id, tmean, bids ->
                         [sub, ses, run_id, tmean, bids]
                     }
                 def dummy_forward_transform = file("${workDir}/dummy_conform_forward_transform.dummy")
                 def dummy_inverse_transform = file("${workDir}/dummy_conform_inverse_transform.dummy")
-                func_compute_conform_transforms = func_compute_input
-                    .map { sub, ses, run_id, bold, tmean, bids ->
+                func_compute_conform_transforms = func_after_bias
+                    .map { sub, ses, run_id, tmean, bids ->
                         [sub, ses, run_id, dummy_forward_transform, dummy_inverse_transform]
                     }
             }
@@ -389,6 +403,7 @@ workflow FUNC_WF {
         }
         
         // APPLY PHASE
+        // ===============================
         def func_apply_bold_input = func_coreg_runs_within_session && func_coreg_success ? func_after_coreg : func_after_coreg
         
         // APPLY CONFORM
@@ -425,7 +440,7 @@ workflow FUNC_WF {
                             },
                         by: [0, 1, 2]
                     )
-                    .map { sub, ses, run_id, bold, tmean, bids, conformed_tmean, func2target_xfm ->
+                    .map { sub, ses, run_id, bold, tmean, bids, conformed_tmean, bids2,func2target_xfm ->
                         [sub, ses, run_id, bold, func2target_xfm, conformed_tmean, bids]
                     }
             }
@@ -536,7 +551,7 @@ workflow FUNC_WF {
                 def func_reg_with_ref = func_compute_reg_output
                     .combine(FUNC_COMPUTE_REGISTRATION.out.transforms, by: [0, 1])
                     .combine(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1])
-                    .map { sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses, run_id2, func2target_xfm, reverse_xfm, run_id3, ref_from_func_reg ->
+                    .map { sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses, run_id2, func2target_xfm, inverse_xfm, run_id3, ref_from_func_reg ->
                         [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg]
                     }
 
@@ -546,7 +561,6 @@ workflow FUNC_WF {
                     .map { sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg ->
                         [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
                     }
-
 
                 func_apply_reg_with_bold = func_apply_conform_output
                     .combine(all_reg_with_ref, by: [0, 1])
@@ -562,15 +576,11 @@ workflow FUNC_WF {
             } else {
                 // FUNC_COMPUTE_REGISTRATION.out.transforms is now: [sub, ses, run_id, func2target_xfm, inverse_transform]
                 // FUNC_COMPUTE_REGISTRATION.out.reference is now: [sub, ses, run_id, ref_from_anat_reg]
-                def func_reg_transforms_forward = FUNC_COMPUTE_REGISTRATION.out.transforms
-                    .map { sub, ses, run_id, func2target_xfm, inverse_transform ->
-                        [sub, ses, run_id, func2target_xfm]
-                    }
                 
                 def func_reg_with_ref = func_compute_reg_output
-                    .join(func_reg_transforms_forward, by: [0, 1, 2])
+                    .join(FUNC_COMPUTE_REGISTRATION.out.transforms, by: [0, 1, 2])
                     .join(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1, 2])
-                    .map { sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses, func2target_xfm, ref_from_func_reg ->
+                    .map { sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses, func2target_xfm, inverse_xfm, ref_from_func_reg ->
                         [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat_ses, is_cross_ses]
                     }
                 
@@ -587,6 +597,10 @@ workflow FUNC_WF {
                         // Keep conformed_bold for multiMap extraction
                         [sub, ses, run_id, conformed_bold, bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
                     }
+                // // debug print
+                // func_apply_reg_with_bold.first().view { tuple ->
+                //     "DEBUG [FUNC_APPLY_TRANSFORMS: func_apply_reg_with_bold]: ${tuple}"
+                // }
             }
 
             func_apply_reg_with_bold
@@ -598,7 +612,7 @@ workflow FUNC_WF {
             
             // // debug print
             // func_apply_reg_multi.reg_combined.first().view { tuple ->
-            //     "DEBUG [FUNC_COMPUTE_REGISTRATION: func_apply_reg_input]: ${tuple}"
+            //     "DEBUG [FUNC_APPLY_TRANSFORMS: func_apply_reg_input]: ${tuple}"
             // }
             
             FUNC_APPLY_TRANSFORMS(func_apply_reg_multi.reg_combined, func_apply_reg_multi.func_4d_file, config_file)
@@ -645,20 +659,40 @@ workflow FUNC_WF {
         }
         
         if (func_skullstripping_enabled) {
-            def func_skull_qc_input = func_apply_conform_output
-                .map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids ->
-                    [sub, ses, run_id, conformed_tmean_ref, bids]
-                }
-                .combine(
-                    FUNC_COMPUTE_BRAIN_MASK.out.output
-                        .map { sub, ses, run_id, masked_tmean, bids, brain_mask ->
-                            [sub, ses, brain_mask]
-                        },
-                    by: [0, 1]
-                )
-                .map { sub, ses, run_id, conformed_tmean_ref, bids, brain_mask ->
-                    [sub, ses, run_id, conformed_tmean_ref, brain_mask, bids]
-                }
+            def func_skull_qc_input
+            if (func_coreg_runs_within_session && func_coreg_success) {
+                // Session-level compute phase: FUNC_COMPUTE_BRAIN_MASK.out.output has run_id == ""
+                func_skull_qc_input = func_apply_conform_output
+                    .map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids ->
+                        [sub, ses, run_id, conformed_tmean_ref, bids]
+                    }
+                    .combine(
+                        FUNC_COMPUTE_BRAIN_MASK.out.output
+                            .map { sub, ses, run_id, masked_tmean, bids, brain_mask ->
+                                [sub, ses, brain_mask]
+                            },
+                        by: [0, 1]
+                    )
+                    .map { sub, ses, run_id, conformed_tmean_ref, bids, brain_mask ->
+                        [sub, ses, run_id, conformed_tmean_ref, brain_mask, bids]
+                    }
+            } else {
+                // Per-run compute phase: FUNC_COMPUTE_BRAIN_MASK.out.output has run-level items
+                func_skull_qc_input = func_apply_conform_output
+                    .map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids ->
+                        [sub, ses, run_id, conformed_tmean_ref, bids]
+                    }
+                    .join(
+                        FUNC_COMPUTE_BRAIN_MASK.out.output
+                            .map { sub, ses, run_id, masked_tmean, bids, brain_mask ->
+                                [sub, ses, run_id, brain_mask]
+                            },
+                        by: [0, 1, 2]
+                    )
+                    .map { sub, ses, run_id, conformed_tmean_ref, bids, brain_mask ->
+                        [sub, ses, run_id, conformed_tmean_ref, brain_mask, bids]
+                    }
+            }
             QC_SKULLSTRIPPING_FUNC(func_skull_qc_input, config_file)
         }
 

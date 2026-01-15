@@ -625,7 +625,8 @@ process ANAT_REGISTRATION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.{nii.gz,h5,mat}'
+        pattern: '*.{nii.gz,h5,mat}',
+        saveAs: { filename -> filename.contains('ref_from_anat_reg.nii.gz') ? null : filename }
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
@@ -702,7 +703,6 @@ bids_naming_template = Path('${bids_naming_template}')
 modality = detect_modality(bids_naming_template)
 
 # Get effective_output_space from effective config file
-config = load_config('${config_file}')
 effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
 template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
 

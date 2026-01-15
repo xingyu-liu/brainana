@@ -34,7 +34,15 @@ workflow {
     // ============================================
     // Generate effective config.yaml that merges: CLI params → YAML config → defaults.yaml
     // This file will be used by all processes instead of passing individual parameters
+    // Must be generated before workflows are invoked
     def effective_config_path = paramResolver.generateEffectiveConfig(params, projectDir, params.output_dir)
+    
+    // Verify the file was created successfully
+    def effective_config_file_check = new File(effective_config_path)
+    if (!effective_config_file_check.exists()) {
+        error "Failed to generate effective config file at: ${effective_config_path}"
+    }
+    
     def effective_config_file = file(effective_config_path)
     
     // ============================================

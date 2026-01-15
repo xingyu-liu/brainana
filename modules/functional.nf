@@ -59,7 +59,6 @@ process FUNC_REORIENT {
     bids_naming_template = Path('${bids_naming_template}')
     
     # Get effective_output_space from effective config file
-    config = load_config('${config_file}')
     effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
     
     # Resolve template if needed
@@ -531,14 +530,13 @@ process FUNC_BIAS_CORRECTION {
         saveAs: { filename -> filename }
     
     input:
-    // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
-    // Use stageAs to automatically create bold_inherited.nii.gz symlink (avoids duplicate symlinks)
-    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file, stageAs: 'bold_inherited.nii.gz'), path(tmean_file), val(bids_naming_template)
+    // Input: [sub, ses, run_identifier, tmean_file, bids_template]
+    tuple val(subject_id), val(session_id), val(run_identifier), path(tmean_file), val(bids_naming_template)
     path config_file
     
     output:
-    // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("bold_inherited.nii.gz"), path("*desc-biasCorrection_boldref.nii.gz"), val(bids_naming_template), emit: output
+    // Output: [sub, ses, run_identifier, bias_corrected_tmean, bids_template]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-biasCorrection_boldref.nii.gz"), val(bids_naming_template), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -565,7 +563,7 @@ PYTHON
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.functional import func_bias_correction
 from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename
+from macacaMRIprep.utils.bids import create_bids_output_filename, parse_bids_entities, create_bids_filename
 from pathlib import Path
 import shutil
 import os
@@ -596,15 +594,7 @@ config = load_config('${config_file}')
 # Get original file path (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
 
-# bold_inherited.nii.gz is automatically created by Nextflow via stageAs parameter
-# No need to manually create symlink - Nextflow handles it
-bold_inherited = Path('bold_inherited.nii.gz')
-
-# Verify the file exists (Nextflow should have staged it)
-if not bold_inherited.exists():
-    raise FileNotFoundError(f"BOLD inherited file does not exist: {bold_inherited}. Nextflow stageAs may have failed.")
-
-# Create step input (process tmean, inherit BOLD via symlink)
+# Create step input (process tmean only)
 input_obj = StepInput(
     input_file=Path('${tmean_file}'),  # Process tmean
     working_dir=Path('work'),
@@ -621,11 +611,26 @@ input_obj = StepInput(
 result = func_bias_correction(input_obj)
 
 # Generate BIDS-compliant output filename (bias correction operates on tmean, so use boldref)
-bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
-    suffix='desc-biasCorrection',
-    modality='boldref'
-)
+# For session-level processing (empty run_identifier), use session-level naming without run-specific entities
+if not run_identifier or run_identifier.strip() == "":
+    # Session-level: parse entities and keep only sub and ses (like FUNC_AVERAGE_TMEAN)
+    parsed = parse_bids_entities(str(bids_naming_template))
+    filtered_entities = {}
+    if 'sub' in parsed:
+        filtered_entities['sub'] = parsed['sub']
+    if 'ses' in parsed:
+        filtered_entities['ses'] = parsed['ses']
+    # Add desc entity for bias correction
+    filtered_entities['desc'] = 'biasCorrection'
+    # Rebuild filename with suffix 'boldref'
+    bids_output_filename = create_bids_filename(filtered_entities, 'boldref', extension='.nii.gz')
+else:
+    # Run-level: preserve all entities from original template
+    bids_output_filename = create_bids_output_filename(
+        original_file_path=bids_naming_template,
+        suffix='desc-biasCorrection',
+        modality='boldref'
+    )
 
 # Create BIDS-compliant symlink for Nextflow output and publishDir
 create_output_link(result.output_file, bids_output_filename)
@@ -646,9 +651,8 @@ process FUNC_COMPUTE_CONFORM {
         saveAs: { filename -> filename == 'template_resampled.nii.gz' ? null : filename }
     
     input:
-    // Input: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
-    // bold_file is dummy for session-level operations
-    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(tmean_file), val(bids_naming_template)
+    // Input: [sub, ses, run_identifier, tmean_file, bids_template]
+    tuple val(subject_id), val(session_id), val(run_identifier), path(tmean_file), val(bids_naming_template)
     path(anat_brain_file)
     path config_file  // Effective config file with all resolved parameters
     
@@ -667,7 +671,7 @@ process FUNC_COMPUTE_CONFORM {
     from macacaMRIprep.steps.functional import func_conform
     from macacaMRIprep.steps.types import StepInput
     from macacaMRIprep.utils.templates import resolve_template
-    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem, parse_bids_entities, create_bids_filename
     from pathlib import Path
     import shutil
     import os
@@ -706,7 +710,6 @@ process FUNC_COMPUTE_CONFORM {
     has_anat_brain = anat_brain_path_str and anat_brain_path_str.strip() != '' and '.dummy' not in anat_brain_path_str
     
     # Get effective_output_space from effective config file
-    config = load_config('${config_file}')
     effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
     
     if registration_pipeline == 'func2template':
@@ -740,11 +743,26 @@ process FUNC_COMPUTE_CONFORM {
     result = func_conform(tmean_input_obj, target_file=target_file, bold_4d_file=None)
     
     # Generate BIDS-compliant output filename for conformed tmean
-    bids_output_filename_tmean = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix='desc-conform',
-        modality='boldref'
-    )
+    # For session-level processing (empty run_identifier), use session-level naming without run-specific entities
+    if not run_identifier or run_identifier.strip() == "":
+        # Session-level: parse entities and keep only sub and ses
+        parsed = parse_bids_entities(str(bids_naming_template))
+        filtered_entities = {}
+        if 'sub' in parsed:
+            filtered_entities['sub'] = parsed['sub']
+        if 'ses' in parsed:
+            filtered_entities['ses'] = parsed['ses']
+        # Add desc entity for conform
+        filtered_entities['desc'] = 'conform'
+        # Rebuild filename with suffix 'boldref'
+        bids_output_filename_tmean = create_bids_filename(filtered_entities, 'boldref', extension='.nii.gz')
+    else:
+        # Run-level: preserve all entities from original template
+        bids_output_filename_tmean = create_bids_output_filename(
+            original_file_path=bids_naming_template,
+            suffix='desc-conform',
+            modality='boldref'
+        )
     
     # Create BIDS-compliant symlink for conformed tmean
     create_output_link(result.output_file, bids_output_filename_tmean)
@@ -1126,7 +1144,8 @@ process FUNC_COMPUTE_REGISTRATION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.{nii.gz,h5}'
+        pattern: '*.{nii.gz,h5}',
+        saveAs: { filename -> filename.contains('ref_from_func_reg.nii.gz') ? null : filename }
     
     input:
     // Input: [sub, ses, run_identifier, masked_tmean, bids_template] + anatomical selection
@@ -1188,7 +1207,6 @@ process FUNC_COMPUTE_REGISTRATION {
     has_anat_brain = anat_brain_path_str and anat_brain_path_str.strip() != '' and '.dummy' not in anat_brain_path_str
     
     # Get effective_output_space from effective config file
-    config = load_config('${config_file}')
     effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
     
     if registration_pipeline == 'func2template':

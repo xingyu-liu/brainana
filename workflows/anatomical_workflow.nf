@@ -43,6 +43,9 @@ def channelHelpers = evaluate(new File("${projectDir}/workflows/channel_helpers.
 // Load parameter resolver
 def paramResolver = evaluate(new File("${projectDir}/workflows/param_resolver.groovy").text)
 
+// Load config helpers
+def configHelpers = evaluate(new File("${projectDir}/workflows/config_helpers.groovy").text)
+
 workflow ANAT_WF {
     main:
     if (!params.bids_dir) {
@@ -61,19 +64,15 @@ workflow ANAT_WF {
     
     // Initialize parameter resolver (if not already initialized in main.nf)
     // This is safe to call multiple times - it will only load configs once
-    try {
-        paramResolver.initialize(params, projectDir)
-    } catch (Exception e) {
-        error "Failed to initialize parameter resolver: ${e.message}"
-    }
+    configHelpers.ensureParamResolverInitialized(paramResolver, params, projectDir)
     
     // Use effective config file (generated in main.nf)
     // This contains all resolved parameters: CLI params → YAML config → defaults.yaml
-    def effective_config_path = "${params.output_dir}/nextflow_reports/config.yaml"
-    def config_file = file(effective_config_path)
-    if (!new File(effective_config_path).exists()) {
-        error "Effective config file not found: ${effective_config_path}. Make sure parameter resolver is initialized in main.nf"
-    }
+    // Get path as string - Nextflow processes can accept string paths for 'path' inputs
+    def config_file_path = configHelpers.getEffectiveConfigPath(params, projectDir)
+    // Pass string path directly - Nextflow will convert to file object when process executes
+    // This avoids early validation issues with file() in workflow blocks
+    def config_file = config_file_path
     
     // ============================================
     // RESOLVE PARAMETERS (for workflow logic)
@@ -116,19 +115,7 @@ workflow ANAT_WF {
     println "BIDS directory: ${params.bids_dir}"
     println "Output directory: ${params.output_dir}"
     println "Output space: ${effective_output_space}"
-    println "Effective config: ${effective_config_path}"
-    if (subjects_str) println "Subjects filter: ${subjects_str}"
-    if (sessions_str) println "Sessions filter: ${sessions_str}"
-    if (tasks_str) println "Tasks filter: ${tasks_str}"
-    if (runs_str) println "Runs filter: ${runs_str}"
-    println "============================================"
-    
-    println "============================================"
-    println "banana Nextflow Pipeline - Anatomical"
-    println "============================================"
-    println "BIDS directory: ${params.bids_dir}"
-    println "Output directory: ${params.output_dir}"
-    println "Output space: ${effective_output_space}"
+    println "Effective config: ${config_file_path}"
     if (subjects_str) println "Subjects filter: ${subjects_str}"
     if (sessions_str) println "Sessions filter: ${sessions_str}"
     if (tasks_str) println "Tasks filter: ${tasks_str}"
@@ -148,6 +135,7 @@ workflow ANAT_WF {
     // ============================================
     // PARSE DISCOVERY RESULTS INTO CHANNELS
     // ============================================
+    // Channel structure: [sub, ses, file_objects, needs_synth, suffix, needs_t1w_reg]
     Channel.fromPath(anat_jobs_file)
         .splitJson()
         .map { job ->
@@ -232,6 +220,7 @@ workflow ANAT_WF {
         .mix(anat_single_jobs)
     
     // ANAT_REORIENT
+    // Channel structure: [sub, ses, anat_file, bids_template]
     anat_after_reorient_normal = anat_input_ch
     if (anat_reorient_enabled) {
         ANAT_REORIENT(anat_input_ch, config_file)
@@ -241,6 +230,7 @@ workflow ANAT_WF {
     }
     
     // ANAT_CONFORM
+    // Channel structure: [sub, ses, anat_file, bids_template]
     anat_after_conform = anat_after_reorient_normal
     anat_conform_transforms = Channel.empty()
     anat_conform_reference = Channel.empty()
