@@ -230,7 +230,13 @@ workflow ANAT_WF {
     }
     
     // ANAT_CONFORM
-    // Channel structure: [sub, ses, anat_file, bids_template]
+    // ============================================
+    // Conform anatomical images to template space
+    // Input: anat_after_reorient_normal: [sub, ses, anat_file, bids_template]
+    // Output: anat_after_conform: [sub, ses, anat_file, bids_template]
+    //         anat_conform_transforms: [sub, ses, forward_xfm, inverse_xfm]
+    //         anat_conform_reference: [sub, ses, reference_file]
+    // ============================================
     anat_after_conform = anat_after_reorient_normal
     anat_conform_transforms = Channel.empty()
     anat_conform_reference = Channel.empty()
@@ -247,6 +253,11 @@ workflow ANAT_WF {
     }
     
     // ANAT_BIAS_CORRECTION
+    // ============================================
+    // Correct intensity non-uniformity (bias field)
+    // Input: anat_after_conform: [sub, ses, anat_file, bids_template]
+    // Output: anat_after_bias: [sub, ses, anat_file, bids_template]
+    // ============================================
     anat_after_bias = anat_after_conform
     if (anat_bias_correction_enabled) {
         ANAT_BIAS_CORRECTION(anat_after_conform, config_file)
@@ -257,6 +268,13 @@ workflow ANAT_WF {
     }
     
     // ANAT_SKULLSTRIPPING
+    // ============================================
+    // Remove non-brain tissue using deep learning segmentation
+    // Input: anat_after_bias: [sub, ses, anat_file, bids_template]
+    // Output: anat_after_skull: [sub, ses, anat_file, bids_template]
+    //         anat_skull_mask: [sub, ses, brain_mask]
+    //         anat_skull_seg: [sub, ses, brain_segmentation]
+    // ============================================
     anat_skull_mask = Channel.empty()
     anat_skull_seg = Channel.empty()
     anat_after_skull = Channel.empty()
@@ -270,6 +288,13 @@ workflow ANAT_WF {
     }
     
     // ANAT_REGISTRATION
+    // ============================================
+    // Register anatomical images to template space
+    // Input: anat_after_skull: [sub, ses, anat_file, bids_template]
+    // Output: anat_after_reg: [sub, ses, registered_file, bids_template]
+    //         anat_reg_transforms: [sub, ses, forward_xfm, inverse_xfm]
+    //         anat_reg_reference: [sub, ses, reference_file]
+    // ============================================
     anat_after_reg = Channel.empty()
     anat_reg_transforms = Channel.empty()
     anat_reg_reference = Channel.empty()

@@ -149,6 +149,11 @@ workflow FUNC_WF {
         }
         
         // WITHIN-SESSION COREGISTRATION
+        // ============================================
+        // Coregister multiple runs within the same session to a reference run
+        // Input: func_after_despike: [sub, ses, run_id, bold_file, tmean_file, bids_template]
+        // Output: func_after_coreg: [sub, ses, run_id, bold_file, tmean_file, bids_template]
+        // ============================================
         def func_after_coreg = func_after_despike
         def func_coreg_transforms_ch = Channel.empty()
         def func_tmean_averaged_ch = Channel.empty()
@@ -206,6 +211,13 @@ workflow FUNC_WF {
         }
         
         // ANATOMICAL SELECTION
+        // ============================================
+        // Select appropriate anatomical reference for each functional job
+        // Priority: 1) Same session, 2) Different session (same subject), 3) Dummy (no anatomical)
+        // Input: func_after_coreg: [sub, ses, run_id, bold_file, tmean_file, bids_template]
+        //        anat_after_skull: [sub, ses, anat_file, bids_template]
+        // Output: [sub, ses, run_id, anat_file, anat_ses, is_cross_ses]
+        // ============================================
         def dummy_anat = file("${workDir}/dummy_anat.dummy")
         def func_anat_selection = funcChannels.performAnatomicalSelection(
             func_after_coreg,
@@ -216,13 +228,23 @@ workflow FUNC_WF {
         )
 
         // COMPUTE PHASE
+        // ============================================
+        // Compute transforms and masks on tmean (session-level or per-run)
+        // Two paths: session-level (when coreg enabled) vs per-run processing
+        // ============================================
         def func_compute_conform_output = Channel.empty()
         def func_compute_conform_transforms = Channel.empty()
         def func_compute_mask_output = Channel.empty()
         def func_compute_reg_output = Channel.empty()
         
         if (func_coreg_runs_within_session && func_coreg_success) {
+            // ============================================
             // SESSION-LEVEL COMPUTE PHASE
+            // ============================================
+            // Process session-level averaged tmean (run_id == "")
+            // Input: func_tmean_averaged_ch: [sub, ses, tmean, bids]
+            // Output channels maintain structure: [sub, ses, "", ...] (empty run_id)
+            // ============================================
             def func_compute_input = func_tmean_averaged_ch
                 .map { sub, ses, tmean, bids ->
                     [sub, ses, "", tmean, bids]
@@ -313,7 +335,13 @@ workflow FUNC_WF {
             }
             
         } else {
+            // ============================================
             // PER-RUN COMPUTE PHASE
+            // ============================================
+            // Process each run's tmean separately
+            // Input: func_after_coreg: [sub, ses, run_id, bold_file, tmean_file, bids_template]
+            // Output channels maintain structure: [sub, ses, run_id, ...]
+            // ============================================
             def func_compute_input = func_after_coreg
                 .map { sub, ses, run_id, bold, tmean, bids ->
                     [sub, ses, run_id, tmean, bids]
@@ -403,10 +431,21 @@ workflow FUNC_WF {
         }
         
         // APPLY PHASE
-        // ===============================
-        def func_apply_bold_input = func_coreg_runs_within_session && func_coreg_success ? func_after_coreg : func_after_coreg
+        // ============================================
+        // Apply computed transforms to full BOLD 4D data
+        // Input: func_after_coreg: [sub, ses, run_id, bold_file, tmean_file, bids_template]
+        // Output: func_apply_reg: [sub, ses, run_id, registered_bold, registered_boldref, bids]
+        // ============================================
+        def func_apply_bold_input = func_after_coreg
         
         // APPLY CONFORM
+        // ============================================
+        // Apply conform transform to BOLD data
+        // Input: func_apply_bold_input: [sub, ses, run_id, bold_file, tmean_file, bids_template]
+        //        func_compute_conform_output: [sub, ses, run_id, conformed_tmean, bids]
+        //        func_compute_conform_transforms: [sub, ses, run_id, forward_xfm, inverse_xfm]
+        // Output: [sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids]
+        // ============================================
         def func_apply_conform_output = Channel.empty()
         if (func_conform_enabled) {
             def func_apply_conform_input
@@ -456,13 +495,23 @@ workflow FUNC_WF {
         }
         
         // APPLY REG
+        // ============================================
+        // Registration application phase: Apply computed transforms to BOLD data
+        // Input: func_apply_conform_output: [sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids]
+        // Output: func_apply_reg: [sub, ses, run_id, registered_bold, registered_boldref, bids]
+        // ============================================
         def func_apply_reg = func_apply_conform_output
         def func_apply_reg_reference = Channel.empty()
         if (registration_enabled) {
 
-            // Create real anat_reg_all from anatomical workflow (session-level: [sub, ses, xfm, ref])
-            // anat_reg_transforms is now: [sub, ses, anat2template_xfm, inverse_transform]
-            // anat_reg_reference is now: [sub, ses, ref_from_anat_reg]
+            // ============================================
+            // PREPARE ANATOMICAL REGISTRATION DATA
+            // ============================================
+            // Combine anatomical registration transforms and reference into single channel
+            // Input channels:
+            //   - anat_reg_transforms: [sub, ses, anat2template_xfm, inverse_transform]
+            //   - anat_reg_reference: [sub, ses, ref_from_anat_reg]
+            // Output: anat_reg_all_real: [sub, ses, anat2template_xfm, ref_from_anat_reg]
             def anat_reg_transforms_forward = anat_reg_transforms
                 .map { sub, ses, anat2template_xfm, inverse_transform ->
                     [sub, ses, anat2template_xfm]
@@ -471,11 +520,15 @@ workflow FUNC_WF {
             def anat_reg_all_real = anat_reg_transforms_forward
                 .join(anat_reg_reference, by: [0, 1])
                 .map { sub, ses, anat2template_xfm, ref_from_anat_reg -> 
-                [sub, ses, anat2template_xfm, ref_from_anat_reg] }
+                    [sub, ses, anat2template_xfm, ref_from_anat_reg]
+                }
             
+            // ============================================
+            // MAP FUNCTIONAL TO ANATOMICAL SESSIONS
+            // ============================================
             // Extract session mapping from func_compute_reg_output
             // Structure: [sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses]
-            // We need: [sub, ses_func, anat_ses, is_cross_ses] unique by [sub, ses_func]
+            // Output: [sub, ses_func, anat_ses, is_cross_ses] unique by [sub, ses_func]
             def func_ses_mapping = func_compute_reg_output
                 .map { sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses ->
                     [sub, ses, anat_ses, is_cross_ses]
@@ -483,26 +536,36 @@ workflow FUNC_WF {
                 .unique { sub, ses, anat_ses, is_cross_ses -> [sub, ses] }
 
             // Split into same-session and cross-session cases
+            // Same-session: functional and anatomical data in same session
             def func_ses_same = func_ses_mapping
                 .filter { sub, ses, anat_ses, is_cross_ses -> !is_cross_ses }
                 .map { sub, ses, anat_ses, is_cross_ses -> [sub, ses] }
             
+            // Cross-session: functional data uses anatomical from different session
             def func_ses_cross = func_ses_mapping
                 .filter { sub, ses, anat_ses, is_cross_ses -> is_cross_ses }
                 .map { sub, ses, anat_ses, is_cross_ses -> [sub, ses, anat_ses] }
 
+            // ============================================
+            // JOIN ANATOMICAL REGISTRATION BY SESSION
+            // ============================================
             // Case 1: Same-session - join anat_reg_all_real by [sub, ses]
+            // Output: [sub, ses, xfm, ref]
             def anat_reg_same_ses = func_ses_same
                 .join(anat_reg_all_real, by: [0, 1])
                 .map { sub, ses, xfm, ref -> [sub, ses, xfm, ref] }
 
             // Case 2: Cross-session - join anat_reg_all_real by [sub, anat_ses], then map back to func ses
+            // Output: [sub, ses_func, xfm, ref]
             def anat_reg_cross_ses = func_ses_cross
-                .map { sub, ses_func, anat_ses -> [sub, anat_ses, ses_func] }  // [sub, anat_ses, ses_func] for joining
+                .map { sub, ses_func, anat_ses -> [sub, anat_ses, ses_func] }  // Reorder for joining
                 .join(anat_reg_all_real, by: [0, 1])
                 .map { sub, anat_ses, ses_func, xfm, ref -> [sub, ses_func, xfm, ref] }  // Map back to func session
 
-            // Create dummy anat_reg_all for all functional subjects/sessions
+            // ============================================
+            // CREATE DUMMY REGISTRATION FOR MISSING DATA
+            // ============================================
+            // Create dummy anat_reg_all for functional subjects/sessions without anatomical data
             def subjects_sessions = func_compute_reg_output
                 .map { sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses ->
                     [sub, ses]
@@ -514,13 +577,17 @@ workflow FUNC_WF {
             def anat_reg_all_dummy = subjects_sessions
                 .map { sub, ses -> [sub, ses, dummy_anat2template_xfm, dummy_anat_reg_ref] }
 
+            // ============================================
+            // COMBINE ALL ANATOMICAL REGISTRATION DATA
+            // ============================================
             // Mix all channels (same-session real, cross-session real, and dummy), then group by [sub, ses]
             // and select real over dummy
+            // Output: [sub, ses, xfm, ref] where xfm/ref are real files if available, dummy otherwise
             def anat_reg_all = anat_reg_same_ses
                 .mix(anat_reg_cross_ses)
                 .mix(anat_reg_all_dummy)
                 .map { sub, ses, xfm, ref ->
-                    // Wrap xfm and ref into a nested tuple so groupTuple preserves the pairing
+                    // Wrap xfm and ref into nested tuple so groupTuple preserves the pairing
                     [sub, ses, [xfm, ref]]
                 }
                 .groupTuple(by: [0, 1])
@@ -533,7 +600,6 @@ workflow FUNC_WF {
                     [sub, ses] + selected
                 }
                 .map { sub, ses, xfm, ref ->
-                    def is_dummy = (xfm.toString().contains('.dummy') || ref.toString().contains('.dummy'))
                     [sub, ses, xfm, ref]
                 }
             
@@ -568,15 +634,16 @@ workflow FUNC_WF {
                         [sub, ses, run_id, conformed_bold, bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
                     }
 
-                // // debug print
-                // func_apply_reg_with_bold.first().view { tuple ->
-                //     "DEBUG [FUNC_COMPUTE_REGISTRATION: func_apply_reg_with_bold]: ${tuple}"
-                // }
-                
             } else {
-                // FUNC_COMPUTE_REGISTRATION.out.transforms is now: [sub, ses, run_id, func2target_xfm, inverse_transform]
-                // FUNC_COMPUTE_REGISTRATION.out.reference is now: [sub, ses, run_id, ref_from_anat_reg]
-                
+                // ============================================
+                // PER-RUN PROCESSING PATH
+                // ============================================
+                // Per-run compute outputs joined with transforms and reference
+                // Input channels:
+                //   - func_compute_reg_output: [sub, ses, run_id, registered_tmean, bids, anat_ses, is_cross_ses]
+                //   - FUNC_COMPUTE_REGISTRATION.out.transforms: [sub, ses, run_id, func2target_xfm, inverse_transform]
+                //   - FUNC_COMPUTE_REGISTRATION.out.reference: [sub, ses, run_id, ref_from_anat_reg]
+                // Output: [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat_ses, is_cross_ses]
                 def func_reg_with_ref = func_compute_reg_output
                     .join(FUNC_COMPUTE_REGISTRATION.out.transforms, by: [0, 1, 2])
                     .join(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1, 2])
@@ -584,17 +651,20 @@ workflow FUNC_WF {
                         [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat_ses, is_cross_ses]
                     }
                 
-                // Single combine with anat_reg_all (replaces two separate joins)
+                // Combine with anatomical registration data
+                // Output: [sub, ses, run_id, registered_tmean, func2target_xfm, anat2template_xfm, ref_from_func_reg, ref_from_anat_reg, anat_ses, is_cross_ses]
                 def func_reg_with_anat = func_reg_with_ref
                     .combine(anat_reg_all, by: [0, 1])
                     .map { sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat_ses, is_cross_ses, anat2template_xfm, ref_from_anat_reg ->
                         [sub, ses, run_id, registered_tmean, func2target_xfm, anat2template_xfm, ref_from_func_reg, ref_from_anat_reg, anat_ses, is_cross_ses]
                     }
                 
+                // Join with conformed BOLD data for application
+                // Input: func_apply_conform_output: [sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids]
+                // Output: [sub, ses, run_id, conformed_bold, bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
                 func_apply_reg_with_bold = func_apply_conform_output
                     .join(func_reg_with_anat, by: [0, 1, 2])
                     .map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids, registered_tmean, func2target_xfm, anat2template_xfm, ref_from_func_reg, ref_from_anat_reg, anat_ses, is_cross_ses ->
-                        // Keep conformed_bold for multiMap extraction
                         [sub, ses, run_id, conformed_bold, bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
                     }
                 // // debug print
@@ -603,6 +673,14 @@ workflow FUNC_WF {
                 // }
             }
 
+            // ============================================
+            // SPLIT CHANNELS FOR FUNC_APPLY_TRANSFORMS
+            // ============================================
+            // Split into registration parameters and BOLD file for process input
+            // Input: func_apply_reg_with_bold: [sub, ses, run_id, conformed_bold, bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
+            // Output channels:
+            //   - reg_combined: [sub, ses, run_id, bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
+            //   - func_4d_file: conformed_bold (separate channel for 4D file)
             func_apply_reg_with_bold
                 .multiMap { sub, ses, run_id, conformed_bold, bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg ->
                     reg_combined: [sub, ses, run_id, bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
@@ -610,11 +688,9 @@ workflow FUNC_WF {
                 }
                 .set { func_apply_reg_multi }
             
-            // // debug print
-            // func_apply_reg_multi.reg_combined.first().view { tuple ->
-            //     "DEBUG [FUNC_APPLY_TRANSFORMS: func_apply_reg_input]: ${tuple}"
-            // }
-            
+            // Apply transforms to BOLD data
+            // Output: func_apply_reg: [sub, ses, run_id, registered_bold, registered_boldref, bids]
+            //         func_apply_reg_reference: [sub, ses, run_id, target_final] (for QC)
             FUNC_APPLY_TRANSFORMS(func_apply_reg_multi.reg_combined, func_apply_reg_multi.func_4d_file, config_file)
             func_apply_reg = FUNC_APPLY_TRANSFORMS.out.output
             func_apply_reg_reference = FUNC_APPLY_TRANSFORMS.out.reference
