@@ -546,24 +546,8 @@ process FUNC_BIAS_CORRECTION {
     
     script:
     """
-    # Set thread environment variables from config
-    THREADS=\$(\${PYTHON:-python3} <<'PYTHON'
-import yaml
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
-threads = config.get('func', {}).get('bias_correction', {}).get('threads', 8)
-threads = min(threads, 32)  # Cap at 32 to prevent oversubscription
-print(threads)
-PYTHON
-    )
-    
-    export OMP_NUM_THREADS=\$THREADS
-    export MKL_NUM_THREADS=\$THREADS
-    export NUMEXPR_NUM_THREADS=\$THREADS
-    export OPENBLAS_NUM_THREADS=\$THREADS
-    export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=\$THREADS
-    
-    echo "Set thread environment variables to \$THREADS"
+    # Thread environment variables are set by Nextflow's beforeScript based on task.cpus
+    # Python code reads OMP_NUM_THREADS from environment
     
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.functional import func_bias_correction
@@ -1787,24 +1771,8 @@ process FUNC_WITHIN_SES_COREG {
     
     script:
     """
-    # Set thread environment variables from config
-    THREADS=\$(\${PYTHON:-python3} <<'PYTHON'
-import yaml
-with open('${config_file}') as f:
-    config = yaml.safe_load(f)
-threads = config.get('registration', {}).get('threads', 8)
-threads = min(threads, 32)  # Cap at 32 to prevent oversubscription
-print(threads)
-PYTHON
-    )
-    
-    export OMP_NUM_THREADS=\$THREADS
-    export MKL_NUM_THREADS=\$THREADS
-    export NUMEXPR_NUM_THREADS=\$THREADS
-    export OPENBLAS_NUM_THREADS=\$THREADS
-    export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=\$THREADS
-    
-    echo "Set thread environment variables to \$THREADS"
+    # Thread environment variables are set by Nextflow's beforeScript based on task.cpus
+    # Python code reads OMP_NUM_THREADS from environment
     
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.functional import func_within_ses_coreg

@@ -174,10 +174,17 @@ class SnapshotProcessor:
     @staticmethod
     def _determine_modality(name: str) -> str:
         """Determine modality from filename."""
-        if 'T1w' in name or 'T2w' in name:
-            return "anatomical"
-        elif 'bold' in name.lower():
+        # Check for functional first (bold suffix), as functional files can contain
+        # space-T1w or space-T2w entities which would otherwise be misclassified
+        if name.lower().endswith('_bold.png') or '_bold.png' in name.lower():
             return "functional"
+        # Check for anatomical in suffix position (e.g., _T1w.png, _T2w.png)
+        # This avoids false positives from space-T1w or space-T2w entities
+        elif name.endswith('_T1w.png') or name.endswith('_T2w.png'):
+            return "anatomical"
+        # Fallback: check if T1w/T2w appears as a suffix pattern (before extension)
+        elif '_T1w.' in name or '_T2w.' in name:
+            return "anatomical"
         elif 'fmap' in name.lower():
             return "field_mapping"
         else:

@@ -492,13 +492,32 @@ workflow FUNC_WF {
             func_compute_reg_output.combine(func_reg_transforms_forward, by: [0, 1]) :
             func_compute_reg_output.join(func_reg_transforms_forward, by: [0, 1, 2])
         
+        // Join with reference - ensure all entries have ref_from_func_reg
+        // FUNC_COMPUTE_REGISTRATION always emits a real file (anatomical brain or template), never a dummy
+        // If a dummy file appears here, it indicates a channel join/mapping bug
         def func_reg_with_ref = isSessionLevel ?
             func_reg_with_transform.combine(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1])
                 .map { sub, ses, run_id, registered_tmean, bids_name, anat_ses, run_id2, func2target_xfm, run_id3, ref_from_func_reg ->
+                    // Validate ref_from_func_reg is not a dummy file
+                    // This should never happen - FUNC_COMPUTE_REGISTRATION always emits real files
+                    if (ref_from_func_reg.toString().contains('.dummy')) {
+                        error "ERROR: ref_from_func_reg is a dummy file for ${sub}/${ses}. " +
+                              "FUNC_COMPUTE_REGISTRATION should have emitted a real reference file (anatomical brain or template). " +
+                              "This indicates a channel join/mapping bug. Check that FUNC_COMPUTE_REGISTRATION.out.reference " +
+                              "has entries for all runs and that the join keys match correctly."
+                    }
                     [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg]
                 } :
             func_reg_with_transform.join(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1, 2])
                 .map { sub, ses, run_id, registered_tmean, bids_name, anat_ses, func2target_xfm, ref_from_func_reg ->
+                    // Validate ref_from_func_reg is not a dummy file
+                    // This should never happen - FUNC_COMPUTE_REGISTRATION always emits real files
+                    if (ref_from_func_reg.toString().contains('.dummy')) {
+                        error "ERROR: ref_from_func_reg is a dummy file for ${sub}/${ses}/${run_id}. " +
+                              "FUNC_COMPUTE_REGISTRATION should have emitted a real reference file (anatomical brain or template). " +
+                              "This indicates a channel join/mapping bug. Check that FUNC_COMPUTE_REGISTRATION.out.reference " +
+                              "has entries for all runs and that the join keys [sub, ses, run_id] match correctly."
+                    }
                     [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg]
                 }
 
@@ -522,7 +541,7 @@ workflow FUNC_WF {
                     [sub, ses, run_id, conformed_bold, bids_name, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
                 } :
             func_apply_conform_output.join(func_reg_with_anat, by: [0, 1, 2])
-                .map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids_name, registered_tmean, func2target_xfm, anat2template_xfm, ref_from_func_reg, ref_from_anat_reg ->
+                .map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids_name, registered_tmean, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg ->
                     [sub, ses, run_id, conformed_bold, bids_name, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
                 }
 
