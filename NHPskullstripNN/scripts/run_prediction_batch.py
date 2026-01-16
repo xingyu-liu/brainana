@@ -20,10 +20,10 @@ from NHPskullstripNN.model import ModelLoader
 # model_name = 'v2'
 
 # func
-test_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/func'
+test_dir = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/test_func_ss'
 model_f = '/home/star/github/banana/NHPskullstripNN/pretrained_model/EPI_brainmask.pth'
 # model_f = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/NHPskullstripNN_training/training_output/EPI_seg-brainmask_v1/checkpoints/best_model.pth'
-model_name = 'v3'
+model_name = 'v1'
 
 output_dir = test_dir + f'/{model_name}'
 

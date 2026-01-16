@@ -92,9 +92,9 @@ process FUNC_REORIENT {
     # Create BIDS-compliant symlink for Nextflow output and publishDir
     create_output_link(result.output_file, bids_output_filename)
     
-    # Copy additional files (e.g., tmean)
+    # Create symlinks for additional files (e.g., tmean) - keep as symlinks until published
     for key, f in result.additional_files.items():
-        shutil.copy2(f, f.name)
+        create_output_link(f, f.name)
     
     # Save metadata
     save_metadata(result.metadata)
@@ -199,7 +199,8 @@ process FUNC_SLICE_TIMING {
     # Create BIDS-compliant symlink for Nextflow output and publishDir
     create_output_link(result.output_file, bids_output_filename)
     
-    # Copy additional files (e.g., tmean) with BIDS-compliant names
+    # Create symlinks for additional files (e.g., tmean) with BIDS-compliant names
+    # Keep as symlinks until published - saves storage
     for key, f in result.additional_files.items():
         if key == 'tmean':
             # Create BIDS-compliant name for tmean (use boldref suffix)
@@ -208,9 +209,9 @@ process FUNC_SLICE_TIMING {
                 suffix='desc-sliceTiming',
                 modality='boldref'
             )
-            shutil.copy2(f, tmean_bids_name)
+            create_output_link(f, tmean_bids_name)
         else:
-            shutil.copy2(f, f.name)
+            create_output_link(f, f.name)
     
     # Save metadata
     save_metadata(result.metadata)
@@ -298,7 +299,9 @@ process FUNC_MOTION_CORRECTION {
     # Create BIDS-compliant symlink for Nextflow output and publishDir
     create_output_link(result.output_file, bids_output_filename)
     
-    # Copy additional files with BIDS-compliant names
+    # Create symlinks for additional files with BIDS-compliant names
+    # Keep large files (tmean) as symlinks until published - saves storage
+    # Small files (motion_params) are copied as they're small and may need to be actual files
     for key, f in result.additional_files.items():
         if key == 'tmean':
             # Create BIDS-compliant name for tmean (use boldref suffix)
@@ -307,16 +310,17 @@ process FUNC_MOTION_CORRECTION {
                 suffix='desc-motion',
                 modality='boldref'
             )
-            shutil.copy2(f, tmean_bids_name)
+            create_output_link(f, tmean_bids_name)
         elif key == 'motion_params':
             # Create BIDS-compliant name for motion parameters
+            # Keep as copy - small file, may need to be actual file for Nextflow
             from macacaMRIprep.utils.bids import get_filename_stem
             original_stem = get_filename_stem(bids_naming_template)
             bids_prefix = original_stem.replace('_bold', '')
             motion_bids_name = f"{bids_prefix}_desc-confounds_timeseries.tsv"
             shutil.copy2(f, motion_bids_name)
         else:
-            shutil.copy2(f, f.name)
+            create_output_link(f, f.name)
     
     # Save metadata
     save_metadata(result.metadata)
@@ -501,7 +505,8 @@ process FUNC_DESPIKE {
     # Create BIDS-compliant symlink for Nextflow output and publishDir
     create_output_link(result.output_file, bids_output_filename)
     
-    # Copy additional files (e.g., tmean) with BIDS-compliant names
+    # Create symlinks for additional files (e.g., tmean) with BIDS-compliant names
+    # Keep as symlinks until published - saves storage
     for key, f in result.additional_files.items():
         if key == 'tmean' or key == 'imagef_despiked_tmean':
             # Create BIDS-compliant name for tmean (use boldref suffix)
@@ -510,9 +515,9 @@ process FUNC_DESPIKE {
                 suffix='desc-despike',
                 modality='boldref'
             )
-            shutil.copy2(f, tmean_bids_name)
+            create_output_link(f, tmean_bids_name)
         else:
-            shutil.copy2(f, f.name)
+            create_output_link(f, f.name)
     
     # Save metadata
     save_metadata(result.metadata)
@@ -786,12 +791,11 @@ process FUNC_COMPUTE_CONFORM {
             conform_inverse_transform_path = Path(bids_transform_name)
         elif key == 'template_resampled':
             # Create symlink at root level for Nextflow output pattern
+            # Use create_output_link() for consistency and proper symlink resolution
             reference_dest = Path('template_resampled.nii.gz')
-            if reference_dest.exists() or reference_dest.is_symlink():
-                reference_dest.unlink()
-            os.symlink(f.resolve(), reference_dest)
+            create_output_link(f, str(reference_dest))
         else:
-            shutil.copy2(f, f.name)
+            create_output_link(f, f.name)
     
     if conform_forward_transform_path is None or not conform_forward_transform_path.exists():
         raise FileNotFoundError("Forward conform transform not found or does not exist")
@@ -1149,13 +1153,13 @@ process FUNC_COMPUTE_REGISTRATION {
     
     input:
     // Input: [sub, ses, run_identifier, masked_tmean, bids_template] + anatomical selection
-    tuple val(subject_id), val(session_id), val(run_identifier), path(masked_tmean), val(bids_naming_template), val(anat_session_id), val(is_cross_ses)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(masked_tmean), val(bids_naming_template), val(anat_session_id)
     path(anat_brain)
     path config_file  // Effective config file with all resolved parameters
     
     output:
-    // Output: [sub, ses, run_identifier, registered_tmean, bids_template, anat_session_id, is_cross_ses]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*boldref.nii.gz"), val(bids_naming_template), val(anat_session_id), val(is_cross_ses), emit: output
+    // Output: [sub, ses, run_identifier, registered_tmean, bids_template, anat_session_id]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*boldref.nii.gz"), val(bids_naming_template), val(anat_session_id), emit: output
     // Transforms: [sub, ses, run_identifier, forward_transform, inverse_transform]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*from-bold_to-*_mode-image_xfm*"), path("*from-*_to-bold_mode-image_xfm*"), emit: transforms
     // Reference: [sub, ses, run_identifier, reference_file]
@@ -1268,7 +1272,8 @@ process FUNC_COMPUTE_REGISTRATION {
     # Create symlink for registered tmean
     create_output_link(result.output_file, bids_output_filename)
     
-    # Copy transform files with BIDS-compliant names (both forward and inverse)
+    # Create symlinks for transform files with BIDS-compliant names (both forward and inverse)
+    # .h5 files can be large, so use symlinks until published - saves storage
     original_stem = get_filename_stem(bids_naming_template)
     bids_prefix = original_stem.replace('_bold', '')
     
@@ -1276,13 +1281,13 @@ process FUNC_COMPUTE_REGISTRATION {
         if key == 'forward_transform':
             # Forward transform: from-bold_to-{space_name}
             bids_transform_name = f"{bids_prefix}_from-bold_to-{space_name}_mode-image_xfm.h5"
-            shutil.copy2(f, bids_transform_name)
+            create_output_link(f, bids_transform_name)
         elif key == 'inverse_transform':
             # Inverse transform: from-{space_name}_to-bold
             bids_transform_name = f"{bids_prefix}_from-{space_name}_to-bold_mode-image_xfm.h5"
-            shutil.copy2(f, bids_transform_name)
+            create_output_link(f, bids_transform_name)
         else:
-            shutil.copy2(f, f.name)
+            create_output_link(f, f.name)
     
     # Emit the original target file used during registration
     # The apply step will resample it if needed (based on keep_func_resolution)
@@ -1631,15 +1636,10 @@ if is_sequential:
     
     # Use template_reff (already resampled to func resolution if keep_func_resolution=True)
     # This avoids duplicate resampling - template_reff was already created above
+    # Use symlink - keep as symlink until published - saves storage
     if template_reff.exists():
-        if template_reff.resolve() != target_final_path.resolve():
-            shutil.copy2(template_reff, target_final_output)
-            print(f"INFO: Created target_final.nii.gz from template_reff (reused from transform)", file=sys.stderr)
-        else:
-            # Same file - read and write to create a new file
-            data = template_reff.read_bytes()
-            target_final_path.write_bytes(data)
-            print(f"INFO: Created target_final.nii.gz from template_reff (reused from transform)", file=sys.stderr)
+        create_output_link(template_reff, target_final_output)
+        print(f"INFO: Created target_final.nii.gz from template_reff (reused from transform)", file=sys.stderr)
     else:
         raise FileNotFoundError(f"Template reference file not found: {template_reff}")
     
@@ -1726,15 +1726,10 @@ else:
     target_final_path = Path(target_final_output)
     
     # Use the same reference file that was used for the transform (already resampled if needed)
+    # Use symlink - keep as symlink until published - saves storage
     if reff.exists():
-        if reff.resolve() != target_final_path.resolve():
-            shutil.copy2(reff, target_final_output)
-            print(f"INFO: Created target_final.nii.gz from reference (same as used for transform)", file=sys.stderr)
-        else:
-            # Same file - read and write to create a new file
-            data = reff.read_bytes()
-            target_final_path.write_bytes(data)
-            print(f"INFO: Created target_final.nii.gz from reference (same as used for transform)", file=sys.stderr)
+        create_output_link(reff, target_final_output)
+        print(f"INFO: Created target_final.nii.gz from reference (same as used for transform)", file=sys.stderr)
     else:
         raise FileNotFoundError(f"Reference file not found for target_final.nii.gz: {reff}")
     
@@ -1901,10 +1896,11 @@ else:
 original_stem = get_filename_stem(bids_naming_template)
 bids_prefix_wo_modality = original_stem.replace("_bold", "").replace("_boldref", "")
 
-# Create transform files for Nextflow pattern matching (but don't publish them - they're intermediate files)
+# Create symlinks for transform files for Nextflow pattern matching (but don't publish them - they're intermediate files)
+# .h5 files can be large, so use symlinks until published - saves storage
 if "forward_transform" in result.additional_files:
     # Create the expected output file name for Nextflow pattern matching
-    shutil.copy2(result.additional_files["forward_transform"], f"from-${run_identifier}_to-${reference_run_identifier}_mode-image_xfm.h5")
+    create_output_link(result.additional_files["forward_transform"], f"from-${run_identifier}_to-${reference_run_identifier}_mode-image_xfm.h5")
 
 if "inverse_transform" in result.additional_files:
     # Create the expected output file name for Nextflow pattern matching (if needed)

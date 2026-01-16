@@ -23,6 +23,9 @@ def create_output_link(source_file, target_file):
     between the work directory and process output directory. Nextflow's publishDir
     will follow the symlink and copy the actual file content to the final output.
     
+    IMPORTANT: Resolves source symlinks to the original non-symlink file before
+    creating a new symlink. This prevents deep symlink chains.
+    
     Args:
         source_file: Path to source file (typically in work/ directory)
         target_file: Path to target file (in process output directory)
@@ -33,13 +36,30 @@ def create_output_link(source_file, target_file):
     try:
         source_path = Path(source_file)
         target_path = Path(target_file)
+        
+        # Remove target if it exists
         if target_path.exists() or target_path.is_symlink():
             target_path.unlink()
-        source_rel = os.path.relpath(str(source_path), str(target_path.parent))
+        
+        # Resolve source to actual file (follows symlink chain to original file)
+        # This prevents creating symlinks to symlinks (deep symlink chains)
+        source_resolved = source_path.resolve(strict=True)
+        
+        # Calculate relative path from target's parent to resolved source
+        # This ensures the symlink works even if work directories are moved
+        source_rel = os.path.relpath(str(source_resolved), str(target_path.parent))
+        
+        # Create symlink pointing to the resolved source
         os.symlink(source_rel, str(target_path))
     except (OSError, AttributeError):
         # Symlink not possible (different filesystem or Windows), use copy
-        shutil.copy2(source_file, target_file)
+        # Also resolve source before copying to ensure we copy the actual file
+        try:
+            source_resolved = Path(source_file).resolve(strict=True)
+            shutil.copy2(str(source_resolved), str(target_file))
+        except Exception:
+            # Fallback to original source if resolve fails
+            shutil.copy2(source_file, target_file)
 
 
 def load_config(config_file_path: Union[str, Path]) -> Dict[str, Any]:

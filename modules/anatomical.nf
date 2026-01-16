@@ -78,16 +78,8 @@ bids_output_filename = create_bids_filename(
 )
 
 # Use symlinks to avoid duplication - Nextflow publishDir will handle final copy
-if synthesized:
-    # Actual synthesis occurred - create symlink to synthesized file
-    create_output_link(result.output_file, bids_output_filename)
-else:
-    # No synthesis (single file) - create hard link to avoid duplicating data
-    try:
-        os.link(result.output_file, bids_output_filename)
-    except (OSError, AttributeError):
-        # Hard link not possible (different filesystem or Windows), use copy
-        shutil.copy2(result.output_file, bids_output_filename)
+# Always use create_output_link() which resolves symlinks to original source
+create_output_link(result.output_file, bids_output_filename)
 
 # Save metadata
 save_metadata(result.metadata)
@@ -297,14 +289,13 @@ if "inverse_transform" in result.additional_files:
     shutil.copy2(result.additional_files["inverse_transform"], bids_transform_name)
 
 # Create symlink to reference file for QC (file is in work/ subdirectory, needs to be at root for Nextflow output)
+# Use create_output_link() for consistency and proper symlink resolution
 if "template_resampled" in result.additional_files:
     reference_src = result.additional_files["template_resampled"]
     if reference_src.exists():
         # Create symlink at root level so Nextflow output pattern can find it
         reference_dest = Path('template_resampled.nii.gz')
-        if os.path.exists(reference_dest):
-            os.remove(reference_dest)
-        os.symlink(reference_src, reference_dest)
+        create_output_link(reference_src, str(reference_dest))
 
 # Save metadata
 save_metadata(result.metadata)
@@ -485,27 +476,28 @@ bids_output_filename = f"{bids_prefix_wo_modality}_desc-preproc_{modality}_brain
 # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
 create_output_link(result.output_file, bids_output_filename)
 
-# Copy and rename additional files with BIDS-compliant names
+# Create symlinks for additional files with BIDS-compliant names
+# Keep large files (masks, segmentations) as symlinks until published - saves storage
 atlas_name = result.metadata.get('atlas_name')
 
 if "brain_mask" in result.additional_files:
     bids_additional_name = f"{bids_prefix_wo_modality}_desc-brain_mask.nii.gz"
-    shutil.copy2(result.additional_files["brain_mask"], bids_additional_name)
+    create_output_link(result.additional_files["brain_mask"], bids_additional_name)
 
 if "segmentation" in result.additional_files:
     if atlas_name:
         bids_additional_name = f"{bids_prefix_wo_modality}_desc-brain_atlas{atlas_name}.nii.gz"
     else:
         bids_additional_name = f"{bids_prefix_wo_modality}_desc-brain_segmentation.nii.gz"
-    shutil.copy2(result.additional_files["segmentation"], bids_additional_name)
+    create_output_link(result.additional_files["segmentation"], bids_additional_name)
 
 if "hemimask" in result.additional_files:
     bids_additional_name = f"{bids_prefix_wo_modality}_desc-brain_hemimask.nii.gz"
-    shutil.copy2(result.additional_files["hemimask"], bids_additional_name)
+    create_output_link(result.additional_files["hemimask"], bids_additional_name)
 
 if "input_cropped" in result.additional_files:
     # Keep original name for input_cropped (or define BIDS name if needed)
-    shutil.copy2(result.additional_files["input_cropped"], result.additional_files["input_cropped"].name)
+    create_output_link(result.additional_files["input_cropped"], result.additional_files["input_cropped"].name)
 
 # Save metadata
 save_metadata(result.metadata)
@@ -741,29 +733,26 @@ original_stem = get_filename_stem(bids_naming_template)
 # Generate BIDS prefix (filename stem without modality)
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 
-# Copy transform files with BIDS-compliant names
+# Create symlinks for transform files with BIDS-compliant names
+# .h5 files can be large, so use symlinks until published - saves storage
 if "forward_transform" in result.additional_files:
     # Forward transform: from-{modality}_to-{template_name}
     bids_transform_name = f"{bids_prefix_wo_modality}_from-{modality}_to-{template_name}_mode-image_xfm.h5"
-    shutil.copy2(result.additional_files["forward_transform"], bids_transform_name)
+    create_output_link(result.additional_files["forward_transform"], bids_transform_name)
 
 if "inverse_transform" in result.additional_files:
     # Inverse transform: from-{template_name}_to-{modality}
     bids_transform_name = f"{bids_prefix_wo_modality}_from-{template_name}_to-{modality}_mode-image_xfm.h5"
-    shutil.copy2(result.additional_files["inverse_transform"], bids_transform_name)
+    create_output_link(result.additional_files["inverse_transform"], bids_transform_name)
 
 # Create ref_from_anat_reg.nii.gz for QC reference
 # This is the template file used as the reference for registration
 ref_from_anat_reg_path = Path(f"{bids_prefix_wo_modality}_ref_from_anat_reg.nii.gz")
 
-# Copy template file as reference (the actual template used during registration)
+# Create symlink to template file (the actual template used during registration)
+# Use symlink - keep as symlink until published - saves storage
 if template_file.exists():
-    if template_file.resolve() != ref_from_anat_reg_path.resolve():
-        shutil.copy2(template_file, str(ref_from_anat_reg_path))
-    else:
-        # Same file - read and write to create a new file
-        data = template_file.read_bytes()
-        ref_from_anat_reg_path.write_bytes(data)
+    create_output_link(template_file, str(ref_from_anat_reg_path))
 else:
     raise FileNotFoundError(f"Template file not found: {template_file}")
 
@@ -880,16 +869,17 @@ create_output_link(result.output_file, bids_output_filename)
 # Generate BIDS prefix (filename stem without modality)
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 
-# Copy transform files with BIDS-compliant names
+# Create symlinks for transform files with BIDS-compliant names
+# .h5 files can be large, so use symlinks until published - saves storage
 if "forward_transform" in result.additional_files:
     # Forward transform: from-T2w_to-T1w
     bids_transform_name = f"{bids_prefix_wo_modality}_from-T2w_to-T1w_mode-image_xfm.h5"
-    shutil.copy2(result.additional_files["forward_transform"], bids_transform_name)
+    create_output_link(result.additional_files["forward_transform"], bids_transform_name)
 
 if "inverse_transform" in result.additional_files:
     # Inverse transform: from-T1w_to-T2w
     bids_transform_name = f"{bids_prefix_wo_modality}_from-T1w_to-T2w_mode-image_xfm.h5"
-    shutil.copy2(result.additional_files["inverse_transform"], bids_transform_name)
+    create_output_link(result.additional_files["inverse_transform"], bids_transform_name)
 
 # Save metadata
 save_metadata(result.metadata)
@@ -925,7 +915,7 @@ process ANAT_CONFORM_PASSTHROUGH {
     """
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.nextflow import detect_modality, save_metadata
+from macacaMRIprep.utils.nextflow import detect_modality, save_metadata, create_output_link
 from pathlib import Path
 import shutil
 import os
@@ -940,12 +930,13 @@ modality = detect_modality(bids_naming_template)
 original_stem = get_filename_stem(bids_naming_template)
 
 # Pass through input file (create symlink)
+# Use create_output_link() for consistency and proper symlink resolution
 bids_output_filename = create_bids_output_filename(
     original_file_path=bids_naming_template,
     suffix='desc-conform',
     modality=modality
 )
-os.symlink(Path('${input_file}').resolve(), bids_output_filename)
+create_output_link(Path('${input_file}'), bids_output_filename)
 
 # Generate BIDS prefix
 bids_prefix = original_stem.replace(f"_{modality}", "")
@@ -962,9 +953,10 @@ np.savetxt(forward_transform_name, identity_matrix, fmt='%.6f', delimiter=' ')
 inverse_transform_name = f"{bids_prefix}_from-{modality}_to-scanner_mode-image_xfm.mat"
 np.savetxt(inverse_transform_name, identity_matrix, fmt='%.6f', delimiter=' ')
 
-# Create dummy reference (copy of input for QC compatibility)
+# Create dummy reference (symlink to input for QC compatibility)
+# Keep as symlink until published - saves storage
 reference_name = 'reference.nii.gz'
-shutil.copy2(Path('${input_file}'), reference_name)
+create_output_link(Path('${input_file}'), reference_name)
 
 # Save metadata
 metadata = {
@@ -999,7 +991,7 @@ process ANAT_BIAS_CORRECTION_PASSTHROUGH {
     """
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.nextflow import detect_modality, save_metadata
+from macacaMRIprep.utils.nextflow import detect_modality, save_metadata, create_output_link
 from pathlib import Path
 import os
 
@@ -1011,12 +1003,13 @@ modality = detect_modality(bids_naming_template)
 original_stem = get_filename_stem(bids_naming_template)
 
 # Pass through input file (create symlink)
+# Use create_output_link() for consistency and proper symlink resolution
 bids_output_filename = create_bids_output_filename(
     original_file_path=bids_naming_template,
     suffix='desc-preproc',
     modality=modality
 )
-os.symlink(Path('${input_file}').resolve(), bids_output_filename)
+create_output_link(Path('${input_file}'), bids_output_filename)
 
 # Save metadata
 metadata = {
@@ -1069,7 +1062,7 @@ PYTHON_OUTPUT_SPACE
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
 from macacaMRIprep.utils.templates import resolve_template
-from macacaMRIprep.utils.nextflow import detect_modality, save_metadata
+from macacaMRIprep.utils.nextflow import detect_modality, save_metadata, create_output_link, load_config
 from pathlib import Path
 import os
 import subprocess
@@ -1088,12 +1081,13 @@ effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym
 template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
 
 # Pass through input file (create symlink with space entity)
+# Use create_output_link() for consistency and proper symlink resolution
 bids_output_filename = create_bids_output_filename(
     original_file_path=bids_naming_template,
     suffix=f'space-{template_name}_desc-preproc',
     modality=modality
 )
-os.symlink(Path('${input_file}').resolve(), bids_output_filename)
+create_output_link(Path('${input_file}'), bids_output_filename)
 
 # Generate BIDS prefix
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
@@ -1138,20 +1132,17 @@ except (subprocess.CalledProcessError, FileNotFoundError):
         f.write('FixedParameters: 0 0 0\n')
 
 # Inverse transform: from-{template_name}_to-{modality} (same as forward for identity)
+# Use symlink since it's the same file - saves storage
 inverse_transform_name = f"{bids_prefix_wo_modality}_from-{template_name}_to-{modality}_mode-image_xfm.h5"
-shutil.copy2(forward_transform_name, inverse_transform_name)
+create_output_link(forward_transform_name, inverse_transform_name)
 
 # Create ref_from_anat_reg.nii.gz for QC reference (same as in ANAT_REGISTRATION) 
+# Use symlink - keep as symlink until published - saves storage
 ref_from_anat_reg_path = Path(f"{bids_prefix_wo_modality}_ref_from_anat_reg.nii.gz")
 
-# Copy template file as reference
+# Create symlink to template file
 if template_file.exists():
-    if template_file.resolve() != ref_from_anat_reg_path.resolve():
-        shutil.copy2(template_file, str(ref_from_anat_reg_path))
-    else:
-        # Same file - read and write to create a new file
-        data = template_file.read_bytes()
-        ref_from_anat_reg_path.write_bytes(data)
+    create_output_link(template_file, str(ref_from_anat_reg_path))
 else:
     raise FileNotFoundError(f"Template file not found: {template_file}")
 
@@ -1172,3 +1163,264 @@ EOF
     """
 }
 
+// ============================================
+// ANATOMICAL APPLY MODULES (for T2w processing)
+// ============================================
+// These modules apply T1w's computed transforms/masks to T2w data
+
+process ANAT_APPLY_CONFORM {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
+        mode: 'copy',
+        pattern: '*.{nii.gz,mat}'
+    
+    input:
+    // Input: [sub, ses, t2w_file, t2w_bids_name, conform_transform, conformed_reference, anat_ses]
+    // Stage conformed_reference as reg_reference.nii.gz to avoid output pattern collision
+    tuple val(subject_id), val(session_id), path(t2w_file), val(bids_naming_template), path(conform_transform), path(conformed_reference, stageAs: 'reg_reference.nii.gz'), val(anatomical_session)
+    path config_file
+    
+    output:
+    // Output: [sub, ses, conformed_t2w, t2w_bids_name, anat_ses]
+    tuple val(subject_id), val(session_id), path("*desc-conform_T2w.nii.gz"), val(bids_naming_template), val(anatomical_session), emit: output
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.operations.registration import flirt_apply_transforms
+from macacaMRIprep.utils.bids import create_bids_output_filename
+from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
+from pathlib import Path
+
+# Initialize command log file
+init_cmd_log_for_nextflow(
+    output_dir='${params.output_dir}',
+    subject_id='${subject_id}',
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_APPLY_CONFORM'
+)
+
+# Load config
+config = load_config('${config_file}')
+
+# Get original file path (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Apply conform transform to T2w
+t2w_result = flirt_apply_transforms(
+    movingf=str(Path('${t2w_file}')),
+    outputf_name='t2w_conformed.nii.gz',
+    reff=str(Path('reg_reference.nii.gz')),
+    working_dir='work',
+    transformf=str(Path('${conform_transform}')),
+    logger=None,
+    interpolation='trilinear',
+    generate_tmean=False
+)
+
+if not t2w_result.get("imagef_registered"):
+    raise FileNotFoundError("Failed to apply conform transform to T2w")
+
+# Generate BIDS-compliant output filename
+bids_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-conform',
+    modality='T2w'
+)
+
+# Create symlink
+create_output_link(Path(t2w_result["imagef_registered"]), bids_output_filename)
+
+# Save metadata
+save_metadata({
+    "step": "apply_conform",
+    "modality": "T2w",
+    "t2w_file": str(Path('${t2w_file}')),
+    "conform_transform": str(Path('${conform_transform}')),
+    "anatomical_session": '${anatomical_session}'
+})
+EOF
+    """
+}
+
+process ANAT_APPLY_BRAIN_MASK {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
+        mode: 'copy',
+        pattern: '*.nii.gz'
+    
+    input:
+    // Input: [sub, ses, conformed_t2w, t2w_bids_name, brain_mask, anat_ses]
+    tuple val(subject_id), val(session_id), path(conformed_t2w), val(bids_naming_template), path(brain_mask), val(anatomical_session)
+    path config_file
+    
+    output:
+    // Output: [sub, ses, masked_t2w, t2w_bids_name, anat_ses]
+    tuple val(subject_id), val(session_id), path("*desc-conform_desc-brain_T2w.nii.gz"), val(bids_naming_template), val(anatomical_session), emit: output
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.operations.preprocessing import apply_mask
+from macacaMRIprep.utils.bids import create_bids_output_filename
+from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
+from pathlib import Path
+import logging
+
+# Initialize command log file
+init_cmd_log_for_nextflow(
+    output_dir='${params.output_dir}',
+    subject_id='${subject_id}',
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_APPLY_BRAIN_MASK'
+)
+
+# Load config
+config = load_config('${config_file}')
+
+# Get original file path (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Apply brain mask to T2w using apply_mask function
+logger = logging.getLogger(__name__)
+
+masked_t2w_path = Path('work') / 't2w_masked.nii.gz'
+result = apply_mask(
+    imagef=str(Path('${conformed_t2w}')),
+    maskf=str(Path('${brain_mask}')),
+    working_dir=Path('work'),
+    output_name='t2w_masked.nii.gz',
+    logger=logger,
+    generate_tmean=False
+)
+
+masked_t2w_path = Path(result['imagef_masked'])
+if not masked_t2w_path.exists():
+    raise FileNotFoundError("Failed to apply brain mask to T2w")
+
+# Generate BIDS-compliant output filename
+bids_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-conform_desc-brain',
+    modality='T2w'
+)
+
+# Create symlink
+create_output_link(masked_t2w_path, bids_output_filename)
+
+# Save metadata
+save_metadata({
+    "step": "apply_brain_mask",
+    "modality": "T2w",
+    "t2w_file": str(Path('${conformed_t2w}')),
+    "mask_file": str(Path('${brain_mask}')),
+    "anatomical_session": '${anatomical_session}'
+})
+EOF
+    """
+}
+
+process ANAT_APPLY_REGISTRATION {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
+        mode: 'copy',
+        pattern: '*.{nii.gz,h5}',
+        saveAs: { filename -> filename.contains('target_final.nii.gz') ? null : filename }
+    
+    input:
+    // Input: [sub, ses, masked_t2w, t2w_bids_name, registration_transform, registration_reference]
+    tuple val(subject_id), val(session_id), path(masked_t2w), val(bids_naming_template), path(registration_transform), path(registration_reference)
+    path config_file
+    
+    output:
+    // Output: [sub, ses, registered_t2w, t2w_bids_name]
+    tuple val(subject_id), val(session_id), path("*space-*desc-preproc_T2w.nii.gz"), val(bids_naming_template), emit: output
+    // Reference file for QC: final target reference at appropriate resolution
+    tuple val(subject_id), val(session_id), path("*target_final.nii.gz"), emit: reference
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.operations.registration import ants_apply_transforms
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
+from pathlib import Path
+import re
+import shutil
+
+# Initialize command log file
+init_cmd_log_for_nextflow(
+    output_dir='${params.output_dir}',
+    subject_id='${subject_id}',
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_APPLY_REGISTRATION'
+)
+
+# Load config
+config = load_config('${config_file}')
+
+# Get original file path (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Determine output space from transform filename
+transform_path = Path('${registration_transform}')
+transform_stem = get_filename_stem(transform_path)
+
+# Extract template name from transform filename (e.g., "from-T1w_to-NMT2Sym" -> "NMT2Sym")
+space_match = re.search(r'to-([A-Za-z0-9]+)', transform_stem)
+if space_match:
+    template_name = space_match.group(1)
+else:
+    # Fallback: get from config
+    template_name = config.get('template', {}).get('output_space', 'NMT2Sym:res-05').split(':')[0]
+
+# Apply registration transform to T2w
+t2w_result = ants_apply_transforms(
+    movingf=str(Path('${masked_t2w}')),
+    moving_type=0,  # 0: scalar (anatomical image)
+    interpolation='Linear',
+    outputf_name='t2w_registered.nii.gz',
+    fixedf=str(Path('${registration_reference}')),
+    working_dir='work',
+    transformf=[str(Path('${registration_transform}'))],
+    reff=str(Path('${registration_reference}')),
+    logger=None
+)
+
+if not t2w_result.get("imagef_registered"):
+    raise FileNotFoundError("Failed to apply registration transform to T2w")
+
+# Generate BIDS-compliant output filename with space entity
+bids_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix=f'space-{template_name}_desc-preproc',
+    modality='T2w'
+)
+
+# Create symlink
+create_output_link(Path(t2w_result["imagef_registered"]), bids_output_filename)
+
+# Create reference file for QC (copy of registration_reference)
+ref_from_reg_path = Path(f"{get_filename_stem(bids_output_filename)}_target_final.nii.gz")
+shutil.copy2(Path('${registration_reference}'), ref_from_reg_path)
+
+# Save metadata
+save_metadata({
+    "step": "apply_registration",
+    "modality": "T2w",
+    "t2w_file": str(Path('${masked_t2w}')),
+    "registration_transform": str(Path('${registration_transform}')),
+    "template_name": template_name
+})
+EOF
+    """
+}

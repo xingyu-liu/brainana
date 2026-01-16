@@ -104,12 +104,17 @@ def print_summary(
     t1w_jobs = [j for j in anat_jobs if j.get('suffix') == 'T1w']
     t2w_jobs = [j for j in anat_jobs if j.get('suffix') == 'T2w']
     synthesis_jobs = [j for j in anat_jobs if j.get('needs_synthesis', False)]
+    t1w_synthesis_jobs = [j for j in synthesis_jobs if j.get('synthesis_type') == 't1w']
+    t2w_synthesis_jobs = [j for j in synthesis_jobs if j.get('synthesis_type') == 't2w']
     
     print(f"  T1w files: {len(t1w_jobs)}")
-    if synthesis_jobs:
-        print(f"    - Multi-run synthesis needed: {len(synthesis_jobs)}")
-        print(f"    - Single T1w files: {len(t1w_jobs) - len(synthesis_jobs)}")
+    if t1w_synthesis_jobs:
+        print(f"    - Multi-run synthesis needed: {len(t1w_synthesis_jobs)}")
+        print(f"    - Single T1w files: {len(t1w_jobs) - len(t1w_synthesis_jobs)}")
     print(f"  T2w files: {len(t2w_jobs)}")
+    if t2w_synthesis_jobs:
+        print(f"    - Multi-run synthesis needed: {len(t2w_synthesis_jobs)}")
+        print(f"    - Single T2w files: {len(t2w_jobs) - len(t2w_synthesis_jobs)}")
     
     # Functional summary
     print(f"\nFunctional data:")

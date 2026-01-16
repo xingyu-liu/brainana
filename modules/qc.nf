@@ -314,7 +314,7 @@ process QC_T2W_TO_T1W_REGISTRATION {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), path(registered_t2w_file), path(t1w_reference_file)
+    tuple val(subject_id), val(session_id), path(t2w_in_t1w_space), path(t1w_brain)
     val(bids_naming_template)
     path config_file
     
@@ -333,13 +333,15 @@ from pathlib import Path
 from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
-# Get T1w reference file
-t1w_reference = Path('${t1w_reference_file}')
+# Get T1w brain file (skullstripped T1w for contour overlay)
+t1w_brain = Path('${t1w_brain}')
+if not t1w_brain.exists():
+    raise FileNotFoundError(f"T1w brain file not found: {t1w_brain}")
 
-# Get the registered T2w file directly from input
-registered_t2w = Path('${registered_t2w_file}')
-if not registered_t2w.exists():
-    raise FileNotFoundError(f"Registered T2w file not found: {registered_t2w}")
+# Get conformed T2w (after applying conform transform)
+conformed_t2w = Path('${t2w_in_t1w_space}')
+if not conformed_t2w.exists():
+    raise FileNotFoundError(f"Conformed T2w file not found: {conformed_t2w}")
 
 # Get BIDS naming template (for BIDS filename generation)
 bids_naming_template = Path('${bids_naming_template}')
@@ -353,12 +355,77 @@ modality = 'T2w'
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 qc_output_filename = f"{bids_prefix_wo_modality}_desc-T2w2T1w_{modality}.png"
 
-# Generate QC
+# Generate QC: Conformed T2w (underlay) with T1w brain contours (overlay)
 result = qc_registration(
-    image_file=registered_t2w,
-    template_file=t1w_reference,  # Use T1w reference instead of template
+    image_file=conformed_t2w,
+    template_file=t1w_brain,  # T1w brain for contour overlay
     output_path=Path(qc_output_filename),
     modality='T2w2T1w',
+    config=config
+)
+
+# Save metadata
+save_metadata(result.metadata)
+EOF
+    """
+}
+
+process QC_T2W_TEMPLATE_SPACE {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}/figures",
+        mode: 'copy',
+        pattern: '*.png'
+    
+    input:
+    tuple val(subject_id), val(session_id), path(t2w_in_template_space), path(template_reference)
+    val(bids_naming_template)
+    path config_file
+    
+    output:
+    path "*.png", emit: qc_files
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.steps.qc import qc_registration
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from pathlib import Path
+
+# Load config
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
+
+# Get template reference file (for contour overlay)
+template_reference = Path('${template_reference}')
+if not template_reference.exists():
+    raise FileNotFoundError(f"Template reference file not found: {template_reference}")
+
+# Get T2w in template space (after all transforms)
+t2w_in_template_space = Path('${t2w_in_template_space}')
+if not t2w_in_template_space.exists():
+    raise FileNotFoundError(f"T2w in template space file not found: {t2w_in_template_space}")
+
+# Get BIDS naming template (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Determine modality from BIDS naming template filename
+original_stem = get_filename_stem(bids_naming_template)
+modality = 'T2w'
+
+# Generate BIDS-compliant QC output filename
+# Format: {prefix}_desc-T2w2template_T2w.png
+bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
+qc_output_filename = f"{bids_prefix_wo_modality}_desc-T2w2template_{modality}.png"
+
+# Generate QC: T2w in template space (underlay) with template reference contours (overlay)
+result = qc_registration(
+    image_file=t2w_in_template_space,
+    template_file=template_reference,  # Template reference for contour overlay
+    output_path=Path(qc_output_filename),
+    modality='T2w2template',
     config=config
 )
 

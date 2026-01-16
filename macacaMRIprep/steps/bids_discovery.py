@@ -187,18 +187,22 @@ def discover_bids_dataset(
                 if not anat_files:
                     continue
                 
-                # Group T1w files by run to detect multi-run cases
+                # Group T1w and T2w files by run to detect multi-run cases
                 t1w_files = [f for f in anat_files if f.get_entities().get('suffix') == 'T1w']
                 t2w_files = [f for f in anat_files if f.get_entities().get('suffix') == 'T2w']
                 
                 # Check if multiple T1w runs exist (needs synthesis)
                 t1w_runs = [f.get_entities().get('run') for f in t1w_files if f.get_entities().get('run')]
-                needs_synthesis = len(set(t1w_runs)) > 1 if t1w_runs else False
+                t1w_needs_synthesis = len(set(t1w_runs)) > 1 if t1w_runs else False
+                
+                # Check if multiple T2w runs exist (needs synthesis)
+                t2w_runs = [f.get_entities().get('run') for f in t2w_files if f.get_entities().get('run')]
+                t2w_needs_synthesis = len(set(t2w_runs)) > 1 if t2w_runs else False
                 
                 # Create job for each anatomical file
                 # For T1w: if multiple runs, create synthesis job first
                 if t1w_files:
-                    if needs_synthesis:
+                    if t1w_needs_synthesis:
                         # Create synthesis job
                         synthesis_job = {
                             "subject_id": sub,
@@ -230,24 +234,43 @@ def discover_bids_dataset(
                             }
                             anatomical_jobs.append(job)
                 
-                # T2w files (always individual jobs)
+                # T2w files: if multiple runs, create synthesis job; otherwise individual jobs
                 # Check if T2w should be registered to T1w (if T1w exists in same session)
                 has_t1w_in_session = len(t1w_files) > 0
-                for t2w_file in t2w_files:
-                    entities = t2w_file.get_entities()
-                    job = {
-                        "subject_id": sub,
-                        "session_id": ses,
-                        "file_path": t2w_file.path,
-                        "modality": "anat",
-                        "suffix": "T2w",
-                        "task": None,
-                        "run": entities.get('run'),
-                        "entities": entities,
-                        "needs_synthesis": False,
-                        "needs_t1w_registration": has_t1w_in_session  # Flag for special T2w processing
-                    }
-                    anatomical_jobs.append(job)
+                if t2w_files:
+                    if t2w_needs_synthesis:
+                        # Create synthesis job for T2w
+                        t2w_synthesis_job = {
+                            "subject_id": sub,
+                            "session_id": ses,
+                            "file_paths": [f.path for f in t2w_files],
+                            "modality": "anat",
+                            "suffix": "T2w",
+                            "task": None,
+                            "run": None,
+                            "entities": t2w_files[0].get_entities(),
+                            "needs_synthesis": True,
+                            "synthesis_type": "t2w",
+                            "needs_t1w_registration": has_t1w_in_session
+                        }
+                        anatomical_jobs.append(t2w_synthesis_job)
+                    else:
+                        # Single T2w file - create regular job
+                        for t2w_file in t2w_files:
+                            entities = t2w_file.get_entities()
+                            job = {
+                                "subject_id": sub,
+                                "session_id": ses,
+                                "file_path": t2w_file.path,
+                                "modality": "anat",
+                                "suffix": "T2w",
+                                "task": None,
+                                "run": entities.get('run'),
+                                "entities": entities,
+                                "needs_synthesis": False,
+                                "needs_t1w_registration": has_t1w_in_session  # Flag for special T2w processing
+                            }
+                            anatomical_jobs.append(job)
     
     # Discover functional files (skip if anat_only is True)
     if not anat_only:

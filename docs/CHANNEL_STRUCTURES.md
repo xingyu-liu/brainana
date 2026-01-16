@@ -148,11 +148,12 @@ Where:
 
 **Anatomical Selection** (`func_anat_selection`):
 ```groovy
-// [sub, ses, run_id, anat_file, anat_ses, is_cross_ses]
+// [sub, ses, anat_file, anat_ses]
 ```
 - `anat_file`: Selected anatomical reference file
 - `anat_ses`: Session ID of anatomical data (may differ from func session)
-- `is_cross_ses`: Boolean indicating if cross-session match
+- **Note**: Session-level only (no run_id) - all runs in the same session use the same anatomical reference
+- Use `combine()` to match with run-level functional data
 
 ### Registration Data Channels
 
@@ -337,9 +338,9 @@ def func_compute_input = func_after_coreg
         [sub, ses, run_id, tmean, bids]
     }
 
-// Join with anatomical selection (matches by [sub, ses, run_id])
+// Combine with anatomical selection (session-level, matches by [sub, ses])
 def func_with_anat = func_compute_input
-    .join(func_anat_selection, by: [0, 1, 2])  // by: [0, 1, 2] = [sub, ses, run_id]
+    .combine(func_anat_selection, by: [0, 1])  // by: [0, 1] = [sub, ses] (anatomical selection is session-level)
 ```
 
 ### Example 3: Channel Splitting
