@@ -605,7 +605,7 @@ process ANAT_REGISTRATION {
         saveAs: { filename -> filename.contains('ref_from_anat_reg.nii.gz') ? null : filename }
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template), path(unskullstripped_file)
     path config_file  // Effective config file with all resolved parameters
     
     output:
@@ -669,9 +669,16 @@ template_name = effective_output_space.split(':')[0] if effective_output_space e
 # Resolve template
 template_file = Path(resolve_template(effective_output_space))
 
-# Create step input
+# Check if unskullstripped version is provided and different from input file
+unskullstripped_path = Path('${unskullstripped_file}')
+input_path = Path('${input_file}')
+use_unskullstripped = (unskullstripped_path.exists() and 
+                       unskullstripped_path.stat().st_size > 0 and
+                       str(unskullstripped_path) != str(input_path))
+
+# Create step input for registration (use skullstripped version for computing transform)
 input_obj = StepInput(
-    input_file=Path('${input_file}'),
+    input_file=input_path,
     working_dir=Path('work'),
     config=config,
     output_name='anat_registered.nii.gz',
@@ -681,8 +688,34 @@ input_obj = StepInput(
     }
 )
 
-# Run step
+# Run step to compute transform (on skullstripped version)
 result = anat_registration(input_obj, template_file=template_file, template_name=template_name)
+
+# If unskullstripped version is provided and different, apply transform to it instead
+if use_unskullstripped:
+    from macacaMRIprep.operations.registration import ants_apply_transforms
+    
+    # Get the forward transform file
+    forward_transform = result.additional_files.get("forward_transform")
+    if not forward_transform or not forward_transform.exists():
+        raise FileNotFoundError(f"Forward transform file not found: {forward_transform}")
+    
+    # Apply the transform to the unskullstripped version
+    # Use LanczosWindowedSinc for continuous-value anatomical images (high-quality interpolation)
+    apply_result = ants_apply_transforms(
+        movingf=str(unskullstripped_path),
+        moving_type=0,  # 0: scalar (anatomical image)
+        interpolation='LanczosWindowedSinc',
+        outputf_name='anat_registered.nii.gz',
+        fixedf=str(template_file),
+        working_dir=str(Path('work')),
+        transformf=[str(forward_transform)],
+        reff=str(template_file),
+        logger=None
+    )
+    
+    # Update the output file to point to the unskullstripped registered version
+    result.output_file = Path(apply_result["imagef_registered"])
 
 # Generate BIDS-compliant output filename with space entity
 # Format: space-{template}_desc-preproc_{modality}.nii.gz
@@ -1278,7 +1311,7 @@ EOF
     """
 }
 
-process ANAT_APPLY_REGISTRATION {
+process ANAT_APPLY_TRANSFORMATION {
     label 'cpu'
     tag "${subject_id}_${session_id}"
     
@@ -1314,7 +1347,7 @@ init_cmd_log_for_nextflow(
     output_dir='${params.output_dir}',
     subject_id='${subject_id}',
     session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_APPLY_REGISTRATION'
+    step_name='ANAT_APPLY_TRANSFORMATION'
 )
 
 # Load config
@@ -1336,10 +1369,11 @@ else:
     template_name = config.get('template', {}).get('output_space', 'NMT2Sym:res-05').split(':')[0]
 
 # Apply registration transform to T2w
+# Use LanczosWindowedSinc for continuous-value anatomical images (high-quality interpolation)
 t2w_result = ants_apply_transforms(
     movingf=str(Path('${masked_t2w}')),
     moving_type=0,  # 0: scalar (anatomical image)
-    interpolation='Linear',
+    interpolation='LanczosWindowedSinc',
     outputf_name='t2w_registered.nii.gz',
     fixedf=str(Path('${registration_reference}')),
     working_dir='work',
@@ -1372,6 +1406,114 @@ save_metadata({
     "t2w_file": str(Path('${masked_t2w}')),
     "registration_transform": str(Path('${registration_transform}')),
     "template_name": template_name
+})
+EOF
+    """
+}
+
+process ANAT_APPLY_TRANSFORM_MASK {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
+        mode: 'copy',
+        pattern: '*.nii.gz'
+    
+    input:
+    // Input: [sub, ses, mask_file, registration_transform, registration_reference]
+    tuple val(subject_id), val(session_id), path(mask_file), path(registration_transform), path(registration_reference)
+    path config_file
+    
+    output:
+    // Output: [sub, ses, transformed_mask]
+    tuple val(subject_id), val(session_id), path("*space-*desc-brain_mask.nii.gz"), emit: output
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.operations.registration import ants_apply_transforms
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
+from pathlib import Path
+import re
+
+# Initialize command log file
+init_cmd_log_for_nextflow(
+    output_dir='${params.output_dir}',
+    subject_id='${subject_id}',
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_APPLY_TRANSFORM_MASK'
+)
+
+# Load config
+config = load_config('${config_file}')
+
+# Get mask file path
+mask_file = Path('${mask_file}')
+
+# Determine output space from transform filename
+transform_path = Path('${registration_transform}')
+transform_stem = get_filename_stem(transform_path)
+
+# Extract template name from transform filename (e.g., "from-T1w_to-NMT2Sym" -> "NMT2Sym")
+space_match = re.search(r'to-([A-Za-z0-9]+)', transform_stem)
+if space_match:
+    template_name = space_match.group(1)
+else:
+    # Fallback: get from config
+    template_name = config.get('template', {}).get('output_space', 'NMT2Sym:res-05').split(':')[0]
+
+# Apply registration transform to mask using NearestNeighbor interpolation (for binary masks)
+mask_result = ants_apply_transforms(
+    movingf=str(mask_file),
+    moving_type=0,  # 0: scalar
+    interpolation='NearestNeighbor',  # NearestNeighbor for binary masks
+    outputf_name='mask_registered.nii.gz',
+    fixedf=str(Path('${registration_reference}')),
+    working_dir='work',
+    transformf=[str(transform_path)],
+    reff=str(Path('${registration_reference}')),
+    logger=None,
+    generate_tmean=False
+)
+
+if not mask_result.get("imagef_registered"):
+    raise FileNotFoundError("Failed to apply registration transform to mask")
+
+# Generate BIDS-compliant output filename with space entity
+# Extract original filename stem to preserve subject/session entities
+mask_stem = get_filename_stem(mask_file)
+# Parse entities from original mask filename
+import json
+from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename
+
+try:
+    # Try to parse BIDS entities from original mask filename
+    entities = parse_bids_entities(str(mask_file))
+    # Add space entity
+    entities['space'] = template_name
+    entities['desc'] = 'brain'
+    # Create new filename
+    bids_output_filename = create_bids_filename(entities, 'mask', extension='.nii.gz')
+except:
+    # Fallback: use create_bids_output_filename with space entity
+    bids_output_filename = create_bids_output_filename(
+        original_file_path=mask_file,
+        suffix=f'space-{template_name}_desc-brain',
+        modality='mask'
+    )
+
+# Create symlink
+create_output_link(Path(mask_result["imagef_registered"]), bids_output_filename)
+
+# Save metadata
+save_metadata({
+    "step": "apply_mask_transform",
+    "mask_file": str(mask_file),
+    "registration_transform": str(transform_path),
+    "template_name": template_name,
+    "interpolation": "NearestNeighbor"
 })
 EOF
     """

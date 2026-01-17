@@ -1308,7 +1308,13 @@ process FUNC_APPLY_TRANSFORMS {
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
         pattern: '*.{nii.gz,h5}',
-        saveAs: { filename -> filename.contains('target_final.nii.gz') ? null : filename }
+        saveAs: { filename -> 
+            // Exclude target_final.nii.gz (QC reference) and _dup files (duplicate mask for channel structure)
+            if (filename.contains('target_final.nii.gz') || filename.contains('_dup')) {
+                return null
+            }
+            return filename
+        }
     
     input:
     // Input structure: [sub, ses, run_identifier, bids_template, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
@@ -1317,11 +1323,14 @@ process FUNC_APPLY_TRANSFORMS {
     // ref_from_func_reg: original target file (anat or template) from func registration, will be resampled if needed
     // target_type and target2template are now inferred from transform filename and validated against config
     tuple val(subject_id), val(session_id), val(run_identifier), val(bids_naming_template), path(func2target_xfm), path(ref_from_func_reg), path(anat2template_xfm), path(ref_from_anat_reg)
-    path(func_4d_file)  // Original 4D BOLD file (conformed_bold)
+    path(input_file)  // Input file: 4D BOLD file (conformed_bold) or 3D mask file
+    val(data_type)  // "bold" or "mask" - determines interpolation, moving_type, and output handling
     path config_file  // Effective config file with all resolved parameters
     
     output:
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*desc-preproc_bold.nii.gz"), path("*space-*desc-preproc_boldref.nii.gz"), val(bids_naming_template), emit: output
+    // For BOLD: [sub, ses, run_id, registered_bold, registered_boldref, bids_template]
+    // For mask: [sub, ses, run_id, registered_mask, registered_mask (duplicate), bids_template] (duplicate mask to match structure)
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*desc-*.nii.gz"), path("*space-*desc-*.nii.gz"), val(bids_naming_template), emit: output
     // Reference file for QC: final target reference at appropriate resolution
     tuple val(subject_id), val(session_id), val(run_identifier), path("*target_final.nii.gz"), emit: reference
     path "*.json", emit: metadata
@@ -1376,7 +1385,25 @@ init_cmd_log_for_nextflow(
 bids_naming_template = Path('${bids_naming_template}')
 
 # Get input parameters
-func_4d_input = Path('${func_4d_file}')
+input_file = Path('${input_file}')
+data_type = '${data_type}'  # "bold" or "mask"
+
+# Set parameters based on data_type
+if data_type == "mask":
+    moving_type = 0  # scalar (3D mask)
+    interpolation = "NearestNeighbor"  # Enforce NearestNeighbor for binary masks
+    generate_tmean = False  # No temporal mean for masks
+    modality = "mask"
+    print(f"INFO: Processing mask with interpolation={interpolation}, moving_type={moving_type}", file=sys.stderr)
+elif data_type == "bold":
+    moving_type = 3  # 3D time series (4D BOLD)
+    interpolation = config.get("registration", {}).get("interpolation", "LanczosWindowedSinc")  # Use config/default
+    generate_tmean = True  # Generate temporal mean for BOLD
+    modality = "bold"
+else:
+    raise ValueError(f"Invalid data_type: {data_type}. Must be 'bold' or 'mask'")
+
+func_4d_input = input_file  # Keep variable name for compatibility with existing code
 
 # Get func2target transform from glob (from-bold_to-*)
 func2target_transform_files = [Path(f) for f in glob.glob('*from-bold_to-*_mode-image_xfm.h5')]
@@ -1470,6 +1497,9 @@ is_sequential = (
     not is_dummy_anat_reg
 )
 
+print(f"INFO: Transform application mode - target_space={target_space}, is_sequential={is_sequential}, "
+      f"is_dummy_anat2template={is_dummy_anat2template}, is_dummy_anat_reg={is_dummy_anat_reg}", file=sys.stderr)
+
 # If expecting sequential but files are missing, warn and fallback to single transform
 if target_space == 'T1w' and (is_dummy_anat2template or is_dummy_anat_reg):
     if registration_pipeline == 'func2anat2template':
@@ -1527,38 +1557,49 @@ if is_sequential:
         anat_reff = ref_from_func_reg_input
         print(f"INFO: Using ref_from_func_reg at native resolution for func2anat transform", file=sys.stderr)
     
-    # Apply func2anat transform to 4D BOLD
+    # Apply func2anat transform
     result_anat = ants_apply_transforms_op(
         movingf=str(func_4d_input),
-        moving_type=3,  # 3D time series
-        interpolation=config.get("registration", {}).get("interpolation", "LanczosWindowedSinc"),
+        moving_type=moving_type,
+        interpolation=interpolation,
         outputf_name="func2anat.nii.gz",
         fixedf=str(anat_reff),
         transformf=[str(func2target_transform)],
         reff=str(anat_reff),
         working_dir=str(working_dir),
-        generate_tmean=True,
+        generate_tmean=generate_tmean,
         logger=logger
     )
     
     func_all_anat = Path(result_anat["imagef_registered"])
     func_tmean_anat = Path(result_anat.get("imagef_registered_tmean", func_all_anat))
     
-    # Save functional data in anat space
-    func_anat_output_name = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix=f'space-{anat_target_name}_desc-preproc',
-        modality='bold'
-    )
+    # Save data in anat space (intermediate output, not published for masks)
+    # For masks, use desc-brain; for BOLD, use desc-preproc
+    if data_type == "mask":
+        # Remove _bold from bids_naming_template before creating mask filename
+        bids_template_for_mask = Path(str(bids_naming_template).replace('_bold', ''))
+        func_anat_output_name = create_bids_output_filename(
+            original_file_path=bids_template_for_mask,
+            suffix=f'space-{anat_target_name}_desc-brain',
+            modality='mask'
+        )
+    else:
+        func_anat_output_name = create_bids_output_filename(
+            original_file_path=bids_naming_template,
+            suffix=f'space-{anat_target_name}_desc-preproc',
+            modality=modality
+        )
     create_output_link(func_all_anat, func_anat_output_name)
     
-    # Save boldref in anat space
-    func_anat_boldref_name = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix=f'space-{anat_target_name}_desc-preproc',
-        modality='boldref'
-    )
-    create_output_link(func_tmean_anat, func_anat_boldref_name)
+    # Save boldref in anat space (only for BOLD)
+    if data_type == "bold":
+        func_anat_boldref_name = create_bids_output_filename(
+            original_file_path=bids_naming_template,
+            suffix=f'space-{anat_target_name}_desc-preproc',
+            modality='boldref'
+        )
+        create_output_link(func_tmean_anat, func_anat_boldref_name)
     
     # Step 2: Apply anat2template transform
     # Use ref_from_anat_reg (template file from anat registration)
@@ -1578,38 +1619,55 @@ if is_sequential:
     else:
         template_reff = template_fixedf
     
-    # Apply anat2template transform to 4D BOLD
+    # Apply anat2template transform
     result_template = ants_apply_transforms_op(
         movingf=str(func_all_anat),
-        moving_type=3,  # 3D time series
-        interpolation=config.get("registration", {}).get("interpolation", "LanczosWindowedSinc"),
+        moving_type=moving_type,
+        interpolation=interpolation,
         outputf_name="func2template.nii.gz",
         fixedf=str(template_fixedf),
         transformf=[str(anat2template_transform_path)],
         reff=str(template_reff),
         working_dir=str(working_dir),
-        generate_tmean=True,
+        generate_tmean=generate_tmean,
         logger=logger
     )
     
     func_all_template = Path(result_template["imagef_registered"])
     func_tmean_template = Path(result_template.get("imagef_registered_tmean", func_all_template))
     
-    # Save functional data in template space (final output)
-    func_template_output_name = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix=f'space-{template_name}_desc-preproc',
-        modality='bold'
-    )
+    # Save data in template space (final output)
+    if data_type == "mask":
+        # For mask, use desc-brain instead of desc-preproc
+        # Remove _bold from bids_naming_template before creating mask filename
+        # (similar to how boldref handles it)
+        bids_template_for_mask = Path(str(bids_naming_template).replace('_bold', ''))
+        func_template_output_name = create_bids_output_filename(
+            original_file_path=bids_template_for_mask,
+            suffix=f'space-{template_name}_desc-brain',
+            modality='mask'
+        )
+    else:
+        func_template_output_name = create_bids_output_filename(
+            original_file_path=bids_naming_template,
+            suffix=f'space-{template_name}_desc-preproc',
+            modality='bold'
+        )
     create_output_link(func_all_template, func_template_output_name)
     
-    # Save boldref in template space (final output)
-    func_template_boldref_name = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix=f'space-{template_name}_desc-preproc',
-        modality='boldref'
-    )
-    create_output_link(func_tmean_template, func_template_boldref_name)
+    # Save boldref in template space (final output) - only for BOLD
+    # For mask, create a duplicate symlink to match BOLD output structure
+    if data_type == "bold":
+        func_template_boldref_name = create_bids_output_filename(
+            original_file_path=bids_naming_template,
+            suffix=f'space-{template_name}_desc-preproc',
+            modality='boldref'
+        )
+        create_output_link(func_tmean_template, func_template_boldref_name)
+    else:
+        # For mask, create a second symlink (duplicate) to match BOLD output structure [bold, boldref]
+        mask_second_name = str(func_template_output_name).replace('_mask.nii.gz', '_mask_dup.nii.gz')
+        create_output_link(func_all_template, mask_second_name)
     
     # Output final reference file for QC: template at appropriate resolution
     # Sequential transforms: final space is template
@@ -1634,7 +1692,11 @@ if is_sequential:
     
     # Final outputs are in template space
     final_output_file = func_all_template
-    final_boldref_file = func_tmean_template
+    if data_type == "bold":
+        final_boldref_file = func_tmean_template
+    else:
+        # For mask, duplicate the mask file to match BOLD output structure [bold, boldref]
+        final_boldref_file = func_all_template
     final_space_name = template_name
     
 else:
@@ -1670,6 +1732,7 @@ else:
     print(f"INFO: Reference file exists: {reff}, size: {file_size} bytes", file=sys.stderr)
     
     # Apply single transform
+    # Pass interpolation parameter explicitly to ensure masks use NearestNeighbor
     result = func_apply_transforms(
         StepInput(
             input_file=func_4d_input,
@@ -1683,25 +1746,39 @@ else:
         }
         ),
         transform_files=[func2target_transform],
-        reference_file=reff
+        reference_file=reff,
+        interpolation=interpolation  # Explicitly pass interpolation (NearestNeighbor for masks, config for BOLD)
     )
     
     # Generate BIDS-compliant output filename with space entity
-    bids_output_filename = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix=f'space-{target_name}_desc-preproc',
-        modality='bold'
-    )
+    if data_type == "mask":
+        # Remove _bold from bids_naming_template before creating mask filename
+        bids_template_for_mask = Path(str(bids_naming_template).replace('_bold', ''))
+        bids_output_filename = create_bids_output_filename(
+            original_file_path=bids_template_for_mask,
+            suffix=f'space-{target_name}_desc-brain',
+            modality='mask'
+        )
+    else:
+        bids_output_filename = create_bids_output_filename(
+            original_file_path=bids_naming_template,
+            suffix=f'space-{target_name}_desc-preproc',
+            modality='bold'
+        )
     create_output_link(result.output_file, bids_output_filename)
     
-    # Generate BIDS-compliant output filename for tmean (boldref)
-    if "tmean" in result.additional_files:
+    # Generate BIDS-compliant output filename for tmean (boldref) - only for BOLD
+    if data_type == "bold" and "tmean" in result.additional_files:
         bids_boldref_filename = create_bids_output_filename(
             original_file_path=bids_naming_template,
             suffix=f'space-{target_name}_desc-preproc',
             modality='boldref'
         )
         create_output_link(result.additional_files["tmean"], bids_boldref_filename)
+    elif data_type == "mask":
+        # For mask, create a second symlink (duplicate) to match BOLD output structure [bold, boldref]
+        mask_second_name = str(bids_output_filename).replace('_mask.nii.gz', '_mask_dup.nii.gz')
+        create_output_link(result.output_file, mask_second_name)
     
     # Output final reference file for QC: target at appropriate resolution
     # Use the same reference file that was used for the transform (already resampled if needed)
@@ -1723,7 +1800,11 @@ else:
     print(f"INFO: target_final.nii.gz created, size: {target_final_path.stat().st_size} bytes", file=sys.stderr)
     
     final_output_file = result.output_file
-    final_boldref_file = result.additional_files.get("tmean", result.output_file)
+    if data_type == "bold":
+        final_boldref_file = result.additional_files.get("tmean", result.output_file)
+    else:
+        # For mask, duplicate the mask file to match BOLD output structure [bold, boldref]
+        final_boldref_file = result.output_file
     final_space_name = target_name
 
 # Save metadata
@@ -1733,12 +1814,15 @@ metadata_target2template = is_sequential  # True if sequential transforms were a
 
 save_metadata({
     "step": "apply_transforms",
-    "modality": "func",
+    "modality": "func" if data_type == "bold" else "mask",
+    "data_type": data_type,
     "target_type": metadata_target_type,
     "target2template": metadata_target2template,
     "target_space": target_space,  # Add parsed space for reference
     "is_sequential": is_sequential,
-    "space": final_space_name
+    "space": final_space_name,
+    "interpolation": interpolation,
+    "moving_type": moving_type
 })
 
 EOF

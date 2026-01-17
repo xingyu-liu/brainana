@@ -21,8 +21,8 @@ include { FUNC_COMPUTE_CONFORM } from '../modules/functional.nf'
 include { FUNC_COMPUTE_BRAIN_MASK } from '../modules/functional.nf'
 include { FUNC_COMPUTE_REGISTRATION } from '../modules/functional.nf'
 include { FUNC_APPLY_CONFORM } from '../modules/functional.nf'
-include { FUNC_APPLY_BRAIN_MASK } from '../modules/functional.nf'
 include { FUNC_APPLY_TRANSFORMS } from '../modules/functional.nf'
+include { FUNC_APPLY_TRANSFORMS as FUNC_APPLY_TRANSFORMS_MASK } from '../modules/functional.nf'
 include { FUNC_WITHIN_SES_COREG } from '../modules/functional.nf'
 include { FUNC_AVERAGE_TMEAN } from '../modules/functional.nf'
 
@@ -116,7 +116,9 @@ workflow FUNC_WF {
     // Sequential processing: slice timing → reorient → motion correction → despike
     // Channel structure maintained: [sub, ses, run_identifier, bold_file, tmean_file, bids_name]
     
+    // ============================================
     // SLICE_TIMING
+    // ============================================
     def func_after_slice = func_jobs_ch
     if (func_slice_timing_enabled) {
         FUNC_SLICE_TIMING(func_jobs_ch, config_file)
@@ -125,7 +127,9 @@ workflow FUNC_WF {
         func_after_slice = func_jobs_ch.map(passThroughFunc)
     }
 
+    // ============================================
     // REORIENT
+    // ============================================
     def func_after_reorient = func_after_slice
     if (func_reorient_enabled) {
         FUNC_REORIENT(func_after_slice, config_file)
@@ -134,7 +138,9 @@ workflow FUNC_WF {
         func_after_reorient = func_after_slice.map(passThroughFunc)
     }
     
+    // ============================================
     // MOTION_CORRECTION
+    // ============================================
     def func_after_motion = func_after_reorient
     def func_motion_params = Channel.empty()
     if (func_motion_correction_enabled) {
@@ -146,7 +152,9 @@ workflow FUNC_WF {
         func_after_motion = FUNC_GENERATE_TMEAN.out.output
     }
     
+    // ============================================
     // DESPIKE
+    // ============================================
     def func_after_despike = func_after_motion
     if (func_despike_enabled) {
         FUNC_DESPIKE(func_after_motion, config_file)
@@ -161,7 +169,6 @@ workflow FUNC_WF {
     // Coregister multiple runs within the same session to a reference run
     // Input: func_after_despike: [sub, ses, run_id, bold_file, tmean_file, bids_name]
     // Output: func_after_coreg: [sub, ses, run_id, bold_file, tmean_file, bids_name]
-    // ============================================
     def func_after_coreg = func_after_despike
     def func_coreg_transforms_ch = Channel.empty()
     def func_tmean_averaged_ch = Channel.empty()
@@ -228,7 +235,6 @@ workflow FUNC_WF {
     // Input: func_after_coreg: [sub, ses, run_id, bold_file, tmean_file, bids_name]
     //        anat_after_skull: [sub, ses, anat_file, bids_name]
     // Output: [sub, ses, anat_file, anat_ses] (session-level only, no run_id)
-    // ============================================
     def dummy_anat = file("${workDir}/dummy_anat.dummy")
     def func_anat_selection = channelHelpers.performFuncAnatomicalSelection(
         func_after_coreg,
@@ -244,7 +250,6 @@ workflow FUNC_WF {
     // ============================================
     // Compute transforms and masks on tmean (session-level or per-run)
     // Two paths: session-level (when coreg enabled) vs per-run processing
-    // ============================================
     def func_compute_conform_output = Channel.empty()
     def func_compute_conform_transforms = Channel.empty()
     def func_compute_mask_output = Channel.empty()
@@ -256,7 +261,9 @@ workflow FUNC_WF {
         func_tmean_averaged_ch.map { sub, ses, tmean, bids_name -> [sub, ses, "", tmean, bids_name] } :
         func_after_coreg.map { sub, ses, run_id, bold, tmean, bids_name -> [sub, ses, run_id, tmean, bids_name] }
     
+    // ============================================
     // BIAS_CORRECTION
+    // ============================================
     def func_after_bias = computeInput
     if (func_bias_correction_enabled) {
         FUNC_BIAS_CORRECTION(computeInput, config_file)
@@ -265,7 +272,9 @@ workflow FUNC_WF {
         func_after_bias = computeInput
     }
     
-    // CONFORM
+    // ============================================
+    // COMPUTE CONFORM
+    // ============================================
     if (func_conform_enabled) {
         // Combine with anatomical selection (session-level)
         // func_after_bias: [sub, ses, run_id, tmean, bids_name] (run_id may be "" for session-level)
@@ -300,7 +309,9 @@ workflow FUNC_WF {
             }
     }
     
-    // SKULLSTRIPPING
+    // ============================================
+    // COMPUTE BRAIN MASK
+    // ============================================
     if (func_skullstripping_enabled) {
         def func_compute_mask_input = func_compute_conform_output
             .map { sub, ses, run_id, conformed_tmean, bids_name ->
@@ -317,7 +328,12 @@ workflow FUNC_WF {
             }
     }
     
-    // REGISTRATION
+    // ============================================
+    // COMPUTE REGISTRATION
+    // ============================================
+    // Compute registration to target space
+    // Input: func_compute_mask_output: [sub, ses, run_id, masked_tmean, bids_name, mask]
+    // Output: func_compute_reg_output: [sub, ses, run_id, registered_tmean, bids_name, anat_ses]
     if (registration_enabled) {
         def func_compute_reg_input = func_compute_mask_output
             .map { sub, ses, run_id, masked_tmean, bids_name, mask ->
@@ -351,7 +367,6 @@ workflow FUNC_WF {
     // Apply computed transforms to full BOLD 4D data
     // Input: func_after_coreg: [sub, ses, run_id, bold_file, tmean_file, bids_name]
     // Output: func_apply_reg: [sub, ses, run_id, registered_bold, registered_boldref, bids_name]
-    // ============================================
     def func_apply_bold_input = func_after_coreg
     
     // ============================================
@@ -362,7 +377,6 @@ workflow FUNC_WF {
     //        func_compute_conform_output: [sub, ses, run_id, conformed_tmean, bids_name]
     //        func_compute_conform_transforms: [sub, ses, run_id, forward_xfm, inverse_xfm]
     // Output: [sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids_name]
-    // ============================================
     def func_apply_conform_output = Channel.empty()
     if (func_conform_enabled) {
         // Step 1: Extract forward transform
@@ -406,13 +420,10 @@ workflow FUNC_WF {
     // Registration application phase: Apply computed transforms to BOLD data
     // Input: func_apply_conform_output: [sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids_name]
     // Output: func_apply_reg: [sub, ses, run_id, registered_bold, registered_boldref, bids_name]
-    // ============================================
     def func_apply_reg = func_apply_conform_output
     def func_apply_reg_reference = Channel.empty()
     if (registration_enabled) {
-        // ============================================
         // PREPARE ANATOMICAL REGISTRATION DATA
-        // ============================================
         // Extract forward transform and join with reference
         // Input: anat_reg_transforms: [sub, ses, anat2template_xfm, inverse_transform]
         //        anat_reg_reference: [sub, ses, ref_from_anat_reg]
@@ -421,9 +432,7 @@ workflow FUNC_WF {
             .map { sub, ses, anat2template_xfm, inverse_transform -> [sub, ses, anat2template_xfm] }
             .join(anat_reg_reference, by: [0, 1]) // join by [sub, ses]
         
-        // ============================================
         // JOIN ANATOMICAL REGISTRATION BY SESSION
-        // ============================================
         // Join anatomical registration by anatomical session, then map back to functional session
         // Works for both same-session (anat_ses == ses_func) and cross-session (anat_ses != ses_func)
         // Input: func_compute_reg_output: [sub, ses, run_id, registered_tmean, bids_name, anat_ses]
@@ -438,9 +447,7 @@ workflow FUNC_WF {
             .join(anat_reg_all_real, by: [0, 1])  // Join by [sub, anat_ses]
             .map { sub, anat_ses, ses_func, xfm, ref -> [sub, ses_func, xfm, ref] }  // Map back to functional session
 
-        // ============================================
         // CREATE DUMMY REGISTRATION FOR MISSING DATA
-        // ============================================
         // Create dummy registration for functional sessions without anatomical data
         // Input: func_compute_reg_output: [sub, ses, run_id, registered_tmean, bids_name, anat_ses]
         // Output: [sub, ses, dummy_xfm, dummy_ref]
@@ -452,9 +459,7 @@ workflow FUNC_WF {
             .unique() // deduplicate by [sub, ses]
             .map { sub, ses -> [sub, ses, dummy_anat2template_xfm, dummy_anat_reg_ref] }
 
-        // ============================================
         // COMBINE ALL ANATOMICAL REGISTRATION DATA
-        // ============================================
         // Mix all sources, group by session, and select best (prefer real over dummy)
         // Input: anat_reg_by_func_ses (real registration), anat_reg_all_dummy
         // Output: [sub, ses, xfm, ref] where xfm/ref are real files if available, dummy otherwise
@@ -470,9 +475,7 @@ workflow FUNC_WF {
                 [sub, ses] + selected // add selected xfm and ref to [sub, ses]
             }
         
-        // ============================================
         // PREPARE FUNCTIONAL REGISTRATION DATA FOR APPLICATION
-        // ============================================
         // Two paths: session-level (run_id == "") vs per-run processing
         // Step 1: Extract forward transform from functional registration
         // Input: FUNC_COMPUTE_REGISTRATION.out.transforms: [sub, ses, run_id, func2target_xfm, inverse_transform]
@@ -545,9 +548,7 @@ workflow FUNC_WF {
                     [sub, ses, run_id, conformed_bold, bids_name, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
                 }
 
-        // ============================================
         // SPLIT CHANNELS FOR FUNC_APPLY_TRANSFORMS
-        // ============================================
         // Split into registration parameters and BOLD file for process input
         // Input: func_apply_reg_with_bold: [sub, ses, run_id, conformed_bold, bids_name, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
         // Output channels:
@@ -563,16 +564,67 @@ workflow FUNC_WF {
         // Apply transforms to BOLD data
         // Output: func_apply_reg: [sub, ses, run_id, registered_bold, registered_boldref, bids_name]
         //         func_apply_reg_reference: [sub, ses, run_id, target_final] (for QC)
-        FUNC_APPLY_TRANSFORMS(func_apply_reg_multi.reg_combined, func_apply_reg_multi.func_4d_file, config_file)
+        FUNC_APPLY_TRANSFORMS(func_apply_reg_multi.reg_combined, func_apply_reg_multi.func_4d_file, "bold", config_file)
         func_apply_reg = FUNC_APPLY_TRANSFORMS.out.output
         func_apply_reg_reference = FUNC_APPLY_TRANSFORMS.out.reference
+        
+        // ============================================
+        // APPLY REGISTRATION TO BRAIN MASK
+        // ============================================
+        // Transform brain mask using the same transforms applied to BOLD data
+        // Reuse func_reg_with_anat and apply transforms with data_type="mask"
+        // Input: func_compute_mask_output: [sub, ses, run_id, masked_tmean, bids_name, brain_mask] (mask in conformed space)
+        //        func_reg_with_anat: [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
+        // Output: func_brain_mask_registered: [sub, ses, run_id, transformed_mask, transformed_mask (dup), bids_name] (in template space)
+        if (func_skullstripping_enabled) {
+            // Extract mask from func_compute_mask_output
+            // Use original BOLD bids_name as bids_naming_template (not mask file path)
+            // The mask file path may have wrong entities; we'll construct the correct mask name from BOLD bids_name
+            def func_mask_for_transform = func_compute_mask_output
+                .map { sub, ses, run_id, masked_tmean, bids_name, mask ->
+                    [sub, ses, run_id, mask, bids_name]  // mask file as input, original BOLD bids_name as template
+                }
+            
+            // Join mask with transform data (same pattern as BOLD)
+            // When session-level: mask has run_id="", need to expand to all runs by combining with func_apply_conform_output
+            // When per-run: mask has actual run_id, join directly with func_reg_with_anat
+            def func_mask_with_transforms = isSessionLevel ?
+                // Step 1: Expand mask to all runs by combining with func_apply_conform_output (which has all run_ids)
+                func_mask_for_transform
+                    .combine(func_apply_conform_output.map { sub, ses, run_id, conformed_bold, conformed_tmean_ref, bids_name -> [sub, ses, run_id, bids_name] }, by: [0, 1])
+                    .map { sub, ses, run_id_mask, mask, mask_bids, run_id_bold, bids_name_bold ->
+                        // Use the run_id from BOLD (actual run), and bids_name from BOLD (per-run bids_name)
+                        [sub, ses, run_id_bold, mask, bids_name_bold]
+                    }
+                    // Step 2: Combine with func_reg_with_anat (session-level, run_id="") to get transforms
+                    .combine(func_reg_with_anat, by: [0, 1])
+                    .map { sub, ses, run_id, mask, mask_bids, run_id2, registered_tmean, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg ->
+                        [sub, ses, run_id, mask_bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg, mask]
+                    } :
+                func_mask_for_transform
+                    .join(func_reg_with_anat, by: [0, 1, 2])
+                    .map { sub, ses, run_id, mask, mask_bids, registered_tmean, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg ->
+                        [sub, ses, run_id, mask_bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg, mask]
+                    }
+            
+            // Split into registration parameters and mask file (same pattern as BOLD)
+            func_mask_with_transforms
+                .multiMap { sub, ses, run_id, mask_bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg, mask ->
+                    reg_combined: [sub, ses, run_id, mask_bids, func2target_xfm, ref_from_func_reg, anat2template_xfm, ref_from_anat_reg]
+                    mask_file: mask
+                }
+                .set { func_mask_multi }
+            
+            // Apply transforms to mask (single call - process handles sequential internally)
+            FUNC_APPLY_TRANSFORMS_MASK(func_mask_multi.reg_combined, func_mask_multi.mask_file, "mask", config_file)
+            func_brain_mask_registered = FUNC_APPLY_TRANSFORMS_MASK.out.output
+        }
     }
 
     // ============================================
     // QUALITY CONTROL
     // ============================================
     // Generate QC reports for functional processing steps
-    // ============================================
     if (func_motion_correction_enabled) {
         func_after_motion
             .join(func_motion_params, by: [0, 1, 2])
@@ -653,7 +705,6 @@ workflow FUNC_WF {
     // COLLECT QC CHANNELS
     // ============================================
     // Aggregate all QC metadata channels for output
-    // ============================================
     func_qc_channels = Channel.empty()
     func_jobs_ch_out = Channel.empty()
     

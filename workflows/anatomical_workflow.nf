@@ -35,7 +35,8 @@ include { ANAT_BIAS_CORRECTION_PASSTHROUGH as ANAT_BIAS_CORRECTION_PASSTHROUGH_T
 include { ANAT_REGISTRATION_PASSTHROUGH } from '../modules/anatomical.nf'
 include { ANAT_REGISTRATION_PASSTHROUGH as ANAT_REGISTRATION_PASSTHROUGH_T2W } from '../modules/anatomical.nf'
 include { ANAT_APPLY_CONFORM } from '../modules/anatomical.nf'
-include { ANAT_APPLY_REGISTRATION } from '../modules/anatomical.nf'
+include { ANAT_APPLY_TRANSFORMATION } from '../modules/anatomical.nf'
+include { ANAT_APPLY_TRANSFORM_MASK } from '../modules/anatomical.nf'
 
 // Include anatomical QC modules
 include { QC_CONFORM } from '../modules/qc.nf'
@@ -364,8 +365,11 @@ workflow ANAT_WF {
     // REGISTRATION
     // ============================================
     // Register anatomical images to template space
-    // Input: anat_after_skull: [sub, ses, anat_file, bids_name]
-    // Output: anat_after_reg: [sub, ses, registered_file, bids_name]
+    // Compute transform on skullstripped version (for better registration)
+    // Apply transform to unskullstripped version (to get full head in template space)
+    // Input: anat_after_skull: [sub, ses, anat_file, bids_name] (for computing transform)
+    //        anat_after_conform: [sub, ses, anat_file, bids_name] (for applying transform)
+    // Output: anat_after_reg: [sub, ses, registered_file, bids_name] (unskullstripped registered)
     //         anat_reg_transforms: [sub, ses, forward_xfm, inverse_xfm]
     //         anat_reg_reference: [sub, ses, reference_file]
     // ============================================
@@ -373,7 +377,15 @@ workflow ANAT_WF {
     anat_reg_transforms = Channel.empty()
     anat_reg_reference = Channel.empty()
     if (registration_enabled) {
-        ANAT_REGISTRATION(anat_after_skull, config_file)
+        // Join skullstripped version (for computing transform) with unskullstripped version (for applying transform)
+        // ANAT_REGISTRATION expects: [sub, ses, skull_file, bids_name, unskull_file]
+        def registration_input = anat_after_skull
+            .join(anat_after_conform, by: [0, 1])
+            .map { sub, ses, skull_file, skull_bids, unskull_file, unskull_bids ->
+                [sub, ses, skull_file, skull_bids, unskull_file]
+            }
+        
+        ANAT_REGISTRATION(registration_input, config_file)
         anat_after_reg = ANAT_REGISTRATION.out.output
         anat_reg_transforms = ANAT_REGISTRATION.out.transforms
         anat_reg_reference = ANAT_REGISTRATION.out.reference
@@ -382,6 +394,29 @@ workflow ANAT_WF {
         anat_after_reg = ANAT_REGISTRATION_PASSTHROUGH.out.output
         anat_reg_transforms = ANAT_REGISTRATION_PASSTHROUGH.out.transforms
         anat_reg_reference = ANAT_REGISTRATION_PASSTHROUGH.out.reference
+    }
+    
+    // ============================================
+    // MASK TRANSFORMATION
+    // ============================================
+    // Transform brain mask to template space using registration transform
+    // Input: anat_skull_mask: [sub, ses, brain_mask] (in conformed space)
+    //        anat_reg_transforms: [sub, ses, forward_xfm, inverse_xfm]
+    //        anat_reg_reference: [sub, ses, reference_file]
+    // Output: anat_skull_mask_registered: [sub, ses, transformed_mask] (in template space)
+    // ============================================
+    anat_skull_mask_registered = Channel.empty()
+    if (registration_enabled && anat_skullstripping_enabled) {
+        // Join mask with registration transform and reference
+        def mask_transform_input = anat_skull_mask
+            .join(anat_reg_transforms.map { sub, ses, forward_xfm, inverse_xfm -> [sub, ses, forward_xfm] }, by: [0, 1])
+            .join(anat_reg_reference, by: [0, 1])
+            .map { sub, ses, mask_file, forward_xfm, reference ->
+                [sub, ses, mask_file, forward_xfm, reference]
+            }
+        
+        ANAT_APPLY_TRANSFORM_MASK(mask_transform_input, config_file)
+        anat_skull_mask_registered = ANAT_APPLY_TRANSFORM_MASK.out.output
     }
     
     // ============================================
@@ -663,8 +698,8 @@ workflow ANAT_WF {
                 [sub, ses, conformed_t2w, t2w_bids_name, forward_xfm, reference]
             }
         
-        ANAT_APPLY_REGISTRATION(t2w_for_apply_reg, config_file)
-        t2w_after_apply_reg = ANAT_APPLY_REGISTRATION.out.output
+        ANAT_APPLY_TRANSFORMATION(t2w_for_apply_reg, config_file)
+        t2w_after_apply_reg = ANAT_APPLY_TRANSFORMATION.out.output
     } else {
         t2w_after_apply_reg = t2w_after_apply_conform
             .map { sub, ses, conformed_t2w, t2w_bids_name, anat_ses ->
