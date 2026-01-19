@@ -433,8 +433,14 @@ workflow FUNC_WF {
             .join(anat_reg_reference, by: [0, 1]) // join by [sub, ses]
         
         // JOIN ANATOMICAL REGISTRATION BY SESSION
-        // Join anatomical registration by anatomical session, then map back to functional session
+        // Match anatomical registration by anatomical session, then map back to functional session
         // Works for both same-session (anat_ses == ses_func) and cross-session (anat_ses != ses_func)
+        // 
+        // IMPORTANT: We use combine() + filter() instead of join() because multiple functional sessions
+        // may reference the SAME anatomical session (e.g., 032309_001 and 032309_002 both use anat from 001).
+        // join() only matches one item per key due to channel consumption, causing a race condition.
+        // combine() creates all subject-level combinations, then filter keeps only matching anat_ses.
+        //
         // Input: func_compute_reg_output: [sub, ses, run_id, registered_tmean, bids_name, anat_ses]
         //        anat_reg_all_real: [sub, ses, anat2template_xfm, ref_from_anat_reg] (keyed by anatomical session)
         // Output: [sub, ses_func, xfm, ref]
@@ -443,9 +449,13 @@ workflow FUNC_WF {
                 [sub, ses, anat_ses]  // Keep func_ses and anat_ses
             }
             .unique { sub, ses, anat_ses -> [sub, ses] }  // Deduplicate by functional session
-            .map { sub, ses_func, anat_ses -> [sub, anat_ses, ses_func] }  // Reorder: join by anatomical session
-            .join(anat_reg_all_real, by: [0, 1])  // Join by [sub, anat_ses]
-            .map { sub, anat_ses, ses_func, xfm, ref -> [sub, ses_func, xfm, ref] }  // Map back to functional session
+            .combine(anat_reg_all_real, by: 0)  // Combine by subject only - creates all subject-level combinations
+            .filter { sub, ses_func, anat_ses, anat_reg_ses, xfm, ref ->
+                anat_ses == anat_reg_ses  // Keep only where functional's anat_ses matches anatomical's session
+            }
+            .map { sub, ses_func, anat_ses, anat_reg_ses, xfm, ref -> 
+                [sub, ses_func, xfm, ref]  // Map to final format
+            }
 
         // CREATE DUMMY REGISTRATION FOR MISSING DATA
         // Create dummy registration for functional sessions without anatomical data
@@ -474,7 +484,7 @@ workflow FUNC_WF {
                 } ?: entries[0]
                 [sub, ses] + selected // add selected xfm and ref to [sub, ses]
             }
-        
+
         // PREPARE FUNCTIONAL REGISTRATION DATA FOR APPLICATION
         // Two paths: session-level (run_id == "") vs per-run processing
         // Step 1: Extract forward transform from functional registration

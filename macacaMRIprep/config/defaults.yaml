@@ -47,7 +47,6 @@ anat:
     enabled: true  # bool: perform surface reconstruction
 
 func:
-  registration_pipeline: "func2anat2template"  # str: "func2anat2template", "func2anat", or "func2template"
   coreg_runs_within_session: true
   slice_timing_correction:
     enabled: true  # bool: perform slice timing correction

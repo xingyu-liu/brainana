@@ -6,12 +6,9 @@ process FUNC_REORIENT {
     label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
     
-    publishDir { 
-        def sesPath = session_id ? "/ses-${session_id}" : ""
-        "${params.output_dir}/sub-${subject_id}${sesPath}/func"
-    },
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.nii.gz'
+        enabled: false
     
     input:
     tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_naming_template)
@@ -108,7 +105,7 @@ process FUNC_SLICE_TIMING {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.nii.gz'
+        enabled: false
     
     input:
     tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_naming_template)
@@ -225,7 +222,7 @@ process FUNC_MOTION_CORRECTION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.{nii.gz,tsv}'
+        pattern: '*.{tsv}'
     
     input:
     tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_naming_template)
@@ -334,7 +331,7 @@ process FUNC_GENERATE_TMEAN {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.nii.gz'
+        enabled: false
     
     input:
     tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), val(bids_naming_template)
@@ -428,7 +425,7 @@ process FUNC_DESPIKE {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.nii.gz'
+        enabled: false
     
     input:
     // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
@@ -531,8 +528,7 @@ process FUNC_BIAS_CORRECTION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*desc-biasCorrection_boldref.nii.gz',
-        saveAs: { filename -> filename }
+        enabled: false
     
     input:
     // Input: [sub, ses, run_identifier, tmean_file, bids_template]
@@ -636,7 +632,7 @@ process FUNC_COMPUTE_CONFORM {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.{nii.gz,mat}',
+        pattern: '*.{mat}',
         saveAs: { filename -> filename == 'template_resampled.nii.gz' ? null : filename }
     
     input:
@@ -691,9 +687,6 @@ process FUNC_COMPUTE_CONFORM {
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
     
-    # Determine target file (anatomical or template based on pipeline)
-    registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
-    
     # Check if anatomical brain file is available
     anat_brain_path_str = '${anat_brain_file}'
     has_anat_brain = anat_brain_path_str and anat_brain_path_str.strip() != '' and '.dummy' not in anat_brain_path_str
@@ -701,15 +694,11 @@ process FUNC_COMPUTE_CONFORM {
     # Get effective_output_space from effective config file
     effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
     
-    if registration_pipeline == 'func2template':
-        target_file = Path(resolve_template(effective_output_space))
-    elif registration_pipeline in ['func2anat', 'func2anat2template']:
-        if has_anat_brain:
-            anat_brain_path = Path(anat_brain_path_str)
-            if anat_brain_path.exists():
-                target_file = anat_brain_path
-            else:
-                target_file = Path(resolve_template(effective_output_space))
+    # Determine target file: use anatomical if available, otherwise use template
+    if has_anat_brain:
+        anat_brain_path = Path(anat_brain_path_str)
+        if anat_brain_path.exists():
+            target_file = anat_brain_path
         else:
             target_file = Path(resolve_template(effective_output_space))
     else:
@@ -804,7 +793,7 @@ process FUNC_APPLY_CONFORM {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.nii.gz'
+        pattern: '*desc-preproc*.nii.gz'
     
     input:
     // Input: [sub, ses, run_identifier, bold_file, conform_transform, conformed_tmean_ref, bids_template]
@@ -815,6 +804,8 @@ process FUNC_APPLY_CONFORM {
     output:
     // Output: [sub, ses, run_identifier, conformed_bold, conformed_tmean_ref, bids_template]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_bold.nii.gz"), path("*desc-conform_boldref.nii.gz"), val(bids_naming_template), emit: output
+    // Phase 1 preproc output: [sub, ses, run_identifier, preproc_bold, preproc_boldref, bids_template]
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-preproc_bold.nii.gz"), path("*desc-preproc_boldref.nii.gz"), val(bids_naming_template), emit: preproc_output
     path "*.json", emit: metadata
     
     script:
@@ -867,7 +858,7 @@ process FUNC_APPLY_CONFORM {
     if not bold_result.get("imagef_registered"):
         raise FileNotFoundError("Failed to apply conform transform to BOLD")
     
-    # Generate BIDS-compliant output filename
+    # Generate BIDS-compliant output filename (for internal workflow use)
     bids_output_filename_bold = create_bids_output_filename(
         original_file_path=bids_naming_template,
         suffix='desc-conform',
@@ -884,8 +875,47 @@ process FUNC_APPLY_CONFORM {
     # This is important for Nextflow pattern matching
     bids_output_filename_tmean = Path(bids_output_filename_tmean).name
     
-    # Create symlinks
+    # Create symlinks (for internal workflow)
     create_output_link(Path(bold_result["imagef_registered"]), bids_output_filename_bold)
+    
+    # Generate BIDS-compliant output filename for Phase 1 preproc (published output)
+    bids_preproc_filename_bold = create_bids_output_filename(
+        original_file_path=bids_naming_template,
+        suffix='desc-preproc',
+        modality='bold'
+    )
+    
+    bids_preproc_filename_boldref = create_bids_output_filename(
+        original_file_path=bids_naming_template,
+        suffix='desc-preproc',
+        modality='boldref'
+    )
+    
+    # Ensure boldref filename is just a filename (for copying later)
+    bids_preproc_filename_boldref = Path(bids_preproc_filename_boldref).name
+    
+    # Create symlinks for Phase 1 preproc output (published)
+    bold_source = Path(bold_result["imagef_registered"])
+    if not bold_source.exists():
+        raise FileNotFoundError(f"Source file for preproc bold output does not exist: {bold_source}")
+    
+    create_output_link(bold_source, bids_preproc_filename_bold)
+    
+    # Verify the bold file exists and is accessible (Nextflow needs to see it)
+    preproc_bold_path = Path(bids_preproc_filename_bold)
+    if not preproc_bold_path.exists():
+        raise FileNotFoundError(f"Failed to create preproc bold output file: {bids_preproc_filename_bold} (source: {bold_source})")
+    # Check if it's a valid symlink or file
+    if not (preproc_bold_path.is_symlink() or preproc_bold_path.is_file()):
+        raise FileNotFoundError(f"Preproc bold output file exists but is not a valid file or symlink: {bids_preproc_filename_bold}")
+    # If it's a symlink, verify it resolves correctly
+    if preproc_bold_path.is_symlink():
+        try:
+            resolved = preproc_bold_path.resolve(strict=True)
+            if not resolved.exists():
+                raise FileNotFoundError(f"Preproc bold symlink points to non-existent file: {bids_preproc_filename_bold} -> {resolved}")
+        except Exception as e:
+            raise FileNotFoundError(f"Preproc bold symlink is broken: {bids_preproc_filename_bold}, error: {e}")
     
     # Ensure conformed_tmean_ref exists and copy it to output
     # We must COPY (not symlink) to ensure Nextflow recognizes it as a valid output
@@ -927,6 +957,28 @@ process FUNC_APPLY_CONFORM {
     print(f"DEBUG: Created output file: {target_path} (exists: {target_path.exists()})", file=sys.stderr)
     if not str(target_path).endswith('desc-conform_boldref.nii.gz'):
         print(f"WARNING: Output filename does not end with 'desc-conform_boldref.nii.gz': {target_path}", file=sys.stderr)
+    
+    # Create Phase 1 preproc boldref output (copy conformed_tmean_ref)
+    target_preproc_path = Path(bids_preproc_filename_boldref)
+    
+    # Remove target if it exists
+    if target_preproc_path.exists() or target_preproc_path.is_symlink():
+        target_preproc_path.unlink()
+    
+    # Copy the file to ensure it's a distinct output file
+    shutil.copy2(source_file, target_preproc_path)
+    
+    # Touch the file to ensure it has a new modification time
+    target_preproc_path.touch()
+    
+    # Verify the output file was created
+    if not target_preproc_path.exists():
+        raise FileNotFoundError(f"Failed to create preproc output file: {target_preproc_path}")
+    
+    # Debug: Print the created filename to verify it matches the pattern *desc-preproc_boldref.nii.gz
+    print(f"DEBUG: Created preproc output file: {target_preproc_path} (exists: {target_preproc_path.exists()})", file=sys.stderr)
+    if not str(target_preproc_path).endswith('desc-preproc_boldref.nii.gz'):
+        print(f"WARNING: Preproc output filename does not end with 'desc-preproc_boldref.nii.gz': {target_preproc_path}", file=sys.stderr)
     
     # Save metadata
     save_metadata({
@@ -1009,12 +1061,31 @@ process FUNC_COMPUTE_BRAIN_MASK {
     result = func_skullstripping(input_obj)
     
     # Generate BIDS-compliant output filename for mask
-    original_stem = get_filename_stem(bids_naming_template)
-    bids_prefix_wobold = original_stem.replace("_bold", "").replace("_boldref", "")
+    # For session-level processing (empty run_identifier), use session-level naming without run-specific entities
+    from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename
+    
+    if not run_identifier or run_identifier.strip() == "":
+        # Session-level: parse entities and keep only sub and ses
+        parsed = parse_bids_entities(str(bids_naming_template))
+        filtered_entities = {}
+        if 'sub' in parsed:
+            filtered_entities['sub'] = parsed['sub']
+        if 'ses' in parsed:
+            filtered_entities['ses'] = parsed['ses']
+        # Add desc entity for brain mask
+        filtered_entities['desc'] = 'brain'
+        # Rebuild filename with suffix 'mask'
+        bids_additional_name = create_bids_filename(filtered_entities, 'mask', extension='.nii.gz')
+        # Create prefix for brain file (without desc-brain_mask suffix)
+        bids_prefix_wobold = create_bids_filename(filtered_entities, '', extension='')
+    else:
+        # Run-level: preserve all entities from original template (except bold/boldref)
+        original_stem = get_filename_stem(bids_naming_template)
+        bids_prefix_wobold = original_stem.replace("_bold", "").replace("_boldref", "")
+        bids_additional_name = f"{bids_prefix_wobold}_desc-brain_mask.nii.gz"
     
     # Create symlink for mask with BIDS-compliant name
     if "brain_mask" in result.additional_files:
-        bids_additional_name = f"{bids_prefix_wobold}_desc-brain_mask.nii.gz"
         create_output_link(result.additional_files["brain_mask"], bids_additional_name)
     
     # Create symlink for brain file (masked tmean)
@@ -1028,111 +1099,13 @@ process FUNC_COMPUTE_BRAIN_MASK {
     """
 }
 
-process FUNC_APPLY_BRAIN_MASK {
-    label 'cpu'
-    tag "${subject_id}_${session_id}_${run_identifier}"
-    
-    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
-        mode: 'copy',
-        pattern: '*.nii.gz'
-    
-    input:
-    // Input: [sub, ses, run_identifier, conformed_bold, brain_mask, masked_tmean_ref, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_bold), path(brain_mask), path(masked_tmean_ref), val(bids_naming_template)
-    path config_file
-    
-    output:
-    // Output: [sub, ses, run_identifier, masked_bold, masked_tmean_ref, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_desc-brain_bold.nii.gz"), path("*_boldref_brain.nii.gz"), val(bids_naming_template), emit: output
-    path "*.json", emit: metadata
-    
-    script:
-    """
-    \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.operations.preprocessing import apply_mask
-    from macacaMRIprep.utils.bids import create_bids_output_filename
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
-    from pathlib import Path
-    import sys
-    
-    # Initialize command log file
-    run_identifier = '${run_identifier}'
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_APPLY_BRAIN_MASK',
-        task_name=task_name,
-        run=run
-    )
-    
-    # Load config
-    from macacaMRIprep.utils.nextflow import load_config
-    config = load_config('${config_file}')
-    
-    # Get original file path (for BIDS filename generation)
-    bids_naming_template = Path('${bids_naming_template}')
-    
-    # Apply brain mask to BOLD using apply_mask function
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    masked_bold_path = Path('work') / 'func_bold_masked.nii.gz'
-    result = apply_mask(
-        imagef=str(Path('${conformed_bold}')),
-        maskf=str(Path('${brain_mask}')),
-        working_dir=Path('work'),
-        output_name='func_bold_masked.nii.gz',
-        logger=logger,
-        generate_tmean=False  # tmean is already provided as masked_tmean_ref input
-    )
-    
-    masked_bold_path = Path(result['imagef_masked'])
-    if not masked_bold_path.exists():
-        raise FileNotFoundError("Failed to apply brain mask to BOLD")
-    
-    # Generate BIDS-compliant output filename
-    bids_output_filename_bold = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix='desc-conform_desc-brain',
-        modality='bold'
-    )
-    
-    bids_output_filename_tmean = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix='desc-brain',
-        modality='boldref'
-    )
-    
-    # Create symlinks
-    create_output_link(masked_bold_path, bids_output_filename_bold)
-    create_output_link(Path('${masked_tmean_ref}'), bids_output_filename_tmean)
-    
-    # Save metadata
-    save_metadata({
-        "step": "apply_brain_mask",
-        "modality": "func",
-        "bold_file": str(Path('${conformed_bold}')),
-        "mask_file": str(Path('${brain_mask}'))
-    })
-    EOF
-    """
-}
-
-
 process FUNC_COMPUTE_REGISTRATION {
     label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.{nii.gz,h5}',
+        pattern: '*.{h5}',
         saveAs: { filename -> filename.contains('ref_from_func_reg.nii.gz') ? null : filename }
     
     input:
@@ -1189,37 +1162,25 @@ process FUNC_COMPUTE_REGISTRATION {
     # Get original file path (for BIDS filename generation)
     bids_naming_template = Path('${bids_naming_template}')
     
-    # Determine target file and type
-    registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
+    # Check if anatomical brain file is available
     anat_brain_path_str = '${anat_brain}'
     has_anat_brain = anat_brain_path_str and anat_brain_path_str.strip() != '' and '.dummy' not in anat_brain_path_str
     
     # Get effective_output_space from effective config file
     effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
     
-    if registration_pipeline == 'func2template':
-        target_file = Path(resolve_template(effective_output_space))
-        target_type = 'template'
-        target2template = False
-    elif registration_pipeline in ['func2anat', 'func2anat2template']:
-        if has_anat_brain:
-            anat_brain_path = Path(anat_brain_path_str)
-            if anat_brain_path.exists():
-                target_file = anat_brain_path
-                target_type = 'anat'
-                target2template = (registration_pipeline == 'func2anat2template')
-            else:
-                target_file = Path(resolve_template(effective_output_space))
-                target_type = 'template'
-                target2template = False
+    # Determine target file and type: use anatomical if available, otherwise use template
+    if has_anat_brain:
+        anat_brain_path = Path(anat_brain_path_str)
+        if anat_brain_path.exists():
+            target_file = anat_brain_path
+            target_type = 'anat'
         else:
             target_file = Path(resolve_template(effective_output_space))
             target_type = 'template'
-            target2template = False
     else:
         target_file = Path(resolve_template(effective_output_space))
         target_type = 'template'
-        target2template = False
     
     # Create step input
     input_obj = StepInput(
@@ -1430,40 +1391,20 @@ def extract_target_space_from_transform(transform_path: Path) -> str:
 try:
     target_space = extract_target_space_from_transform(func2target_transform)
 except (ValueError, AttributeError) as e:
-    # Fallback to config if parsing fails
-    registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
-    if registration_pipeline == 'func2template':
+    # Fallback: infer from ref_from_func_reg file
+    # If ref_from_func_reg is not a template file, it's likely anatomical
+    ref_from_func_reg_input = Path('${ref_from_func_reg}')
+    has_anat_brain = not ('.dummy' in str(ref_from_func_reg_input) or 'template' in str(ref_from_func_reg_input).lower())
+    if has_anat_brain:
+        target_space = 'T1w'
+    else:
         target_space = template_name
-    else:
-        target_space = 'T1w'  # Default for func2anat or func2anat2template
-    logger.warning(f"Failed to parse target space from transform filename, using config fallback: {target_space}. Error: {e}")
-
-# Validate against config
-registration_pipeline = config.get('func', {}).get('registration_pipeline', 'func2anat2template')
-def determine_expected_space(pipeline: str, has_anat: bool) -> str:
-    # Determine expected target space based on pipeline config.
-    if pipeline == 'func2template':
-        return template_name
-    elif pipeline in ['func2anat', 'func2anat2template']:
-        if has_anat:
-            return 'T1w'
-        else:
-            return template_name
-    else:
-        return template_name  # Default fallback
+    logger.warning(f"Failed to parse target space from transform filename, inferred '{target_space}' from ref_from_func_reg. Error: {e}")
 
 # Check if anatomical brain was used (inferred from ref_from_func_reg)
 # If ref_from_func_reg is not a template file, it's likely anatomical
 ref_from_func_reg_input = Path('${ref_from_func_reg}')
 has_anat_brain = not ('.dummy' in str(ref_from_func_reg_input) or 'template' in str(ref_from_func_reg_input).lower())
-expected_space = determine_expected_space(registration_pipeline, has_anat_brain)
-
-if target_space != expected_space:
-    logger.warning(
-        f"Transform filename suggests target space '{target_space}', but config "
-        f"(registration_pipeline='{registration_pipeline}') expects '{expected_space}'. "
-        f"Using parsed space '{target_space}' from transform filename."
-    )
 
 # Handle anat2template_xfm - may be a single file or space-separated string
 anat2template_xfm_str = '${anat2template_xfm}'
@@ -1500,14 +1441,13 @@ is_sequential = (
 print(f"INFO: Transform application mode - target_space={target_space}, is_sequential={is_sequential}, "
       f"is_dummy_anat2template={is_dummy_anat2template}, is_dummy_anat_reg={is_dummy_anat_reg}", file=sys.stderr)
 
-# If expecting sequential but files are missing, warn and fallback to single transform
+# If target space is T1w but sequential transform files are missing, warn and fallback to single transform
 if target_space == 'T1w' and (is_dummy_anat2template or is_dummy_anat_reg):
-    if registration_pipeline == 'func2anat2template':
-        logger.warning(
-            f"Expected func2anat2template pipeline but anat2template transform or reference is missing. "
-            f"Applying single transform to T1w only. "
-            f"anat2template_xfm dummy: {is_dummy_anat2template}, ref_from_anat_reg dummy: {is_dummy_anat_reg}"
-        )
+    logger.warning(
+        f"Target space is T1w but anat2template transform or reference is missing. "
+        f"Applying single transform to T1w only. "
+        f"anat2template_xfm dummy: {is_dummy_anat2template}, ref_from_anat_reg dummy: {is_dummy_anat_reg}"
+    )
     is_sequential = False
 
 # Import additional modules needed for sequential transforms
@@ -1839,8 +1779,7 @@ process FUNC_WITHIN_SES_COREG {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*desc-coreg_bold*.nii.gz',
-        saveAs: { filename -> filename }
+        enabled: false
     
     input:
     tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(tmean_file), val(bids_naming_template)

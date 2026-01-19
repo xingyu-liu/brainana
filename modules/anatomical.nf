@@ -110,7 +110,7 @@ process ANAT_REORIENT {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.nii.gz'
+        enabled: false
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
@@ -195,8 +195,14 @@ process ANAT_CONFORM {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.{nii.gz,mat}',
-        saveAs: { filename -> filename == 'template_resampled.nii.gz' ? null : filename }
+        pattern: '*.{mat,nii.gz}',
+        saveAs: { filename -> 
+            // Exclude template_resampled.nii.gz (QC reference) and desc-conform files (intermediate, not for publication)
+            if (filename == 'template_resampled.nii.gz' || filename.contains('desc-conform')) {
+                return null
+            }
+            return filename
+        }
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
@@ -204,6 +210,8 @@ process ANAT_CONFORM {
     
     output:
     tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(bids_naming_template), emit: output
+    // Phase 1 preproc output: [sub, ses, preproc_file, bids_template]
+    tuple val(subject_id), val(session_id), path("*desc-preproc*.nii.gz"), val(bids_naming_template), emit: preproc_output
     // Transforms: [sub, ses, forward_transform, inverse_transform]
     tuple val(subject_id), val(session_id), path("*from-scanner_to-*_mode-image_xfm*"), path("*from-*_to-scanner_mode-image_xfm*"), emit: transforms
     // Reference: [sub, ses, reference]
@@ -273,6 +281,44 @@ bids_output_filename = create_bids_output_filename(
 # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
 create_output_link(result.output_file, bids_output_filename)
 
+# Generate BIDS-compliant output filename for Phase 1 preproc (published output)
+bids_preproc_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-preproc',
+    modality=modality
+)
+
+# Create symlink for Phase 1 preproc output (published)
+# Use the same source file as desc-conform (result.output_file)
+# Ensure source file exists before creating symlink
+if not result.output_file.exists():
+    raise FileNotFoundError(f"Source file for preproc output does not exist: {result.output_file}")
+
+create_output_link(result.output_file, bids_preproc_filename)
+
+# Verify the file exists and is accessible (Nextflow needs to see it)
+preproc_path = Path(bids_preproc_filename)
+if not preproc_path.exists():
+    # Debug: list current directory to see what files exist
+    import os
+    current_files = [f for f in os.listdir('.') if f.endswith('.nii.gz')]
+    error_msg = ("Failed to create preproc output file: " + str(bids_preproc_filename) + 
+                 " (source: " + str(result.output_file) + ")\\n" +
+                 "Current directory files ending in .nii.gz: " + str(current_files) + "\\n" +
+                 "Absolute path: " + str(preproc_path.resolve()))
+    raise FileNotFoundError(error_msg)
+# Check if it's a valid symlink or file
+if not (preproc_path.is_symlink() or preproc_path.is_file()):
+    raise FileNotFoundError(f"Preproc output file exists but is not a valid file or symlink: {bids_preproc_filename}")
+# If it's a symlink, verify it resolves correctly
+if preproc_path.is_symlink():
+    try:
+        resolved = preproc_path.resolve(strict=True)
+        if not resolved.exists():
+            raise FileNotFoundError(f"Preproc symlink points to non-existent file: {bids_preproc_filename} -> {resolved}")
+    except Exception as e:
+        raise FileNotFoundError(f"Preproc symlink is broken: {bids_preproc_filename}, error: {e}")
+
 # Generate BIDS prefix (filename stem without modality)
 original_stem = get_filename_stem(bids_naming_template)
 bids_prefix = original_stem.replace(f"_{modality}", "")
@@ -309,7 +355,7 @@ process ANAT_BIAS_CORRECTION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.nii.gz'
+        enabled: false
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
@@ -368,10 +414,10 @@ input_obj = StepInput(
 # Run step
 result = anat_bias_correction(input_obj)
 
-# Generate BIDS-compliant output filename (main preprocessed file)
+# Generate BIDS-compliant output filename (bias corrected file)
 bids_output_filename = create_bids_output_filename(
     original_file_path=bids_naming_template,
-    suffix='desc-preproc',
+    suffix='desc-biascorrected',
     modality=modality
 )
 
@@ -773,7 +819,7 @@ process ANAT_T2W_TO_T1W_REGISTRATION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.{nii.gz,h5}'
+        pattern: '*.{h5}'
     
     input:
     tuple val(subject_id), val(session_id), path(t2w_file), val(bids_naming_template)
@@ -783,7 +829,8 @@ process ANAT_T2W_TO_T1W_REGISTRATION {
     output:
     tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_naming_template), emit: output
     // Transforms: [sub, ses, forward_transform, inverse_transform]
-    tuple val(subject_id), val(session_id), path("*from-T2w_to-T1w_mode-image_xfm*"), path("*from-T1w_to-T2w_mode-image_xfm*"), emit: transforms
+    // Note: T1w is in native space at registration time (after bias correction, before conform)
+    tuple val(subject_id), val(session_id), path("*from-T2w_to-T1wNative_mode-image_xfm*"), path("*from-T1wNative_to-T2w_mode-image_xfm*"), emit: transforms
     path "*.json", emit: metadata
     
     script:
@@ -840,11 +887,13 @@ input_obj = StepInput(
 # Run step
 result = anat_t2w_to_t1w_registration(input_obj, t1w_reference=t1w_reference)
 
-# Generate BIDS-compliant output filename with space-T1w entity
-# Format: space-T1w_desc-reorient_T2w.nii.gz (after reorient, before bias correction)
+# Generate BIDS-compliant output filename with space-T1wNative entity
+# Format: space-T1wNative_T2w.nii.gz (after T2w→T1w registration)
+# Note: T2w is registered to T1w in its native space (after bias correction, before conform)
+# Only after applying conform transform is T2w in the preprocessed T1w space (space-T1w)
 bids_output_filename = create_bids_output_filename(
     original_file_path=bids_naming_template,
-    suffix='space-T1w_desc-reorient',
+    suffix='space-T1wNative',
     modality=modality
 )
 
@@ -856,14 +905,15 @@ bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 
 # Create symlinks for transform files with BIDS-compliant names
 # .h5 files can be large, so use symlinks until published - saves storage
+# Note: T1w is in native space at this point (after bias correction, before conform)
 if "forward_transform" in result.additional_files:
-    # Forward transform: from-T2w_to-T1w
-    bids_transform_name = f"{bids_prefix_wo_modality}_from-T2w_to-T1w_mode-image_xfm.h5"
+    # Forward transform: from-T2w_to-T1wNative
+    bids_transform_name = f"{bids_prefix_wo_modality}_from-T2w_to-T1wNative_mode-image_xfm.h5"
     create_output_link(result.additional_files["forward_transform"], bids_transform_name)
 
 if "inverse_transform" in result.additional_files:
-    # Inverse transform: from-T1w_to-T2w
-    bids_transform_name = f"{bids_prefix_wo_modality}_from-T1w_to-T2w_mode-image_xfm.h5"
+    # Inverse transform: from-T1wNative_to-T2w
+    bids_transform_name = f"{bids_prefix_wo_modality}_from-T1wNative_to-T2w_mode-image_xfm.h5"
     create_output_link(result.additional_files["inverse_transform"], bids_transform_name)
 
 # Save metadata
@@ -882,7 +932,7 @@ process ANAT_CONFORM_PASSTHROUGH {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.{nii.gz,mat}'
+        enabled: false
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
@@ -962,7 +1012,7 @@ process ANAT_BIAS_CORRECTION_PASSTHROUGH {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.nii.gz'
+        enabled: false
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
@@ -989,9 +1039,10 @@ original_stem = get_filename_stem(bids_naming_template)
 
 # Pass through input file (create symlink)
 # Use create_output_link() for consistency and proper symlink resolution
+# Rename to desc-biascorrected for pipeline consistency even when step is disabled
 bids_output_filename = create_bids_output_filename(
     original_file_path=bids_naming_template,
-    suffix='desc-preproc',
+    suffix='desc-biascorrected',
     modality=modality
 )
 create_output_link(Path('${input_file}'), bids_output_filename)
@@ -1014,7 +1065,7 @@ process ANAT_REGISTRATION_PASSTHROUGH {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.{nii.gz,h5}'
+        enabled: false
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
@@ -1159,7 +1210,7 @@ process ANAT_APPLY_CONFORM {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.{nii.gz,mat}'
+        pattern: '*desc-preproc*.nii.gz'
     
     input:
     // Input: [sub, ses, t2w_file, t2w_bids_name, conform_transform, conformed_reference, anat_ses]
@@ -1170,6 +1221,9 @@ process ANAT_APPLY_CONFORM {
     output:
     // Output: [sub, ses, conformed_t2w, t2w_bids_name, anat_ses]
     tuple val(subject_id), val(session_id), path("*desc-conform_T2w.nii.gz"), val(bids_naming_template), val(anatomical_session), emit: output
+    // Phase 1 preproc output: [sub, ses, preproc_t2w, t2w_bids_name, anat_ses]
+    // T2w is in preprocessed T1w space (after applying conform transform)
+    tuple val(subject_id), val(session_id), path("*space-T1w_desc-preproc_T2w.nii.gz"), val(bids_naming_template), val(anatomical_session), emit: preproc_output
     path "*.json", emit: metadata
     
     script:
@@ -1209,15 +1263,47 @@ t2w_result = flirt_apply_transforms(
 if not t2w_result.get("imagef_registered"):
     raise FileNotFoundError("Failed to apply conform transform to T2w")
 
-# Generate BIDS-compliant output filename
+# Generate BIDS-compliant output filename (for internal workflow use)
 bids_output_filename = create_bids_output_filename(
     original_file_path=bids_naming_template,
     suffix='desc-conform',
     modality='T2w'
 )
 
-# Create symlink
+# Create symlink (for internal workflow)
 create_output_link(Path(t2w_result["imagef_registered"]), bids_output_filename)
+
+# Generate BIDS-compliant output filename for Phase 1 preproc (published output)
+# T2w is now in preprocessed T1w space (after applying conform transform)
+bids_preproc_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='space-T1w_desc-preproc',
+    modality='T2w'
+)
+
+# Create symlink for Phase 1 preproc output (published)
+# Use the same source file as desc-conform (t2w_result["imagef_registered"])
+t2w_source = Path(t2w_result["imagef_registered"])
+if not t2w_source.exists():
+    raise FileNotFoundError(f"Source file for preproc output does not exist: {t2w_source}")
+
+create_output_link(t2w_source, bids_preproc_filename)
+
+# Verify the file exists and is accessible (Nextflow needs to see it)
+preproc_path = Path(bids_preproc_filename)
+if not preproc_path.exists():
+    raise FileNotFoundError(f"Failed to create preproc output file: {bids_preproc_filename} (source: {t2w_source})")
+# Check if it's a valid symlink or file
+if not (preproc_path.is_symlink() or preproc_path.is_file()):
+    raise FileNotFoundError(f"Preproc output file exists but is not a valid file or symlink: {bids_preproc_filename}")
+# If it's a symlink, verify it resolves correctly
+if preproc_path.is_symlink():
+    try:
+        resolved = preproc_path.resolve(strict=True)
+        if not resolved.exists():
+            raise FileNotFoundError(f"Preproc symlink points to non-existent file: {bids_preproc_filename} -> {resolved}")
+    except Exception as e:
+        raise FileNotFoundError(f"Preproc symlink is broken: {bids_preproc_filename}, error: {e}")
 
 # Save metadata
 save_metadata({
@@ -1225,86 +1311,6 @@ save_metadata({
     "modality": "T2w",
     "t2w_file": str(Path('${t2w_file}')),
     "conform_transform": str(Path('${conform_transform}')),
-    "anatomical_session": '${anatomical_session}'
-})
-EOF
-    """
-}
-
-process ANAT_APPLY_BRAIN_MASK {
-    label 'cpu'
-    tag "${subject_id}_${session_id}"
-    
-    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
-        mode: 'copy',
-        pattern: '*.nii.gz'
-    
-    input:
-    // Input: [sub, ses, conformed_t2w, t2w_bids_name, brain_mask, anat_ses]
-    tuple val(subject_id), val(session_id), path(conformed_t2w), val(bids_naming_template), path(brain_mask), val(anatomical_session)
-    path config_file
-    
-    output:
-    // Output: [sub, ses, masked_t2w, t2w_bids_name, anat_ses]
-    tuple val(subject_id), val(session_id), path("*desc-conform_desc-brain_T2w.nii.gz"), val(bids_naming_template), val(anatomical_session), emit: output
-    path "*.json", emit: metadata
-    
-    script:
-    """
-    \${PYTHON:-python3} <<EOF
-from macacaMRIprep.operations.preprocessing import apply_mask
-from macacaMRIprep.utils.bids import create_bids_output_filename
-from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
-from pathlib import Path
-import logging
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_APPLY_BRAIN_MASK'
-)
-
-# Load config
-config = load_config('${config_file}')
-
-# Get original file path (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
-
-# Apply brain mask to T2w using apply_mask function
-logger = logging.getLogger(__name__)
-
-masked_t2w_path = Path('work') / 't2w_masked.nii.gz'
-result = apply_mask(
-    imagef=str(Path('${conformed_t2w}')),
-    maskf=str(Path('${brain_mask}')),
-    working_dir=Path('work'),
-    output_name='t2w_masked.nii.gz',
-    logger=logger,
-    generate_tmean=False
-)
-
-masked_t2w_path = Path(result['imagef_masked'])
-if not masked_t2w_path.exists():
-    raise FileNotFoundError("Failed to apply brain mask to T2w")
-
-# Generate BIDS-compliant output filename
-bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
-    suffix='desc-conform_desc-brain',
-    modality='T2w'
-)
-
-# Create symlink
-create_output_link(masked_t2w_path, bids_output_filename)
-
-# Save metadata
-save_metadata({
-    "step": "apply_brain_mask",
-    "modality": "T2w",
-    "t2w_file": str(Path('${conformed_t2w}')),
-    "mask_file": str(Path('${brain_mask}')),
     "anatomical_session": '${anatomical_session}'
 })
 EOF
@@ -1327,7 +1333,8 @@ process ANAT_APPLY_TRANSFORMATION {
     
     output:
     // Output: [sub, ses, registered_t2w, t2w_bids_name]
-    tuple val(subject_id), val(session_id), path("*space-*desc-preproc_T2w.nii.gz"), val(bids_naming_template), emit: output
+    // Pattern excludes target_final files (they have target_final before .nii.gz)
+    tuple val(subject_id), val(session_id), path("*space-*desc-preproc*T2w.nii.gz"), val(bids_naming_template), emit: output
     // Reference file for QC: final target reference at appropriate resolution
     tuple val(subject_id), val(session_id), path("*target_final.nii.gz"), emit: reference
     path "*.json", emit: metadata

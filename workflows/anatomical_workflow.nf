@@ -665,13 +665,22 @@ workflow ANAT_WF {
     def t2w_after_apply_conform = t2w_after_reg_to_t1w
     if (anat_conform_enabled) {
         // Join T2w with T1w's conform transform by anatomical session
+        // IMPORTANT: Use combine() + filter() instead of join() because multiple T2w sessions
+        // may reference the SAME T1w session. join() causes race condition, combine() creates
+        // all subject-level combinations, then filter keeps only matching anat_ses.
+        def anat_conform_data = anat_conform_transforms
+            .map { sub, ses, forward_xfm, inverse_xfm -> [sub, ses, forward_xfm] }
+            .join(anat_conform_reference, by: [0, 1])
+        
         def t2w_for_apply_conform = t2w_after_reg_to_t1w
             .map { sub, ses, t2w_file, t2w_bids_name, anat_ses ->
-                [sub, anat_ses, ses, t2w_file, t2w_bids_name]  // Reorder for join by anatomical session
+                [sub, ses, t2w_file, t2w_bids_name, anat_ses]
             }
-            .join(anat_conform_transforms.map { sub, ses, forward_xfm, inverse_xfm -> [sub, ses, forward_xfm] }, by: [0, 1])
-            .join(anat_conform_reference, by: [0, 1])
-            .map { sub, anat_ses, ses, t2w_file, t2w_bids_name, forward_xfm, reference ->
+            .combine(anat_conform_data, by: 0)  // Combine by subject only
+            .filter { sub, ses, t2w_file, t2w_bids_name, anat_ses, conform_ses, forward_xfm, reference ->
+                anat_ses == conform_ses  // Keep only where T2w's anat_ses matches conform session
+            }
+            .map { sub, ses, t2w_file, t2w_bids_name, anat_ses, conform_ses, forward_xfm, reference ->
                 [sub, ses, t2w_file, t2w_bids_name, forward_xfm, reference, anat_ses]
             }
         
@@ -688,13 +697,21 @@ workflow ANAT_WF {
     // Output: t2w_after_apply_reg: [sub, ses, t2w_file, t2w_bids_name]
     def t2w_after_apply_reg = t2w_after_apply_conform
     if (registration_enabled) {
+        // IMPORTANT: Use combine() + filter() instead of join() because multiple T2w sessions
+        // may reference the SAME T1w session. join() causes race condition.
+        def anat_reg_data = anat_reg_transforms
+            .map { sub, ses, forward_xfm, inverse_xfm -> [sub, ses, forward_xfm] }
+            .join(anat_reg_reference, by: [0, 1])
+        
         def t2w_for_apply_reg = t2w_after_apply_conform
             .map { sub, ses, conformed_t2w, t2w_bids_name, anat_ses ->
-                [sub, anat_ses, ses, conformed_t2w, t2w_bids_name]  // Reorder for join by anatomical session
+                [sub, ses, conformed_t2w, t2w_bids_name, anat_ses]
             }
-            .join(anat_reg_transforms.map { sub, ses, forward_xfm, inverse_xfm -> [sub, ses, forward_xfm] }, by: [0, 1])
-            .join(anat_reg_reference, by: [0, 1])
-            .map { sub, anat_ses, ses, conformed_t2w, t2w_bids_name, forward_xfm, reference ->
+            .combine(anat_reg_data, by: 0)  // Combine by subject only
+            .filter { sub, ses, conformed_t2w, t2w_bids_name, anat_ses, reg_ses, forward_xfm, reference ->
+                anat_ses == reg_ses  // Keep only where T2w's anat_ses matches registration session
+            }
+            .map { sub, ses, conformed_t2w, t2w_bids_name, anat_ses, reg_ses, forward_xfm, reference ->
                 [sub, ses, conformed_t2w, t2w_bids_name, forward_xfm, reference]
             }
         
@@ -731,13 +748,18 @@ workflow ANAT_WF {
     // Input: t2w_after_apply_conform: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
     //        t1w_skullstripped: [sub, ses, t1w_file, t1w_bids_name] (keyed by anatomical session)
     // ============================================
+    // IMPORTANT: Use combine() + filter() instead of join() because multiple T2w sessions
+    // may reference the SAME T1w session. join() causes race condition.
     def t2w_qc1_input = t2w_after_apply_conform
         .map { sub, ses, t2w_file, t2w_bids_name, anat_ses ->
-            [sub, anat_ses, ses, t2w_file, t2w_bids_name]  // Reorder for join by anatomical session
+            [sub, ses, t2w_file, t2w_bids_name, anat_ses]
         }
-        .join(t1w_skullstripped, by: [0, 1])  // Join by [sub, anat_ses]
-        .map { sub, anat_ses, ses_t2w, t2w_file, t2w_bids_name, t1w_file, t1w_bids_name ->
-            [sub, ses_t2w, t2w_file, t1w_file, t2w_bids_name]  // t1w_bids_name from join is dropped (not used)
+        .combine(t1w_skullstripped, by: 0)  // Combine by subject only
+        .filter { sub, ses, t2w_file, t2w_bids_name, anat_ses, t1w_ses, t1w_file, t1w_bids_name ->
+            anat_ses == t1w_ses  // Keep only where T2w's anat_ses matches T1w session
+        }
+        .map { sub, ses, t2w_file, t2w_bids_name, anat_ses, t1w_ses, t1w_file, t1w_bids_name ->
+            [sub, ses, t2w_file, t1w_file, t2w_bids_name]
         }
     
     t2w_qc1_input
@@ -759,17 +781,22 @@ workflow ANAT_WF {
     //        t2w_anat_selection: [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses] (to get anat_ses)
     //        anat_reg_reference: [sub, ses, reference] (keyed by anatomical session)
     // ============================================
+    // IMPORTANT: Use combine() + filter() instead of join() for the anat_reg_reference join
+    // because multiple T2w sessions may reference the SAME T1w session. join() causes race condition.
     def t2w_qc2_input = t2w_after_apply_reg
         .join(t2w_anat_selection
             .filter { sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses -> t1w_file != null }
             .map { sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses -> [sub, ses, anat_ses] },
             by: [0, 1])
         .map { sub, ses, registered_t2w_file, t2w_bids_name, anat_ses ->
-            [sub, anat_ses, ses, registered_t2w_file, t2w_bids_name]  // Reorder for join by anatomical session
+            [sub, ses, registered_t2w_file, t2w_bids_name, anat_ses]
         }
-        .join(anat_reg_reference, by: [0, 1])  // Join by [sub, anat_ses]
-        .map { sub, anat_ses, ses_t2w, registered_t2w_file, t2w_bids_name, template_ref ->
-            [sub, ses_t2w, registered_t2w_file, template_ref, t2w_bids_name]
+        .combine(anat_reg_reference, by: 0)  // Combine by subject only
+        .filter { sub, ses, registered_t2w_file, t2w_bids_name, anat_ses, ref_ses, template_ref ->
+            anat_ses == ref_ses  // Keep only where T2w's anat_ses matches reference session
+        }
+        .map { sub, ses, registered_t2w_file, t2w_bids_name, anat_ses, ref_ses, template_ref ->
+            [sub, ses, registered_t2w_file, template_ref, t2w_bids_name]
         }
     
     t2w_qc2_input

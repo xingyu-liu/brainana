@@ -604,7 +604,10 @@ def func_within_ses_coreg(
                 "cost": "mutualinfo",
                 "searchcost": "mutualinfo",
                 "coarsesearch": 40,
-                "finesearch": 15
+                "finesearch": 15,
+                "searchrx": [-120, 120],
+                "searchry": [-120, 120],
+                "searchrz": [-120, 120]
             }
         }
     }

@@ -26,7 +26,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
 BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_easy_downsampled"
-OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_downsampled_v3"
+OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_downsampled_v4"
 # BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_2pass"
 # OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_2pass_nextflow"
 # BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_multiple"
