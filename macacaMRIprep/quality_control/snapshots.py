@@ -168,12 +168,6 @@ def create_motion_correction_qc(
         if motion_data.ndim == 1:
             motion_data = motion_data.reshape(1, -1)
             
-        # Calculate motion statistics
-        trans_rms = np.sqrt(np.mean(motion_data[:, :3]**2, axis=0))
-        rot_rms = np.sqrt(np.mean(motion_data[:, 3:]**2, axis=0))
-        
-        logger.info(f"Data: motion RMS - translation {trans_rms.mean():.3f}mm, rotation {np.degrees(rot_rms.mean()):.3f}°")
-        
         # Create motion plot
         fig = create_motion_plot(motion_data, title="")
         

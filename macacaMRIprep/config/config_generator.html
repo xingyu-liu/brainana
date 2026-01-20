@@ -647,20 +647,6 @@
                 </select>
                 <span class="help-text">(interpolation method)</span>
             </div>
-            <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" id="registration_output_registered_image" name="registration_output_registered_image" checked>
-                    <label for="registration_output_registered_image">output_registered_image</label>
-                </div>
-                <div class="help-text">(output registered image)</div>
-            </div>
-            <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" id="registration_output_inverse_registered_image" name="registration_output_inverse_registered_image">
-                    <label for="registration_output_inverse_registered_image">output_inverse_registered_image</label>
-                </div>
-                <div class="help-text">(output inverse registered image)</div>
-            </div>
         </div>
 
         <!-- Preview Section (injected by CLI if dataset_dir provided) -->
@@ -767,9 +753,7 @@
                 func2anat_xfm_type: "syn",
                 func2template_xfm_type: "syn",
                 keep_func_resolution: true,
-                interpolation: "LanczosWindowedSinc",
-                output_registered_image: true,
-                output_inverse_registered_image: false
+                interpolation: "LanczosWindowedSinc"
             }
         };
 
@@ -1142,8 +1126,6 @@
             config.registration.func2template_xfm_type = document.getElementById('registration_func2template_xfm_type').value;
             config.registration.keep_func_resolution = document.getElementById('registration_keep_func_resolution').checked;
             config.registration.interpolation = document.getElementById('registration_interpolation').value;
-            config.registration.output_registered_image = document.getElementById('registration_output_registered_image').checked;
-            config.registration.output_inverse_registered_image = document.getElementById('registration_output_inverse_registered_image').checked;
             
             // Validate
             const errors = validateConfig(config);

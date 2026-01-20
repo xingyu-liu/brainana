@@ -291,9 +291,9 @@ def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepO
                 "searchcost": "mutualinfo",
                 "coarsesearch": 40,
                 "finesearch": 15,
-                "searchrx": [-120, 120],
-                "searchry": [-120, 120],
-                "searchrz": [-120, 120]
+                "searchrx": [-60, 60],
+                "searchry": [-60, 60],
+                "searchrz": [-60, 60]
             }
         }
     }

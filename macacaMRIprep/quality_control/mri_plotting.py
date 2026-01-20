@@ -21,8 +21,6 @@ import nibabel as nib
 from typing import Optional, Tuple, List, Union, Set
 from pathlib import Path
 from PIL import Image
-import tempfile
-import shutil
 from ..utils.mri import get_opposite_orientation, get_image_orientation_from_affine
 
 # %%
@@ -649,7 +647,7 @@ def create_overlay_grid_3xN(
 def create_motion_plot(
     motion_data: np.ndarray,
     title: str = "Head Motion Parameters",
-    figsize: Tuple[int, int] = (12, 8)
+    figsize: Tuple[int, int] = (15, 6)
 ) -> plt.Figure:
     """
     Create motion parameter plots.
@@ -664,27 +662,48 @@ def create_motion_plot(
     Returns:
         Matplotlib figure object
     """
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize, sharex=True)
+
+    colors = ['#636295', '#7EA3A8', '#C86043']
     
     # Plot translations (mm)
-    ax1.plot(motion_data[:, 0], label='X (mm)', color='red')
-    ax1.plot(motion_data[:, 1], label='Y (mm)', color='green')
-    ax1.plot(motion_data[:, 2], label='Z (mm)', color='blue')
+    ax1.plot(motion_data[:, 0], label='X', color=colors[0], lw=2)
+    ax1.plot(motion_data[:, 1], label='Y', color=colors[1], lw=2)
+    ax1.plot(motion_data[:, 2], label='Z', color=colors[2], lw=2)
     ax1.set_ylabel('Translation (mm)')
-    ax1.set_title(title)
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
+    yrange = np.max(np.abs(motion_data[:, :3])) * 1.1
+    ax1.set_ylim(-yrange, yrange)
     
     # Plot rotations (radians to degrees)
-    ax2.plot(np.degrees(motion_data[:, 3]), label='X (deg)', color='red')
-    ax2.plot(np.degrees(motion_data[:, 4]), label='Y (deg)', color='green')
-    ax2.plot(np.degrees(motion_data[:, 5]), label='Z (deg)', color='blue')
+    ax2.plot(np.degrees(motion_data[:, 3]), label='X', color=colors[0], lw=2)
+    ax2.plot(np.degrees(motion_data[:, 4]), label='Y', color=colors[1], lw=2)
+    ax2.plot(np.degrees(motion_data[:, 5]), label='Z', color=colors[2], lw=2)
     ax2.set_ylabel('Rotation (degrees)')
-    ax2.set_xlabel('Volume')
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
+    yrange = np.max(np.abs(np.degrees(motion_data[:, 3:]))) * 1.1
+    ax2.set_ylim(-yrange, yrange)
+
+    ax1.set_title(title)
+    ax1.legend()
+    ax2.set_xlabel('Timepoint')
+
+    # show 10 xticks if there are more than 10 timepoints
+    if motion_data.shape[0] > 10:
+        xticks = np.linspace(0, motion_data.shape[0], 10).astype(int)
+    for ax in [ax1, ax2]:
+        ax.set_xticks(xticks)
+        ax.set_xticklabels([f'{i:d}' for i in xticks])
+
+    # add a horizontal line at 0 for the y-axis
+    for ax in [ax1, ax2]:
+        ax.axhline(0, color='gray', linestyle='--')
+    
+    # add grid
+    for ax in [ax1, ax2]:
+        ax.grid(True, alpha=0.1)
     
     plt.tight_layout()
+    # sns.despine(right=True, top=True, trim=False, offset=0)
+
     return fig
 
 

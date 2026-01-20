@@ -31,7 +31,7 @@ anat:
     enabled: true  # bool: perform bias field correction
     algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
     shrink_factor: 2  # float: shrink factor for faster processing (> 0)
-    bspline_fitting: "[ 200 ]"  # str: B-spline fitting parameters in ANTs format
+    bspline_fitting: "[ 150 ]"  # str: B-spline fitting parameters in ANTs format
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
   skullstripping_segmentation:
     enabled: true  # bool: perform brain extraction and segmentation
@@ -75,7 +75,7 @@ func:
     enabled: true  # bool: perform bias field correction
     algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
     shrink_factor: 2  # float: shrink factor for faster processing (> 0)
-    bspline_fitting: "[ 200 ]"  # str: B-spline fitting parameters in ANTs format
+    bspline_fitting: "[ 100 ]"  # str: B-spline fitting parameters in ANTs format
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
   conform:
     enabled: true  # bool: conform functional tmean image to target space using FLIRT rigid registration
@@ -87,7 +87,5 @@ registration:
   anat2template_xfm_type: "syn"  # str: transform type for anat->template ("translation", "rigid", "affine", or "syn")
   func2anat_xfm_type: "syn"  # str: transform type for func->anat ("translation", "rigid", "affine", or "syn")
   func2template_xfm_type: "syn"  # str: transform type for func->template ("translation", "rigid", "affine", or "syn")
-  keep_func_resolution: true  # bool: keep original functional image resolution after registration
   interpolation: "LanczosWindowedSinc"  # str: interpolation method ("Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline", "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc", "LanczosWindowedSinc", "GenericLabel")
-  output_registered_image: true  # bool: output registered image
-  output_inverse_registered_image: false  # bool: output inverse registered image
+  keep_func_resolution: true  # bool: keep original functional image resolution after registration

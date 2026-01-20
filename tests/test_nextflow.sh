@@ -26,17 +26,17 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
 BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_easy_downsampled"
-OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_downsampled_v4"
+OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_downsampled_v5"
 # BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_2pass"
 # OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_2pass_nextflow"
 # BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_multiple"
-# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_multiple_nextflow_v1"
+# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_multiple_v4"
 # BIDS_DIR="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids"
 # OUTPUT_DIR="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_baby25_v1"
 
 # CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_affine.yaml"
 CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_easy.yaml"
-# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_2pass.yaml"
+# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_full.yaml"
 # CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_marge.yaml"
 
 WORKING_DIR=${OUTPUT_DIR}_wd
