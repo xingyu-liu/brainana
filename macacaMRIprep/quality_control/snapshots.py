@@ -17,19 +17,16 @@ from typing import Dict, Any, Union, List, Optional
 from PIL import Image
 import tempfile
 import shutil
+import subprocess
 
 from .mri_plotting import (
     create_overlay_grid_3xN, 
     create_motion_plot, 
     create_grid_mri_image,
-    create_surface_mask_from_mesh,
-    create_surface_mask_for_multiple_surfaces,
     _crop_white_space,
     _create_colorbar,
     _create_label_image,
     _find_content_width,
-    WHITE_THRESHOLD,
-    CROP_PADDING,
     MARGIN_PERCENT,
     SURFACE_SPACING,
     SURFACE_PLOT_SIZE,
@@ -39,10 +36,8 @@ from .mri_plotting import (
     CBAR_SPACING,
     CBAR_GRADIENT_WIDTH_RATIO,
     CBAR_TARGET_WIDTH_RATIO,
-    CBAR_LABEL_FONTSIZE,
-    CBAR_TICK_FONTSIZE,
-    CBAR_LABEL_PAD
 )
+from ..utils.system import check_dependency
 
 # Try to import surfplot
 SURFPLOT_AVAILABLE = False
@@ -521,117 +516,237 @@ def _create_before_after_comparison(
     return None  # Function doesn't need to return a figure anymore
 
 
+def _get_scene_file_path() -> Path:
+    """Get path to Vol_Surface.scene resource file.
+    
+    Returns:
+        Path to the scene file
+        
+    Raises:
+        FileNotFoundError: If scene file is not found
+    """
+    # Get directory of this file (snapshots.py)
+    module_dir = Path(__file__).parent
+    scene_file = module_dir / "resources" / "Vol_Surface.scene"
+    
+    if not scene_file.exists():
+        raise FileNotFoundError(
+            f"Scene file not found: {scene_file}\n"
+            "This file should be packaged with the installation. "
+            "Please ensure macacaMRIprep is properly installed and the scene file "
+            "is present in quality_control/resources/Vol_Surface.scene"
+        )
+    return scene_file
+
+
 def create_surf_recon_tissue_seg_qc(
     fs_subject_dir: Union[str, Path],
     save_f: Union[str, Path],
     modality: str = "anat",
-    num_slices: int = 6,
+    num_slices: int = 6,  # Not used in Workbench implementation, kept for compatibility
     logger: Optional[logging.Logger] = None,
     **kwargs
 ) -> Dict[str, str]:
     """
-    Generate surface reconstruction tissue segmentation quality control overlays.
-    Creates a 3xN grid showing T1w with white and pial surface contours.
+    Generate surface reconstruction tissue segmentation quality control visualization.
+    
+    Uses Connectome Workbench to create a 3D visualization of FreeSurfer surfaces
+    (white and pial) overlaid on the brain volume. This replaces the previous
+    rasterization-based 2D slice approach with a Workbench-based 3D rendering.
     
     Args:
         fs_subject_dir: Path to FreeSurfer subject directory (e.g., 'fastsurfer/sub-XXX')
-        save_f: Full path for output file (e.g., 'figures/sub-01_desc-surfReconTissueSeg_T1w.png')
+        save_f: Full path for output PNG file (e.g., 'figures/sub-01_desc-surfReconTissueSeg_T1w.png')
         modality: Imaging modality ("anat" or "func")
-        num_slices: Number of slices per orientation
+        num_slices: Number of slices per orientation (not used, kept for compatibility)
         logger: Logger instance
         
     Returns:
-        Dictionary with snapshot file paths
+        Dictionary with snapshot file paths: {f"{modality}_surf_recon_tissue_seg_overlay": str(output_path)}
+        
+    Raises:
+        RuntimeError: If required tools (wb_command, mris_convert, mri_convert) are not available
+        FileNotFoundError: If required input files or scene file are not found
     """
     if logger is None:
         logger = logging.getLogger(__name__)
     
     fs_subject_dir = Path(fs_subject_dir)
     output_path = Path(save_f)
-    logger.info(f"QC: creating {modality} surface reconstruction tissue segmentation overlay")
+    logger.info(f"QC: creating {modality} surface reconstruction tissue segmentation overlay (Workbench-based)")
     
     try:
-        # Construct file paths from FreeSurfer directory structure
+        # Step 1: Validate external tools
+        logger.info("QC: checking external tool dependencies...")
+        if not check_dependency('wb_command', logger):
+            raise RuntimeError("wb_command not found. Connectome Workbench is required.")
+        if not check_dependency('mris_convert', logger):
+            raise RuntimeError("mris_convert not found. FreeSurfer is required.")
+        if not check_dependency('mri_convert', logger):
+            raise RuntimeError("mri_convert not found. FreeSurfer is required.")
+        
+        # Step 2: Construct file paths from FreeSurfer directory structure
         surf_dir = fs_subject_dir / "surf"
         mri_dir = fs_subject_dir / "mri"
         
-        # Surface files
-        white_surf_lh = surf_dir / "lh.smoothwm"
-        white_surf_rh = surf_dir / "rh.smoothwm"
-        pial_surf_lh = surf_dir / "lh.pial"
-        pial_surf_rh = surf_dir / "rh.pial"
+        # Surface files (using .white and .pial, not .smoothwm)
+        lh_white_f = surf_dir / "lh.white"
+        rh_white_f = surf_dir / "rh.white"
+        lh_pial_f = surf_dir / "lh.pial"
+        rh_pial_f = surf_dir / "rh.pial"
         
         # T1w brain file
-        t1w_brain_file = mri_dir / "brain.finalsurfs.mgz"
+        brain_f = mri_dir / "brain.finalsurfs.mgz"
         
-        # Validate inputs
+        # Step 3: Validate input files exist
+        logger.info("QC: validating input files...")
         for file_path, name in [
-            (t1w_brain_file, "T1w"), 
-            (white_surf_lh, "white_lh"), (pial_surf_lh, "pial_lh"), 
-            (pial_surf_rh, "pial_rh"), (white_surf_rh, "white_rh")
-            
+            (brain_f, "brain.finalsurfs.mgz"),
+            (lh_white_f, "lh.white"),
+            (rh_white_f, "rh.white"),
+            (lh_pial_f, "lh.pial"),
+            (rh_pial_f, "rh.pial")
         ]:
             if not file_path.exists():
                 logger.error(f"QC: {name} file not found - {file_path}")
                 return {}
         
-        # Load T1w image
-        t1w_brain_img = nib.load(str(t1w_brain_file))
-        volume_shape = t1w_brain_img.shape[:3]
+        # Step 4: Get scene file path
+        scene_file = _get_scene_file_path()
+        logger.info(f"QC: using scene file: {scene_file}")
         
-        # Load surfaces
-        logger.info("QC: loading surface meshes...")
-        white_lh_verts, white_lh_faces = nib.freesurfer.read_geometry(str(white_surf_lh))
-        white_rh_verts, white_rh_faces = nib.freesurfer.read_geometry(str(white_surf_rh))
-        pial_lh_verts, pial_lh_faces = nib.freesurfer.read_geometry(str(pial_surf_lh))
-        pial_rh_verts, pial_rh_faces = nib.freesurfer.read_geometry(str(pial_surf_rh))
+        # Step 5: Create working directory (Nextflow work dir)
+        # Use output_path.parent as the base (Nextflow manages this)
+        work_dir = output_path.parent / "volsurf_work"
+        work_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"QC: working directory: {work_dir}")
         
-        # Create masks from surface meshes
-        logger.info("QC: creating masks from surface meshes (rasterization approach)...")
-        white_mask = create_surface_mask_for_multiple_surfaces(
-            [(white_lh_verts, white_lh_faces), (white_rh_verts, white_rh_faces)],
-            t1w_brain_img
+        # Step 6: Convert FreeSurfer surfaces to GIFTI format
+        logger.info("QC: converting surfaces to GIFTI format...")
+        lh_white_gii = work_dir / 'lh.white.surf.gii'
+        rh_white_gii = work_dir / 'rh.white.surf.gii'
+        lh_pial_gii = work_dir / 'lh.pial.surf.gii'
+        rh_pial_gii = work_dir / 'rh.pial.surf.gii'
+        
+        subprocess.run(
+            ['mris_convert', str(lh_white_f), str(lh_white_gii)],
+            check=True,
+            capture_output=True,
+            text=True
         )
-        pial_mask = create_surface_mask_for_multiple_surfaces(
-            [(pial_lh_verts, pial_lh_faces), (pial_rh_verts, pial_rh_faces)],
-            t1w_brain_img
+        subprocess.run(
+            ['mris_convert', str(rh_white_f), str(rh_white_gii)],
+            check=True,
+            capture_output=True,
+            text=True
         )
-        
-        # Combine masks into a single multi-label overlay
-        # Label 1 = white surface, Label 2 = pial surface
-        # If both overlap, pial (label 2) takes precedence
-        logger.info("QC: combining white and pial surface masks...")
-        combined_mask = np.zeros(volume_shape, dtype=np.uint8)
-        combined_mask[white_mask > 0] = 1
-        combined_mask[pial_mask > 0] = 2  # Overwrites white where they overlap
-        
-        # Create combined surface overlay
-        logger.info("QC: creating combined surface overlay...")
-        fig = create_grid_mri_image(
-            underlay_data=str(t1w_brain_file),
-            overlay_data=combined_mask,
-            num_cols=num_slices,
-            perspectives=["axial", "sagittal", "coronal"],
-            overlay_colors=['mediumseagreen', 'mediumpurple'],  # Label 1 (white), Label 2 (pial)
-            alpha=0.7,
-            num_contour_levels=1,
-            show_title=False,
-            col_margin=1,
-            figsize_per_col=(3, 3),
-            contour_linewidth=1.0,
-            contour_type='discrete'  # Use discrete for multi-label masks to avoid double lines
+        subprocess.run(
+            ['mris_convert', str(lh_pial_f), str(lh_pial_gii)],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        subprocess.run(
+            ['mris_convert', str(rh_pial_f), str(rh_pial_gii)],
+            check=True,
+            capture_output=True,
+            text=True
         )
         
-        # Ensure the parent directory exists
+        # Step 7: Convert volume to NIfTI
+        logger.info("QC: converting volume to NIfTI format...")
+        brain_nii = work_dir / 'brain.finalsurfs.nii.gz'
+        subprocess.run(
+            ['mri_convert', str(brain_f), str(brain_nii)],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        
+        # Step 8: Create affine matrix from CRAS values
+        logger.info("QC: creating affine matrix from surface CRAS values...")
+        affine_mat = work_dir / 'affine.mat'
+        
+        # Read CRAS (center of RAS) from lh.white surface file header
+        _, _, header_info = nib.freesurfer.read_geometry(str(lh_white_f), read_metadata=True)
+        c_ras = header_info['cras']
+        
+        # Create affine matrix with CRAS as translation components
+        affine_list = [
+            [1, 0, 0, float(c_ras[0])],
+            [0, 1, 0, float(c_ras[1])],
+            [0, 0, 1, float(c_ras[2])],
+            [0, 0, 0, 1]
+        ]
+        
+        with open(affine_mat, 'w') as f:
+            for line in affine_list:
+                # Format as space-separated values (matching original format)
+                f.write(str(line)[1:-1].replace(',', '    ') + '\n')
+        
+        logger.debug(f"QC: created affine matrix with CRAS values: {c_ras}")
+        
+        # Step 9: Apply affine transformation to surfaces
+        logger.info("QC: applying affine transformation to surfaces...")
+        # Apply affine to each surface (in-place, overwriting the original GIFTI files)
+        subprocess.run(
+            ['wb_command', '-surface-apply-affine', str(lh_white_gii), str(affine_mat), str(lh_white_gii)],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        subprocess.run(
+            ['wb_command', '-surface-apply-affine', str(rh_white_gii), str(affine_mat), str(rh_white_gii)],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        subprocess.run(
+            ['wb_command', '-surface-apply-affine', str(lh_pial_gii), str(affine_mat), str(lh_pial_gii)],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        subprocess.run(
+            ['wb_command', '-surface-apply-affine', str(rh_pial_gii), str(affine_mat), str(rh_pial_gii)],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        
+        # Step 10: Copy scene file to working directory
+        logger.info("QC: copying scene file to working directory...")
+        work_scene_file = work_dir / 'Vol_Surface.scene'
+        shutil.copy2(scene_file, work_scene_file)
+        
+        # Step 11: Render scene using Connectome Workbench
+        logger.info("QC: rendering scene with Connectome Workbench...")
+        # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='black')
-        plt.close(fig)
+        
+        subprocess.run(
+            ['wb_command', '-show-scene', str(work_scene_file), '1', str(output_path), '2400', '1000'],
+            check=True,
+            capture_output=True,
+            text=True
+        )
         
         logger.info(f"QC: surface reconstruction tissue segmentation overlay saved - {os.path.basename(output_path)}")
         return {f"{modality}_surf_recon_tissue_seg_overlay": str(output_path)}
         
+    except FileNotFoundError as e:
+        logger.error(f"QC: Required file not found - {e}")
+        return {}
+    except subprocess.CalledProcessError as e:
+        logger.error(f"QC: Command failed - {e.cmd}: {e.stderr if e.stderr else 'no error output'}")
+        return {}
+    except RuntimeError as e:
+        logger.error(f"QC: {e}")
+        return {}
     except Exception as e:
         logger.error(f"QC: surface reconstruction tissue segmentation overlay generation failed - {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
         return {}
 
 

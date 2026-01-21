@@ -106,6 +106,12 @@ REQUIRED_EXTERNAL_TOOLS = {
         'env_var': 'FREESURFER_HOME',
         'version_cmd': 'mri_info --version',
         'required_version': '7.4.1'
+    },
+    'connectome_workbench': {
+        'env_var': None,  # wb_command typically in PATH
+        'version_cmd': 'wb_command -version',
+        'required_version': None,  # No specific version requirement
+        'commands': ['wb_command']
     }
 }
 

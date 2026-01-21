@@ -94,6 +94,7 @@ include = ["macacaMRIprep*", "FastSurferCNN*", "FastSurferRecon*", "NHPskullstri
 "macacaMRIprep" = [
     "config/*.yaml",
     "config/*.html",
+    "quality_control/resources/*.scene",
 ]
 "FastSurferCNN" = [
     "config/*.yaml",
