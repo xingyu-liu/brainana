@@ -62,7 +62,7 @@ workflow {
     // ============================================
     if (!anat_only) {
         FUNC_WF(
-            ANAT_WF.out.anat_after_skull,
+            ANAT_WF.out.anat_after_bias_brain,  // Use brain version for functional registration
             ANAT_WF.out.anat_reg_transforms,
             ANAT_WF.out.anat_reg_reference
         )

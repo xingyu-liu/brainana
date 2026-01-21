@@ -34,7 +34,7 @@ process FUNC_BIAS_CORRECTION {
     output:
     tuple val(subject_id), val(session_id), val(task_name), val(run), 
           path("bold_inherited.nii.gz"),  // Symlink to input (no copy!)
-          path("*desc-biasCorrection_boldref.nii.gz"),  // Processed tmean
+          path("*desc-biascorrect_boldref.nii.gz"),  // Processed tmean
           val(bids_naming_template), 
           emit: combined
     
@@ -70,7 +70,7 @@ process FUNC_BIAS_CORRECTION {
     output:
     tuple val(subject_id), val(session_id), val(task_name), val(run), 
           path("bold_inherited.nii.gz"),  // Output symlink
-          path("*desc-biasCorrection_boldref.nii.gz"), 
+          path("*desc-biascorrect_boldref.nii.gz"), 
           val(bids_naming_template), 
           emit: combined
     
@@ -200,7 +200,7 @@ Make sure output patterns match the symlinked filename:
 output:
 tuple val(subject_id), val(session_id), val(task_name), val(run), 
       path("bold_inherited.nii.gz"),  // Matches stageAs name
-      path("*desc-biasCorrection_boldref.nii.gz"), 
+      path("*desc-biascorrect_boldref.nii.gz"), 
       val(bids_naming_template), 
       emit: combined
 ```

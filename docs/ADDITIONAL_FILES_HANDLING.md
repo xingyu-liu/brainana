@@ -122,7 +122,7 @@ output:
 // Main combined channel
 tuple val(subject_id), val(session_id), val(task_name), val(run), 
       path(bold_file),                          // Inherited from input (pass through)
-      path("*desc-biasCorrection_boldref.nii.gz"), // Processed tmean
+      path("*desc-biascorrect_boldref.nii.gz"), // Processed tmean
       val(bids_naming_template), 
       emit: combined
 

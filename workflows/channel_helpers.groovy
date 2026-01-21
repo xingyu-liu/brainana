@@ -242,7 +242,7 @@ def performT2wAnatomicalSelection = { t2w_after_reorient, anat_after_bias, isT1w
  * so this function returns session-level results only (no run_identifier).
  * Use combine() to match with run-level functional data.
  */
-def performFuncAnatomicalSelection = { func_after_coreg, anat_after_skull, isT1wFileForFunc, findUnmatched, dummy_anat ->
+def performFuncAnatomicalSelection = { func_after_coreg, anat_after_bias_brain, isT1wFileForFunc, findUnmatched, dummy_anat ->
     // Select anatomical reference for each functional session with priority:
     // 1. Same session (exact match by [sub, ses])
     // 2. Different session (same subject, first available session)
@@ -254,23 +254,26 @@ def performFuncAnatomicalSelection = { func_after_coreg, anat_after_skull, isT1w
     // NOTE: We use a "left anti-join" pattern with mix() + groupTuple() instead of
     // combine() because combine() only emits when BOTH channels have matching keys,
     // which would silently drop sessions that need to go to Case 2 or Case 3.
-    
+    //
+    // NOTE: Uses anat_after_bias_brain (Phase 1 final output - brain version) for functional registration
+    //
     // Extract unique [sub, ses] pairs from functional jobs
     // All runs in the same session will use the same anatomical reference
     def func_sessions = func_after_coreg.map { sub, ses, run_identifier, bold_file, tmean_file, bids_name ->
         [sub, ses]
     }.unique()
     
-    def anat_for_func = anat_after_skull.filter(isT1wFileForFunc)
+    def anat_for_func = anat_after_bias_brain.filter(isT1wFileForFunc)
     
     // Build lookup: same-session anatomical data [sub, ses, anat_file]
+    // Note: anat_after_bias_brain structure is [sub, ses, brain_file, bids_name]
     def anat_same_ses = anat_for_func
-        .map { sub, ses, anat_file, bids_name -> [sub, ses, anat_file] }
-        .unique { sub, ses, anat_file -> [sub, ses] }  // Deduplicate by [sub, ses]
+        .map { sub, ses, brain_file, bids_name -> [sub, ses, brain_file] }
+        .unique { sub, ses, brain_file -> [sub, ses] }  // Deduplicate by [sub, ses]
     
     // Build lookup: across-session anatomical data [sub, anat_file, anat_ses] (first session per subject)
     def anat_across_ses = anat_for_func
-        .map { sub, ses, anat_file, bids_name -> [sub, ses, anat_file] }
+        .map { sub, ses, brain_file, bids_name -> [sub, ses, brain_file] }
         .groupTuple(by: 0)
         .map { sub, ses_list, file_list ->
             def first = [ses_list, file_list].transpose().sort { a, b -> (a[0] ?: '') <=> (b[0] ?: '') }[0]

@@ -101,7 +101,7 @@ modality = detect_modality(bids_naming_template)
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
     original_file_path=bids_naming_template,
-    suffix='desc-biasCorrection',
+    suffix='desc-biascorrect',
     modality=modality
 ).replace('.nii.gz', '.png')
 
@@ -156,7 +156,7 @@ modality = detect_modality(bids_naming_template)
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
     original_file_path=bids_naming_template,
-    suffix='desc-skullStripping',
+    suffix='desc-skullstrip',
     modality=modality
 ).replace('.nii.gz', '.png')
 
@@ -647,7 +647,7 @@ bids_naming_template = Path('${bids_naming_template}')
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
     original_file_path=bids_naming_template,
-    suffix='desc-biasCorrection',
+    suffix='desc-biascorrect',
     modality='bold'
 ).replace('.nii.gz', '.png')
 
@@ -756,7 +756,7 @@ bids_naming_template = Path('${bids_naming_template}')
 # Generate BIDS-compliant QC output filename
 qc_output_filename = create_bids_output_filename(
     original_file_path=bids_naming_template,
-    suffix='desc-skullStripping',
+    suffix='desc-skullstrip',
     modality='bold'
 ).replace('.nii.gz', '.png')
 
@@ -892,12 +892,12 @@ config = load_config('${config_file}')
 bids_naming_template = Path('${bids_naming_template}')
 
 # Generate BIDS-compliant QC output filename
-# Remove run-specific entities (other than sub and ses), add desc-coreg, ends with _boldref
+# Remove run-specific entities (other than sub and ses), add desc-func_coreg, ends with _boldref
 # Parse the original filename to get entities
 parsed = parse_bids_entities(str(bids_naming_template))
 # Keep only sub and ses entities, then add desc
 parsed = {k: v for k, v in parsed.items() if k in ['sub', 'ses']}
-parsed['desc'] = 'coreg'
+parsed['desc'] = 'func_coreg'
 qc_output_filename = create_bids_filename(parsed, 'boldref', extension='.png')
 
 # Generate QC

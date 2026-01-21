@@ -11,11 +11,11 @@ process FUNC_REORIENT {
         enabled: false
     
     input:
-    tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_name)
     path config_file  // Effective config file with all resolved parameters
     
     output:
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-reorient_bold.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-reorient_bold.nii.gz"), val(bids_name), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -53,7 +53,7 @@ process FUNC_REORIENT {
     config = load_config('${config_file}')
     
     # Get BIDS naming template (for BIDS filename generation)
-    bids_naming_template = Path('${bids_naming_template}')
+    bids_name = Path('${bids_name}')
     
     # Get effective_output_space from effective config file
     effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
@@ -81,7 +81,7 @@ process FUNC_REORIENT {
     
     # Generate BIDS-compliant output filename
     bids_output_filename = create_bids_output_filename(
-        original_file_path=bids_naming_template,
+        original_file_path=bids_name,
         suffix='desc-reorient',
         modality='bold'
     )
@@ -108,11 +108,11 @@ process FUNC_SLICE_TIMING {
         enabled: false
     
     input:
-    tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_name)
     path config_file  // Effective config file with all resolved parameters
     
     output:
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-sliceTiming_bold.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-sliceTiming_bold.nii.gz"), val(bids_name), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -149,7 +149,7 @@ process FUNC_SLICE_TIMING {
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
-    bids_naming_template = Path('${bids_naming_template}')
+    bids_name = Path('${bids_name}')
     
     # Load BIDS metadata from JSON file and update config
     from macacaMRIprep.utils.bids import find_bids_metadata
@@ -158,7 +158,7 @@ process FUNC_SLICE_TIMING {
     logger = logging.getLogger(__name__)
     
     # Find BIDS dataset directory (parent of subject directory)
-    bids_file_path = Path('${bids_naming_template}')
+    bids_file_path = Path('${bids_name}')
     # Navigate up from func/ to ses/ to sub/ to dataset root
     dataset_dir = bids_file_path.parent.parent.parent.parent
     func_metadata = find_bids_metadata(bids_file_path, dataset_dir)
@@ -188,7 +188,7 @@ process FUNC_SLICE_TIMING {
     
     # Generate BIDS-compliant output filename
     bids_output_filename = create_bids_output_filename(
-        original_file_path=bids_naming_template,
+        original_file_path=bids_name,
         suffix='desc-sliceTiming',
         modality='bold'
     )
@@ -202,7 +202,7 @@ process FUNC_SLICE_TIMING {
         if key == 'tmean':
             # Create BIDS-compliant name for tmean (use boldref suffix)
             tmean_bids_name = create_bids_output_filename(
-                original_file_path=bids_naming_template,
+                original_file_path=bids_name,
                 suffix='desc-sliceTiming',
                 modality='boldref'
             )
@@ -225,12 +225,12 @@ process FUNC_MOTION_CORRECTION {
         pattern: '*.{tsv}'
     
     input:
-    tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_name)
     path config_file  // Effective config file with all resolved parameters
     
     output:
     // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-motion_bold.nii.gz"), path("*desc-motion_boldref.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-motion_bold.nii.gz"), path("*desc-motion_boldref.nii.gz"), val(bids_name), emit: output
     tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-confounds_timeseries.tsv"), emit: motion_params
     path "*.json", emit: metadata
     
@@ -268,7 +268,7 @@ process FUNC_MOTION_CORRECTION {
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
-    bids_naming_template = Path('${bids_naming_template}')
+    bids_name = Path('${bids_name}')
     
     # Create step input
     input_obj = StepInput(
@@ -288,7 +288,7 @@ process FUNC_MOTION_CORRECTION {
     
     # Generate BIDS-compliant output filename
     bids_output_filename = create_bids_output_filename(
-        original_file_path=bids_naming_template,
+        original_file_path=bids_name,
         suffix='desc-motion',
         modality='bold'
     )
@@ -303,7 +303,7 @@ process FUNC_MOTION_CORRECTION {
         if key == 'tmean':
             # Create BIDS-compliant name for tmean (use boldref suffix)
             tmean_bids_name = create_bids_output_filename(
-                original_file_path=bids_naming_template,
+                original_file_path=bids_name,
                 suffix='desc-motion',
                 modality='boldref'
             )
@@ -312,7 +312,7 @@ process FUNC_MOTION_CORRECTION {
             # Create BIDS-compliant name for motion parameters
             # Keep as copy - small file, may need to be actual file for Nextflow
             from macacaMRIprep.utils.bids import get_filename_stem
-            original_stem = get_filename_stem(bids_naming_template)
+            original_stem = get_filename_stem(bids_name)
             bids_prefix = original_stem.replace('_bold', '')
             motion_bids_name = f"{bids_prefix}_desc-confounds_timeseries.tsv"
             shutil.copy2(f, motion_bids_name)
@@ -334,12 +334,12 @@ process FUNC_GENERATE_TMEAN {
         enabled: false
     
     input:
-    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), val(bids_name)
     path config_file
     
     output:
     // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*_bold.nii.gz"), path("*_boldref.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*_bold.nii.gz"), path("*_boldref.nii.gz"), val(bids_name), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -378,19 +378,19 @@ process FUNC_GENERATE_TMEAN {
     config = load_config('${config_file}')
     
     # Get BIDS naming template
-    bids_naming_template = Path('${bids_naming_template}')
+    bids_name = Path('${bids_name}')
     
     # Input BOLD file
     bold_file = Path('${bold_file}')
     
     # Create symlink to BOLD file - preserve exact input structure
     # Simply use the input filename as-is (it's already BIDS-compliant)
-    bids_bold_filename = bids_naming_template.name
+    bids_bold_filename = bids_name.name
     create_output_link(bold_file, bids_bold_filename)
     
     # Generate tmean file
     # Convert _bold to _boldref while preserving all other parts of the filename
-    tmean_basename = bids_naming_template.name.replace('_bold.nii.gz', '_boldref.nii.gz')
+    tmean_basename = bids_name.name.replace('_bold.nii.gz', '_boldref.nii.gz')
     tmean_output_path = Path('work') / tmean_basename
     
     # Create work directory if it doesn't exist
@@ -429,12 +429,12 @@ process FUNC_DESPIKE {
     
     input:
     // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(tmean_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(tmean_file), val(bids_name)
     path config_file
     
     output:
     // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-despike_bold.nii.gz"), path("*desc-despike_boldref.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-despike_bold.nii.gz"), path("*desc-despike_boldref.nii.gz"), val(bids_name), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -471,7 +471,7 @@ process FUNC_DESPIKE {
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
-    bids_naming_template = Path('${bids_naming_template}')
+    bids_name = Path('${bids_name}')
     
     # Create step input (process BOLD, inherit tmean)
     input_obj = StepInput(
@@ -494,7 +494,7 @@ process FUNC_DESPIKE {
     
     # Generate BIDS-compliant output filename
     bids_output_filename = create_bids_output_filename(
-        original_file_path=bids_naming_template,
+        original_file_path=bids_name,
         suffix='desc-despike',
         modality='bold'
     )
@@ -508,7 +508,7 @@ process FUNC_DESPIKE {
         if key == 'tmean' or key == 'imagef_despiked_tmean':
             # Create BIDS-compliant name for tmean (use boldref suffix)
             tmean_bids_name = create_bids_output_filename(
-                original_file_path=bids_naming_template,
+                original_file_path=bids_name,
                 suffix='desc-despike',
                 modality='boldref'
             )
@@ -532,12 +532,12 @@ process FUNC_BIAS_CORRECTION {
     
     input:
     // Input: [sub, ses, run_identifier, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path(tmean_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(tmean_file), val(bids_name)
     path config_file
     
     output:
     // Output: [sub, ses, run_identifier, bias_corrected_tmean, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-biasCorrection_boldref.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-biascorrect_boldref.nii.gz"), val(bids_name), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -577,7 +577,7 @@ from macacaMRIprep.utils.nextflow import load_config
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Create step input (process tmean only)
 input_obj = StepInput(
@@ -599,21 +599,21 @@ result = func_bias_correction(input_obj)
 # For session-level processing (empty run_identifier), use session-level naming without run-specific entities
 if not run_identifier or run_identifier.strip() == "":
     # Session-level: parse entities and keep only sub and ses (like FUNC_AVERAGE_TMEAN)
-    parsed = parse_bids_entities(str(bids_naming_template))
+    parsed = parse_bids_entities(str(bids_name))
     filtered_entities = {}
     if 'sub' in parsed:
         filtered_entities['sub'] = parsed['sub']
     if 'ses' in parsed:
         filtered_entities['ses'] = parsed['ses']
-    # Add desc entity for bias correction
-    filtered_entities['desc'] = 'biasCorrection'
+    # Add desc entity for bias correction (use lowercase to match output pattern)
+    filtered_entities['desc'] = 'biascorrect'
     # Rebuild filename with suffix 'boldref'
     bids_output_filename = create_bids_filename(filtered_entities, 'boldref', extension='.nii.gz')
 else:
     # Run-level: preserve all entities from original template
     bids_output_filename = create_bids_output_filename(
-        original_file_path=bids_naming_template,
-        suffix='desc-biasCorrection',
+        original_file_path=bids_name,
+        suffix='desc-biascorrect',
         modality='boldref'
     )
 
@@ -637,13 +637,13 @@ process FUNC_COMPUTE_CONFORM {
     
     input:
     // Input: [sub, ses, run_identifier, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path(tmean_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(tmean_file), val(bids_name)
     path(anat_brain_file)
     path config_file  // Effective config file with all resolved parameters
     
     output:
     // Output: [sub, ses, run_identifier, conformed_tmean, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_boldref.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_boldref.nii.gz"), val(bids_name), emit: output
     // Transforms: [sub, ses, run_identifier, forward_transform, inverse_transform]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*from-scanner_to-bold_mode-image_xfm.mat"), path("*from-bold_to-scanner_mode-image_xfm.mat"), emit: transforms
     // Reference: [sub, ses, run_identifier, reference]
@@ -685,7 +685,7 @@ process FUNC_COMPUTE_CONFORM {
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
-    bids_naming_template = Path('${bids_naming_template}')
+    bids_name = Path('${bids_name}')
     
     # Check if anatomical brain file is available
     anat_brain_path_str = '${anat_brain_file}'
@@ -724,7 +724,7 @@ process FUNC_COMPUTE_CONFORM {
     # For session-level processing (empty run_identifier), use session-level naming without run-specific entities
     if not run_identifier or run_identifier.strip() == "":
         # Session-level: parse entities and keep only sub and ses
-        parsed = parse_bids_entities(str(bids_naming_template))
+        parsed = parse_bids_entities(str(bids_name))
         filtered_entities = {}
         if 'sub' in parsed:
             filtered_entities['sub'] = parsed['sub']
@@ -737,7 +737,7 @@ process FUNC_COMPUTE_CONFORM {
     else:
         # Run-level: preserve all entities from original template
         bids_output_filename_tmean = create_bids_output_filename(
-            original_file_path=bids_naming_template,
+            original_file_path=bids_name,
             suffix='desc-conform',
             modality='boldref'
         )
@@ -746,7 +746,7 @@ process FUNC_COMPUTE_CONFORM {
     create_output_link(result.output_file, bids_output_filename_tmean)
     
     # Copy transform files with BIDS-compliant names
-    original_stem = get_filename_stem(bids_naming_template)
+    original_stem = get_filename_stem(bids_name)
     bids_prefix = original_stem.replace('_bold', '')
     
     conform_forward_transform_path = None
@@ -798,14 +798,14 @@ process FUNC_APPLY_CONFORM {
     input:
     // Input: [sub, ses, run_identifier, bold_file, conform_transform, conformed_tmean_ref, bids_template]
     // Stage conformed_tmean_ref as reg_reference.nii.gz to avoid output pattern collision
-    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(conform_transform), path(conformed_tmean_ref, stageAs: 'reg_reference.nii.gz'), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(conform_transform), path(conformed_tmean_ref, stageAs: 'reg_reference.nii.gz'), val(bids_name)
     path config_file
     
     output:
     // Output: [sub, ses, run_identifier, conformed_bold, conformed_tmean_ref, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_bold.nii.gz"), path("*desc-conform_boldref.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_bold.nii.gz"), path("*desc-conform_boldref.nii.gz"), val(bids_name), emit: output
     // Phase 1 preproc output: [sub, ses, run_identifier, preproc_bold, preproc_boldref, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-preproc_bold.nii.gz"), path("*desc-preproc_boldref.nii.gz"), val(bids_naming_template), emit: preproc_output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-preproc_bold.nii.gz"), path("*desc-preproc_boldref.nii.gz"), val(bids_name), emit: preproc_output
     path "*.json", emit: metadata
     
     script:
@@ -841,7 +841,7 @@ process FUNC_APPLY_CONFORM {
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
-    bids_naming_template = Path('${bids_naming_template}')
+    bids_name = Path('${bids_name}')
     
     # Apply conform transform to BOLD
     bold_result = flirt_apply_transforms(
@@ -860,13 +860,13 @@ process FUNC_APPLY_CONFORM {
     
     # Generate BIDS-compliant output filename (for internal workflow use)
     bids_output_filename_bold = create_bids_output_filename(
-        original_file_path=bids_naming_template,
+        original_file_path=bids_name,
         suffix='desc-conform',
         modality='bold'
     )
     
     bids_output_filename_tmean = create_bids_output_filename(
-        original_file_path=bids_naming_template,
+        original_file_path=bids_name,
         suffix='desc-conform',
         modality='boldref'
     )
@@ -880,13 +880,13 @@ process FUNC_APPLY_CONFORM {
     
     # Generate BIDS-compliant output filename for Phase 1 preproc (published output)
     bids_preproc_filename_bold = create_bids_output_filename(
-        original_file_path=bids_naming_template,
+        original_file_path=bids_name,
         suffix='desc-preproc',
         modality='bold'
     )
     
     bids_preproc_filename_boldref = create_bids_output_filename(
-        original_file_path=bids_naming_template,
+        original_file_path=bids_name,
         suffix='desc-preproc',
         modality='boldref'
     )
@@ -1001,12 +1001,12 @@ process FUNC_COMPUTE_BRAIN_MASK {
     
     input:
     // Input: [sub, ses, run_identifier, conformed_tmean, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_tmean), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_tmean), val(bids_name)
     path config_file
     
     output:
     // Output: [sub, ses, run_identifier, masked_tmean, bids_template, brain_mask]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*_boldref_brain.nii.gz"), val(bids_naming_template), path("*desc-brain_mask.nii.gz"), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*_boldref_brain.nii.gz"), val(bids_name), path("*desc-brain_mask.nii.gz"), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -1042,7 +1042,7 @@ process FUNC_COMPUTE_BRAIN_MASK {
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
-    bids_naming_template = Path('${bids_naming_template}')
+    bids_name = Path('${bids_name}')
     
     # Create step input (process conformed tmean → brain)
     input_obj = StepInput(
@@ -1066,7 +1066,7 @@ process FUNC_COMPUTE_BRAIN_MASK {
     
     if not run_identifier or run_identifier.strip() == "":
         # Session-level: parse entities and keep only sub and ses
-        parsed = parse_bids_entities(str(bids_naming_template))
+        parsed = parse_bids_entities(str(bids_name))
         filtered_entities = {}
         if 'sub' in parsed:
             filtered_entities['sub'] = parsed['sub']
@@ -1080,7 +1080,7 @@ process FUNC_COMPUTE_BRAIN_MASK {
         bids_prefix_wobold = create_bids_filename(filtered_entities, '', extension='')
     else:
         # Run-level: preserve all entities from original template (except bold/boldref)
-        original_stem = get_filename_stem(bids_naming_template)
+        original_stem = get_filename_stem(bids_name)
         bids_prefix_wobold = original_stem.replace("_bold", "").replace("_boldref", "")
         bids_additional_name = f"{bids_prefix_wobold}_desc-brain_mask.nii.gz"
     
@@ -1110,13 +1110,13 @@ process FUNC_COMPUTE_REGISTRATION {
     
     input:
     // Input: [sub, ses, run_identifier, masked_tmean, bids_template] + anatomical selection
-    tuple val(subject_id), val(session_id), val(run_identifier), path(masked_tmean), val(bids_naming_template), val(anat_session_id)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(masked_tmean), val(bids_name), val(anat_session_id)
     path(anat_brain)
     path config_file  // Effective config file with all resolved parameters
     
     output:
     // Output: [sub, ses, run_identifier, registered_tmean, bids_template, anat_session_id]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*boldref.nii.gz"), val(bids_naming_template), val(anat_session_id), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*boldref.nii.gz"), val(bids_name), val(anat_session_id), emit: output
     // Transforms: [sub, ses, run_identifier, forward_transform, inverse_transform]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*from-bold_to-*_mode-image_xfm*"), path("*from-*_to-bold_mode-image_xfm*"), emit: transforms
     // Reference: [sub, ses, run_identifier, reference_file]
@@ -1160,7 +1160,7 @@ process FUNC_COMPUTE_REGISTRATION {
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
-    bids_naming_template = Path('${bids_naming_template}')
+    bids_name = Path('${bids_name}')
     
     # Check if anatomical brain file is available
     anat_brain_path_str = '${anat_brain}'
@@ -1209,7 +1209,7 @@ process FUNC_COMPUTE_REGISTRATION {
         space_name = template_name
     
     bids_output_filename = create_bids_output_filename(
-        original_file_path=bids_naming_template,
+        original_file_path=bids_name,
         suffix=f'space-{space_name}_desc-preproc',
         modality='boldref'
     )
@@ -1219,7 +1219,7 @@ process FUNC_COMPUTE_REGISTRATION {
     
     # Create symlinks for transform files with BIDS-compliant names (both forward and inverse)
     # .h5 files can be large, so use symlinks until published - saves storage
-    original_stem = get_filename_stem(bids_naming_template)
+    original_stem = get_filename_stem(bids_name)
     bids_prefix = original_stem.replace('_bold', '')
     
     for key, f in result.additional_files.items():
@@ -1283,7 +1283,7 @@ process FUNC_APPLY_TRANSFORMS {
     // For single: anat2template_xfm is dummy file, ref_from_anat_reg is dummy file
     // ref_from_func_reg: original target file (anat or template) from func registration, will be resampled if needed
     // target_type and target2template are now inferred from transform filename and validated against config
-    tuple val(subject_id), val(session_id), val(run_identifier), val(bids_naming_template), path(func2target_xfm), path(ref_from_func_reg), path(anat2template_xfm), path(ref_from_anat_reg)
+    tuple val(subject_id), val(session_id), val(run_identifier), val(bids_name), path(func2target_xfm), path(ref_from_func_reg), path(anat2template_xfm), path(ref_from_anat_reg)
     path(input_file)  // Input file: 4D BOLD file (conformed_bold) or 3D mask file
     val(data_type)  // "bold" or "mask" - determines interpolation, moving_type, and output handling
     path config_file  // Effective config file with all resolved parameters
@@ -1291,7 +1291,7 @@ process FUNC_APPLY_TRANSFORMS {
     output:
     // For BOLD: [sub, ses, run_id, registered_bold, registered_boldref, bids_template]
     // For mask: [sub, ses, run_id, registered_mask, registered_mask (duplicate), bids_template] (duplicate mask to match structure)
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*desc-*.nii.gz"), path("*space-*desc-*.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*desc-*.nii.gz"), path("*space-*desc-*.nii.gz"), val(bids_name), emit: output
     // Reference file for QC: final target reference at appropriate resolution
     tuple val(subject_id), val(session_id), val(run_identifier), path("*target_final.nii.gz"), emit: reference
     path "*.json", emit: metadata
@@ -1343,7 +1343,7 @@ init_cmd_log_for_nextflow(
 
 # Config already loaded above
 # Get original file path (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Get input parameters
 input_file = Path('${input_file}')
@@ -1517,8 +1517,8 @@ if is_sequential:
     # Save data in anat space (intermediate output, not published for masks)
     # For masks, use desc-brain; for BOLD, use desc-preproc
     if data_type == "mask":
-        # Remove _bold from bids_naming_template before creating mask filename
-        bids_template_for_mask = Path(str(bids_naming_template).replace('_bold', ''))
+        # Remove _bold from bids_name before creating mask filename
+        bids_template_for_mask = Path(str(bids_name).replace('_bold', ''))
         func_anat_output_name = create_bids_output_filename(
             original_file_path=bids_template_for_mask,
             suffix=f'space-{anat_target_name}_desc-brain',
@@ -1526,7 +1526,7 @@ if is_sequential:
         )
     else:
         func_anat_output_name = create_bids_output_filename(
-            original_file_path=bids_naming_template,
+            original_file_path=bids_name,
             suffix=f'space-{anat_target_name}_desc-preproc',
             modality=modality
         )
@@ -1535,7 +1535,7 @@ if is_sequential:
     # Save boldref in anat space (only for BOLD)
     if data_type == "bold":
         func_anat_boldref_name = create_bids_output_filename(
-            original_file_path=bids_naming_template,
+            original_file_path=bids_name,
             suffix=f'space-{anat_target_name}_desc-preproc',
             modality='boldref'
         )
@@ -1579,9 +1579,9 @@ if is_sequential:
     # Save data in template space (final output)
     if data_type == "mask":
         # For mask, use desc-brain instead of desc-preproc
-        # Remove _bold from bids_naming_template before creating mask filename
+        # Remove _bold from bids_name before creating mask filename
         # (similar to how boldref handles it)
-        bids_template_for_mask = Path(str(bids_naming_template).replace('_bold', ''))
+        bids_template_for_mask = Path(str(bids_name).replace('_bold', ''))
         func_template_output_name = create_bids_output_filename(
             original_file_path=bids_template_for_mask,
             suffix=f'space-{template_name}_desc-brain',
@@ -1589,7 +1589,7 @@ if is_sequential:
         )
     else:
         func_template_output_name = create_bids_output_filename(
-            original_file_path=bids_naming_template,
+            original_file_path=bids_name,
             suffix=f'space-{template_name}_desc-preproc',
             modality='bold'
         )
@@ -1599,7 +1599,7 @@ if is_sequential:
     # For mask, create a duplicate symlink to match BOLD output structure
     if data_type == "bold":
         func_template_boldref_name = create_bids_output_filename(
-            original_file_path=bids_naming_template,
+            original_file_path=bids_name,
             suffix=f'space-{template_name}_desc-preproc',
             modality='boldref'
         )
@@ -1612,7 +1612,7 @@ if is_sequential:
     # Output final reference file for QC: template at appropriate resolution
     # Sequential transforms: final space is template
     # Reuse template_reff (already resampled if needed) instead of resampling again
-    bids_prefix = get_filename_stem(bids_naming_template).replace('_bold', '')
+    bids_prefix = get_filename_stem(bids_name).replace('_bold', '')
     target_final_output = f"{bids_prefix}_target_final.nii.gz"
     target_final_path = Path(target_final_output)
     
@@ -1692,8 +1692,8 @@ else:
     
     # Generate BIDS-compliant output filename with space entity
     if data_type == "mask":
-        # Remove _bold from bids_naming_template before creating mask filename
-        bids_template_for_mask = Path(str(bids_naming_template).replace('_bold', ''))
+        # Remove _bold from bids_name before creating mask filename
+        bids_template_for_mask = Path(str(bids_name).replace('_bold', ''))
         bids_output_filename = create_bids_output_filename(
             original_file_path=bids_template_for_mask,
             suffix=f'space-{target_name}_desc-brain',
@@ -1701,7 +1701,7 @@ else:
         )
     else:
         bids_output_filename = create_bids_output_filename(
-            original_file_path=bids_naming_template,
+            original_file_path=bids_name,
             suffix=f'space-{target_name}_desc-preproc',
             modality='bold'
         )
@@ -1710,7 +1710,7 @@ else:
     # Generate BIDS-compliant output filename for tmean (boldref) - only for BOLD
     if data_type == "bold" and "tmean" in result.additional_files:
         bids_boldref_filename = create_bids_output_filename(
-            original_file_path=bids_naming_template,
+            original_file_path=bids_name,
             suffix=f'space-{target_name}_desc-preproc',
             modality='boldref'
         )
@@ -1722,7 +1722,7 @@ else:
     
     # Output final reference file for QC: target at appropriate resolution
     # Use the same reference file that was used for the transform (already resampled if needed)
-    bids_prefix = get_filename_stem(bids_naming_template).replace('_bold', '')
+    bids_prefix = get_filename_stem(bids_name).replace('_bold', '')
     target_final_output = f"{bids_prefix}_target_final.nii.gz"
     target_final_path = Path(target_final_output)
     
@@ -1782,13 +1782,13 @@ process FUNC_WITHIN_SES_COREG {
         enabled: false
     
     input:
-    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(tmean_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(tmean_file), val(bids_name)
     path(reference_tmean)
     val(reference_run_identifier)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-coreg_bold.nii.gz"), path("*desc-coreg_boldref.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-coreg_bold.nii.gz"), path("*desc-coreg_boldref.nii.gz"), val(bids_name), emit: output
     tuple val(subject_id), val(session_id), val(run_identifier), path("from-${run_identifier}_to-${reference_run_identifier}_mode-image_xfm.h5"), emit: transforms
     path "*.json", emit: metadata
     
@@ -1830,7 +1830,7 @@ init_cmd_log_for_nextflow(
 config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Get reference tmean and run_identifier
 reference_tmean = Path('${reference_tmean}')
@@ -1864,14 +1864,14 @@ result = func_within_ses_coreg(
 
 # Generate BIDS-compliant output filename for tmean (with desc-coreg)
 bids_tmean_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
+    original_file_path=bids_name,
     suffix='desc-coreg',
     modality='boldref'
 )
 
 # Generate BIDS-compliant output filename for BOLD (with desc-coreg)
 bids_bold_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
+    original_file_path=bids_name,
     suffix='desc-coreg',
     modality='bold'
 )
@@ -1884,7 +1884,7 @@ else:
     raise FileNotFoundError("Coregistered BOLD file not found in result")
 
 # Generate BIDS prefix (filename stem without modality)
-original_stem = get_filename_stem(bids_naming_template)
+original_stem = get_filename_stem(bids_name)
 bids_prefix_wo_modality = original_stem.replace("_bold", "").replace("_boldref", "")
 
 # Create symlinks for transform files for Nextflow pattern matching (but don't publish them - they're intermediate files)
@@ -1917,11 +1917,11 @@ process FUNC_AVERAGE_TMEAN {
     val(tmean_files)  // List of tmean file paths (as strings) - direct input, avoids staging name collisions and file list overhead
     val(subject_id)
     val(session_id)
-    val(bids_naming_template)
+    val(bids_name)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*desc-coreg_boldref.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), path("*desc-coreg_boldref.nii.gz"), val(bids_name), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -1952,7 +1952,7 @@ init_cmd_log_for_nextflow(
 config = load_config('${config_file}')
 
 # Get BIDS naming template
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Parse tmean_files from Nextflow (passed as JSON string for reliable parsing)
 tmean_files_json = '${tmean_files}'
@@ -2016,7 +2016,7 @@ result = func_average_tmean(
 # Remove all run-specific entities (keep only sub, ses), add desc-coreg, ends with _boldref
 # Format: sub-XX[_ses-XX]_desc-coreg_boldref.nii.gz
 # Parse the original filename to get entities
-parsed = parse_bids_entities(str(bids_naming_template))
+parsed = parse_bids_entities(str(bids_name))
 # Keep only sub and ses entities (remove all run-specific identifiers like task, run, acq, etc.)
 # Create a new dict with only sub and ses
 filtered_entities = {}

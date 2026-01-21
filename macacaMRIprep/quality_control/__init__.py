@@ -44,14 +44,14 @@ motion_qc = create_motion_correction_qc(
 anat_skull_qc = create_skullstripping_qc(
     underlay_file="anat_orig.nii.gz",
     mask_file="anat_brain_mask.nii.gz",
-    save_f="figures/sub-01_desc-skullStripping_T1w.png",
+    save_f="figures/sub-01_desc-skullstrip_T1w.png",
     modality="anat"
 )
 
 func_skull_qc = create_skullstripping_qc(
     underlay_file="func_orig.nii.gz",
     mask_file="func_brain_mask.nii.gz",
-    save_f="figures/sub-01_desc-skullStripping_bold.png",
+    save_f="figures/sub-01_desc-skullstrip_bold.png",
     modality="func"
 )
 
@@ -74,14 +74,14 @@ anat_reg_qc = create_registration_qc(
 func_bias_qc = create_bias_correction_qc(
     image_original="func_orig.nii.gz",
     image_corrected="func_bias_corrected.nii.gz",
-    save_f="figures/sub-01_desc-biasCorrection_bold.png",
+    save_f="figures/sub-01_desc-biascorrect_bold.png",
     modality="func"
 )
 
 anat_bias_qc = create_bias_correction_qc(
     image_original="anat_orig.nii.gz",
     image_corrected="anat_bias_corrected.nii.gz",
-    save_f="figures/sub-01_desc-biasCorrection_T1w.png",
+    save_f="figures/sub-01_desc-biascorrect_T1w.png",
     modality="anat"
 )
 

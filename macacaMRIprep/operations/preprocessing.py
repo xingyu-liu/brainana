@@ -1467,6 +1467,7 @@ def bias_correction(
     output_name: str,
     config: Dict[str, Any],
     logger: Optional[logging.Logger] = None,
+    maskf: Optional[Union[str, Path]] = None,
 ) -> Dict[str, str]:
     """Perform bias field correction using ANTs N4BiasFieldCorrection.
     
@@ -1475,11 +1476,15 @@ def bias_correction(
         working_dir: Working directory
         modal: Modality ('func' or 'anat')
         output_name: Name of output file
-        logger: Logger instance
         config: Configuration dictionary
+        logger: Logger instance
+        maskf: Optional mask file for bias correction (if provided, will use -x flag)
         
     Returns:
-        Dictionary with output file paths
+        Dictionary with output file paths:
+        - 'imagef_bias_corrected': Bias-corrected image
+        - 'bias_field': Bias field map
+        - 'imagef_brain': Brain-only image (if mask provided and not dummy)
         
     Raises:
         FileNotFoundError: If input file doesn't exist
@@ -1549,6 +1554,12 @@ def bias_correction(
     # Merge with current environment to preserve other variables
     env = {**os.environ, **env}
 
+    # Get mask path if provided (mask is already validated as real in workflow)
+    mask_path = None
+    if maskf:
+        mask_path = validate_input_file(maskf, logger)
+        logger.info(f"Workflow: using mask for bias correction - {os.path.basename(mask_path)}")
+    
     # Build command
     if bias_cfg.get('algorithm') == 'N4BiasFieldCorrection':
         logger.info(f"Workflow: starting bias field correction using N4BiasFieldCorrection algorithm")
@@ -1563,6 +1574,10 @@ def bias_correction(
             '-s', str(bias_cfg.get('shrink_factor')),
             '-b', str(bias_cfg.get('bspline_fitting'))
         ]
+        # Add mask if provided
+        if mask_path:
+            command.extend(['-x', str(mask_path)])
+            logger.info(f"Workflow: using mask for bias correction")
     else:
         # TODO: add other bias correction algorithms
         pass
@@ -1581,6 +1596,30 @@ def bias_correction(
             "imagef_bias_corrected": output_path,
             "bias_field": bias_field_path
         }
+        
+        # If mask is provided, apply mask to generate brain-only image
+        if mask_path:
+            brain_output_name = output_name.replace('.nii.gz', '_brain.nii.gz')
+            if brain_output_name == output_name:  # In case output_name doesn't have .nii.gz
+                brain_output_name = output_name.split('.')[0] + '_brain.nii.gz'
+            brain_output_path = work_dir / brain_output_name
+            
+            logger.info(f"Workflow: applying mask to bias-corrected image to generate brain-only version")
+            logger.info(f"System: brain output path - {brain_output_path}")
+            
+            # Apply mask using fslmaths
+            command_apply_mask = [
+                'fslmaths', str(output_path),
+                '-mas', str(mask_path),
+                str(brain_output_path)
+            ]
+            returncode, stdout, stderr = run_command(command_apply_mask, step_logger=logger)
+            if returncode != 0:
+                raise RuntimeError(f"fslmaths failed when applying mask (exit code {returncode}): {stderr}")
+            
+            validate_output_file(brain_output_path, logger)
+            outputs["imagef_brain"] = brain_output_path
+            logger.info(f"Workflow: brain-only image generated - {os.path.basename(brain_output_path)}")
         
         return outputs
         

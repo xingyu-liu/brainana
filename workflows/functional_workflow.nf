@@ -45,7 +45,7 @@ def configHelpers = evaluate(new File("${projectDir}/workflows/config_helpers.gr
 
 workflow FUNC_WF {
     take:
-    anat_after_skull  // channel from anatomical workflow
+    anat_after_bias_brain  // channel from anatomical workflow (Phase 1 final output - brain version for registration)
     anat_reg_transforms  // channel from anatomical workflow
     anat_reg_reference  // channel from anatomical workflow (target_final.nii.gz from ANAT_REGISTRATION)
     
@@ -224,6 +224,7 @@ workflow FUNC_WF {
         
         def func_coreg_qc_input = funcChannels.prepareCoregQCChannels(coregChannels.func_first_runs, func_tmean_averaged_ch)
         QC_WITHIN_SES_COREG(func_coreg_qc_input, config_file)
+        // Note: QC_WITHIN_SES_COREG metadata is collected in the COLLECT QC CHANNELS section below
     }
     
     // ============================================
@@ -233,12 +234,12 @@ workflow FUNC_WF {
     // Priority: 1) Same session, 2) Different session (same subject), 3) Dummy (no anatomical)
     // Note: All runs in the same session use the same anatomical reference
     // Input: func_after_coreg: [sub, ses, run_id, bold_file, tmean_file, bids_name]
-    //        anat_after_skull: [sub, ses, anat_file, bids_name]
+    //        anat_after_bias_brain: [sub, ses, brain_file, bids_name] (Phase 1 final output - brain version)
     // Output: [sub, ses, anat_file, anat_ses] (session-level only, no run_id)
     def dummy_anat = file("${workDir}/dummy_anat.dummy")
     def func_anat_selection = channelHelpers.performFuncAnatomicalSelection(
         func_after_coreg,
-        anat_after_skull,
+        anat_after_bias_brain,
         isT1wFile,
         findUnmatched,
         dummy_anat

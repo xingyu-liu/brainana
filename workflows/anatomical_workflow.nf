@@ -20,8 +20,6 @@ include { ANAT_REORIENT as ANAT_REORIENT_T2W } from '../modules/anatomical.nf'
 include { ANAT_CONFORM } from '../modules/anatomical.nf'
 include { ANAT_CONFORM as ANAT_CONFORM_T2W } from '../modules/anatomical.nf'
 include { ANAT_BIAS_CORRECTION } from '../modules/anatomical.nf'
-include { ANAT_BIAS_CORRECTION as ANAT_BIAS_CORRECTION_T2W } from '../modules/anatomical.nf'
-include { ANAT_BIAS_CORRECTION as ANAT_BIAS_CORRECTION_T2W_NO_T1W } from '../modules/anatomical.nf'
 include { ANAT_SKULLSTRIPPING } from '../modules/anatomical.nf'
 include { ANAT_SKULLSTRIPPING as ANAT_SKULLSTRIPPING_T2W } from '../modules/anatomical.nf'
 include { ANAT_SURFACE_RECONSTRUCTION } from '../modules/anatomical.nf'
@@ -31,12 +29,12 @@ include { ANAT_T2W_TO_T1W_REGISTRATION } from '../modules/anatomical.nf'
 include { ANAT_CONFORM_PASSTHROUGH } from '../modules/anatomical.nf'
 include { ANAT_CONFORM_PASSTHROUGH as ANAT_CONFORM_PASSTHROUGH_T2W } from '../modules/anatomical.nf'
 include { ANAT_BIAS_CORRECTION_PASSTHROUGH } from '../modules/anatomical.nf'
-include { ANAT_BIAS_CORRECTION_PASSTHROUGH as ANAT_BIAS_CORRECTION_PASSTHROUGH_T2W } from '../modules/anatomical.nf'
 include { ANAT_REGISTRATION_PASSTHROUGH } from '../modules/anatomical.nf'
 include { ANAT_REGISTRATION_PASSTHROUGH as ANAT_REGISTRATION_PASSTHROUGH_T2W } from '../modules/anatomical.nf'
 include { ANAT_APPLY_CONFORM } from '../modules/anatomical.nf'
 include { ANAT_APPLY_TRANSFORMATION } from '../modules/anatomical.nf'
 include { ANAT_APPLY_TRANSFORM_MASK } from '../modules/anatomical.nf'
+include { ANAT_PUBLISH_PHASE1 } from '../modules/anatomical.nf'
 
 // Include anatomical QC modules
 include { QC_CONFORM } from '../modules/qc.nf'
@@ -216,8 +214,8 @@ workflow ANAT_WF {
     def anat_t1w_synthesis_output = Channel.empty()
     ANAT_SYNTHESIS(anat_t1w_synthesis_input, config_file)
     anat_t1w_synthesis_output = ANAT_SYNTHESIS.out.synthesized
-        .map { sub, ses, anat_file, bids_naming_template_file ->
-            def bids_name = bids_naming_template_file.text.trim()
+        .map { sub, ses, anat_file, bids_name_file ->
+            def bids_name = bids_name_file.text.trim()
             [sub, ses, anat_file, bids_name]
         }
     
@@ -248,8 +246,8 @@ workflow ANAT_WF {
     def anat_t2w_synthesis_output = Channel.empty()
     ANAT_SYNTHESIS_T2W(anat_t2w_synthesis_input, config_file)
     anat_t2w_synthesis_output = ANAT_SYNTHESIS_T2W.out.synthesized
-        .map { sub, ses, anat_file, bids_naming_template_file ->
-            def bids_name = bids_naming_template_file.text.trim()
+        .map { sub, ses, anat_file, bids_name_file ->
+            def bids_name = bids_name_file.text.trim()
             [sub, ses, anat_file, bids_name]
         }
         .join(t2w_synthesis_needs_t1w_reg, by: [0, 1])
@@ -281,7 +279,7 @@ workflow ANAT_WF {
     // ============================================
     // ANATOMICAL PROCESSING PIPELINE
     // ============================================
-    // Sequential processing: reorient → conform → bias correction → skull stripping → registration
+    // Sequential processing: reorient → conform → skull stripping → bias correction → registration
     // Channel structure maintained: [sub, ses, anat_file, bids_name]
     // ============================================
     
@@ -290,51 +288,35 @@ workflow ANAT_WF {
     // ============================================
     // Reorient anatomical images to standard orientation
     // Input: anat_input_ch: [sub, ses, anat_file, bids_name]
-    // Output: anat_after_reorient_normal: [sub, ses, anat_file, bids_name]
+    // Output: anat_after_reorient: [sub, ses, anat_file, bids_name]
     // ============================================
-    anat_after_reorient_normal = anat_input_ch
+    anat_after_reorient = anat_input_ch
     if (anat_reorient_enabled) {
         ANAT_REORIENT(anat_input_ch, config_file)
-        anat_after_reorient_normal = ANAT_REORIENT.out.output
+        anat_after_reorient = ANAT_REORIENT.out.output
     } else {
-        anat_after_reorient_normal = anat_input_ch.map(passThroughAnat)
-    }
-    
-    // ============================================
-    // BIAS CORRECTION
-    // ============================================
-    // Correct intensity non-uniformity (bias field)
-    // Input: anat_after_reorient_normal: [sub, ses, anat_file, bids_name]
-    // Output: anat_after_bias: [sub, ses, anat_file, bids_name]
-    // ============================================
-    anat_after_bias = anat_after_reorient_normal
-    if (anat_bias_correction_enabled) {
-        ANAT_BIAS_CORRECTION(anat_after_reorient_normal, config_file)
-        anat_after_bias = ANAT_BIAS_CORRECTION.out.output
-    } else {
-        ANAT_BIAS_CORRECTION_PASSTHROUGH(anat_after_reorient_normal, config_file)
-        anat_after_bias = ANAT_BIAS_CORRECTION_PASSTHROUGH.out.output
+        anat_after_reorient = anat_input_ch.map(passThroughAnat)
     }
     
     // ============================================
     // CONFORM
     // ============================================
     // Conform anatomical images to template space
-    // Input: anat_after_bias: [sub, ses, anat_file, bids_name]
+    // Input: anat_after_reorient: [sub, ses, anat_file, bids_name]
     // Output: anat_after_conform: [sub, ses, anat_file, bids_name]
     //         anat_conform_transforms: [sub, ses, forward_xfm, inverse_xfm]
     //         anat_conform_reference: [sub, ses, reference_file]
     // ============================================
-    anat_after_conform = anat_after_bias
+    anat_after_conform = anat_after_reorient
     anat_conform_transforms = Channel.empty()
     anat_conform_reference = Channel.empty()
     if (anat_conform_enabled) {
-        ANAT_CONFORM(anat_after_bias, config_file)
+        ANAT_CONFORM(anat_after_reorient, config_file)
         anat_after_conform = ANAT_CONFORM.out.output
         anat_conform_transforms = ANAT_CONFORM.out.transforms
         anat_conform_reference = ANAT_CONFORM.out.reference
     } else {
-        ANAT_CONFORM_PASSTHROUGH(anat_after_bias, config_file)
+        ANAT_CONFORM_PASSTHROUGH(anat_after_reorient, config_file)
         anat_after_conform = ANAT_CONFORM_PASSTHROUGH.out.output
         anat_conform_transforms = ANAT_CONFORM_PASSTHROUGH.out.transforms
         anat_conform_reference = ANAT_CONFORM_PASSTHROUGH.out.reference
@@ -345,44 +327,192 @@ workflow ANAT_WF {
     // ============================================
     // Remove non-brain tissue using deep learning segmentation
     // Input: anat_after_conform: [sub, ses, anat_file, bids_name]
-    // Output: anat_after_skull: [sub, ses, anat_file, bids_name]
+    // Output: anat_after_skull: [sub, ses, anat_file, bids_name] (full head, always - not skullstripped)
+    //         anat_after_skull_brain: [sub, ses, brain_file, bids_name] (brain-only, always available - real or dummy)
     //         anat_skull_mask: [sub, ses, brain_mask]
     //         anat_skull_seg: [sub, ses, brain_segmentation]
+    // Principle: anat_after_xxxstep = full head (_T1w), anat_after_xxxstep_brain = brain (_T1w_brain)
     // ============================================
-    anat_skull_mask = Channel.empty()
-    anat_skull_seg = Channel.empty()
-    anat_after_skull = Channel.empty()
+    // Initialize with dummy mask and segmentation from anat_after_conform (never null)
+    def dummy_mask = file("${workDir}/dummy_brain_mask.dummy")
+    def dummy_seg = file("${workDir}/dummy_brain_segmentation.dummy")
+    def dummy_brain = file("${workDir}/dummy_brain.dummy")
+    def anat_skull_mask_dummy = anat_after_conform.map { sub, ses, anat_file, bids_name ->
+        [sub, ses, dummy_mask]
+    }
+    def anat_skull_seg_dummy = anat_after_conform.map { sub, ses, anat_file, bids_name ->
+        [sub, ses, dummy_seg]
+    }
+    def anat_after_skull_dummy = anat_after_conform.map(passThroughAnat)
+    def anat_after_skull_brain_dummy = anat_after_conform.map { sub, ses, anat_file, bids_name ->
+        [sub, ses, dummy_brain, bids_name]
+    }
+    
+    // Always initialize with dummy segmentation to ensure consistent structure for joins/combines
+    def anat_skull_seg = anat_skull_seg_dummy
+    def anat_after_skull = anat_after_skull_dummy
+    def anat_after_skull_brain = anat_after_skull_brain_dummy
+    
+    // Always initialize with dummy mask to ensure valid structure for joins/combines
+    // This ensures Nextflow can validate structure at parse time
+    def anat_skull_mask = anat_skull_mask_dummy
+    
     if (anat_skullstripping_enabled) {
         ANAT_SKULLSTRIPPING(anat_after_conform, config_file)
-        anat_after_skull = ANAT_SKULLSTRIPPING.out.output
-        anat_skull_mask = ANAT_SKULLSTRIPPING.out.brain_mask
-        anat_skull_seg = ANAT_SKULLSTRIPPING.out.brain_segmentation
-    } else {
-        anat_after_skull = anat_after_conform.map(passThroughAnat)
+        // Principle: anat_after_skull = full head (not skullstripped), anat_after_skull_brain = brain (skullstripped)
+        anat_after_skull = ANAT_SKULLSTRIPPING.out.output  // Full head version (_T1w)
+        anat_after_skull_brain = ANAT_SKULLSTRIPPING.out.brain  // Brain-only version (_T1w_brain)
+        // Create a channel that prefers process output but falls back to dummy
+        // Use groupTuple to handle cases where both exist, then prefer non-dummy
+        def skull_mask_with_fallback = ANAT_SKULLSTRIPPING.out.brain_mask
+            .mix(anat_skull_mask_dummy)
+            .groupTuple(by: [0, 1])
+            .map { sub, ses, mask_list ->
+                // Prefer real mask (non-dummy) if available, otherwise use first item
+                def real_mask = mask_list.find { mask -> !mask.toString().contains('.dummy') }
+                [sub, ses, real_mask ?: mask_list[0]]
+            }
+        anat_skull_mask = skull_mask_with_fallback
+        // Use real segmentation when available, otherwise keep dummy
+        def skull_seg_with_fallback = ANAT_SKULLSTRIPPING.out.brain_segmentation
+            .mix(anat_skull_seg_dummy)
+            .groupTuple(by: [0, 1])
+            .map { sub, ses, seg_list ->
+                // Prefer real segmentation (non-dummy) if available, otherwise use first item
+                def real_seg = seg_list.find { seg -> !seg.toString().contains('.dummy') }
+                [sub, ses, real_seg ?: seg_list[0]]
+            }
+        anat_skull_seg = skull_seg_with_fallback
     }
+    
+    // ============================================
+    // BIAS CORRECTION
+    // ============================================
+    // Correct intensity non-uniformity (bias field) using brain mask
+    // Input: anat_after_conform: [sub, ses, anat_file, bids_name] (full head T1w)
+    //        anat_skull_mask: [sub, ses, brain_mask] (may be dummy)
+    // Output: anat_after_bias: [sub, ses, anat_file, bids_name] (bias-corrected full head _T1w)
+    //         anat_after_bias_brain: [sub, ses, brain_file, bids_name] (bias-corrected brain _T1w_brain, always available - real or dummy)
+    // Principle: anat_after_xxxstep = full head (_T1w), anat_after_xxxstep_brain = brain (_T1w_brain)
+    // ============================================
+    // Initialize to ensure they're always defined (will be reassigned in if/else blocks)
+    // Use workflow-level variables (no 'def') so they're accessible to emit statement
+    anat_after_bias = anat_after_conform.map(passThroughAnat)
+    anat_after_bias_brain = Channel.empty()
+    if (anat_bias_correction_enabled) {
+        // Join conformed T1w with mask (both have [sub, ses] as first two elements)
+        // Now that structures are consistent with dummies, we can use join() for exact matching
+        def bias_correction_input = anat_after_conform
+            .join(anat_skull_mask, by: [0, 1])
+        
+        // Split into cases with real mask vs dummy mask
+        def bias_correction_with_mask = bias_correction_input
+            .filter { sub, ses, anat_file, bids_name, mask_file ->
+                !mask_file.toString().contains('.dummy')
+            }
+        
+        def bias_correction_no_mask = bias_correction_input
+            .filter { sub, ses, anat_file, bids_name, mask_file ->
+                mask_file.toString().contains('.dummy')
+            }
+            .map { sub, ses, anat_file, bids_name, mask_file ->
+                [sub, ses, anat_file, bids_name]
+            }
+        
+        // Prepare input channels for bias correction with real mask
+        def bias_input_files = bias_correction_with_mask
+            .map { sub, ses, anat_file, bids_name, mask_file ->
+                [sub, ses, anat_file, bids_name]
+            }
+        def bias_input_masks = bias_correction_with_mask
+            .map { sub, ses, anat_file, bids_name, mask_file ->
+                [sub, ses, mask_file]
+            }
+        
+        // Extract bids_name lookup for no_mask path (needed for joining brain output)
+        def bias_no_mask_bids_lookup = bias_correction_no_mask
+            .map { sub, ses, anat_file, bids_name ->
+                [sub, ses, bids_name]
+            }
+        
+        // Run bias correction with mask (process will only run if channel has items)
+        ANAT_BIAS_CORRECTION(bias_input_files, bias_input_masks, config_file)
+        def bias_with_mask_output = ANAT_BIAS_CORRECTION.out.output
+        // Join brain output with bids_name from input files to match anat_after_skull structure [sub, ses, brain_file, bids_name]
+        def bias_with_mask_brain = ANAT_BIAS_CORRECTION.out.brain
+            .join(bias_input_files.map { sub, ses, anat_file, bids_name -> [sub, ses, bids_name] }, by: [0, 1])
+            .map { sub, ses, brain_file, bids_name ->
+                [sub, ses, brain_file, bids_name]
+            }
+        
+        // Use passthrough for cases with dummy mask (always outputs dummy brain)
+        ANAT_BIAS_CORRECTION_PASSTHROUGH(bias_correction_no_mask, config_file)
+        def bias_no_mask_output = ANAT_BIAS_CORRECTION_PASSTHROUGH.out.output
+        // Join brain output with bids_name to match anat_after_skull structure [sub, ses, brain_file, bids_name]
+        def bias_no_mask_brain = ANAT_BIAS_CORRECTION_PASSTHROUGH.out.brain
+            .join(bias_no_mask_bids_lookup, by: [0, 1])
+            .map { sub, ses, brain_file, bids_name ->
+                [sub, ses, brain_file, bids_name]
+            }
+        
+        // Mix outputs from both paths
+        // Since both processes always output brain (real or dummy), and we join with bias_bids_lookup
+        // (which always has entries), both brain channels should have entries after join
+        anat_after_bias = bias_with_mask_output.mix(bias_no_mask_output)
+        anat_after_bias_brain = bias_with_mask_brain.mix(bias_no_mask_brain)
+    } else {
+        // If bias correction is disabled, use passthrough to maintain channel structure
+        // Passthrough always outputs dummy brain for consistent structure
+        ANAT_BIAS_CORRECTION_PASSTHROUGH(anat_after_conform, config_file)
+        anat_after_bias = ANAT_BIAS_CORRECTION_PASSTHROUGH.out.output
+        // Join brain output with bids_template to match anat_after_skull structure [sub, ses, brain_file, bids_name]
+        anat_after_bias_brain = ANAT_BIAS_CORRECTION_PASSTHROUGH.out.brain
+            .join(anat_after_conform.map { sub, ses, anat_file, bids_name -> [sub, ses, bids_name] }, by: [0, 1])
+            .map { sub, ses, brain_file, bids_name ->
+                [sub, ses, brain_file, bids_name]
+            }
+    }
+    
+    // ============================================
+    // PUBLISH PHASE 1 OUTPUTS
+    // ============================================
+    // Publish Phase 1 preprocessed outputs (desc-preproc naming)
+    // Takes final Phase 1 outputs and creates desc-preproc versions for publishing
+    // Input: anat_after_bias: [sub, ses, anat_file, bids_name]
+    //        anat_after_bias_brain: [sub, ses, brain_file, bids_name]
+    // Output: Creates desc-preproc symlinks and publishes them
+    // ============================================
+    def phase1_publish_input = anat_after_bias
+        .join(anat_after_bias_brain, by: [0, 1])
+        .map { sub, ses, anat_file, anat_bids, brain_file, brain_bids ->
+            [sub, ses, anat_file, brain_file, anat_bids]
+        }
+    
+    ANAT_PUBLISH_PHASE1(phase1_publish_input, config_file)
     
     // ============================================
     // REGISTRATION
     // ============================================
     // Register anatomical images to template space
-    // Compute transform on skullstripped version (for better registration)
+    // Compute transform on bias-corrected brain version (for better registration)
     // Apply transform to unskullstripped version (to get full head in template space)
-    // Input: anat_after_skull: [sub, ses, anat_file, bids_name] (for computing transform)
-    //        anat_after_conform: [sub, ses, anat_file, bids_name] (for applying transform)
-    // Output: anat_after_reg: [sub, ses, registered_file, bids_name] (unskullstripped registered)
+    // Input: anat_after_bias_brain: [sub, ses, brain_file, bids_name] (for computing transform, always available - real or dummy)
+    //        anat_after_bias: [sub, ses, anat_file, bids_name] (for applying transform - bias-corrected full head _T1w)
+    // Output: anat_after_reg: [sub, ses, registered_file, bids_name] (full head registered _T1w, not brain)
     //         anat_reg_transforms: [sub, ses, forward_xfm, inverse_xfm]
     //         anat_reg_reference: [sub, ses, reference_file]
+    // Principle: anat_after_xxxstep = full head (_T1w), anat_after_xxxstep_brain = brain (_T1w_brain)
     // ============================================
     anat_after_reg = Channel.empty()
     anat_reg_transforms = Channel.empty()
     anat_reg_reference = Channel.empty()
     if (registration_enabled) {
-        // Join skullstripped version (for computing transform) with unskullstripped version (for applying transform)
+        // Join brain version (for computing transform) with bias-corrected full head (for applying transform)
         // ANAT_REGISTRATION expects: [sub, ses, skull_file, bids_name, unskull_file]
-        def registration_input = anat_after_skull
-            .join(anat_after_conform, by: [0, 1])
-            .map { sub, ses, skull_file, skull_bids, unskull_file, unskull_bids ->
-                [sub, ses, skull_file, skull_bids, unskull_file]
+        def registration_input = anat_after_bias_brain  // [sub, ses, brain_file, brain_bids_name]
+            .join(anat_after_bias, by: [0, 1])
+            .map { sub, ses, brain_file, brain_bids_name, anat_file, anat_bids_name ->
+                [sub, ses, brain_file, brain_bids_name, anat_file]
             }
         
         ANAT_REGISTRATION(registration_input, config_file)
@@ -390,7 +520,7 @@ workflow ANAT_WF {
         anat_reg_transforms = ANAT_REGISTRATION.out.transforms
         anat_reg_reference = ANAT_REGISTRATION.out.reference
     } else {
-        ANAT_REGISTRATION_PASSTHROUGH(anat_after_skull, config_file)
+        ANAT_REGISTRATION_PASSTHROUGH(anat_after_bias, config_file)
         anat_after_reg = ANAT_REGISTRATION_PASSTHROUGH.out.output
         anat_reg_transforms = ANAT_REGISTRATION_PASSTHROUGH.out.transforms
         anat_reg_reference = ANAT_REGISTRATION_PASSTHROUGH.out.reference
@@ -434,16 +564,6 @@ workflow ANAT_WF {
         QC_CONFORM(conform_qc_input, config_file)
     }
     
-    if (anat_bias_correction_enabled) {
-        anat_after_reorient_normal
-            .join(anat_after_bias, by: [0, 1])
-            .map { sub, ses, reoriented_file, bids_name1, bias_corrected_file, bids_name2 ->
-                [sub, ses, reoriented_file, bias_corrected_file, bids_name2]
-            }
-            .set { bias_qc_input }
-        QC_BIAS_CORRECTION(bias_qc_input, config_file)
-    }
-    
     if (anat_skullstripping_enabled) {
         anat_after_conform
             .join(anat_skull_mask, by: [0, 1])
@@ -453,15 +573,31 @@ workflow ANAT_WF {
             .set { skull_qc_input }
         QC_SKULLSTRIPPING(skull_qc_input, config_file)
         
-        anat_after_skull
+        anat_after_skull_brain
             .join(anat_skull_seg, by: [0, 1])
-            .map { sub, ses, anat_file, bids_name, seg_file ->
-                [sub, ses, anat_file, seg_file, bids_name]
+            .map { sub, ses, brain_file, bids_name, seg_file ->
+                [sub, ses, brain_file, seg_file, bids_name]
             }
             .set { atlas_qc_input }
         QC_ATLAS_SEGMENTATION(atlas_qc_input, config_file)
     }
-    
+
+    if (anat_bias_correction_enabled) {
+        // For QC, compare T1w_brain before and after bias correction
+        // Before: use skull-stripped brain from skullstripping (anat_after_skull_brain)
+        // After: use bias-corrected T1w_brain (anat_after_bias_brain) - filter out dummy brains
+        // Only generate QC when real bias-corrected brain is available
+        // Both channels have structure [sub, ses, file, bids_name] (4 elements)
+        def bias_qc_input = anat_after_skull_brain
+            .join(anat_after_bias_brain.filter { sub, ses, brain_file, bids_name ->
+                !brain_file.toString().contains('.dummy')
+            }, by: [0, 1])
+            .map { sub, ses, before_brain_file, before_bids, after_brain_file, after_bids ->
+                [sub, ses, before_brain_file, after_brain_file, after_bids]
+            }
+        QC_BIAS_CORRECTION(bias_qc_input, config_file)
+    }
+
     if (registration_enabled) {
         anat_after_reg
             .join(anat_reg_reference, by: [0, 1])
@@ -477,20 +613,21 @@ workflow ANAT_WF {
     // SURFACE RECONSTRUCTION
     // ============================================
     // Generate cortical surfaces and measurements (requires skullstripping)
-    // Input: anat_after_conform, anat_skull_seg, anat_skull_mask: [sub, ses, ...]
+    // Input: anat_after_bias (Phase 1 final output), anat_skull_seg, anat_skull_mask: [sub, ses, ...]
     // Output: Surface reconstruction outputs and QC
     // ============================================
     def surf_recon_input = Channel.empty()
     def surf_qc_input = Channel.empty()
     if (surf_recon_enabled && anat_skullstripping_enabled) {
-        // Step 1: Join conformed image with segmentation
-        def surf_recon_input_base = anat_after_conform
+        // Step 1: Join bias-corrected image (Phase 1 final) with segmentation
+        // Both channels have [sub, ses] as first two elements, so use join() for exact matching
+        def surf_recon_input_base = anat_after_bias
             .join(anat_skull_seg, by: [0, 1])
             .map { sub, ses, anat_file, bids_name, seg_file ->
                 [sub, ses, anat_file, bids_name, seg_file]
             }
         
-        // Step 2: Join with brain mask
+        // Step 2: Join with brain mask (both have [sub, ses] as first two elements)
         surf_recon_input = surf_recon_input_base
             .join(anat_skull_mask, by: [0, 1])
             .map { sub, ses, anat_file, bids_name, seg_file, mask_file ->
@@ -532,8 +669,9 @@ workflow ANAT_WF {
     // T2W PROCESSING
     // ============================================
     // Process all T2w files (both synthesized and single files)
-    // Flow: synthesis → reorient → bias correction → T2w→T1w registration → APPLY phase (for T2w with T1w)
-    //       OR: synthesis → reorient → bias correction → STOP (for T2w without T1w)
+    // Flow: synthesis → reorient → T2w→T1w registration (anat file, not brain file) → APPLY phase (for T2w with T1w)
+    //       OR: synthesis → reorient → STOP (for T2w without T1w)
+    // Note: Bias correction is skipped for T2w images
     // ============================================
     // Step 1: Combine T2w synthesis output with single T2w files
     // anat_t2w_synthesis_output: [sub, ses, anat_file, bids_name, needs_t1w_reg]
@@ -572,46 +710,30 @@ workflow ANAT_WF {
         t2w_after_reorient = anat_t2w_all_jobs
     }
     
-    // Step 3: Bias correct T2w files
-    // Input: t2w_after_reorient: [sub, ses, anat_file, bids_name, needs_t1w_reg]
-    // Output: t2w_after_bias: [sub, ses, anat_file, bids_name, needs_t1w_reg]
-    def t2w_after_bias = t2w_after_reorient
-    if (anat_bias_correction_enabled) {
-        t2w_after_reorient
-            .map { sub, ses, anat_file, bids_name, needs_t1w_reg ->
-                [sub, ses, anat_file, bids_name]
-            }
-            .set { t2w_for_bias }
-        ANAT_BIAS_CORRECTION_T2W(t2w_for_bias, config_file)
-        t2w_after_bias = ANAT_BIAS_CORRECTION_T2W.out.output
-            .join(t2w_after_reorient.map { sub, ses, anat_file, bids_name, needs_t1w_reg -> [sub, ses, needs_t1w_reg] }, by: [0, 1])
-            .map { sub, ses, anat_file, bids_name, needs_t1w_reg ->
-                [sub, ses, anat_file, bids_name, needs_t1w_reg]
-            }
-    } else {
-        t2w_after_bias = t2w_after_reorient
-    }
-    
-    // Step 4: Perform anatomical selection for ALL T2w files
+    // Step 3: Perform anatomical selection for ALL T2w files
+    // Note: Bias correction is skipped for T2w - T2w proceeds directly from reorient to anatomical selection
+    // Use T1w from reorient stage (anat_after_reorient) for T2w→T1w registration - BEFORE conform
+    // This ensures both T2w and T1w are in their native space before registration
+    // Note: anat_after_reorient is the full head version (_T1w), not the brain version (_T1w_brain)
     // Check for T1w matches (same-session or cross-session) for all T2w files
     // Priority: 1) Same session T1w, 2) Cross-session T1w, 3) No T1w (stop processing)
     // Output: [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses]
-    def t2w_all_after_bias = t2w_after_bias
+    def t2w_all_after_reorient = t2w_after_reorient
         .map { sub, ses, anat_file, bids_name, needs_t1w_reg ->
             [sub, ses, anat_file, bids_name]
         }
     
     def findUnmatchedT2w = channelHelpers.findUnmatchedT2w
     def t2w_anat_selection = channelHelpers.performT2wAnatomicalSelection(
-        t2w_all_after_bias,
-        anat_after_bias,
+        t2w_all_after_reorient,
+        anat_after_reorient,  // Full head T1w from reorient stage (before conform), not brain (_T1w_brain)
         isT1wFile,
         findUnmatchedT2w
     )
     
     // Step 4b: Split T2w into two paths based on T1w availability
     // Path 1: T2w with T1w (same-session or cross-session) - register to T1w space, then APPLY T1w's transforms
-    // Path 2: T2w without T1w - stop after bias correction
+    // Path 2: T2w without T1w - stop after reorient
     t2w_anat_selection
         .branch {
             with_t1w: it[4] != null  // t1w_file != null
@@ -641,7 +763,7 @@ workflow ANAT_WF {
             [sub, ses, t2w_file, t2w_bids_name, anat_ses]
         }
     
-    // Path 2: T2w without T1w - stop after bias correction
+    // Path 2: T2w without T1w - stop after reorient
     // Input: t2w_branched_by_t1w.without_t1w: [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses]
     // Output: t2w_without_t1w_final: [sub, ses, t2w_file, t2w_bids_name]
     // (No further processing - stops here)
@@ -736,17 +858,17 @@ workflow ANAT_WF {
     // 2. T2w in template space QC: T2w in template space (after all transforms) with template contours
     // ============================================
     
-    // Filter T1w skullstripped images for QC
-    def t1w_skullstripped = anat_after_skull
+    // Filter T1w brain images for QC
+    def t1w_brain = anat_after_skull_brain
         .filter(isT1wFile)
     
     // ============================================
     // QC SNAP 1: T2w→T1w Registration
     // ============================================
     // Underlay: Conformed T2w (after applying conform transform)
-    // Overlay: T1w brain (skullstripped T1w) - contours will be generated
+    // Overlay: T1w brain - contours will be generated
     // Input: t2w_after_apply_conform: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
-    //        t1w_skullstripped: [sub, ses, t1w_file, t1w_bids_name] (keyed by anatomical session)
+    //        t1w_brain: [sub, ses, t1w_file, t1w_bids_name] (keyed by anatomical session)
     // ============================================
     // IMPORTANT: Use combine() + filter() instead of join() because multiple T2w sessions
     // may reference the SAME T1w session. join() causes race condition.
@@ -754,7 +876,7 @@ workflow ANAT_WF {
         .map { sub, ses, t2w_file, t2w_bids_name, anat_ses ->
             [sub, ses, t2w_file, t2w_bids_name, anat_ses]
         }
-        .combine(t1w_skullstripped, by: 0)  // Combine by subject only
+        .combine(t1w_brain, by: 0)  // Combine by subject only
         .filter { sub, ses, t2w_file, t2w_bids_name, anat_ses, t1w_ses, t1w_file, t1w_bids_name ->
             anat_ses == t1w_ses  // Keep only where T2w's anat_ses matches T1w session
         }
@@ -839,7 +961,7 @@ workflow ANAT_WF {
     // EMIT OUTPUT CHANNELS
     // ============================================
     emit:
-    anat_after_skull
+    anat_after_bias_brain  // Phase 1 final output - brain (for functional workflow registration)
     anat_reg_transforms
     anat_reg_reference
     anat_subjects_ch

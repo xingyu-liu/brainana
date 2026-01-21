@@ -199,7 +199,7 @@ def create_skullstripping_qc(
     Args:
         underlay_file: Path to underlay image (e.g., T1w brain image)
         mask_file: Path to brain mask file
-        save_f: Full path for output file (e.g., 'figures/sub-01_desc-skullStripping_T1w.png')
+        save_f: Full path for output file (e.g., 'figures/sub-01_desc-skullstrip_T1w.png')
         modality: Imaging modality ("anat" or "func")
         num_slices: Number of slices per orientation
         logger: Logger instance
@@ -325,7 +325,7 @@ def create_bias_correction_qc(
     Args:
         image_original: Path to original image (before bias correction)
         image_corrected: Path to corrected image (after bias correction)
-        save_f: Full path for output file (e.g., 'figures/sub-01_desc-biasCorrection_T1w.png')
+        save_f: Full path for output file (e.g., 'figures/sub-01_desc-biascorrect_T1w.png')
         modality: Imaging modality ("anat" or "func")
         num_slices: Number of slices per orientation
         logger: Logger instance

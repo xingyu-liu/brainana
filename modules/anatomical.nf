@@ -15,7 +15,7 @@ process ANAT_SYNTHESIS {
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*.nii.gz"), file("bids_naming_template.txt"), emit: synthesized
+    tuple val(subject_id), val(session_id), path("*.nii.gz"), file("bids_name.txt"), emit: synthesized
     path "metadata.json", emit: metadata
     
     script:
@@ -48,10 +48,10 @@ config = load_config('${config_file}')
 anat_files = [Path(f) for f in [${anat_files_list}]]
 
 # Get BIDS naming template for BIDS filename generation
-bids_naming_template = Path('${first_file}')
+bids_name = Path('${first_file}')
 
 # Determine modality from BIDS naming template filename
-modality = detect_modality(bids_naming_template)
+modality = detect_modality(bids_name)
 
 # Run synthesis (anat_synthesis function works for all anatomical modalities via underlying synthesis_multiple_anatomical)
 result = anat_synthesis(
@@ -65,7 +65,7 @@ synthesized = result.metadata.get("synthesized", False)
 
 # Generate BIDS-compliant output filename
 # Parse entities from BIDS naming template and remove 'run' entity for synthesized output
-entities = parse_bids_entities(bids_naming_template.name)
+entities = parse_bids_entities(bids_name.name)
 # Remove 'run' entity since synthesis combines multiple runs
 if 'run' in entities:
     del entities['run']
@@ -84,22 +84,22 @@ create_output_link(result.output_file, bids_output_filename)
 # Save metadata
 save_metadata(result.metadata)
 
-# Determine what to write to bids_naming_template.txt for downstream steps
+# Determine what to write to bids_name.txt for downstream steps
 # If synthesis occurred, use the synthesized filename (without run) as the BIDS naming template
 # If synthesis didn't occur, use the original file path (preserves run for single files)
 if synthesized:
     # For synthesized files, construct a path using the synthesized filename
     # This ensures downstream steps don't include run identifiers
     # Use the same directory structure as the original file
-    synthesized_path = bids_naming_template.parent / bids_output_filename
-    bids_naming_template_for_downstream = str(synthesized_path)
+    synthesized_path = bids_name.parent / bids_output_filename
+    bids_name_for_downstream = str(synthesized_path)
 else:
     # For single files (no synthesis), use the original file path
-    bids_naming_template_for_downstream = str(bids_naming_template)
+    bids_name_for_downstream = str(bids_name)
 
 # Write the appropriate path to file for Nextflow value output
-with open('bids_naming_template.txt', 'w') as f:
-    f.write(bids_naming_template_for_downstream)
+with open('bids_name.txt', 'w') as f:
+    f.write(bids_name_for_downstream)
 PYTHON_EOF
     """
 }
@@ -113,11 +113,11 @@ process ANAT_REORIENT {
         enabled: false
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_name)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_name), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -144,10 +144,10 @@ init_cmd_log_for_nextflow(
 config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Determine modality from BIDS naming template filename
-modality = detect_modality(bids_naming_template)
+modality = detect_modality(bids_name)
 
 # Get effective_output_space from effective config file
 config = load_config('${config_file}')
@@ -175,7 +175,7 @@ result = anat_reorient(input_obj, template_file=template_file)
 
 # Generate BIDS-compliant output filename
 bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
+    original_file_path=bids_name,
     suffix='desc-reorient',
     modality=modality
 )
@@ -205,13 +205,11 @@ process ANAT_CONFORM {
         }
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_name)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(bids_naming_template), emit: output
-    // Phase 1 preproc output: [sub, ses, preproc_file, bids_template]
-    tuple val(subject_id), val(session_id), path("*desc-preproc*.nii.gz"), val(bids_naming_template), emit: preproc_output
+    tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(bids_name), emit: output
     // Transforms: [sub, ses, forward_transform, inverse_transform]
     tuple val(subject_id), val(session_id), path("*from-scanner_to-*_mode-image_xfm*"), path("*from-*_to-scanner_mode-image_xfm*"), emit: transforms
     // Reference: [sub, ses, reference]
@@ -244,10 +242,10 @@ init_cmd_log_for_nextflow(
 config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Determine modality from BIDS naming template filename
-modality = detect_modality(bids_naming_template)
+modality = detect_modality(bids_name)
 
 # Get effective_output_space from effective config file
 config = load_config('${config_file}')
@@ -273,7 +271,7 @@ result = anat_conform(input_obj, template_file=template_file)
 
 # Generate BIDS-compliant output filename
 bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
+    original_file_path=bids_name,
     suffix='desc-conform',
     modality=modality
 )
@@ -281,46 +279,8 @@ bids_output_filename = create_bids_output_filename(
 # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
 create_output_link(result.output_file, bids_output_filename)
 
-# Generate BIDS-compliant output filename for Phase 1 preproc (published output)
-bids_preproc_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
-    suffix='desc-preproc',
-    modality=modality
-)
-
-# Create symlink for Phase 1 preproc output (published)
-# Use the same source file as desc-conform (result.output_file)
-# Ensure source file exists before creating symlink
-if not result.output_file.exists():
-    raise FileNotFoundError(f"Source file for preproc output does not exist: {result.output_file}")
-
-create_output_link(result.output_file, bids_preproc_filename)
-
-# Verify the file exists and is accessible (Nextflow needs to see it)
-preproc_path = Path(bids_preproc_filename)
-if not preproc_path.exists():
-    # Debug: list current directory to see what files exist
-    import os
-    current_files = [f for f in os.listdir('.') if f.endswith('.nii.gz')]
-    error_msg = ("Failed to create preproc output file: " + str(bids_preproc_filename) + 
-                 " (source: " + str(result.output_file) + ")\\n" +
-                 "Current directory files ending in .nii.gz: " + str(current_files) + "\\n" +
-                 "Absolute path: " + str(preproc_path.resolve()))
-    raise FileNotFoundError(error_msg)
-# Check if it's a valid symlink or file
-if not (preproc_path.is_symlink() or preproc_path.is_file()):
-    raise FileNotFoundError(f"Preproc output file exists but is not a valid file or symlink: {bids_preproc_filename}")
-# If it's a symlink, verify it resolves correctly
-if preproc_path.is_symlink():
-    try:
-        resolved = preproc_path.resolve(strict=True)
-        if not resolved.exists():
-            raise FileNotFoundError(f"Preproc symlink points to non-existent file: {bids_preproc_filename} -> {resolved}")
-    except Exception as e:
-        raise FileNotFoundError(f"Preproc symlink is broken: {bids_preproc_filename}, error: {e}")
-
 # Generate BIDS prefix (filename stem without modality)
-original_stem = get_filename_stem(bids_naming_template)
+original_stem = get_filename_stem(bids_name)
 bids_prefix = original_stem.replace(f"_{modality}", "")
 
 # Copy transform files with BIDS-compliant names
@@ -358,11 +318,17 @@ process ANAT_BIAS_CORRECTION {
         enabled: false
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_name)
+    tuple val(subject_id), val(session_id), path(mask_file)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_naming_template), emit: output
+    // Bias-corrected full head output: [sub, ses, biascorrected_file, bids_template]
+    // Use specific pattern to exclude brain file
+    tuple val(subject_id), val(session_id), path("*desc-biascorrect*_T1w.nii.gz"), val(bids_name), emit: output
+    // Brain output: [sub, ses, brain_file] - will be joined with bids_template in workflow
+    // Use desc-biascorrect naming (not desc-preproc) - publishing step will handle preproc naming
+    tuple val(subject_id), val(session_id), path("*desc-biascorrect*_brain.nii.gz"), emit: brain
     path "*.json", emit: metadata
     
     script:
@@ -394,10 +360,14 @@ init_cmd_log_for_nextflow(
 config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Determine modality from BIDS naming template filename
-modality = detect_modality(bids_naming_template)
+modality = detect_modality(bids_name)
+
+# Get mask file (already validated as real in workflow)
+mask_file = Path('${mask_file}')
+brain_mask = mask_file
 
 # Create step input
 input_obj = StepInput(
@@ -412,17 +382,34 @@ input_obj = StepInput(
 )
 
 # Run step
-result = anat_bias_correction(input_obj)
+result = anat_bias_correction(input_obj, brain_mask=brain_mask)
 
-# Generate BIDS-compliant output filename (bias corrected file)
+# Generate BIDS-compliant output filename (for internal workflow use)
 bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
-    suffix='desc-biascorrected',
+    original_file_path=bids_name,
+    suffix='desc-biascorrect',
     modality=modality
 )
 
-# Use symlink to avoid duplication - Nextflow publishDir will handle final copy
+# Use symlink to avoid duplication - publishing step will handle final copy
 create_output_link(result.output_file, bids_output_filename)
+
+# Always output brain (real if available, dummy if not) for consistent structure
+# Structure: [sub, ses, brain_file] - will be joined with bids_template in workflow
+# Use desc-biascorrect naming (not desc-preproc) - publishing step will handle preproc naming
+from macacaMRIprep.utils.bids import get_filename_stem
+original_stem = get_filename_stem(bids_name)
+bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
+bids_brain_filename = f"{bids_prefix_wo_modality}_desc-biascorrect_{modality}_brain.nii.gz"
+
+if "brain" in result.additional_files:
+    # Real brain was generated - use it
+    create_output_link(result.additional_files["brain"], bids_brain_filename)
+else:
+    # No brain generated - create dummy brain file for consistent structure
+    dummy_brain = Path('dummy_brain.dummy')
+    dummy_brain.touch()
+    create_output_link(dummy_brain, bids_brain_filename)
 
 # Save metadata
 with open('metadata.json', 'w') as f:
@@ -437,14 +424,17 @@ process ANAT_SKULLSTRIPPING {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.nii.gz'
+        enabled: false
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_name)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*_desc-preproc_*_brain.nii.gz"), val(bids_naming_template), emit: output
+    // Pattern matches files with desc-skullstrip (full head, inherited from input)
+    tuple val(subject_id), val(session_id), path("*desc-skullstrip*_T1w.nii.gz"), val(bids_name), emit: output  // Full head (inherited from input, not skullstripped)
+    tuple val(subject_id), val(session_id), path("*desc-skullstrip*_T1w_brain.nii.gz"), val(bids_name), emit: brain  // Brain-only (skullstripped, generated by this step)
+    // Note: For T2w processing, a separate ANAT_SKULLSTRIPPING_T2W process would be used with T2w-specific patterns
     tuple val(subject_id), val(session_id), path("*_desc-brain_mask.nii.gz"), emit: brain_mask
     tuple val(subject_id), val(session_id), path("*_desc-brain_hemimask.nii.gz"), optional: true, emit: brain_hemimask
     tuple val(subject_id), val(session_id), path("*_desc-brain_atlas*.nii.gz"), optional: true, emit: brain_segmentation
@@ -475,10 +465,10 @@ init_cmd_log_for_nextflow(
 config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Determine modality from BIDS naming template filename
-modality = detect_modality(bids_naming_template)
+modality = detect_modality(bids_name)
 
 # Create step input
 input_obj = StepInput(
@@ -495,16 +485,29 @@ input_obj = StepInput(
 # Run step
 result = anat_skullstripping(input_obj)
 
-# Generate BIDS-compliant output filename for brain-only version
-# Format: {prefix}_desc-preproc_{modality}_brain.nii.gz
-# We need to handle _brain specially since it's not part of the modality
-from macacaMRIprep.utils.bids import get_filename_stem
-original_stem = get_filename_stem(bids_naming_template)
+# Generate BIDS-compliant output filenames
+# Principle: anat_after_xxxstep = full head (_T1w), anat_after_xxxstep_brain = brain (_T1w_brain)
+# Use desc-skullstrip naming to indicate this step (similar to desc-conform, desc-biascorrect)
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+original_stem = get_filename_stem(bids_name)
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
-bids_output_filename = f"{bids_prefix_wo_modality}_desc-preproc_{modality}_brain.nii.gz"
 
-# Use symlink to avoid duplication - Nextflow publishDir will handle final copy
-create_output_link(result.output_file, bids_output_filename)
+# Output 1: Full head version (not skullstripped) - inherit from input file
+# ANAT_SKULLSTRIPPING does NOT generate a full head file - it only generates the brain version
+# So we inherit the input file (full head) and create a symlink with proper BIDS naming
+# Format: {prefix}_desc-skullstrip_{modality}.nii.gz (e.g., sub-XXX_ses-001_run-1_desc-skullstrip_T1w.nii.gz)
+bids_output_full_head = create_bids_output_filename(
+    original_file_path=bids_name,
+    suffix='desc-skullstrip',
+    modality=modality
+)
+create_output_link(Path('${input_file}'), bids_output_full_head)
+
+# Output 2: Brain-only version (skullstripped) - generated by this step
+# Format: {prefix}_desc-skullstrip_{modality}_brain.nii.gz (e.g., sub-XXX_ses-001_run-1_desc-skullstrip_T1w_brain.nii.gz)
+# Note: _brain is appended after the modality, not part of it
+bids_output_brain = f"{bids_prefix_wo_modality}_desc-skullstrip_{modality}_brain.nii.gz"
+create_output_link(result.output_file, bids_output_brain)
 
 # Create symlinks for additional files with BIDS-compliant names
 # Keep large files (masks, segmentations) as symlinks until published - saves storage
@@ -548,7 +551,7 @@ process ANAT_SURFACE_RECONSTRUCTION {
         }
     
     input:
-    tuple val(subject_id), val(session_id), path(t1w_file), val(bids_naming_template), path(segmentation_file), path(brain_mask)
+    tuple val(subject_id), val(session_id), path(t1w_file), val(bids_name), path(segmentation_file), path(brain_mask)
     path config_file
     
     output:
@@ -651,12 +654,12 @@ process ANAT_REGISTRATION {
         saveAs: { filename -> filename.contains('ref_from_anat_reg.nii.gz') ? null : filename }
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template), path(unskullstripped_file)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_name), path(unskullstripped_file)
     path config_file  // Effective config file with all resolved parameters
     
     output:
     // Output: [sub, ses, registered_file, bids_template]
-    tuple val(subject_id), val(session_id), path("*space-*.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), path("*space-*.nii.gz"), val(bids_name), emit: output
     // Transforms: [sub, ses, forward_transform, inverse_transform]
     // Use patterns that match the actual naming: forward starts with from-T1w_to- or from-T2w_to-, inverse ends with _to-T1w or _to-T2w
     tuple val(subject_id), val(session_id), path("*from-T1w_to-*_mode-image_xfm*"), path("*from-*_to-T1w_mode-image_xfm*"), emit: transforms
@@ -703,10 +706,10 @@ init_cmd_log_for_nextflow(
 config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Determine modality from BIDS naming template filename
-modality = detect_modality(bids_naming_template)
+modality = detect_modality(bids_name)
 
 # Get effective_output_space from effective config file
 effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
@@ -766,7 +769,7 @@ if use_unskullstripped:
 # Generate BIDS-compliant output filename with space entity
 # Format: space-{template}_desc-preproc_{modality}.nii.gz
 bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
+    original_file_path=bids_name,
     suffix=f'space-{template_name}_desc-preproc',
     modality=modality
 )
@@ -775,7 +778,7 @@ bids_output_filename = create_bids_output_filename(
 create_output_link(result.output_file, bids_output_filename)
 
 # Get filename stem for BIDS-compliant transform naming
-original_stem = get_filename_stem(bids_naming_template)
+original_stem = get_filename_stem(bids_name)
 
 # Generate BIDS prefix (filename stem without modality)
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
@@ -822,14 +825,14 @@ process ANAT_T2W_TO_T1W_REGISTRATION {
         pattern: '*.{h5}'
     
     input:
-    tuple val(subject_id), val(session_id), path(t2w_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), path(t2w_file), val(bids_name)
     path(t1w_reference)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_name), emit: output
     // Transforms: [sub, ses, forward_transform, inverse_transform]
-    // Note: T1w is in native space at registration time (after bias correction, before conform)
+    // Note: T1w is in native space at registration time (before conform and bias correction)
     tuple val(subject_id), val(session_id), path("*from-T2w_to-T1wNative_mode-image_xfm*"), path("*from-T1wNative_to-T2w_mode-image_xfm*"), emit: transforms
     path "*.json", emit: metadata
     
@@ -861,13 +864,13 @@ init_cmd_log_for_nextflow(
 config = load_config('${config_file}')
 
 # Get BIDS naming template (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Determine modality from BIDS naming template filename
-modality = detect_modality(bids_naming_template)
+modality = detect_modality(bids_name)
 
 # Get filename stem for BIDS-compliant transform naming
-original_stem = get_filename_stem(bids_naming_template)
+original_stem = get_filename_stem(bids_name)
 
 # Get T1w reference file
 t1w_reference = Path('${t1w_reference}')
@@ -889,10 +892,10 @@ result = anat_t2w_to_t1w_registration(input_obj, t1w_reference=t1w_reference)
 
 # Generate BIDS-compliant output filename with space-T1wNative entity
 # Format: space-T1wNative_T2w.nii.gz (after T2w→T1w registration)
-# Note: T2w is registered to T1w in its native space (after bias correction, before conform)
+# Note: T2w is registered to T1w in its native space (after reorient, before conform and bias correction)
 # Only after applying conform transform is T2w in the preprocessed T1w space (space-T1w)
 bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
+    original_file_path=bids_name,
     suffix='space-T1wNative',
     modality=modality
 )
@@ -905,7 +908,7 @@ bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 
 # Create symlinks for transform files with BIDS-compliant names
 # .h5 files can be large, so use symlinks until published - saves storage
-# Note: T1w is in native space at this point (after bias correction, before conform)
+# Note: T1w is in native space at this point (after reorient, before conform and bias correction)
 if "forward_transform" in result.additional_files:
     # Forward transform: from-T2w_to-T1wNative
     bids_transform_name = f"{bids_prefix_wo_modality}_from-T2w_to-T1wNative_mode-image_xfm.h5"
@@ -935,11 +938,11 @@ process ANAT_CONFORM_PASSTHROUGH {
         enabled: false
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_name)
     path config_file  // Effective config file with all resolved parameters
     
     output:
-    tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(bids_name), emit: output
     // Transforms: [sub, ses, forward_transform, inverse_transform]
     tuple val(subject_id), val(session_id), path("*from-scanner_to-*_mode-image_xfm*"), path("*from-*_to-scanner_mode-image_xfm*"), emit: transforms
     // Reference: [sub, ses, reference]
@@ -958,16 +961,16 @@ import numpy as np
 import json
 
 # Get BIDS naming template
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Determine modality
-modality = detect_modality(bids_naming_template)
-original_stem = get_filename_stem(bids_naming_template)
+modality = detect_modality(bids_name)
+original_stem = get_filename_stem(bids_name)
 
 # Pass through input file (create symlink)
 # Use create_output_link() for consistency and proper symlink resolution
 bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
+    original_file_path=bids_name,
     suffix='desc-conform',
     modality=modality
 )
@@ -1015,11 +1018,17 @@ process ANAT_BIAS_CORRECTION_PASSTHROUGH {
         enabled: false
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_name)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_naming_template), emit: output
+    // Bias-corrected full head output (passthrough): [sub, ses, biascorrected_file, bids_template]
+    // Use specific pattern to exclude brain file
+    tuple val(subject_id), val(session_id), path("*desc-biascorrect*_T1w.nii.gz"), val(bids_name), emit: output
+    // Always output dummy brain for consistent structure (matches ANAT_BIAS_CORRECTION.out.brain)
+    // Brain output: [sub, ses, brain_file] - will be joined with bids_template in workflow
+    // Use desc-biascorrect naming (not desc-preproc) - publishing step will handle preproc naming
+    tuple val(subject_id), val(session_id), path("*desc-biascorrect*_brain.nii.gz"), emit: brain
     path "*.json", emit: metadata
     
     script:
@@ -1031,21 +1040,29 @@ from pathlib import Path
 import os
 
 # Get BIDS naming template
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Determine modality
-modality = detect_modality(bids_naming_template)
-original_stem = get_filename_stem(bids_naming_template)
+modality = detect_modality(bids_name)
+original_stem = get_filename_stem(bids_name)
 
 # Pass through input file (create symlink)
 # Use create_output_link() for consistency and proper symlink resolution
-# Rename to desc-biascorrected for pipeline consistency even when step is disabled
+# Rename to desc-biascorrect for pipeline consistency even when step is disabled
 bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
-    suffix='desc-biascorrected',
+    original_file_path=bids_name,
+    suffix='desc-biascorrect',
     modality=modality
 )
 create_output_link(Path('${input_file}'), bids_output_filename)
+
+# Always output dummy brain for consistent structure (matches ANAT_BIAS_CORRECTION.out.brain)
+# Use desc-biascorrect naming (not desc-preproc) - publishing step will handle preproc naming
+bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
+bids_brain_filename = f"{bids_prefix_wo_modality}_desc-biascorrect_{modality}_brain.nii.gz"
+dummy_brain = Path('dummy_brain.dummy')
+dummy_brain.touch()
+create_output_link(dummy_brain, bids_brain_filename)
 
 # Save metadata
 metadata = {
@@ -1068,12 +1085,12 @@ process ANAT_REGISTRATION_PASSTHROUGH {
         enabled: false
     
     input:
-    tuple val(subject_id), val(session_id), path(input_file), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), path(input_file), val(bids_name)
     path config_file  // Effective config file with all resolved parameters
     
     output:
     // Output: [sub, ses, registered_file, bids_template]
-    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_name), emit: output
     // Transforms: [sub, ses, forward_transform, inverse_transform]
     // Forward: from-{modality}_to-{template} (e.g., from-T1w_to-NMT2Sym)
     // Inverse: from-{template}_to-{modality} (e.g., from-NMT2Sym_to-T1w)
@@ -1105,11 +1122,11 @@ import subprocess
 import shutil
 
 # Get BIDS naming template
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Determine modality
-modality = detect_modality(bids_naming_template)
-original_stem = get_filename_stem(bids_naming_template)
+modality = detect_modality(bids_name)
+original_stem = get_filename_stem(bids_name)
 
 # Get effective_output_space from effective config file
 config = load_config('${config_file}')
@@ -1119,7 +1136,7 @@ template_name = effective_output_space.split(':')[0] if effective_output_space e
 # Pass through input file (create symlink with space entity)
 # Use create_output_link() for consistency and proper symlink resolution
 bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
+    original_file_path=bids_name,
     suffix=f'space-{template_name}_desc-preproc',
     modality=modality
 )
@@ -1215,15 +1232,15 @@ process ANAT_APPLY_CONFORM {
     input:
     // Input: [sub, ses, t2w_file, t2w_bids_name, conform_transform, conformed_reference, anat_ses]
     // Stage conformed_reference as reg_reference.nii.gz to avoid output pattern collision
-    tuple val(subject_id), val(session_id), path(t2w_file), val(bids_naming_template), path(conform_transform), path(conformed_reference, stageAs: 'reg_reference.nii.gz'), val(anatomical_session)
+    tuple val(subject_id), val(session_id), path(t2w_file), val(bids_name), path(conform_transform), path(conformed_reference, stageAs: 'reg_reference.nii.gz'), val(anatomical_session)
     path config_file
     
     output:
     // Output: [sub, ses, conformed_t2w, t2w_bids_name, anat_ses]
-    tuple val(subject_id), val(session_id), path("*desc-conform_T2w.nii.gz"), val(bids_naming_template), val(anatomical_session), emit: output
+    tuple val(subject_id), val(session_id), path("*desc-conform_T2w.nii.gz"), val(bids_name), val(anatomical_session), emit: output
     // Phase 1 preproc output: [sub, ses, preproc_t2w, t2w_bids_name, anat_ses]
     // T2w is in preprocessed T1w space (after applying conform transform)
-    tuple val(subject_id), val(session_id), path("*space-T1w_desc-preproc_T2w.nii.gz"), val(bids_naming_template), val(anatomical_session), emit: preproc_output
+    tuple val(subject_id), val(session_id), path("*space-T1w_desc-preproc_T2w.nii.gz"), val(bids_name), val(anatomical_session), emit: preproc_output
     path "*.json", emit: metadata
     
     script:
@@ -1246,7 +1263,7 @@ init_cmd_log_for_nextflow(
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Apply conform transform to T2w
 t2w_result = flirt_apply_transforms(
@@ -1265,7 +1282,7 @@ if not t2w_result.get("imagef_registered"):
 
 # Generate BIDS-compliant output filename (for internal workflow use)
 bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
+    original_file_path=bids_name,
     suffix='desc-conform',
     modality='T2w'
 )
@@ -1276,7 +1293,7 @@ create_output_link(Path(t2w_result["imagef_registered"]), bids_output_filename)
 # Generate BIDS-compliant output filename for Phase 1 preproc (published output)
 # T2w is now in preprocessed T1w space (after applying conform transform)
 bids_preproc_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
+    original_file_path=bids_name,
     suffix='space-T1w_desc-preproc',
     modality='T2w'
 )
@@ -1328,13 +1345,13 @@ process ANAT_APPLY_TRANSFORMATION {
     
     input:
     // Input: [sub, ses, masked_t2w, t2w_bids_name, registration_transform, registration_reference]
-    tuple val(subject_id), val(session_id), path(masked_t2w), val(bids_naming_template), path(registration_transform), path(registration_reference)
+    tuple val(subject_id), val(session_id), path(masked_t2w), val(bids_name), path(registration_transform), path(registration_reference)
     path config_file
     
     output:
     // Output: [sub, ses, registered_t2w, t2w_bids_name]
     // Pattern excludes target_final files (they have target_final before .nii.gz)
-    tuple val(subject_id), val(session_id), path("*space-*desc-preproc*T2w.nii.gz"), val(bids_naming_template), emit: output
+    tuple val(subject_id), val(session_id), path("*space-*desc-preproc*T2w.nii.gz"), val(bids_name), emit: output
     // Reference file for QC: final target reference at appropriate resolution
     tuple val(subject_id), val(session_id), path("*target_final.nii.gz"), emit: reference
     path "*.json", emit: metadata
@@ -1361,7 +1378,7 @@ init_cmd_log_for_nextflow(
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
-bids_naming_template = Path('${bids_naming_template}')
+bids_name = Path('${bids_name}')
 
 # Determine output space from transform filename
 transform_path = Path('${registration_transform}')
@@ -1394,7 +1411,7 @@ if not t2w_result.get("imagef_registered"):
 
 # Generate BIDS-compliant output filename with space entity
 bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_naming_template,
+    original_file_path=bids_name,
     suffix=f'space-{template_name}_desc-preproc',
     modality='T2w'
 )
@@ -1521,6 +1538,92 @@ save_metadata({
     "registration_transform": str(transform_path),
     "template_name": template_name,
     "interpolation": "NearestNeighbor"
+})
+EOF
+    """
+}
+
+process ANAT_PUBLISH_PHASE1 {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
+        mode: 'copy',
+        pattern: '*desc-preproc*.nii.gz',
+        saveAs: { filename -> 
+            // Only publish files matching desc-preproc pattern (exclude other files)
+            if (filename.contains('desc-preproc')) {
+                return filename
+            }
+            return null
+        }
+    
+    input:
+    tuple val(subject_id), val(session_id), path(anat_file), path(brain_file), val(bids_name)
+    path config_file
+    
+    output:
+    tuple val(subject_id), val(session_id), path("*desc-preproc*.nii.gz"), optional: true, emit: published_files
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from pathlib import Path
+import re
+import sys
+from macacaMRIprep.utils.nextflow import save_metadata, create_output_link
+
+# Get input files
+anat_file = Path('${anat_file}')
+brain_file = Path('${brain_file}')
+
+# Function to replace desc-{stepname} with desc-preproc in filename
+def replace_desc_with_preproc(filename):
+    # Use regex to replace desc-{anything} with desc-preproc
+    # Pattern matches: desc- followed by any word characters, followed by underscore
+    pattern = r'desc-\\w+_'
+    replacement = 'desc-preproc_'
+    result = re.sub(pattern, replacement, str(filename))
+    return Path(result)
+
+# Track created files for output declaration
+created_files = []
+
+# Process anat_file (full head) if not dummy
+if '.dummy' not in str(anat_file):
+    anat_preproc_filename = replace_desc_with_preproc(anat_file.name)
+    create_output_link(anat_file, anat_preproc_filename)
+    # Verify the symlink was created and is accessible
+    if not Path(anat_preproc_filename).exists():
+        raise FileNotFoundError(f"Failed to create symlink: {anat_preproc_filename}")
+    created_files.append(anat_preproc_filename)
+    print(f"Created symlink: {anat_preproc_filename} -> {anat_file}", file=sys.stderr)
+    print(f"Symlink exists: {Path(anat_preproc_filename).exists()}, is_symlink: {Path(anat_preproc_filename).is_symlink()}", file=sys.stderr)
+
+# Process brain_file if not dummy
+if '.dummy' not in str(brain_file):
+    brain_preproc_filename = replace_desc_with_preproc(brain_file.name)
+    create_output_link(brain_file, brain_preproc_filename)
+    # Verify the symlink was created and is accessible
+    if not Path(brain_preproc_filename).exists():
+        raise FileNotFoundError(f"Failed to create symlink: {brain_preproc_filename}")
+    created_files.append(brain_preproc_filename)
+    print(f"Created symlink: {brain_preproc_filename} -> {brain_file}", file=sys.stderr)
+    print(f"Symlink exists: {Path(brain_preproc_filename).exists()}, is_symlink: {Path(brain_preproc_filename).is_symlink()}", file=sys.stderr)
+
+# Print summary for debugging
+print(f"Total files created for publishing: {len(created_files)}", file=sys.stderr)
+for f in created_files:
+    print(f"  - {f}", file=sys.stderr)
+
+# Save metadata
+save_metadata({
+    "step": "publish_phase1",
+    "subject_id": "${subject_id}",
+    "session_id": "${session_id}" if "${session_id}" else None,
+    "anat_file": str(anat_file),
+    "brain_file": str(brain_file)
 })
 EOF
     """

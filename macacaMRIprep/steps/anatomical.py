@@ -126,15 +126,16 @@ def anat_conform(input: StepInput, template_file: Path) -> StepOutput:
     )
 
 
-def anat_bias_correction(input: StepInput) -> StepOutput:
+def anat_bias_correction(input: StepInput, brain_mask: Optional[Path] = None) -> StepOutput:
     """
     Perform bias field correction on anatomical image.
     
     Args:
         input: StepInput with input_file, working_dir, config, metadata
+        brain_mask: Optional brain mask file (if provided and not dummy, will be used for bias correction)
         
     Returns:
-        StepOutput with bias-corrected file
+        StepOutput with bias-corrected file and optionally brain-only file
     """
     if not input.config.get("anat.bias_correction.enabled", True):
         logger.info("Step: bias correction skipped (disabled in configuration)")
@@ -143,6 +144,11 @@ def anat_bias_correction(input: StepInput) -> StepOutput:
             metadata={"step": "bias_correction", "skipped": True}
         )
     
+    # Use mask if provided (mask is already validated as real in workflow)
+    mask_path = brain_mask if brain_mask else None
+    if mask_path:
+        logger.info(f"Step: using brain mask for bias correction - {brain_mask.name}")
+    
     # Call operation
     result = bias_correction(
         imagef=str(input.input_file),
@@ -150,18 +156,26 @@ def anat_bias_correction(input: StepInput) -> StepOutput:
         modal="anat",
         output_name=input.output_name or "anat_bias_corrected.nii.gz",
         config=input.config,
-        logger=logger
+        logger=logger,
+        maskf=str(mask_path) if mask_path else None
     )
     
     output_file = Path(result["imagef_bias_corrected"])
+    additional_files = {}
+    
+    # Add brain-only file if generated
+    if result.get("imagef_brain"):
+        additional_files["brain"] = Path(result["imagef_brain"])
     
     return StepOutput(
         output_file=output_file,
         metadata={
             "step": "bias_correction",
             "modality": "anat",
-            "algorithm": input.config.get("anat", {}).get("bias_correction", {}).get("algorithm", "N4BiasFieldCorrection")
-        }
+            "algorithm": input.config.get("anat", {}).get("bias_correction", {}).get("algorithm", "N4BiasFieldCorrection"),
+            "mask_used": str(mask_path) if mask_path else None
+        },
+        additional_files=additional_files
     )
 
 
@@ -271,14 +285,11 @@ def anat_registration(input: StepInput, template_file: Path, template_name: str)
 
 def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepOutput:
     """
-    Register T2w image to preprocessed T1w space.
-    
-    This is used when T2w and T1w are in the same session. The T2w is registered
-    to the bias-corrected T1w (not to template), then bias correction is applied.
+    Register T2w image to T1w space.
     
     Args:
         input: StepInput with input_file (reoriented T2w), working_dir, config, metadata
-        t1w_reference: Path to preprocessed T1w reference (desc-preproc_T1w.nii.gz)
+        t1w_reference: Path to T1w reference
         
     Returns:
         StepOutput with registered T2w file and transform files
