@@ -214,7 +214,7 @@ def _get_rotation_for_perspective(perspective: str, orientation_code: str, shown
 
 def _plot_labeled_data(ax, data_slice: np.ndarray, label_to_color: dict, 
                       plot_type: str = 'contour', alpha: float = 0.7, 
-                      linewidth: float = 2.0) -> List[Tuple[int, str]]:
+                      linewidth: float = 1.5) -> List[Tuple[int, str]]:
     """
     Plot multi-label segmentation data with different colors for each label.
     Uses a consistent label-to-color mapping to ensure same label gets same color across slices.
@@ -344,7 +344,7 @@ def create_grid_mri_image(
     show_legend: bool = False,  # Show legend for multi-label segmentation
     show_row_labels: bool = False,  # Show orientation names on left
     col_margin: int = 0,  # Extract extra slices on each side but only display middle num_cols
-    contour_linewidth: float = 2.0  # Line width for contour overlays
+    contour_linewidth: float = 1.5  # Line width for contour overlays
 ) -> plt.Figure:
     """
     Create a flexible grid of MRI images with optional overlay and customizable perspectives.

@@ -31,6 +31,7 @@ include { QC_MOTION_CORRECTION } from '../modules/qc.nf'
 include { QC_CONFORM_FUNC } from '../modules/qc.nf'
 include { QC_SKULLSTRIPPING_FUNC } from '../modules/qc.nf'
 include { QC_REGISTRATION_FUNC } from '../modules/qc.nf'
+include { QC_REGISTRATION_FUNC as QC_REGISTRATION_FUNC_INTERMEDIATE } from '../modules/qc.nf'
 include { QC_WITHIN_SES_COREG } from '../modules/qc.nf'
 
 // Load external Groovy files
@@ -578,6 +579,7 @@ workflow FUNC_WF {
         FUNC_APPLY_TRANSFORMS(func_apply_reg_multi.reg_combined, func_apply_reg_multi.func_4d_file, "bold", config_file)
         func_apply_reg = FUNC_APPLY_TRANSFORMS.out.output
         func_apply_reg_reference = FUNC_APPLY_TRANSFORMS.out.reference
+        func_apply_reg_intermediate = FUNC_APPLY_TRANSFORMS.out.intermediate_output
         
         // ============================================
         // APPLY REGISTRATION TO BRAIN MASK
@@ -703,13 +705,22 @@ workflow FUNC_WF {
     }
 
     if (registration_enabled) {
+        // QC for intermediate func2anat step (only when sequential transforms are used)
+        func_apply_reg_intermediate
+            .map { sub, ses, run_identifier, intermediate_boldref, intermediate_reference, bids_name ->
+                [sub, ses, run_identifier, intermediate_boldref, intermediate_reference, bids_name]
+            }
+            .set { func_reg_intermediate_qc_input }
+        QC_REGISTRATION_FUNC_INTERMEDIATE(func_reg_intermediate_qc_input, "func2anat", config_file)
+        
+        // QC for final func2target step (template space)
         func_apply_reg
             .join(func_apply_reg_reference, by: [0, 1, 2])
             .map { sub, ses, run_identifier, registered_bold, registered_boldref, bids_name, reference_file ->
-                [sub, ses, run_identifier, registered_boldref, reference_file]
+                [sub, ses, run_identifier, registered_boldref, reference_file, bids_name]
             }
             .set { func_reg_qc_input }
-        QC_REGISTRATION_FUNC(func_reg_qc_input, config_file)
+        QC_REGISTRATION_FUNC(func_reg_qc_input, "func2target", config_file)
     }
     
     // ============================================
@@ -733,6 +744,7 @@ workflow FUNC_WF {
         func_qc_channels = func_qc_channels.mix(QC_WITHIN_SES_COREG.out.metadata)
     }
     if (registration_enabled) {
+        func_qc_channels = func_qc_channels.mix(QC_REGISTRATION_FUNC_INTERMEDIATE.out.metadata)
         func_qc_channels = func_qc_channels.mix(QC_REGISTRATION_FUNC.out.metadata)
     }
 

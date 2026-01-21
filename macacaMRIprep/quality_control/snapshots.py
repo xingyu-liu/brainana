@@ -436,6 +436,7 @@ def _create_before_after_comparison(
     before_data: Union[str, Path, np.ndarray],
     after_data: Union[str, Path, np.ndarray], 
     num_cols: int = 6,
+    col_margin: int = 1,
     save_f: Union[str, Path] = None,
     perspectives: Optional[List[str]] = ["axial"],
     before_after_labels: Optional[List[str]] = ["Before", "After"],
@@ -456,11 +457,12 @@ def _create_before_after_comparison(
     # Common parameters for both figures
     grid_params = {
         'num_cols': num_cols,
+        'col_margin': col_margin,
         'perspectives': perspectives,
         'figsize_per_col': (3, 3),
         'show_title': False,
         'overlay_data': None,
-        'underlay_cmap': 'gray'
+        'underlay_cmap': 'gray',
     }
 
     # Create before and after figures

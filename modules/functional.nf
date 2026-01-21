@@ -1294,6 +1294,9 @@ process FUNC_APPLY_TRANSFORMS {
     tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*desc-*.nii.gz"), path("*space-*desc-*.nii.gz"), val(bids_name), emit: output
     // Reference file for QC: final target reference at appropriate resolution
     tuple val(subject_id), val(session_id), val(run_identifier), path("*target_final.nii.gz"), emit: reference
+    // Intermediate output for sequential transforms QC: [sub, ses, run_id, func_tmean_anat, anat_reff, bids_name]
+    // Only emitted when is_sequential=True, empty otherwise
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*space-T1w_desc-func2anat_boldref.nii.gz"), path("*_desc-func2anat_reference.nii.gz"), val(bids_name), emit: intermediate_output, optional: true
     path "*.json", emit: metadata
     
     script:
@@ -1540,6 +1543,24 @@ if is_sequential:
             modality='boldref'
         )
         create_output_link(func_tmean_anat, func_anat_boldref_name)
+    
+    # Create intermediate output files for QC (func2anat step)
+    # These are only needed for QC snapshots, not for the pipeline
+    if data_type == "bold":
+        # Create intermediate boldref file for QC (BIDS-compliant naming)
+        intermediate_boldref_name = create_bids_output_filename(
+            original_file_path=bids_name,
+            suffix=f'space-{anat_target_name}_desc-func2anat',
+            modality='boldref'
+        )
+        create_output_link(func_tmean_anat, intermediate_boldref_name)
+        
+        # Create intermediate reference file for QC (anat_reff used in func2anat transform)
+        # Use a simple naming pattern for the reference file
+        bids_prefix = get_filename_stem(bids_name).replace('_bold', '')
+        intermediate_reference_name = f"{bids_prefix}_desc-func2anat_reference.nii.gz"
+        create_output_link(anat_reff, intermediate_reference_name)
+        print(f"INFO: Created intermediate files for func2anat QC: {intermediate_boldref_name}, {intermediate_reference_name}", file=sys.stderr)
     
     # Step 2: Apply anat2template transform
     # Use ref_from_anat_reg (template file from anat registration)

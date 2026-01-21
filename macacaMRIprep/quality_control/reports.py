@@ -23,6 +23,7 @@ SNAPSHOT_MAPPINGS = {
     'skullstrip': {'key': 'skullstrip_overlay', 'description': 'Skullstripping'},
     'atlasSegmentation': {'key': 'atlas_segmentation_overlay', 'description': 'Atlas segmentation'},
     'anat2template': {'key': 'anat2template_registration_overlay', 'description': 'Structural to template registration'},
+    'func2anat': {'key': 'func2anat_registration_overlay', 'description': 'Functional to anatomical registration'},
     'func2target': {'key': 'func2target_registration_overlay', 'description': 'Functional to target registration'},
     'T2w2T1w': {'key': 'T2w2T1w_registration_overlay', 'description': 'T2w to T1w coregistration'},
     'func_coreg': {'key': 'func_coreg_overlay', 'description': 'Within-session functional coregistration'},
@@ -40,6 +41,7 @@ SNAPSHOT_ORDER = [
     'anat2template_registration_overlay', 
     'T2w2T1w_registration_overlay', 
     'func_coreg_overlay',  # Within-session coregistration (appears before run-specific snapshots)
+    'func2anat_registration_overlay',  # Functional to anatomical (intermediate step in sequential transforms)
     'func2target_registration_overlay', 
     'motion_parameters'
 ]

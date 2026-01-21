@@ -784,7 +784,8 @@ process QC_REGISTRATION_FUNC {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), val(run_identifier), path(registered_file), path(reference_file)
+    tuple val(subject_id), val(session_id), val(run_identifier), path(registered_file), path(reference_file), val(bids_name)
+    val(modality)  // Modality for QC: 'func2anat' or 'func2target' (default)
     path config_file  // Effective config file with all resolved parameters
     
     output:
@@ -836,22 +837,52 @@ else:
 if not registered_file.exists():
     raise FileNotFoundError(f"Registered file not found: {registered_file}")
 
-# Extract BIDS entities from registered filename
-from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename
-entities = parse_bids_entities(registered_file.name)
-entities['desc'] = 'func2target'
-qc_output_filename = create_bids_filename(
-    entities=entities,
-    suffix='bold',
-    extension='.png'
-)
+# Get modality from input (default to 'func2target' if not provided)
+qc_modality = '${modality}' if '${modality}' else 'func2target'
+desc_value = 'func2anat' if qc_modality == 'func2anat' else 'func2target'
+
+# Get bids_name for filename construction
+bids_name = Path('${bids_name}') if '${bids_name}' else None
+
+# Construct QC output filename
+# For intermediate files (func2anat), use bids_name directly since intermediate file names aren't BIDS-compliant
+# For final files (func2target), try to parse from registered_file first, fallback to bids_name
+from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename, create_bids_output_filename
+if qc_modality == 'func2anat' and bids_name:
+    # Use create_bids_output_filename for intermediate case
+    qc_output_filename = create_bids_output_filename(
+        original_file_path=bids_name,
+        suffix=f'desc-{desc_value}',
+        modality='bold'
+    ).replace('.nii.gz', '.png')
+else:
+    # Try to parse from registered_file name, fallback to bids_name
+    try:
+        entities = parse_bids_entities(registered_file.name)
+        entities['desc'] = desc_value
+        qc_output_filename = create_bids_filename(
+            entities=entities,
+            suffix='bold',
+            extension='.png'
+        )
+    except (ValueError, KeyError):
+        # Fallback to bids_name if parsing fails
+        if bids_name:
+            qc_output_filename = create_bids_output_filename(
+                original_file_path=bids_name,
+                suffix=f'desc-{desc_value}',
+                modality='bold'
+            ).replace('.nii.gz', '.png')
+        else:
+            # Last resort: construct from registered_file stem
+            qc_output_filename = f"{registered_file.stem}_desc-{desc_value}_bold.png"
 
 # Generate QC
 result = qc_registration(
     image_file=registered_file,
     template_file=reference_file,
     output_path=Path(qc_output_filename),
-    modality='func2target',
+    modality=qc_modality,
     config=config
 )
 

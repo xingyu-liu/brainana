@@ -27,12 +27,6 @@ anat:
     enabled: false  # bool: reorient anatomical images to template orientation when given, otherwise to RAS
   conform:
     enabled: true  # bool: conform input image to template space using FLIRT rigid registration (padding is hardcoded to 0.2)
-  bias_correction:
-    enabled: true  # bool: perform bias field correction
-    algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
-    shrink_factor: 2  # float: shrink factor for faster processing (> 0)
-    bspline_fitting: "[ 150 ]"  # str: B-spline fitting parameters in ANTs format
-    rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
   skullstripping_segmentation:
     enabled: true  # bool: perform brain extraction and segmentation
     method: "fastSurferCNN" 
@@ -43,6 +37,12 @@ anat:
       plane_weight_axial: 0.4  # float: weight for axial plane (0.0-1.0)
       plane_weight_sagittal: 0.2  # float: weight for sagittal plane (0.0-1.0)
       fix_V1_WM: true  # bool: fix missing thin WM in V1 by registering template V1 WM to individual space.
+  bias_correction:
+    enabled: true  # bool: perform bias field correction
+    algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
+    shrink_factor: 2  # float: shrink factor for faster processing (> 0)
+    bspline_fitting: "[ 150 ]"  # str: B-spline fitting parameters in ANTs format
+    rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
   surface_reconstruction:
     enabled: true  # bool: perform surface reconstruction
 
