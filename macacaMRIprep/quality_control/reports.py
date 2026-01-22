@@ -168,7 +168,7 @@ class SnapshotProcessor:
             key_parts.append('T1w')
         elif filename.endswith('_T2w.png'):
             key_parts.append('T2w')
-        elif filename.endswith('_bold.png'):
+        elif filename.endswith('_bold.png') or filename.endswith('_boldref.png'):
             key_parts.append('bold')
         
         return "_".join(key_parts)
@@ -176,9 +176,10 @@ class SnapshotProcessor:
     @staticmethod
     def _determine_modality(name: str) -> str:
         """Determine modality from filename."""
-        # Check for functional first (bold suffix), as functional files can contain
+        # Check for functional first (bold or boldref suffix), as functional files can contain
         # space-T1w or space-T2w entities which would otherwise be misclassified
-        if name.lower().endswith('_bold.png') or '_bold.png' in name.lower():
+        if (name.lower().endswith('_bold.png') or '_bold.png' in name.lower() or
+            name.lower().endswith('_boldref.png') or '_boldref.png' in name.lower()):
             return "functional"
         # Check for anatomical in suffix position (e.g., _T1w.png, _T2w.png)
         # This avoids false positives from space-T1w or space-T2w entities
