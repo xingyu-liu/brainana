@@ -165,24 +165,37 @@ def findUnmatchedT2w = { t2w_channel, matched_keys ->
  */
 def performT2wAnatomicalSelection = { t2w_after_reorient, anat_after_bias, isT1wFileForT2w, findUnmatched ->
     // Select T1w reference for each T2w job with priority:
-    // 1. Same session (exact match by [sub, ses])
-    // 2. Different session (same subject, first available session)
-    // 3. No T1w data (null files, skip T2w→T1w registration)
-    
-    // Extract only [sub, ses] - other fields preserved in output
-    def t2w_keys = t2w_after_reorient.map { sub, ses, t2w_file, t2w_bids_name ->
-        [sub, ses]
-    }
+    // 1. Subject-level (cross-session synthesized T1w, ses == "") - HIGHEST PRIORITY
+    // 2. Same session (exact match by [sub, ses])
+    // 3. Different session (same subject, first available session)
+    // 4. No T1w data (null files, skip T2w→T1w registration)
     
     def t1w_for_t2w = anat_after_bias.filter(isT1wFileForT2w)
     
+    // Build lookup: subject-level T1w data [sub, t1w_file] (ses == "" or "null")
+    // Note: Nextflow may pass "null" as a string when session_id is empty/null in Groovy
+    def t1w_subject_level = t1w_for_t2w
+        .filter { sub, ses, t1w_file, t1w_bids_name -> 
+            ses == "" || ses == null || (ses instanceof String && ses.toLowerCase() == 'null')
+        }
+        .map { sub, ses, t1w_file, t1w_bids_name -> [sub, t1w_file] }
+        .unique { sub, t1w_file -> sub }  // Deduplicate by subject
+    
     // Build lookup: same-session T1w data [sub, ses, t1w_file]
+    // Exclude subject-level (ses == "" or "null") from same-session lookup
     def t1w_same_ses = t1w_for_t2w
+        .filter { sub, ses, t1w_file, t1w_bids_name -> 
+            ses != "" && ses != null && !(ses instanceof String && ses.toLowerCase() == 'null')
+        }
         .map { sub, ses, t1w_file, t1w_bids_name -> [sub, ses, t1w_file] }
         .unique { sub, ses, t1w_file -> [sub, ses] }  // Deduplicate by [sub, ses]
     
     // Build lookup: across-session T1w data [sub, t1w_file, anat_ses] (first session per subject)
+    // Exclude subject-level (ses == "" or "null") from across-session lookup
     def t1w_across_ses = t1w_for_t2w
+        .filter { sub, ses, t1w_file, t1w_bids_name -> 
+            ses != "" && ses != null && !(ses instanceof String && ses.toLowerCase() == 'null')
+        }
         .map { sub, ses, t1w_file, t1w_bids_name -> [sub, ses, t1w_file] }
         .groupTuple(by: 0)
         .map { sub, ses_list, file_list ->
@@ -190,8 +203,26 @@ def performT2wAnatomicalSelection = { t2w_after_reorient, anat_after_bias, isT1w
             [sub, first[1], first[0]]  // [sub, t1w_file, anat_ses]
         }
     
-    // Case 1: Same-session match
-    def t2w_same_ses = t2w_after_reorient
+    // Case 1: Subject-level match (HIGHEST PRIORITY)
+    // Match by subject only - subject-level T1w available to ALL T2w sessions
+    def t2w_subject_level = t2w_after_reorient
+        .combine(t1w_subject_level, by: 0)  // combine by subject
+        .map { sub, ses, t2w_file, t2w_bids_name, t1w_file ->
+            [sub, ses, t2w_file, t2w_bids_name, t1w_file, ""]  // [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses] with anat_ses = ""
+        }
+    
+    def matched_subject_level = t2w_subject_level.map { sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses ->
+        [sub, ses]
+    }.unique()
+    
+    // Case 2: Same-session match (for T2w NOT matched in Case 1)
+    def unmatched_for_case2 = findUnmatched(t2w_after_reorient, matched_subject_level)
+    def t2w_same_ses = unmatched_for_case2
+        .map { key -> [key[0], key[1]] }  // [sub, ses]
+        .combine(t2w_after_reorient.map { sub, ses, t2w_file, t2w_bids_name -> [sub, ses, t2w_file, t2w_bids_name] }, by: [0, 1])
+        .map { sub, ses, t2w_file, t2w_bids_name ->
+            [sub, ses, t2w_file, t2w_bids_name]
+        }
         .combine(t1w_same_ses, by: [0, 1])
         .map { sub, ses, t2w_file, t2w_bids_name, t1w_file ->
             [sub, ses, t2w_file, t2w_bids_name, t1w_file, ses]  // [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses]
@@ -201,37 +232,36 @@ def performT2wAnatomicalSelection = { t2w_after_reorient, anat_after_bias, isT1w
         [sub, ses]
     }.unique()
     
-    // Case 2: Across-session match (for unmatched jobs)
-    def unmatched_for_case2 = findUnmatched(t2w_after_reorient, matched_same_ses)
-    def t2w_across_ses = t2w_after_reorient
+    // Case 3: Across-session match (for T2w NOT matched in Case 1 OR Case 2)
+    def all_matched_case3 = matched_subject_level.mix(matched_same_ses).unique()
+    def unmatched_for_case3 = findUnmatched(t2w_after_reorient, all_matched_case3)
+    def t2w_across_ses = unmatched_for_case3
+        .map { key -> [key[0], key[1]] }  // [sub, ses]
+        .combine(t2w_after_reorient.map { sub, ses, t2w_file, t2w_bids_name -> [sub, ses, t2w_file, t2w_bids_name] }, by: [0, 1])
         .map { sub, ses, t2w_file, t2w_bids_name ->
-            [[sub, ses], [sub, ses, t2w_file, t2w_bids_name]]
+            [sub, ses, t2w_file, t2w_bids_name]
         }
-        .combine(unmatched_for_case2.map { key -> [key, true] }.groupTuple(), by: 0)
-        .map { key, t2w_data, flags -> t2w_data }
         .combine(t1w_across_ses, by: 0)
-        .map { sub, ses_t2w, t2w_file, t2w_bids_name, t1w_file, anat_ses ->
-            [sub, ses_t2w, t2w_file, t2w_bids_name, t1w_file, anat_ses]
+        .map { sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses ->
+            [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses]
         }
     
     def matched_across_ses = t2w_across_ses.map { sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses ->
         [sub, ses]
     }.unique()
     
-    // Case 3: No T1w data (for remaining unmatched jobs - skip T2w→T1w registration)
-    def unmatched_for_case3 = findUnmatched(t2w_after_reorient, matched_same_ses.mix(matched_across_ses).unique())
-    def t2w_no_t1w = t2w_after_reorient
-        .map { sub, ses, t2w_file, t2w_bids_name ->
-            [[sub, ses], [sub, ses, t2w_file, t2w_bids_name]]
-        }
-        .combine(unmatched_for_case3.map { key -> [key, true] }.groupTuple(), by: 0)
-        .map { key, t2w_data, flags -> t2w_data }
+    // Case 4: No T1w data (for remaining unmatched T2w - skip T2w→T1w registration)
+    def all_matched = matched_subject_level.mix(matched_same_ses).mix(matched_across_ses).unique()
+    def unmatched_for_case4 = findUnmatched(t2w_after_reorient, all_matched)
+    def t2w_no_t1w = unmatched_for_case4
+        .map { key -> [key[0], key[1]] }  // [sub, ses]
+        .combine(t2w_after_reorient.map { sub, ses, t2w_file, t2w_bids_name -> [sub, ses, t2w_file, t2w_bids_name] }, by: [0, 1])
         .map { sub, ses, t2w_file, t2w_bids_name ->
             [sub, ses, t2w_file, t2w_bids_name, null, ses]  // null T1w file, anat_ses = t2w session
         }
     
     // Combine all cases: [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses]
-    return t2w_same_ses.mix(t2w_across_ses).mix(t2w_no_t1w)
+    return t2w_subject_level.mix(t2w_same_ses).mix(t2w_across_ses).mix(t2w_no_t1w)
 }
 
 /**
@@ -244,16 +274,17 @@ def performT2wAnatomicalSelection = { t2w_after_reorient, anat_after_bias, isT1w
  */
 def performFuncAnatomicalSelection = { func_after_coreg, anat_after_bias_brain, isT1wFileForFunc, findUnmatched, dummy_anat ->
     // Select anatomical reference for each functional session with priority:
-    // 1. Same session (exact match by [sub, ses])
-    // 2. Different session (same subject, first available session)
-    // 3. No anatomical data (dummy file, Python will fallback to template)
+    // 1. Subject-level (cross-session synthesized anat, ses == "") - HIGHEST PRIORITY
+    // 2. Same session (exact match by [sub, ses])
+    // 3. Different session (same subject, first available session)
+    // 4. No anatomical data (dummy file, Python will fallback to template)
     //
     // CRITICAL: This function MUST return entries for ALL functional sessions
     // to prevent jobs from being dropped in the compute phase.
     //
     // NOTE: We use a "left anti-join" pattern with mix() + groupTuple() instead of
     // combine() because combine() only emits when BOTH channels have matching keys,
-    // which would silently drop sessions that need to go to Case 2 or Case 3.
+    // which would silently drop sessions that need to go to Case 2, 3, or 4.
     //
     // NOTE: Uses anat_after_bias_brain (Phase 1 final output - brain version) for functional registration
     //
@@ -265,14 +296,31 @@ def performFuncAnatomicalSelection = { func_after_coreg, anat_after_bias_brain, 
     
     def anat_for_func = anat_after_bias_brain.filter(isT1wFileForFunc)
     
-    // Build lookup: same-session anatomical data [sub, ses, anat_file]
+    // Build lookup: subject-level anatomical data [sub, anat_file] (ses == "" or "null")
     // Note: anat_after_bias_brain structure is [sub, ses, brain_file, bids_name]
+    // Note: Nextflow may pass "null" as a string when session_id is empty/null in Groovy
+    def anat_subject_level = anat_for_func
+        .filter { sub, ses, brain_file, bids_name -> 
+            ses == "" || ses == null || (ses instanceof String && ses.toLowerCase() == 'null')
+        }
+        .map { sub, ses, brain_file, bids_name -> [sub, brain_file] }
+        .unique { sub, brain_file -> sub }  // Deduplicate by subject
+    
+    // Build lookup: same-session anatomical data [sub, ses, anat_file]
+    // Exclude subject-level (ses == "" or "null") from same-session lookup
     def anat_same_ses = anat_for_func
+        .filter { sub, ses, brain_file, bids_name -> 
+            ses != "" && ses != null && !(ses instanceof String && ses.toLowerCase() == 'null')
+        }
         .map { sub, ses, brain_file, bids_name -> [sub, ses, brain_file] }
         .unique { sub, ses, brain_file -> [sub, ses] }  // Deduplicate by [sub, ses]
     
     // Build lookup: across-session anatomical data [sub, anat_file, anat_ses] (first session per subject)
+    // Exclude subject-level (ses == "" or "null") from across-session lookup
     def anat_across_ses = anat_for_func
+        .filter { sub, ses, brain_file, bids_name -> 
+            ses != "" && ses != null && !(ses instanceof String && ses.toLowerCase() == 'null')
+        }
         .map { sub, ses, brain_file, bids_name -> [sub, ses, brain_file] }
         .groupTuple(by: 0)
         .map { sub, ses_list, file_list ->
@@ -280,9 +328,30 @@ def performFuncAnatomicalSelection = { func_after_coreg, anat_after_bias_brain, 
             [sub, first[1], first[0]]  // [sub, anat_file, anat_ses]
         }
     
-    // Case 1: Same-session match
-    // Use combine() here - this correctly joins sessions WITH same-session anatomical data
-    def func_same_ses = func_sessions
+    // Case 1: Subject-level match (HIGHEST PRIORITY)
+    // Match by subject only - subject-level anat available to ALL functional sessions
+    def func_subject_level = func_sessions
+        .combine(anat_subject_level, by: 0)  // combine by subject
+        .map { sub, ses, anat_file ->
+            [sub, ses, anat_file, ""]  // [sub, ses, anat_file, anat_ses] with anat_ses = ""
+        }
+    
+    def matched_subject_level_keys = func_subject_level.map { sub, ses, anat_file, anat_ses ->
+        [sub, ses]
+    }.unique()
+    
+    // Case 2: Same-session match (for sessions NOT matched in Case 1)
+    // Use left anti-join pattern: mix with marker tags, group, filter for unmatched
+    def unmatched_for_case2 = func_sessions
+        .map { sub, ses -> [[sub, ses], 'func'] }
+        .mix(matched_subject_level_keys.map { sub, ses -> [[sub, ses], 'matched'] })
+        .groupTuple(by: 0)
+        .filter { key, tags -> !tags.contains('matched') }
+        .map { key, tags -> key }  // key is [sub, ses]
+    
+    // Match with same-session anatomical data
+    def func_same_ses = unmatched_for_case2
+        .map { key -> [key[0], key[1]] }  // [sub, ses]
         .combine(anat_same_ses, by: [0, 1])
         .map { sub, ses, anat_file ->
             [sub, ses, anat_file, ses]  // [sub, ses, anat_file, anat_ses]
@@ -292,18 +361,17 @@ def performFuncAnatomicalSelection = { func_after_coreg, anat_after_bias_brain, 
         [sub, ses]
     }.unique()
     
-    // Case 2: Across-session match (for sessions NOT matched in Case 1)
-    // Use left anti-join pattern: mix with marker tags, group, filter for unmatched
-    def unmatched_for_case2 = func_sessions
+    // Case 3: Across-session match (for sessions NOT matched in Case 1 OR Case 2)
+    def all_matched_keys_case3 = matched_subject_level_keys.mix(matched_same_ses_keys).unique()
+    def unmatched_for_case3 = func_sessions
         .map { sub, ses -> [[sub, ses], 'func'] }
-        .mix(matched_same_ses_keys.map { sub, ses -> [[sub, ses], 'matched'] })
+        .mix(all_matched_keys_case3.map { sub, ses -> [[sub, ses], 'matched'] })
         .groupTuple(by: 0)
         .filter { key, tags -> !tags.contains('matched') }
         .map { key, tags -> key }  // key is [sub, ses]
     
     // Match with cross-session anatomical data (by subject only)
-    // combine() is correct here - we want sessions that have cross-session anatomical data
-    def func_across_ses = unmatched_for_case2
+    def func_across_ses = unmatched_for_case3
         .map { key -> [key[0], key[1]] }  // [sub, ses]
         .combine(anat_across_ses, by: 0)  // combine by subject
         .map { sub, ses_func, anat_file, anat_ses ->
@@ -314,17 +382,16 @@ def performFuncAnatomicalSelection = { func_after_coreg, anat_after_bias_brain, 
         [sub, ses]
     }.unique()
     
-    // Case 3: No anatomical data (sessions NOT matched in Case 1 OR Case 2)
-    // Use left anti-join pattern again
-    def all_matched_keys = matched_same_ses_keys.mix(matched_across_ses_keys).unique()
-    def unmatched_for_case3 = func_sessions
+    // Case 4: No anatomical data (sessions NOT matched in Case 1, 2, OR 3)
+    def all_matched_keys = matched_subject_level_keys.mix(matched_same_ses_keys).mix(matched_across_ses_keys).unique()
+    def unmatched_for_case4 = func_sessions
         .map { sub, ses -> [[sub, ses], 'func'] }
         .mix(all_matched_keys.map { sub, ses -> [[sub, ses], 'matched'] })
         .groupTuple(by: 0)
         .filter { key, tags -> !tags.contains('matched') }
         .map { key, tags -> key }  // key is [sub, ses]
     
-    def func_no_anat = unmatched_for_case3
+    def func_no_anat = unmatched_for_case4
         .map { key ->
             def sub = key[0]
             def ses = key[1]
@@ -333,7 +400,7 @@ def performFuncAnatomicalSelection = { func_after_coreg, anat_after_bias_brain, 
     
     // Combine all cases: [sub, ses, anat_file, anat_ses]
     // This MUST include entries for ALL functional sessions to prevent job loss
-    def result = func_same_ses.mix(func_across_ses).mix(func_no_anat)
+    def result = func_subject_level.mix(func_same_ses).mix(func_across_ses).mix(func_no_anat)
     
     return result
 }

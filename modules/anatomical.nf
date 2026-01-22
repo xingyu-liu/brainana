@@ -6,7 +6,7 @@ process ANAT_SYNTHESIS {
     label 'cpu'
     tag "${subject_id}_${session_id}"
     
-    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
+    publishDir "${params.output_dir}/sub-${subject_id}${(session_id && session_id != '') ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
         pattern: '*.nii.gz'
     
@@ -34,10 +34,21 @@ import shutil
 import os
 
 # Initialize command log file
+# Handle empty string session_id (subject-level synthesis)
+# Parse session_id once and reuse
+# Note: Nextflow may pass "null" as a string when session_id is empty/null in Groovy
+session_id_raw = '${session_id}'
+import sys
+# Handle empty string, None, whitespace-only, and the string "null"
+if session_id_raw and session_id_raw.strip() and session_id_raw.strip().lower() != 'null':
+    session_id_py = session_id_raw.strip()
+else:
+    session_id_py = None
+
 init_cmd_log_for_nextflow(
     output_dir='${params.output_dir}',
     subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
+    session_id=session_id_py,
     step_name='ANAT_SYNTHESIS'
 )
 
@@ -70,12 +81,32 @@ entities = parse_bids_entities(bids_name.name)
 if 'run' in entities:
     del entities['run']
 
-# Create BIDS filename: preserve entities (without run), add detected modality
+# Remove 'ses' entity if session_id is empty (subject-level synthesis)
+# session_id_py is already set above, reuse it here
+print(f"DEBUG: session_id_raw from Nextflow: {repr(session_id_raw)}", file=sys.stderr)
+print(f"DEBUG: session_id_py (reused): {repr(session_id_py)}", file=sys.stderr)
+
+# Explicitly remove ses entity for subject-level synthesis
+# Check for None, empty string, or the string "null" (Nextflow may pass "null" as a string)
+print(f"DEBUG: Before ses removal check: entities={entities}, session_id_py={repr(session_id_py)}", file=sys.stderr)
+if session_id_py is None or session_id_py == "" or (isinstance(session_id_py, str) and session_id_py.lower() == 'null'):
+    if 'ses' in entities:
+        ses_value = entities['ses']
+        del entities['ses']
+        print(f"DEBUG: Removed 'ses' entity (value was '{ses_value}') for subject-level synthesis. entities now: {entities}", file=sys.stderr)
+    else:
+        print(f"DEBUG: 'ses' not in entities, nothing to remove", file=sys.stderr)
+else:
+    print(f"DEBUG: session_id_py is not None/empty/null ({repr(session_id_py)}), keeping 'ses' entity", file=sys.stderr)
+
+# Create BIDS filename: preserve entities (without run, without ses for subject-level), add detected modality
+print(f"DEBUG: Creating filename with entities: {entities}", file=sys.stderr)
 bids_output_filename = create_bids_filename(
     entities=entities,
     suffix=modality,
     extension='.nii.gz'
 )
+print(f"DEBUG: Created bids_output_filename: {bids_output_filename}", file=sys.stderr)
 
 # Use symlinks to avoid duplication - Nextflow publishDir will handle final copy
 # Always use create_output_link() which resolves symlinks to original source
@@ -87,15 +118,30 @@ save_metadata(result.metadata)
 # Determine what to write to bids_name.txt for downstream steps
 # If synthesis occurred, use the synthesized filename (without run) as the BIDS naming template
 # If synthesis didn't occur, use the original file path (preserves run for single files)
+print(f"DEBUG: synthesized flag: {synthesized}", file=sys.stderr)
 if synthesized:
     # For synthesized files, construct a path using the synthesized filename
     # This ensures downstream steps don't include run identifiers
-    # Use the same directory structure as the original file
-    synthesized_path = bids_name.parent / bids_output_filename
+    # Check for None, empty string, or the string "null" (Nextflow may pass "null" as a string)
+    is_subject_level = (session_id_py is None or session_id_py == "" or 
+                       (isinstance(session_id_py, str) and session_id_py.lower() == 'null'))
+    if is_subject_level:  # Subject-level synthesis
+        # Create path without session directory: sub-XXX/anat/filename
+        subject_id = entities.get('sub', '${subject_id}')
+        subject_anat_dir = f"sub-{subject_id}/anat"
+        synthesized_path = Path(subject_anat_dir) / bids_output_filename
+        print(f"DEBUG: Subject-level synthesis path: {synthesized_path}", file=sys.stderr)
+    else:
+        # Session-level: use original directory structure
+        synthesized_path = bids_name.parent / bids_output_filename
+        print(f"DEBUG: Session-level synthesis path: {synthesized_path}", file=sys.stderr)
     bids_name_for_downstream = str(synthesized_path)
 else:
     # For single files (no synthesis), use the original file path
     bids_name_for_downstream = str(bids_name)
+    print(f"DEBUG: No synthesis, using original path: {bids_name_for_downstream}", file=sys.stderr)
+
+print(f"DEBUG: Final bids_name_for_downstream: {bids_name_for_downstream}", file=sys.stderr)
 
 # Write the appropriate path to file for Nextflow value output
 with open('bids_name.txt', 'w') as f:
@@ -551,11 +597,16 @@ process ANAT_SURFACE_RECONSTRUCTION {
         }
     
     input:
-    tuple val(subject_id), val(session_id), path(t1w_file), val(bids_name), path(segmentation_file), path(brain_mask)
+    tuple val(subject_id), val(session_id), path(t1w_file), val(bids_name), path(segmentation_file), path(brain_mask), val(session_count)
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("fastsurfer/sub-${subject_id}"), emit: subject_dir
+    // Output path: sub-XXX or sub-XXX_ses-XXX (determined by script based on session_count)
+    // Script creates the directory with the correct name that matches what Nextflow expects
+    // When session_count > 1: creates fastsurfer/sub-XXX_ses-XXX
+    // When session_count == 1: creates fastsurfer/sub-XXX
+    // Use a glob pattern to match the directory name
+    tuple val(subject_id), val(session_id), path("fastsurfer/sub-${subject_id}*"), emit: subject_dir
     tuple val(subject_id), val(session_id), path("metadata.json"), emit: metadata
     
     script:
@@ -580,6 +631,10 @@ init_cmd_log_for_nextflow(
 # Load config
 config = load_config('${config_file}')
 
+# Handle empty string session_id (subject-level synthesis)
+session_id_py = '${session_id}' if '${session_id}' and '${session_id}'.strip() else None
+session_count = int('${session_count}') if '${session_count}' else 1
+
 # Create step input
 input_obj = StepInput(
     input_file=Path('${t1w_file}'),
@@ -588,7 +643,8 @@ input_obj = StepInput(
     output_name='surface_reconstruction',
     metadata={
         'subject_id': '${subject_id}',
-        'session_id': '${session_id}'
+        'session_id': session_id_py,
+        'session_count': session_count
     }
 )
 
@@ -606,10 +662,30 @@ result = anat_surface_reconstruction(
 )
 
 # Copy directory to work directory root so Nextflow can find it
-# The output is created in work/fastsurfer/sub-XXX, but Nextflow expects fastsurfer/sub-XXX
-# We copy (not symlink) to ensure actual content is moved, not just a symlink
+# The output is created in work/fastsurfer/sub-XXX or work/fastsurfer/sub-XXX_ses-XXX
+# Nextflow expects fastsurfer/sub-${subject_id} (which may or may not include session)
+# We need to ensure the path matches what Nextflow expects
 output_subject_dir = result.output_file
-expected_path = Path('fastsurfer') / 'sub-${subject_id}'
+# The result.output_file already has the correct subject ID (with or without session)
+# Extract just the directory name (e.g., 'sub-XXX' or 'sub-XXX_ses-XXX')
+actual_subject_id = output_subject_dir.name
+
+# Determine what Nextflow expects based on session_count
+# If session_count > 1 and session_id exists, Nextflow should expect sub-XXX_ses-XXX
+# Otherwise, it expects sub-XXX
+session_id_py = '${session_id}' if '${session_id}' and '${session_id}'.strip() else None
+session_count = int('${session_count}') if '${session_count}' else 1
+
+if session_id_py and session_count > 1:
+    # Multiple sessions: Nextflow expects sub-XXX_ses-XXX
+    ses_id = session_id_py if not session_id_py.startswith("ses-") else session_id_py[4:]
+    base_subject_id = 'sub-${subject_id}' if '${subject_id}'.startswith('sub-') else f"sub-${subject_id}"
+    expected_subject_id = f"{base_subject_id}_ses-{ses_id}"
+else:
+    # Single session or no session: Nextflow expects sub-XXX
+    expected_subject_id = 'sub-${subject_id}' if '${subject_id}'.startswith('sub-') else f"sub-${subject_id}"
+
+expected_path = Path('fastsurfer') / expected_subject_id
 
 # Ensure the output directory exists
 if not output_subject_dir.exists():

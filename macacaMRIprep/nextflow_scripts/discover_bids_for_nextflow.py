@@ -107,14 +107,30 @@ def print_summary(
     t1w_synthesis_jobs = [j for j in synthesis_jobs if j.get('synthesis_type') == 't1w']
     t2w_synthesis_jobs = [j for j in synthesis_jobs if j.get('synthesis_type') == 't2w']
     
+    # Count cross-session vs within-session synthesis
+    t1w_cross_session = [j for j in t1w_synthesis_jobs if j.get('synthesis_scope') == 'cross_session']
+    t1w_within_session = [j for j in t1w_synthesis_jobs if j.get('synthesis_scope') == 'within_session']
+    t2w_cross_session = [j for j in t2w_synthesis_jobs if j.get('synthesis_scope') == 'cross_session']
+    t2w_within_session = [j for j in t2w_synthesis_jobs if j.get('synthesis_scope') == 'within_session']
+    
     print(f"  T1w files: {len(t1w_jobs)}")
     if t1w_synthesis_jobs:
-        print(f"    - Multi-run synthesis needed: {len(t1w_synthesis_jobs)}")
-        print(f"    - Single T1w files: {len(t1w_jobs) - len(t1w_synthesis_jobs)}")
+        if t1w_cross_session:
+            print(f"    - Cross-session synthesis: {len(t1w_cross_session)}")
+        if t1w_within_session:
+            print(f"    - Within-session synthesis: {len(t1w_within_session)}")
+        single_count = len(t1w_jobs) - len(t1w_synthesis_jobs)
+        if single_count > 0:
+            print(f"    - Single T1w files: {single_count}")
     print(f"  T2w files: {len(t2w_jobs)}")
     if t2w_synthesis_jobs:
-        print(f"    - Multi-run synthesis needed: {len(t2w_synthesis_jobs)}")
-        print(f"    - Single T2w files: {len(t2w_jobs) - len(t2w_synthesis_jobs)}")
+        if t2w_cross_session:
+            print(f"    - Cross-session synthesis: {len(t2w_cross_session)}")
+        if t2w_within_session:
+            print(f"    - Within-session synthesis: {len(t2w_within_session)}")
+        single_count = len(t2w_jobs) - len(t2w_synthesis_jobs)
+        if single_count > 0:
+            print(f"    - Single T2w files: {single_count}")
     
     # Functional summary
     print(f"\nFunctional data:")
@@ -225,8 +241,30 @@ def main():
         sys.exit(1)
     
     # Create output directory
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    (args.output_dir / 'nextflow_reports').mkdir(exist_ok=True)
+    try:
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        # Verify directory was created and is accessible
+        if not args.output_dir.exists():
+            print(f"ERROR: Failed to create output directory: {args.output_dir}", file=sys.stderr)
+            sys.exit(1)
+        if not args.output_dir.is_dir():
+            print(f"ERROR: Output path exists but is not a directory: {args.output_dir}", file=sys.stderr)
+            sys.exit(1)
+        # Resolve to absolute path for clarity
+        args.output_dir = args.output_dir.resolve()
+    except (OSError, PermissionError) as e:
+        print(f"ERROR: Failed to create output directory {args.output_dir}: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Create nextflow_reports subdirectory
+    try:
+        (args.output_dir / 'nextflow_reports').mkdir(exist_ok=True)
+        if not (args.output_dir / 'nextflow_reports').exists():
+            print(f"ERROR: Failed to create nextflow_reports directory", file=sys.stderr)
+            sys.exit(1)
+    except (OSError, PermissionError) as e:
+        print(f"ERROR: Failed to create nextflow_reports directory: {e}", file=sys.stderr)
+        sys.exit(1)
     
     # Discover jobs
     try:
@@ -257,9 +295,15 @@ def main():
     with open(func_json_path, 'w') as f:
         json.dump(func_jobs, f, indent=2)
     
+    # Verify files were written successfully
+    if not anat_json_path.exists() or not func_json_path.exists():
+        print(f"ERROR: Failed to write job list files", file=sys.stderr)
+        sys.exit(1)
+    
     print(f"INFO: Discovery complete. Saved job lists to:")
     print(f"  - {anat_json_path}")
     print(f"  - {func_json_path}")
+    print(f"INFO: Output directory: {args.output_dir}")
     
     # Exit with error if no jobs found
     if not anat_jobs and not func_jobs:

@@ -1270,8 +1270,10 @@ process FUNC_APPLY_TRANSFORMS {
         mode: 'copy',
         pattern: '*.{nii.gz,h5}',
         saveAs: { filename -> 
-            // Exclude target_final.nii.gz (QC reference) and _dup files (duplicate mask for channel structure)
-            if (filename.contains('target_final.nii.gz') || filename.contains('_dup')) {
+            // Exclude intermediate QC files and internal files:
+            if (filename.contains('target_final.nii.gz') || 
+                filename.contains('_dup') || 
+                filename.contains('desc-func2anat')) {
                 return null
             }
             return filename

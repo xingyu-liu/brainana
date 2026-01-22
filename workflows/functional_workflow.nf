@@ -189,11 +189,20 @@ workflow FUNC_WF {
         FUNC_WITHIN_SES_COREG(func_coreg_multi.combined, func_coreg_multi.reference, func_coreg_multi.ref_run_identifier_val, config_file)
         func_coreg_transforms_ch = FUNC_WITHIN_SES_COREG.out.transforms
         
-        def func_all_coreg = coregChannels.func_first_runs
+        // Separate multi-run sessions (need averaging) from single-run sessions (skip averaging)
+        // Multi-run sessions: first runs + coregistered later runs
+        def func_multi_run_ses = coregChannels.func_first_runs
             .mix(FUNC_WITHIN_SES_COREG.out.output)
-            .mix(coregChannels.func_single_run_ses)
         
-        def func_for_averaging_ch = func_all_coreg
+        // Single-run sessions: pass through unchanged (no averaging needed)
+        def func_single_run_ses = coregChannels.func_single_run_ses
+        
+        // Combine all runs for func_after_coreg (for anatomical selection and apply phase)
+        def func_all_coreg = func_multi_run_ses
+            .mix(func_single_run_ses)
+        
+        // Only average tmean for multi-run sessions
+        def func_for_averaging_ch = func_multi_run_ses
             .groupTuple(by: [0, 1])
             .map { sub, ses, run_identifier_list, bold_list, tmean_list, bids_list ->
                 def tmean_paths = tmean_list.collect { file -> file.toString() }
@@ -219,11 +228,23 @@ workflow FUNC_WF {
             config_file
         )
         
+        // For single-run sessions, create channel matching FUNC_AVERAGE_TMEAN output format
+        // but with original tmean and bids_name (no desc-coreg)
+        // Format: [sub, ses, tmean, bids_name]
+        def func_single_run_tmean_ch = func_single_run_ses
+            .map { sub, ses, run_identifier, bold, tmean, bids_name ->
+                [sub, ses, tmean, bids_name]
+            }
+        
+        // Combine averaged tmean (multi-run) with original tmean (single-run)
         func_tmean_averaged_ch = FUNC_AVERAGE_TMEAN.out.output
+            .mix(func_single_run_tmean_ch)
+        
         func_after_coreg = func_all_coreg
         func_coreg_success = true
         
-        def func_coreg_qc_input = funcChannels.prepareCoregQCChannels(coregChannels.func_first_runs, func_tmean_averaged_ch)
+        // QC only for multi-run sessions (single-run sessions don't need coreg QC)
+        def func_coreg_qc_input = funcChannels.prepareCoregQCChannels(coregChannels.func_first_runs, FUNC_AVERAGE_TMEAN.out.output)
         QC_WITHIN_SES_COREG(func_coreg_qc_input, config_file)
         // Note: QC_WITHIN_SES_COREG metadata is collected in the COLLECT QC CHANNELS section below
     }
@@ -246,6 +267,11 @@ workflow FUNC_WF {
         dummy_anat
     )
     // func_anat_selection: [sub, ses, anat_file, anat_ses] (session-level)
+
+    // // debug print
+    // func_anat_selection.view() {
+    //     println "|| func_anat_selection ||: ${it}"
+    // }
 
     // ============================================
     // COMPUTE PHASE
@@ -453,7 +479,17 @@ workflow FUNC_WF {
             .unique { sub, ses, anat_ses -> [sub, ses] }  // Deduplicate by functional session
             .combine(anat_reg_all_real, by: 0)  // Combine by subject only - creates all subject-level combinations
             .filter { sub, ses_func, anat_ses, anat_reg_ses, xfm, ref ->
-                anat_ses == anat_reg_ses  // Keep only where functional's anat_ses matches anatomical's session
+                // Normalize session identifiers for comparison
+                // Handle subject-level case: "" or "null" or null should all match
+                // Note: Nextflow may pass "null" as a string when session_id is empty/null in Groovy
+                def normalize_ses = { ses_val ->
+                    if (ses_val == null || ses_val == "") return null
+                    if (ses_val instanceof String && ses_val.toLowerCase() == 'null') return null
+                    return ses_val
+                }
+                def anat_ses_norm = normalize_ses(anat_ses)
+                def anat_reg_ses_norm = normalize_ses(anat_reg_ses)
+                anat_ses_norm == anat_reg_ses_norm  // Keep only where functional's anat_ses matches anatomical's session
             }
             .map { sub, ses_func, anat_ses, anat_reg_ses, xfm, ref -> 
                 [sub, ses_func, xfm, ref]  // Map to final format
@@ -572,6 +608,11 @@ workflow FUNC_WF {
                 func_4d_file: conformed_bold
             }
             .set { func_apply_reg_multi }
+        
+        // debug print
+        func_apply_reg_multi.reg_combined.view() {
+            println "|| func_apply_reg_multi.reg_combined ||: ${it}"
+        }
         
         // Apply transforms to BOLD data
         // Output: func_apply_reg: [sub, ses, run_id, registered_bold, registered_boldref, bids_name]

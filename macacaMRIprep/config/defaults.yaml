@@ -23,6 +23,9 @@ template:
   #   - "NMT2Sym:res-025"
 
 anat:
+  synthesis_level: "subject"  # str: T1w/T2w synthesis level ("subject", "session"). 
+  # "subject" = cross-session synthesis (cross-sectional)
+  # "session" = within-session synthesis (longitudinal)
   reorient:
     enabled: false  # bool: reorient anatomical images to template orientation when given, otherwise to RAS
   conform:

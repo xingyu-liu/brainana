@@ -619,28 +619,71 @@ workflow ANAT_WF {
     def surf_recon_input = Channel.empty()
     def surf_qc_input = Channel.empty()
     if (surf_recon_enabled && anat_skullstripping_enabled) {
+        // Step 0: Calculate session count per subject (for surface reconstruction naming)
+        // Count unique sessions with anatomical data for each subject
+        def anat_sessions_per_subject = anat_after_bias
+            .map { sub, ses, anat_file, bids_name ->
+                [sub, ses]
+            }
+            .unique()
+            .groupTuple(by: 0)
+            .map { sub, ses_list ->
+                // Filter out empty strings and count unique sessions
+                def unique_sessions = ses_list.findAll { it && it != '' }.unique()
+                def session_count = unique_sessions.size()
+                [sub, session_count]
+            }
+        
         // Step 1: Join bias-corrected image (Phase 1 final) with segmentation
         // Both channels have [sub, ses] as first two elements, so use join() for exact matching
+        // Ensure clean structure: anat_after_bias = [sub, ses, anat_file, bids_name]
+        //                        anat_skull_seg = [sub, ses, seg_file]
         def surf_recon_input_base = anat_after_bias
-            .join(anat_skull_seg, by: [0, 1])
+            .join(anat_skull_seg.map { sub, ses, seg_file -> [sub, ses, seg_file] }, by: [0, 1])
             .map { sub, ses, anat_file, bids_name, seg_file ->
                 [sub, ses, anat_file, bids_name, seg_file]
             }
         
         // Step 2: Join with brain mask (both have [sub, ses] as first two elements)
-        surf_recon_input = surf_recon_input_base
-            .join(anat_skull_mask, by: [0, 1])
+        // Ensure clean structure: anat_skull_mask = [sub, ses, mask_file]
+        def surf_recon_input_with_mask = surf_recon_input_base
+            .join(anat_skull_mask.map { sub, ses, mask_file -> [sub, ses, mask_file] }, by: [0, 1])
             .map { sub, ses, anat_file, bids_name, seg_file, mask_file ->
                 [sub, ses, anat_file, bids_name, seg_file, mask_file ?: file("")]
             }
+
         
+        // Step 3: Join with session count (by subject only)
+        // Ensure clean structure: anat_sessions_per_subject = [sub, session_count]
+        // Use unique() to ensure only one session_count per subject
+        def anat_sessions_clean = anat_sessions_per_subject
+            .unique { sub, session_count -> sub }
+            .map { sub, session_count -> [sub, session_count] }
+        
+        surf_recon_input = surf_recon_input_with_mask
+            .combine(anat_sessions_clean, by: 0)
+            .map { sub, ses, anat_file, bids_name, seg_file, mask_file, session_count ->
+                // Ensure session_count is a single integer value, not a list
+                def count = session_count instanceof List ? session_count[0] : session_count
+                [sub, ses, anat_file, bids_name, seg_file, mask_file, count]
+            }
+        
+        // Call the process with surf_recon_input
+        // IMPORTANT: Do not reference surf_recon_input anywhere after this line to avoid channel reuse issues
         ANAT_SURFACE_RECONSTRUCTION(surf_recon_input, config_file)
         
         // Step 3: Prepare QC input channels
+        // Use a completely separate channel for QC - extract bids_name from anat_after_bias
+        // Do NOT reference surf_recon_input here to avoid any channel mixing
+        def surf_qc_bids_lookup = anat_after_bias
+            .map { sub, ses, anat_file, bids_name ->
+                [sub, ses, bids_name]
+            }
+        
         surf_qc_input = ANAT_SURFACE_RECONSTRUCTION.out.subject_dir
             .join(ANAT_SURFACE_RECONSTRUCTION.out.metadata, by: [0, 1])
-            .join(surf_recon_input, by: [0, 1])
-            .map { sub, ses, subject_dir, metadata_file, anat_file, bids_name, seg_file, mask_file ->
+            .join(surf_qc_bids_lookup, by: [0, 1])
+            .map { sub, ses, subject_dir, metadata_file, bids_name ->
                 def atlas_name = "ARM2"
                 try {
                     def metadata = new groovy.json.JsonSlurper().parse(metadata_file)
@@ -754,6 +797,14 @@ workflow ANAT_WF {
         }
         .set { t2w_reg_multi }
     
+    // debug print
+    t2w_reg_multi.combined.view() {
+        println "|| t2w_reg_multi.combined ||: ${it}"
+    }
+    t2w_reg_multi.reference.view() {
+        println "|| t2w_reg_multi.reference ||: ${it}"
+    }
+    
     ANAT_T2W_TO_T1W_REGISTRATION(t2w_reg_multi.combined, t2w_reg_multi.reference, config_file)
     def t2w_after_reg_to_t1w = ANAT_T2W_TO_T1W_REGISTRATION.out.output
         .join(t2w_branched_by_t1w.with_t1w
@@ -800,7 +851,12 @@ workflow ANAT_WF {
             }
             .combine(anat_conform_data, by: 0)  // Combine by subject only
             .filter { sub, ses, t2w_file, t2w_bids_name, anat_ses, conform_ses, forward_xfm, reference ->
-                anat_ses == conform_ses  // Keep only where T2w's anat_ses matches conform session
+                // Handle subject-level case: anat_ses == "" or "null" matches conform_ses == "" or "null"
+                // Also handle regular case: anat_ses == conform_ses
+                // Note: Nextflow may pass "null" as a string when session_id is empty/null in Groovy
+                def is_subject_level_anat = (anat_ses == "" || anat_ses == null || (anat_ses instanceof String && anat_ses.toLowerCase() == 'null'))
+                def is_subject_level_conform = (conform_ses == "" || conform_ses == null || (conform_ses instanceof String && conform_ses.toLowerCase() == 'null'))
+                (anat_ses == conform_ses) || (is_subject_level_anat && is_subject_level_conform)
             }
             .map { sub, ses, t2w_file, t2w_bids_name, anat_ses, conform_ses, forward_xfm, reference ->
                 [sub, ses, t2w_file, t2w_bids_name, forward_xfm, reference, anat_ses]
@@ -831,7 +887,12 @@ workflow ANAT_WF {
             }
             .combine(anat_reg_data, by: 0)  // Combine by subject only
             .filter { sub, ses, conformed_t2w, t2w_bids_name, anat_ses, reg_ses, forward_xfm, reference ->
-                anat_ses == reg_ses  // Keep only where T2w's anat_ses matches registration session
+                // Handle subject-level case: anat_ses == "" or "null" matches reg_ses == "" or "null"
+                // Also handle regular case: anat_ses == reg_ses
+                // Note: Nextflow may pass "null" as a string when session_id is empty/null in Groovy
+                def is_subject_level_anat = (anat_ses == "" || anat_ses == null || (anat_ses instanceof String && anat_ses.toLowerCase() == 'null'))
+                def is_subject_level_reg = (reg_ses == "" || reg_ses == null || (reg_ses instanceof String && reg_ses.toLowerCase() == 'null'))
+                (anat_ses == reg_ses) || (is_subject_level_anat && is_subject_level_reg)
             }
             .map { sub, ses, conformed_t2w, t2w_bids_name, anat_ses, reg_ses, forward_xfm, reference ->
                 [sub, ses, conformed_t2w, t2w_bids_name, forward_xfm, reference]

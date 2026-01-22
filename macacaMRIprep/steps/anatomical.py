@@ -473,9 +473,31 @@ def anat_surface_reconstruction(input: StepInput, t1w_file: Path, segmentation_f
     from fastsurfer_recon.config import ReconSurfConfig, AtlasConfig
     
     # Get subject ID from metadata or derive from input
-    subject_id = input.metadata.get("subject_id") or "unknown"
-    if not subject_id.startswith("sub-"):
-        subject_id = f"sub-{subject_id}"
+    base_subject_id = input.metadata.get("subject_id") or "unknown"
+    if not base_subject_id.startswith("sub-"):
+        base_subject_id = f"sub-{base_subject_id}"
+    
+    # Get session information from metadata
+    session_id = input.metadata.get("session_id")
+    session_count = input.metadata.get("session_count", 1)
+    
+    # Determine subject ID for FastSurfer based on session count and session_id
+    # Logic:
+    # - If session_id is None/empty: subject-level synthesis → use sub-XXX
+    # - If session_id is not empty:
+    #   - If session_count > 1: multiple sessions exist → use sub-XXX_ses-XXX
+    #   - If session_count == 1: only one session → use sub-XXX
+    if not session_id or session_id == "":
+        # Subject-level synthesis (no session identifier)
+        subject_id = base_subject_id
+    elif session_count > 1:
+        # Multiple sessions exist: use session identifier to avoid collisions
+        # Extract session ID without 'ses-' prefix if present
+        ses_id = session_id if not session_id.startswith("ses-") else session_id[4:]
+        subject_id = f"{base_subject_id}_ses-{ses_id}"
+    else:
+        # Only one session: no need for session identifier
+        subject_id = base_subject_id
     
     # Get atlas name from config (default to ARM2 for macaque)
     atlas_name = input.config.get("anat", {}).get("skullstripping_segmentation", {}).get("atlas_name", "ARM2")

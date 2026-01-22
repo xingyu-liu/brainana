@@ -121,17 +121,37 @@ def synthesize_multiple_anatomical(
         if len(coregistered_images) > 1:
             logger.info(f"Step: averaging {len(coregistered_images)} coregistered images")
             
-            # Stack all image data
-            image_data = []
-            for img in coregistered_images:
-                image_data.append(img.get_fdata())
+            # Incremental mean calculation to avoid loading all images into memory at once
+            # Process images one by one: accumulate sum, then divide by count
+            sum_data = None
+            valid_count = 0
             
-            # Calculate mean across images
-            mean_data = np.mean(image_data, axis=0)
+            for img in coregistered_images:
+                try:
+                    img_data = img.get_fdata()
+                    
+                    # Initialize sum with first valid image
+                    if sum_data is None:
+                        sum_data = img_data.astype(np.float64)  # Use float64 for accumulation precision
+                    else:
+                        # Accumulate sum incrementally
+                        sum_data += img_data
+                    
+                    valid_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to load image data: {e}, skipping")
+                    continue
+            
+            if valid_count == 0:
+                logger.error("No valid images could be loaded for averaging")
+                return None
+            
+            # Calculate mean by dividing accumulated sum by count
+            mean_data = (sum_data / valid_count).astype(np.float32)
             
             # Create synthesized image using reference header
             synthesized_img = nib.Nifti1Image(
-                mean_data.astype(np.float32),
+                mean_data,
                 affine=reference_img.affine,
                 header=reference_img.header
             )
