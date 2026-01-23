@@ -681,9 +681,10 @@ workflow ANAT_WF {
             }
         
         surf_qc_input = ANAT_SURFACE_RECONSTRUCTION.out.subject_dir
+            .join(ANAT_SURFACE_RECONSTRUCTION.out.actual_subject_id, by: [0, 1])
             .join(ANAT_SURFACE_RECONSTRUCTION.out.metadata, by: [0, 1])
             .join(surf_qc_bids_lookup, by: [0, 1])
-            .map { sub, ses, subject_dir, metadata_file, bids_name ->
+            .map { sub, ses, subject_dir, actual_subject_id_file, metadata_file, bids_name ->
                 def atlas_name = "ARM2"
                 try {
                     def metadata = new groovy.json.JsonSlurper().parse(metadata_file)
@@ -691,13 +692,15 @@ workflow ANAT_WF {
                 } catch (Exception e) {
                     println "Warning: Could not read atlas_name from metadata, using default: ${e.message}"
                 }
-                [sub, ses, subject_dir, bids_name, atlas_name]
+                // Read actual subject ID from file
+                def actual_subject_id = actual_subject_id_file.text.trim()
+                [sub, ses, actual_subject_id, bids_name, atlas_name]
             }
         
         // Step 4: Run QC processes
         def surf_tissue_seg_qc_input = surf_qc_input
-            .map { sub, ses, subject_dir, bids_name, atlas_name ->
-                [sub, ses, subject_dir, bids_name]
+            .map { sub, ses, actual_subject_id, bids_name, atlas_name ->
+                [sub, ses, actual_subject_id, bids_name]
             }
         QC_SURF_RECON_TISSUE_SEG(surf_tissue_seg_qc_input, config_file)
         

@@ -607,6 +607,7 @@ process ANAT_SURFACE_RECONSTRUCTION {
     // When session_count == 1: creates fastsurfer/sub-XXX
     // Use a glob pattern to match the directory name
     tuple val(subject_id), val(session_id), path("fastsurfer/sub-${subject_id}*"), emit: subject_dir
+    tuple val(subject_id), val(session_id), path("actual_subject_id.txt"), emit: actual_subject_id
     tuple val(subject_id), val(session_id), path("metadata.json"), emit: metadata
     
     script:
@@ -713,6 +714,10 @@ shutil.copytree(output_abs, expected_abs, dirs_exist_ok=True)
 # Verify the expected path exists (check relative path for Nextflow)
 if not expected_path.exists():
     raise FileNotFoundError(f"Failed to create expected output path: {expected_path} (absolute: {expected_abs})")
+
+# Write actual subject ID to a file for downstream processes
+with open('actual_subject_id.txt', 'w') as f:
+    f.write(actual_subject_id)
 
 # Save metadata
 save_metadata(result.metadata)

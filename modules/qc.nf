@@ -444,7 +444,7 @@ process QC_SURF_RECON_TISSUE_SEG {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), path(fs_subject_dir), val(bids_naming_template)
+    tuple val(subject_id), val(session_id), val(actual_subject_id), val(bids_naming_template)
     path config_file
     
     output:
@@ -475,10 +475,17 @@ qc_output_filename = create_bids_output_filename(
     modality=modality
 ).replace('.nii.gz', '.png')
 
-# Since ANAT_SURFACE_RECONSTRUCTION uses publishDir with mode: 'move',
-# the directory has been moved to the published location, not staged.
-# Use the published directory path directly.
-fs_subject_dir_resolved = Path('${params.output_dir}/fastsurfer/sub-${subject_id}').resolve()
+# Use the actual subject ID passed from ANAT_SURFACE_RECONSTRUCTION
+# This is the real directory name (e.g., 'sub-032309m' or 'sub-032309m_ses-001')
+actual_subject_id = '${actual_subject_id}'
+published_base = Path('${params.output_dir}/fastsurfer')
+fs_subject_dir_resolved = published_base / actual_subject_id
+
+# Verify the directory exists
+if not fs_subject_dir_resolved.exists():
+    raise FileNotFoundError(
+        f"FastSurfer subject directory not found: {fs_subject_dir_resolved}"
+    )
 
 # Generate QC
 result = qc_surf_recon_tissue_seg(
@@ -503,7 +510,7 @@ process QC_CORTICAL_SURF_AND_MEASURES {
         pattern: '*.png'
     
     input:
-    tuple val(subject_id), val(session_id), path(fs_subject_dir), val(bids_naming_template), val(atlas_name)
+    tuple val(subject_id), val(session_id), val(actual_subject_id), val(bids_naming_template), val(atlas_name)
     path config_file
     
     output:
@@ -539,10 +546,16 @@ qc_output_filename = create_bids_output_filename(
     modality=modality
 ).replace('.nii.gz', '.png')
 
-# Since ANAT_SURFACE_RECONSTRUCTION uses publishDir with mode: 'move',
-# the directory has been moved to the published location, not staged.
-# Use the published directory path directly.
-fs_subject_dir_resolved = Path('${params.output_dir}/fastsurfer/sub-${subject_id}').resolve()
+# Use the actual subject ID passed from ANAT_SURFACE_RECONSTRUCTION
+actual_subject_id = '${actual_subject_id}'
+published_base = Path('${params.output_dir}/fastsurfer')
+fs_subject_dir_resolved = published_base / actual_subject_id
+
+# Verify the directory exists
+if not fs_subject_dir_resolved.exists():
+    raise FileNotFoundError(
+        f"FastSurfer subject directory not found: {fs_subject_dir_resolved}"
+    )
 
 # Generate QC
 result = qc_cortical_surf_and_measures(

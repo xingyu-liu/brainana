@@ -174,6 +174,7 @@ workflow FUNC_WF {
     def func_coreg_transforms_ch = Channel.empty()
     def func_tmean_averaged_ch = Channel.empty()
     def func_coreg_success = false
+    def func_single_run_ses = Channel.empty()  // Initialize for use in compute phase
     
     if (func_coreg_runs_within_session) {
         def coregChannels = funcChannels.prepareWithinSessionCoregChannels(func_after_despike, Channel)
@@ -195,7 +196,8 @@ workflow FUNC_WF {
             .mix(FUNC_WITHIN_SES_COREG.out.output)
         
         // Single-run sessions: pass through unchanged (no averaging needed)
-        def func_single_run_ses = coregChannels.func_single_run_ses
+        // Store in outer scope for use in compute phase
+        func_single_run_ses = coregChannels.func_single_run_ses
         
         // Combine all runs for func_after_coreg (for anatomical selection and apply phase)
         def func_all_coreg = func_multi_run_ses
@@ -277,17 +279,35 @@ workflow FUNC_WF {
     // COMPUTE PHASE
     // ============================================
     // Compute transforms and masks on tmean (session-level or per-run)
-    // Two paths: session-level (when coreg enabled) vs per-run processing
+    // Two paths: session-level (when coreg enabled for multi-run) vs per-run processing
     def func_compute_conform_output = Channel.empty()
     def func_compute_conform_transforms = Channel.empty()
     def func_compute_mask_output = Channel.empty()
     def func_compute_reg_output = Channel.empty()
     
     // Determine processing mode and setup helper variables
+    // When coreg is enabled:
+    //   - Multi-run sessions: use session-level processing (empty run_id) with averaged tmean
+    //   - Single-run sessions: use per-run processing (preserve run_id) with original tmean
+    // When coreg is disabled: use per-run processing for all sessions
+    // Note: isSessionLevel is used for channel operations (combine vs join) - true when coreg enabled
     def isSessionLevel = func_coreg_runs_within_session && func_coreg_success
-    def computeInput = isSessionLevel ? 
-        func_tmean_averaged_ch.map { sub, ses, tmean, bids_name -> [sub, ses, "", tmean, bids_name] } :
-        func_after_coreg.map { sub, ses, run_id, bold, tmean, bids_name -> [sub, ses, run_id, tmean, bids_name] }
+    def computeInput
+    if (isSessionLevel) {
+        // Multi-run sessions: session-level processing with averaged tmean
+        def computeInput_multi_run = FUNC_AVERAGE_TMEAN.out.output
+            .map { sub, ses, tmean, bids_name -> [sub, ses, "", tmean, bids_name] }
+        
+        // Single-run sessions: per-run processing with original tmean (preserve run_id)
+        def computeInput_single_run = func_single_run_ses
+            .map { sub, ses, run_id, bold, tmean, bids_name -> [sub, ses, run_id, tmean, bids_name] }
+        
+        // Combine multi-run and single-run sessions
+        computeInput = computeInput_multi_run.mix(computeInput_single_run)
+    } else {
+        // Coreg disabled: per-run processing for all sessions
+        computeInput = func_after_coreg.map { sub, ses, run_id, bold, tmean, bids_name -> [sub, ses, run_id, tmean, bids_name] }
+    }
     
     // ============================================
     // BIAS_CORRECTION
