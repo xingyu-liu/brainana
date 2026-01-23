@@ -37,6 +37,40 @@ def mapSingleFileJob = { item ->
 }
 
 /**
+ * Normalize session ID from Nextflow.
+ * Handles None, empty string, whitespace, and string "null".
+ * 
+ * @param ses Session ID to normalize
+ * @return Normalized session ID string, or null if empty/null
+ */
+def normalizeSessionId = { ses ->
+    if (ses == null || ses == "") {
+        return null
+    }
+    if (ses instanceof String) {
+        def trimmed = ses.trim()
+        if (trimmed == "" || trimmed.toLowerCase() == 'null') {
+            return null
+        }
+        return trimmed
+    }
+    return ses
+}
+
+/**
+ * Match two session IDs, handling subject-level case (null/empty/"null").
+ * 
+ * @param ses1 First session ID
+ * @param ses2 Second session ID
+ * @return true if sessions match (including both being subject-level)
+ */
+def matchSessions = { ses1, ses2 ->
+    def ses1_norm = normalizeSessionId(ses1)
+    def ses2_norm = normalizeSessionId(ses2)
+    return ses1_norm == ses2_norm
+}
+
+/**
  * Filter predicate for T1w files (checks bids_name)
  * 
  * @param sub Subject ID
@@ -176,7 +210,7 @@ def performT2wAnatomicalSelection = { t2w_after_reorient, anat_after_bias, isT1w
     // Note: Nextflow may pass "null" as a string when session_id is empty/null in Groovy
     def t1w_subject_level = t1w_for_t2w
         .filter { sub, ses, t1w_file, t1w_bids_name -> 
-            ses == "" || ses == null || (ses instanceof String && ses.toLowerCase() == 'null')
+            normalizeSessionId(ses) == null
         }
         .map { sub, ses, t1w_file, t1w_bids_name -> [sub, t1w_file] }
         .unique { sub, t1w_file -> sub }  // Deduplicate by subject
@@ -185,7 +219,7 @@ def performT2wAnatomicalSelection = { t2w_after_reorient, anat_after_bias, isT1w
     // Exclude subject-level (ses == "" or "null") from same-session lookup
     def t1w_same_ses = t1w_for_t2w
         .filter { sub, ses, t1w_file, t1w_bids_name -> 
-            ses != "" && ses != null && !(ses instanceof String && ses.toLowerCase() == 'null')
+            normalizeSessionId(ses) != null
         }
         .map { sub, ses, t1w_file, t1w_bids_name -> [sub, ses, t1w_file] }
         .unique { sub, ses, t1w_file -> [sub, ses] }  // Deduplicate by [sub, ses]
@@ -194,7 +228,7 @@ def performT2wAnatomicalSelection = { t2w_after_reorient, anat_after_bias, isT1w
     // Exclude subject-level (ses == "" or "null") from across-session lookup
     def t1w_across_ses = t1w_for_t2w
         .filter { sub, ses, t1w_file, t1w_bids_name -> 
-            ses != "" && ses != null && !(ses instanceof String && ses.toLowerCase() == 'null')
+            normalizeSessionId(ses) != null
         }
         .map { sub, ses, t1w_file, t1w_bids_name -> [sub, ses, t1w_file] }
         .groupTuple(by: 0)
@@ -301,7 +335,7 @@ def performFuncAnatomicalSelection = { func_after_coreg, anat_after_bias_brain, 
     // Note: Nextflow may pass "null" as a string when session_id is empty/null in Groovy
     def anat_subject_level = anat_for_func
         .filter { sub, ses, brain_file, bids_name -> 
-            ses == "" || ses == null || (ses instanceof String && ses.toLowerCase() == 'null')
+            normalizeSessionId(ses) == null
         }
         .map { sub, ses, brain_file, bids_name -> [sub, brain_file] }
         .unique { sub, brain_file -> sub }  // Deduplicate by subject
@@ -310,7 +344,7 @@ def performFuncAnatomicalSelection = { func_after_coreg, anat_after_bias_brain, 
     // Exclude subject-level (ses == "" or "null") from same-session lookup
     def anat_same_ses = anat_for_func
         .filter { sub, ses, brain_file, bids_name -> 
-            ses != "" && ses != null && !(ses instanceof String && ses.toLowerCase() == 'null')
+            normalizeSessionId(ses) != null
         }
         .map { sub, ses, brain_file, bids_name -> [sub, ses, brain_file] }
         .unique { sub, ses, brain_file -> [sub, ses] }  // Deduplicate by [sub, ses]
@@ -319,7 +353,7 @@ def performFuncAnatomicalSelection = { func_after_coreg, anat_after_bias_brain, 
     // Exclude subject-level (ses == "" or "null") from across-session lookup
     def anat_across_ses = anat_for_func
         .filter { sub, ses, brain_file, bids_name -> 
-            ses != "" && ses != null && !(ses instanceof String && ses.toLowerCase() == 'null')
+            normalizeSessionId(ses) != null
         }
         .map { sub, ses, brain_file, bids_name -> [sub, ses, brain_file] }
         .groupTuple(by: 0)
@@ -416,5 +450,7 @@ return [
     findUnmatchedT2w: findUnmatchedT2w,
     extractRunIdentifier: extractRunIdentifier,
     performT2wAnatomicalSelection: performT2wAnatomicalSelection,
-    performFuncAnatomicalSelection: performFuncAnatomicalSelection
+    performFuncAnatomicalSelection: performFuncAnatomicalSelection,
+    normalizeSessionId: normalizeSessionId,
+    matchSessions: matchSessions
 ]

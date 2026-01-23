@@ -195,6 +195,57 @@ def create_bids_output_filename(
     return output_filename
 
 
+def create_synthesized_bids_filename(
+    original_file: Path,
+    modality: str,
+    is_subject_level: bool,
+    synthesized: bool
+) -> tuple[str, str]:
+    """
+    Create BIDS filename and path for synthesized anatomical output.
+    
+    Args:
+        original_file: Original anatomical file (for parsing entities)
+        modality: Modality suffix (e.g., "T1w", "T2w")
+        is_subject_level: True if subject-level synthesis, False if session-level
+        synthesized: True if synthesis occurred, False if passthrough
+        
+    Returns:
+        Tuple of (bids_filename, bids_path_for_downstream)
+        - bids_filename: Just the filename (e.g., "sub-001_T1w.nii.gz")
+        - bids_path_for_downstream: Full path for downstream steps
+          (e.g., "sub-001/anat/sub-001_T1w.nii.gz" for subject-level)
+    """
+    # Parse entities from original file
+    entities = parse_bids_entities(original_file.name)
+    
+    # Remove 'run' entity for synthesized files
+    if synthesized and 'run' in entities:
+        del entities['run']
+    
+    # Remove 'ses' entity for subject-level synthesis
+    if is_subject_level and 'ses' in entities:
+        del entities['ses']
+    
+    # Generate filename
+    bids_filename = create_bids_filename(
+        entities=entities,
+        suffix=modality,
+        extension='.nii.gz'
+    )
+    
+    # Generate path for downstream
+    if synthesized and is_subject_level:
+        subject_id = entities.get('sub', 'unknown')
+        bids_path = f"sub-{subject_id}/anat/{bids_filename}"
+    elif synthesized:
+        bids_path = str(original_file.parent / bids_filename)
+    else:
+        bids_path = str(original_file)
+    
+    return bids_filename, bids_path
+
+
 def find_bids_metadata(nifti_path: Union[str, Path], dataset_dir: Union[str, Path]) -> Optional[Dict[str, Any]]:
     """
     Find and load BIDS sidecar JSON metadata for a NIfTI file using hierarchical search.

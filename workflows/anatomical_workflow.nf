@@ -176,6 +176,8 @@ workflow ANAT_WF {
     def mapSingleFileJob = channelHelpers.mapSingleFileJob
     def isT1wFile = channelHelpers.isT1wFile
     def passThroughAnat = channelHelpers.passThroughAnat
+    def normalizeSessionId = channelHelpers.normalizeSessionId
+    def matchSessions = channelHelpers.matchSessions
     
     // Extract all subjects from anat_jobs_ch for later use
     anat_jobs_ch
@@ -761,8 +763,8 @@ workflow ANAT_WF {
     // Use T1w from reorient stage (anat_after_reorient) for T2w→T1w registration - BEFORE conform
     // This ensures both T2w and T1w are in their native space before registration
     // Note: anat_after_reorient is the full head version (_T1w), not the brain version (_T1w_brain)
-    // Check for T1w matches (same-session or cross-session) for all T2w files
-    // Priority: 1) Same session T1w, 2) Cross-session T1w, 3) No T1w (stop processing)
+    // Check for T1w matches for all T2w files
+    // Priority: 1) Subject-level T1w (ses="", HIGHEST PRIORITY), 2) Same session T1w, 3) Cross-session T1w, 4) No T1w (stop processing)
     // Output: [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses]
     def t2w_all_after_reorient = t2w_after_reorient
         .map { sub, ses, anat_file, bids_name, needs_t1w_reg ->
@@ -854,12 +856,7 @@ workflow ANAT_WF {
             }
             .combine(anat_conform_data, by: 0)  // Combine by subject only
             .filter { sub, ses, t2w_file, t2w_bids_name, anat_ses, conform_ses, forward_xfm, reference ->
-                // Handle subject-level case: anat_ses == "" or "null" matches conform_ses == "" or "null"
-                // Also handle regular case: anat_ses == conform_ses
-                // Note: Nextflow may pass "null" as a string when session_id is empty/null in Groovy
-                def is_subject_level_anat = (anat_ses == "" || anat_ses == null || (anat_ses instanceof String && anat_ses.toLowerCase() == 'null'))
-                def is_subject_level_conform = (conform_ses == "" || conform_ses == null || (conform_ses instanceof String && conform_ses.toLowerCase() == 'null'))
-                (anat_ses == conform_ses) || (is_subject_level_anat && is_subject_level_conform)
+                matchSessions(anat_ses, conform_ses)
             }
             .map { sub, ses, t2w_file, t2w_bids_name, anat_ses, conform_ses, forward_xfm, reference ->
                 [sub, ses, t2w_file, t2w_bids_name, forward_xfm, reference, anat_ses]
@@ -890,12 +887,7 @@ workflow ANAT_WF {
             }
             .combine(anat_reg_data, by: 0)  // Combine by subject only
             .filter { sub, ses, conformed_t2w, t2w_bids_name, anat_ses, reg_ses, forward_xfm, reference ->
-                // Handle subject-level case: anat_ses == "" or "null" matches reg_ses == "" or "null"
-                // Also handle regular case: anat_ses == reg_ses
-                // Note: Nextflow may pass "null" as a string when session_id is empty/null in Groovy
-                def is_subject_level_anat = (anat_ses == "" || anat_ses == null || (anat_ses instanceof String && anat_ses.toLowerCase() == 'null'))
-                def is_subject_level_reg = (reg_ses == "" || reg_ses == null || (reg_ses instanceof String && reg_ses.toLowerCase() == 'null'))
-                (anat_ses == reg_ses) || (is_subject_level_anat && is_subject_level_reg)
+                matchSessions(anat_ses, reg_ses)
             }
             .map { sub, ses, conformed_t2w, t2w_bids_name, anat_ses, reg_ses, forward_xfm, reference ->
                 [sub, ses, conformed_t2w, t2w_bids_name, forward_xfm, reference]

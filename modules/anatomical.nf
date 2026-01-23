@@ -35,15 +35,10 @@ import os
 
 # Initialize command log file
 # Handle empty string session_id (subject-level synthesis)
-# Parse session_id once and reuse
-# Note: Nextflow may pass "null" as a string when session_id is empty/null in Groovy
+from macacaMRIprep.utils.nextflow import normalize_session_id
+
 session_id_raw = '${session_id}'
-import sys
-# Handle empty string, None, whitespace-only, and the string "null"
-if session_id_raw and session_id_raw.strip() and session_id_raw.strip().lower() != 'null':
-    session_id_py = session_id_raw.strip()
-else:
-    session_id_py = None
+session_id_py = normalize_session_id(session_id_raw)
 
 init_cmd_log_for_nextflow(
     output_dir='${params.output_dir}',
@@ -74,39 +69,18 @@ result = anat_synthesis(
 # Check if synthesis actually occurred
 synthesized = result.metadata.get("synthesized", False)
 
-# Generate BIDS-compliant output filename
-# Parse entities from BIDS naming template and remove 'run' entity for synthesized output
-entities = parse_bids_entities(bids_name.name)
-# Remove 'run' entity since synthesis combines multiple runs
-if 'run' in entities:
-    del entities['run']
+# Determine if subject-level synthesis
+is_subject_level = (session_id_py is None)
 
-# Remove 'ses' entity if session_id is empty (subject-level synthesis)
-# session_id_py is already set above, reuse it here
-print(f"DEBUG: session_id_raw from Nextflow: {repr(session_id_raw)}", file=sys.stderr)
-print(f"DEBUG: session_id_py (reused): {repr(session_id_py)}", file=sys.stderr)
+# Generate BIDS filename and path using utility function
+from macacaMRIprep.utils.bids import create_synthesized_bids_filename
 
-# Explicitly remove ses entity for subject-level synthesis
-# Check for None, empty string, or the string "null" (Nextflow may pass "null" as a string)
-print(f"DEBUG: Before ses removal check: entities={entities}, session_id_py={repr(session_id_py)}", file=sys.stderr)
-if session_id_py is None or session_id_py == "" or (isinstance(session_id_py, str) and session_id_py.lower() == 'null'):
-    if 'ses' in entities:
-        ses_value = entities['ses']
-        del entities['ses']
-        print(f"DEBUG: Removed 'ses' entity (value was '{ses_value}') for subject-level synthesis. entities now: {entities}", file=sys.stderr)
-    else:
-        print(f"DEBUG: 'ses' not in entities, nothing to remove", file=sys.stderr)
-else:
-    print(f"DEBUG: session_id_py is not None/empty/null ({repr(session_id_py)}), keeping 'ses' entity", file=sys.stderr)
-
-# Create BIDS filename: preserve entities (without run, without ses for subject-level), add detected modality
-print(f"DEBUG: Creating filename with entities: {entities}", file=sys.stderr)
-bids_output_filename = create_bids_filename(
-    entities=entities,
-    suffix=modality,
-    extension='.nii.gz'
+bids_output_filename, bids_name_for_downstream = create_synthesized_bids_filename(
+    original_file=bids_name,
+    modality=modality,
+    is_subject_level=is_subject_level,
+    synthesized=synthesized
 )
-print(f"DEBUG: Created bids_output_filename: {bids_output_filename}", file=sys.stderr)
 
 # Use symlinks to avoid duplication - Nextflow publishDir will handle final copy
 # Always use create_output_link() which resolves symlinks to original source
@@ -114,34 +88,6 @@ create_output_link(result.output_file, bids_output_filename)
 
 # Save metadata
 save_metadata(result.metadata)
-
-# Determine what to write to bids_name.txt for downstream steps
-# If synthesis occurred, use the synthesized filename (without run) as the BIDS naming template
-# If synthesis didn't occur, use the original file path (preserves run for single files)
-print(f"DEBUG: synthesized flag: {synthesized}", file=sys.stderr)
-if synthesized:
-    # For synthesized files, construct a path using the synthesized filename
-    # This ensures downstream steps don't include run identifiers
-    # Check for None, empty string, or the string "null" (Nextflow may pass "null" as a string)
-    is_subject_level = (session_id_py is None or session_id_py == "" or 
-                       (isinstance(session_id_py, str) and session_id_py.lower() == 'null'))
-    if is_subject_level:  # Subject-level synthesis
-        # Create path without session directory: sub-XXX/anat/filename
-        subject_id = entities.get('sub', '${subject_id}')
-        subject_anat_dir = f"sub-{subject_id}/anat"
-        synthesized_path = Path(subject_anat_dir) / bids_output_filename
-        print(f"DEBUG: Subject-level synthesis path: {synthesized_path}", file=sys.stderr)
-    else:
-        # Session-level: use original directory structure
-        synthesized_path = bids_name.parent / bids_output_filename
-        print(f"DEBUG: Session-level synthesis path: {synthesized_path}", file=sys.stderr)
-    bids_name_for_downstream = str(synthesized_path)
-else:
-    # For single files (no synthesis), use the original file path
-    bids_name_for_downstream = str(bids_name)
-    print(f"DEBUG: No synthesis, using original path: {bids_name_for_downstream}", file=sys.stderr)
-
-print(f"DEBUG: Final bids_name_for_downstream: {bids_name_for_downstream}", file=sys.stderr)
 
 # Write the appropriate path to file for Nextflow value output
 with open('bids_name.txt', 'w') as f:

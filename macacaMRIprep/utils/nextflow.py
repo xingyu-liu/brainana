@@ -120,6 +120,32 @@ def save_metadata(metadata_dict: Dict[str, Any], output_path: Union[str, Path] =
         json.dump(metadata_dict, f, indent=2)
 
 
+def normalize_session_id(session_id_raw: Optional[str]) -> Optional[str]:
+    """
+    Normalize session ID from Nextflow.
+    
+    Handles various representations of empty/null session IDs:
+    - None
+    - Empty string ""
+    - Whitespace-only strings
+    - String "null" (Nextflow may pass "null" as a string when session_id is empty/null in Groovy)
+    
+    Args:
+        session_id_raw: Raw session ID from Nextflow
+        
+    Returns:
+        Normalized session ID string, or None if empty/null
+    """
+    if not session_id_raw:
+        return None
+    
+    session_id = session_id_raw.strip()
+    if not session_id or session_id.lower() == 'null':
+        return None
+    
+    return session_id
+
+
 def init_cmd_log_for_nextflow(
     output_dir: str,
     subject_id: str,
