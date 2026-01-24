@@ -416,7 +416,8 @@ process ANAT_SKULLSTRIPPING {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        enabled: false
+        pattern: '*desc-brain*.nii.gz',
+        enabled: true
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_name)

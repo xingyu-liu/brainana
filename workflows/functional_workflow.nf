@@ -629,10 +629,10 @@ workflow FUNC_WF {
             }
             .set { func_apply_reg_multi }
         
-        // debug print
-        func_apply_reg_multi.reg_combined.view() {
-            println "|| func_apply_reg_multi.reg_combined ||: ${it}"
-        }
+        // // debug print
+        // func_apply_reg_multi.reg_combined.view() {
+        //     println "|| func_apply_reg_multi.reg_combined ||: ${it}"
+        // }
         
         // Apply transforms to BOLD data
         // Output: func_apply_reg: [sub, ses, run_id, registered_bold, registered_boldref, bids_name]

@@ -802,13 +802,13 @@ workflow ANAT_WF {
         }
         .set { t2w_reg_multi }
     
-    // debug print
-    t2w_reg_multi.combined.view() {
-        println "|| t2w_reg_multi.combined ||: ${it}"
-    }
-    t2w_reg_multi.reference.view() {
-        println "|| t2w_reg_multi.reference ||: ${it}"
-    }
+    // // debug print
+    // t2w_reg_multi.combined.view() {
+    //     println "|| t2w_reg_multi.combined ||: ${it}"
+    // }
+    // t2w_reg_multi.reference.view() {
+    //     println "|| t2w_reg_multi.reference ||: ${it}"
+    // }
     
     ANAT_T2W_TO_T1W_REGISTRATION(t2w_reg_multi.combined, t2w_reg_multi.reference, config_file)
     def t2w_after_reg_to_t1w = ANAT_T2W_TO_T1W_REGISTRATION.out.output
