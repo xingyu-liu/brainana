@@ -16,7 +16,7 @@ from ..operations.preprocessing import (
     bias_correction,
     apply_segmentation
 )
-from ..operations.registration import ants_register, flirt_register, flirt_apply_transforms
+from ..operations.registration import ants_register, ants_apply_transforms, flirt_register, flirt_apply_transforms
 
 
 logger = logging.getLogger(__name__)
@@ -294,55 +294,44 @@ def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepO
     Returns:
         StepOutput with registered T2w file and transform files
     """
-    # Set FLIRT parameters for anatomical registration
-    flirt_config = {
-        "registration": {
-            "flirt": {
-                "cost": "mutualinfo",
-                "searchcost": "mutualinfo",
-                "coarsesearch": 40,
-                "finesearch": 15,
-                "searchrx": [-60, 60],
-                "searchry": [-60, 60],
-                "searchrz": [-60, 60]
-            }
-        }
-    }
-    
-    # Step 1: FLIRT rigid registration from T2w to T1w
+    # Step 1: ANTs rigid registration from T2w to T1w
     try:
-        registration_result = flirt_register(
+        registration_result = ants_register(
             fixedf=str(t1w_reference),
             movingf=str(input.input_file),
             working_dir=str(input.working_dir),
             output_prefix="t2w_to_t1w_coreg",
-            config=flirt_config,
             logger=logger,
-            dof=6  # Use rigid registration for T2w→T1w coregistration
+            xfm_type="rigid"
         )
-        xfm_forward_f = Path(registration_result['forward_transform'])
-        xfm_inverse_f = Path(registration_result.get('inverse_transform')) if 'inverse_transform' in registration_result else None
+        forward_transform = registration_result.get("forward_transform")
+        if not forward_transform:
+            raise RuntimeError("ANTs registration did not produce a forward transform")
+        xfm_forward_f = Path(forward_transform)
+        xfm_inverse_f = Path(registration_result.get("inverse_transform")) if registration_result.get("inverse_transform") else None
     except Exception as e:
-        logger.error(f"Error during FLIRT registration: {e}")
+        logger.error(f"Error during ANTs registration: {e}")
         raise RuntimeError(
-            f"T2w to T1w registration failed during FLIRT registration: {e}"
+            f"T2w to T1w registration failed during ANTs registration: {e}"
         )
     
-    # Step 2: Apply the affine transformation to the T2w image
+    # Step 2: Apply the transform with Lanczos interpolation
     try:
-        apply_result = flirt_apply_transforms(
+        apply_result = ants_apply_transforms(
             movingf=str(input.input_file),
             outputf_name="t2w_to_t1w_coreg_registered.nii.gz",
-            reff=str(t1w_reference),
+            fixedf=str(t1w_reference),
             working_dir=str(input.working_dir),
-            transformf=str(xfm_forward_f),
+            transformf=[str(xfm_forward_f)],
             logger=logger,
-            interpolation='trilinear',
+            moving_type=0,
+            interpolation="LanczosWindowedSinc",
+            reff=str(t1w_reference),
             generate_tmean=False
         )
         output_file = Path(apply_result['imagef_registered'])
     except Exception as e:
-        logger.error(f"Error during affine transformation application: {e}")
+        logger.error(f"Error during ANTs transformation application: {e}")
         raise RuntimeError(
             f"T2w to T1w registration failed when applying transformation: {e}"
         )

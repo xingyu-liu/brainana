@@ -1003,14 +1003,20 @@ process FUNC_COMPUTE_BRAIN_MASK {
     // Input: [sub, ses, run_identifier, conformed_tmean, bids_template]
     tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_tmean), val(bids_name)
     path config_file
+    val gpu_id
     
     output:
     // Output: [sub, ses, run_identifier, masked_tmean, bids_template, brain_mask]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*_boldref_brain.nii.gz"), val(bids_name), path("*desc-brain_mask.nii.gz"), emit: output
     path "*.json", emit: metadata
+    val gpu_id, emit: gpu_token
     
     script:
     """
+    # GPU Assignment: Assign this job to GPU ${gpu_id} (round-robin distribution)
+    export CUDA_VISIBLE_DEVICES=${gpu_id}
+    echo "[GPU Assignment] Task ${task.index} -> GPU ${gpu_id} (of ${params.gpu_count} available)"
+    
     \${PYTHON:-python3} <<EOF
     from macacaMRIprep.steps.functional import func_skullstripping
     from macacaMRIprep.steps.types import StepInput

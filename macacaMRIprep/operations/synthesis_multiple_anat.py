@@ -15,7 +15,7 @@ import nibabel as nib
 import numpy as np
 import json
 
-from .registration import ants_register
+from .registration import ants_register, ants_apply_transforms
 from .validation import validate_input_file, ensure_working_directory, validate_output_file
 from ..config import get_config
 from ..utils.bids import BIDSFile
@@ -79,16 +79,25 @@ def synthesize_multiple_anatomical(
             
             moving_path = validate_input_file(anat_file.path, logger)
             
-            # Use real run values for meaningful output naming
+            # Use the ses and run ids when available
             reference_run = anat_files[0].run or "01"
             moving_run = anat_file.run or f"{i+1:02d}"
+            reference_id_parts = []
+            moving_id_parts = []
+            if anat_files[0].ses:
+                reference_id_parts.append(f"ses-{anat_files[0].ses}")
+            if anat_file.ses:
+                moving_id_parts.append(f"ses-{anat_file.ses}")
+            reference_id_parts.append(f"run-{reference_run}")
+            moving_id_parts.append(f"run-{moving_run}")
+            reference_id = "_".join(reference_id_parts)
+            moving_id = "_".join(moving_id_parts)
             
-            # Output prefix using real run values: run-02_to_run-01_T1w_coreg
-            output_prefix = f"run-{moving_run}_to_run-{reference_run}_{modality}_coreg"
+            # Output prefix using the ses and run ids
+            output_prefix = f"{moving_id}_to_{reference_id}_{modality}_coreg"
             
             try:
-                # Use the existing ants_register function for coregistration
-                # This performs rigid + affine registration (linear only, no nonlinear)
+                # Compute transforms with ANTs registration (rigid only)
                 registration_result = ants_register(
                     fixedf=str(reference_path),
                     movingf=str(moving_path),
@@ -99,16 +108,38 @@ def synthesize_multiple_anatomical(
                     xfm_type='rigid'  # Use only linear registration (affine)
                 )
                 
-                # Check if registration was successful
-                if "imagef_registered" in registration_result:
-                    coregistered_path = registration_result["imagef_registered"]
-                    logger.info(f"Step: successfully coregistered - {os.path.basename(coregistered_path)}")
-                    
-                    # Load and store the coregistered image
-                    coregistered_img = nib.load(coregistered_path)
-                    coregistered_images.append(coregistered_img)
-                else:
-                    logger.warning(f"Step: registration did not produce expected output for {os.path.basename(anat_file.path)}")
+                forward_transform = registration_result.get("forward_transform")
+                if not forward_transform:
+                    raise RuntimeError("ANTs registration did not produce a forward transform")
+
+                # Remove the output image, because we are going to recompute it
+                registered_path = synthesis_work_dir / f"{output_prefix}_registered.nii.gz"
+                if registered_path.exists():
+                    registered_path.unlink()
+
+                # Apply transform with explicit interpolation
+                apply_result = ants_apply_transforms(
+                    movingf=str(moving_path),
+                    moving_type=0,
+                    interpolation="LanczosWindowedSinc",
+                    outputf_name=f"{output_prefix}_registered.nii.gz",
+                    fixedf=str(reference_path),
+                    working_dir=str(synthesis_work_dir),
+                    transformf=[str(forward_transform)],
+                    logger=logger,
+                    reff=str(reference_path),
+                    generate_tmean=False
+                )
+
+                coregistered_path = apply_result.get("imagef_registered")
+                if not coregistered_path:
+                    raise RuntimeError("ANTs apply transforms did not produce output image")
+
+                logger.info(f"Step: successfully coregistered - {os.path.basename(coregistered_path)}")
+                
+                # Load and store the coregistered image
+                coregistered_img = nib.load(coregistered_path)
+                coregistered_images.append(coregistered_img)
                     
             except Exception as e:
                 logger.error(f"Step: coregistration failed for {os.path.basename(anat_file.path)} - {e}")

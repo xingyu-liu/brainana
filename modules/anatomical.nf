@@ -422,6 +422,7 @@ process ANAT_SKULLSTRIPPING {
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_name)
     path config_file
+    val gpu_id
     
     output:
     // Pattern matches files with desc-skullstrip (full head, inherited from input)
@@ -431,10 +432,15 @@ process ANAT_SKULLSTRIPPING {
     tuple val(subject_id), val(session_id), path("*_desc-brain_mask.nii.gz"), emit: brain_mask
     tuple val(subject_id), val(session_id), path("*_desc-brain_hemimask.nii.gz"), optional: true, emit: brain_hemimask
     tuple val(subject_id), val(session_id), path("*_desc-brain_atlas*.nii.gz"), optional: true, emit: brain_segmentation
+    val gpu_id, emit: gpu_token
     path "*.json", emit: metadata
     
     script:
     """
+    # GPU Assignment: Assign this job to GPU ${gpu_id} (round-robin distribution)
+    export CUDA_VISIBLE_DEVICES=${gpu_id}
+    echo "[GPU Assignment] Task ${task.index} -> GPU ${gpu_id} (of ${params.gpu_count} available)"
+    
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.anatomical import anat_skullstripping
 from macacaMRIprep.steps.types import StepInput
@@ -534,6 +540,11 @@ EOF
 process ANAT_SURFACE_RECONSTRUCTION {
     label 'cpu'
     tag "${subject_id}_${session_id}"
+    
+    // Allow workflow to continue if surface reconstruction fails for some subjects
+    // (e.g., due to poor image quality). Failed subjects won't emit outputs,
+    // so downstream QC processes will simply skip them.
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/fastsurfer",
         mode: 'copy',

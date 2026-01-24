@@ -49,6 +49,7 @@ workflow FUNC_WF {
     anat_after_bias_brain  // channel from anatomical workflow (Phase 1 final output - brain version for registration)
     anat_reg_transforms  // channel from anatomical workflow
     anat_reg_reference  // channel from anatomical workflow (target_final.nii.gz from ANAT_REGISTRATION)
+    gpu_queue
     
     main:
     // ============================================
@@ -366,7 +367,8 @@ workflow FUNC_WF {
                 [sub, ses, run_id, conformed_tmean, bids_name]
             }
         
-        FUNC_COMPUTE_BRAIN_MASK(func_compute_mask_input, config_file)
+        FUNC_COMPUTE_BRAIN_MASK(func_compute_mask_input, config_file, gpu_queue)
+        FUNC_COMPUTE_BRAIN_MASK.out.gpu_token.subscribe { gpu_queue << it }
         func_compute_mask_output = FUNC_COMPUTE_BRAIN_MASK.out.output
     } else {
         func_compute_mask_output = func_compute_conform_output

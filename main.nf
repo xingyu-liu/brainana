@@ -12,6 +12,8 @@
 
 nextflow.enable.dsl=2
 
+import groovyx.gpars.dataflow.DataflowQueue
+
 // Include sub-workflows
 include { ANAT_WF } from './workflows/anatomical_workflow.nf'
 include { FUNC_WF } from './workflows/functional_workflow.nf'
@@ -51,11 +53,25 @@ workflow {
     // Get anat_only parameter with priority: CLI → YAML → defaults.yaml
     // No hardcoded default - must come from defaults.yaml
     def anat_only = paramResolver.getParamBool(params, 'anat_only')
+
+    // ============================================
+    // GLOBAL GPU TOKEN POOL
+    // ============================================
+    // Create a shared GPU token queue so ALL GPU processes draw from the same pool
+    // This enforces max_jobs_per_gpu across anatomical + functional GPU steps.
+    def gpu_queue = new DataflowQueue()
+    def gpu_count = params.gpu_count ?: 0
+    def max_jobs_per_gpu = params.max_jobs_per_gpu ?: 1
+    def token_gpu_count = gpu_count > 0 ? gpu_count : 1
+    def token_jobs_per_gpu = max_jobs_per_gpu > 0 ? max_jobs_per_gpu : 1
+    (0..<token_gpu_count).each { gpu_id ->
+        (0..<token_jobs_per_gpu).each { gpu_queue << gpu_id }
+    }
     
     // ============================================
     // RUN ANATOMICAL WORKFLOW
     // ============================================
-    ANAT_WF()
+    ANAT_WF(gpu_queue)
     
     // ============================================
     // RUN FUNCTIONAL WORKFLOW (conditionally)
@@ -64,7 +80,8 @@ workflow {
         FUNC_WF(
             ANAT_WF.out.anat_after_bias_brain,  // Use brain version for functional registration
             ANAT_WF.out.anat_reg_transforms,
-            ANAT_WF.out.anat_reg_reference
+            ANAT_WF.out.anat_reg_reference,
+            gpu_queue
         )
     }
     
@@ -126,4 +143,51 @@ workflow {
         }
     
     QC_GENERATE_REPORT(qc_report_input)
+}
+
+// ============================================
+// WORKFLOW COMPLETION HANDLER
+// ============================================
+// Report summary of pipeline execution, including any failed tasks
+workflow.onComplete {
+    def duration = workflow.duration
+    def successCount = workflow.stats.succeededCount
+    def failedCount = workflow.stats.failedCount
+    def ignoredCount = workflow.stats.ignoredCount
+    def cachedCount = workflow.stats.cachedCount
+    
+    println ""
+    println "=" * 60
+    println "PIPELINE EXECUTION SUMMARY"
+    println "=" * 60
+    println "Status:     ${workflow.success ? 'COMPLETED' : 'FAILED'}"
+    println "Duration:   ${duration}"
+    println "Succeeded:  ${successCount}"
+    println "Cached:     ${cachedCount}"
+    println "Failed:     ${failedCount}"
+    println "Ignored:    ${ignoredCount}"
+    println "=" * 60
+    
+    // Report on ignored/failed tasks (typically surface reconstruction failures)
+    if (ignoredCount > 0 || failedCount > 0) {
+        println ""
+        println "WARNING: Some tasks failed or were ignored."
+        println "This may include surface reconstruction jobs that failed due to image quality issues."
+        println ""
+        println "To see details of failed tasks, check the trace file:"
+        println "  ${params.output_dir}/nextflow_reports/nextflow_trace.txt"
+        println ""
+        println "Filter for failed tasks with:"
+        println "  grep -E 'FAILED|ABORTED' ${params.output_dir}/nextflow_reports/nextflow_trace.txt"
+        println ""
+        
+        // If there were failures but workflow still completed (due to errorStrategy 'ignore'),
+        // report as "completed with warnings"
+        if (workflow.success && (ignoredCount > 0 || failedCount > 0)) {
+            println "Pipeline completed with ${ignoredCount + failedCount} task(s) that failed/were ignored."
+            println "Review the trace file to identify affected subjects."
+        }
+    }
+    
+    println ""
 }

@@ -52,8 +52,8 @@ from fastsurfer_recon.stages import (
 STOP_STEP = "s21"
 
 # Test subject
-subject_root = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/histology_test/surf")
-subject_dir = subject_root / "sub-histology"
+subject_root = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_UNC_v1_wd/8f/a66eded44115ae4ba42f1bbf6f2adc")
+subject_dir = subject_root / "test"
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 

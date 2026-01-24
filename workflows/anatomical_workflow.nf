@@ -57,6 +57,9 @@ def paramResolver = evaluate(new File("${projectDir}/workflows/param_resolver.gr
 def configHelpers = evaluate(new File("${projectDir}/workflows/config_helpers.groovy").text)
 
 workflow ANAT_WF {
+    take:
+    gpu_queue
+    
     main:
     // ============================================
     // INPUT VALIDATION
@@ -360,7 +363,8 @@ workflow ANAT_WF {
     def anat_skull_mask = anat_skull_mask_dummy
     
     if (anat_skullstripping_enabled) {
-        ANAT_SKULLSTRIPPING(anat_after_conform, config_file)
+        ANAT_SKULLSTRIPPING(anat_after_conform, config_file, gpu_queue)
+        ANAT_SKULLSTRIPPING.out.gpu_token.subscribe { gpu_queue << it }
         // Principle: anat_after_skull = full head (not skullstripped), anat_after_skull_brain = brain (skullstripped)
         anat_after_skull = ANAT_SKULLSTRIPPING.out.output  // Full head version (_T1w)
         anat_after_skull_brain = ANAT_SKULLSTRIPPING.out.brain  // Brain-only version (_T1w_brain)

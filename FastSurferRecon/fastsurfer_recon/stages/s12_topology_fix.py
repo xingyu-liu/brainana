@@ -108,16 +108,16 @@ class TopologyFix(HemisphereStage):
                 logger.info(f"Copying {self.hemi}.orig.premesh to {self.hemi}.orig...")
                 shutil.copy(premesh, orig)
             
-            # Step 3: Remove surface intersections
-            # Even after topology fix, the surface may have self-intersections.
-            # This step removes any remaining intersections to ensure a clean surface.
-            logger.info(f"Removing intersections from {self.hemi}.orig...")
-            mris_remove_intersection(
-                input_surf=orig,
-                output_surf=orig,  # In-place operation
-                log_file=self.config.log_file,
-                subject_dir=self.sd.subject_dir,
-            )
+            # # Step 3: Remove surface intersections
+            # # Even after topology fix, the surface may have self-intersections.
+            # # This step removes any remaining intersections to ensure a clean surface.
+            # logger.info(f"Removing intersections from {self.hemi}.orig...")
+            # mris_remove_intersection(
+            #     input_surf=orig,
+            #     output_surf=orig,  # In-place operation
+            #     log_file=self.config.log_file,
+            #     subject_dir=self.sd.subject_dir,
+            # )
             
             # Step 4: Clean up temporary files
             # inflated.nofix is no longer needed after topology fix (it was only needed as input).

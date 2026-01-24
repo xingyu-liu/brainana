@@ -5,9 +5,9 @@ from macacaMRIprep.operations.registration import ants_register
 import logging
 
 # %%
-moving_f = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/histology_test/ugly_lh_res-025_space-NMT2Sym.nii.gz'
-fixed_f = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/histology_test/tpl-NMT2Sym_res-05_hemi-lh_T1w_brainWoCerebellumBrainstem.nii.gz'
-xfm_type = 'syn'
+moving_f = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_UNC_v1_wd/a1/8d5f78f4b081cf0440e335028f98c9/sub-032_ses-06months_T2w.nii.gz'
+fixed_f = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_UNC_v1_wd/a1/8d5f78f4b081cf0440e335028f98c9/sub-032_ses-06months_T1w.nii.gz'
+xfm_type = 'rigid'
 
 output_f = moving_f.replace('.nii.gz', f'_{xfm_type}.nii.gz')
 
