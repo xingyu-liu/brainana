@@ -49,10 +49,10 @@ from fastsurfer_recon.stages import (
 
 # Stop at this step (e.g., "s07", "s12", "s21")
 # Pipeline will run all steps up to and including this step
-STOP_STEP = "s21"
+STOP_STEP = "s13"
 
 # Test subject
-subject_root = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_UNC_v1_wd/8f/a66eded44115ae4ba42f1bbf6f2adc")
+subject_root = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_downsampled_multianat_v2_wd/04/646e90b82820269ca27b220d398161/work/fastsurfer")
 subject_dir = subject_root / "test"
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
@@ -181,7 +181,7 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
             ("s17", Statistics),
         ]
         
-        hemis = ["lh"]
+        hemis = ["rh"]
         
         for step_name, stage_class in surface_stages:
             step_num = get_stage_number(step_name)

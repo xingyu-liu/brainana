@@ -126,10 +126,10 @@ class Tessellation(HemisphereStage):
                 mris_remesh(
                     input_surf=orig_nofix,
                     output_surf=orig_nofix_final,
-                    desired_face_area=0.5,
+                    desired_face_area=0.2,
                     log_file=self.config.log_file,
                     subject_dir=self.sd.subject_dir,
-                    iters=20,
+                    iters=5,
                 )
                 orig_nofix = orig_nofix_final
     

@@ -148,45 +148,22 @@ workflow {
 // ============================================
 // WORKFLOW COMPLETION HANDLER
 // ============================================
-// Report summary of pipeline execution, including any failed tasks
+// Report additional info on failed tasks (Nextflow already prints summary)
 workflow.onComplete {
-    def duration = workflow.duration
-    def successCount = workflow.stats.succeededCount
     def failedCount = workflow.stats.failedCount
     def ignoredCount = workflow.stats.ignoredCount
-    def cachedCount = workflow.stats.cachedCount
     
-    println ""
-    println "=" * 60
-    println "PIPELINE EXECUTION SUMMARY"
-    println "=" * 60
-    println "Status:     ${workflow.success ? 'COMPLETED' : 'FAILED'}"
-    println "Duration:   ${duration}"
-    println "Succeeded:  ${successCount}"
-    println "Cached:     ${cachedCount}"
-    println "Failed:     ${failedCount}"
-    println "Ignored:    ${ignoredCount}"
-    println "=" * 60
-    
-    // Report on ignored/failed tasks (typically surface reconstruction failures)
+    // Report on failed/ignored tasks (typically surface reconstruction failures)
     if (ignoredCount > 0 || failedCount > 0) {
         println ""
-        println "WARNING: Some tasks failed or were ignored."
+        println "WARNING: Some tasks failed (${failedCount + ignoredCount} total)."
         println "This may include surface reconstruction jobs that failed due to image quality issues."
         println ""
-        println "To see details of failed tasks, check the trace file:"
+        println "To see details, check the trace file:"
         println "  ${params.output_dir}/nextflow_reports/nextflow_trace.txt"
         println ""
         println "Filter for failed tasks with:"
         println "  grep -E 'FAILED|ABORTED' ${params.output_dir}/nextflow_reports/nextflow_trace.txt"
-        println ""
-        
-        // If there were failures but workflow still completed (due to errorStrategy 'ignore'),
-        // report as "completed with warnings"
-        if (workflow.success && (ignoredCount > 0 || failedCount > 0)) {
-            println "Pipeline completed with ${ignoredCount + failedCount} task(s) that failed/were ignored."
-            println "Review the trace file to identify affected subjects."
-        }
     }
     
     println ""

@@ -26,9 +26,9 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
 # BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_easy_downsampled_multianat
-# OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_downsampled_multianat_v1
+# OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_downsampled_multianat_v2
 # BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_easy_downsampled"
-# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_downsampled_v5"
+# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_downsampled_v6"
 # BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_2pass"
 # OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_2pass_nextflow"
 # BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_multiple"

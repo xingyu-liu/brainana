@@ -20,6 +20,7 @@ include { ANAT_REORIENT as ANAT_REORIENT_T2W } from '../modules/anatomical.nf'
 include { ANAT_CONFORM } from '../modules/anatomical.nf'
 include { ANAT_CONFORM as ANAT_CONFORM_T2W } from '../modules/anatomical.nf'
 include { ANAT_BIAS_CORRECTION } from '../modules/anatomical.nf'
+include { ANAT_BIAS_CORRECTION as ANAT_BIAS_CORRECTION_T2W } from '../modules/anatomical.nf'
 include { ANAT_SKULLSTRIPPING } from '../modules/anatomical.nf'
 include { ANAT_SKULLSTRIPPING as ANAT_SKULLSTRIPPING_T2W } from '../modules/anatomical.nf'
 include { ANAT_SURFACE_RECONSTRUCTION } from '../modules/anatomical.nf'
@@ -29,16 +30,19 @@ include { ANAT_T2W_TO_T1W_REGISTRATION } from '../modules/anatomical.nf'
 include { ANAT_CONFORM_PASSTHROUGH } from '../modules/anatomical.nf'
 include { ANAT_CONFORM_PASSTHROUGH as ANAT_CONFORM_PASSTHROUGH_T2W } from '../modules/anatomical.nf'
 include { ANAT_BIAS_CORRECTION_PASSTHROUGH } from '../modules/anatomical.nf'
+include { ANAT_BIAS_CORRECTION_PASSTHROUGH as ANAT_BIAS_CORRECTION_PASSTHROUGH_T2W } from '../modules/anatomical.nf'
 include { ANAT_REGISTRATION_PASSTHROUGH } from '../modules/anatomical.nf'
 include { ANAT_REGISTRATION_PASSTHROUGH as ANAT_REGISTRATION_PASSTHROUGH_T2W } from '../modules/anatomical.nf'
 include { ANAT_APPLY_CONFORM } from '../modules/anatomical.nf'
 include { ANAT_APPLY_TRANSFORMATION } from '../modules/anatomical.nf'
 include { ANAT_APPLY_TRANSFORM_MASK } from '../modules/anatomical.nf'
 include { ANAT_PUBLISH_PHASE1 } from '../modules/anatomical.nf'
+include { ANAT_PUBLISH_PHASE1 as ANAT_PUBLISH_T2W } from '../modules/anatomical.nf'
 
 // Include anatomical QC modules
 include { QC_CONFORM } from '../modules/qc.nf'
 include { QC_BIAS_CORRECTION } from '../modules/qc.nf'
+include { QC_BIAS_CORRECTION as QC_BIAS_CORRECTION_T2W } from '../modules/qc.nf'
 include { QC_SKULLSTRIPPING } from '../modules/qc.nf'
 include { QC_ATLAS_SEGMENTATION } from '../modules/qc.nf'
 include { QC_SURF_RECON_TISSUE_SEG } from '../modules/qc.nf'
@@ -86,7 +90,6 @@ workflow ANAT_WF {
     configHelpers.ensureParamResolverInitialized(paramResolver, params, projectDir)
     
     // Use effective config file (generated in main.nf)
-    // This contains all resolved parameters: CLI params → YAML config → defaults.yaml
     // Get path as string - Nextflow processes can accept string paths for 'path' inputs
     def config_file_path = configHelpers.getEffectiveConfigPath(params, projectDir)
     // Pass string path directly - Nextflow will convert to file object when process executes
@@ -721,9 +724,8 @@ workflow ANAT_WF {
     // T2W PROCESSING
     // ============================================
     // Process all T2w files (both synthesized and single files)
-    // Flow: synthesis → reorient → T2w→T1w registration (anat file, not brain file) → APPLY phase (for T2w with T1w)
+    // Flow: synthesis → reorient → T2w→T1w registration → apply conform → bias correction → apply registration
     //       OR: synthesis → reorient → STOP (for T2w without T1w)
-    // Note: Bias correction is skipped for T2w images
     // ============================================
     // Step 1: Combine T2w synthesis output with single T2w files
     // anat_t2w_synthesis_output: [sub, ses, anat_file, bids_name, needs_t1w_reg]
@@ -776,12 +778,21 @@ workflow ANAT_WF {
         }
     
     def findUnmatchedT2w = channelHelpers.findUnmatchedT2w
-    def t2w_anat_selection = channelHelpers.performT2wAnatomicalSelection(
+    def t2w_anat_selection_raw = channelHelpers.performT2wAnatomicalSelection(
         t2w_all_after_reorient,
         anat_after_reorient,  // Full head T1w from reorient stage (before conform), not brain (_T1w_brain)
         isT1wFile,
         findUnmatchedT2w
     )
+    
+    // Create copies for branching and QC (channel can only be consumed once)
+    t2w_anat_selection_raw.multiMap { sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses ->
+        for_branching: [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses]
+        for_qc: [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses]
+    }.set { t2w_anat_selection_channels }
+    
+    def t2w_anat_selection = t2w_anat_selection_channels.for_branching
+    def t2w_anat_selection_for_qc = t2w_anat_selection_channels.for_qc
     
     // Step 4b: Split T2w into two paths based on T1w availability
     // Path 1: T2w with T1w (same-session or cross-session) - register to T1w space, then APPLY T1w's transforms
@@ -872,12 +883,151 @@ workflow ANAT_WF {
         t2w_after_apply_conform = t2w_after_reg_to_t1w
     }
     
-    // Step 6: Apply T1w's registration transform to T2w
+
+    // ============================================
+    // STEP 6: T2W BIAS CORRECTION
+    // ============================================
+    // Apply bias correction to T2w using T1w's brain mask in conformed space
     // Input: t2w_after_apply_conform: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+    //        anat_skull_mask: [sub, ses, mask_file] (keyed by T1w session)
+    // Output: t2w_after_bias: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+    //         t2w_after_bias_brain: [sub, ses, brain_file, bids_name, anat_ses]
+    // ============================================
+    // Use multiMap to create copies for bias correction and QC (channel can only be consumed once)
+    t2w_after_apply_conform.multiMap { sub, ses, t2w_file, t2w_bids_name, anat_ses ->
+        for_bias: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+        for_qc: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+    }.set { t2w_conform_channels }
+    
+    // Initialize - will be reassigned in if/else blocks
+    def t2w_after_bias = Channel.empty()
+    def t2w_before_bias_for_qc = t2w_conform_channels.for_qc
+    def t2w_after_bias_brain = Channel.empty()
+    def t2w_after_bias_for_qc_bias = Channel.empty()
+    def t2w_after_bias_for_qc_snap1 = Channel.empty()
+    
+    if (anat_bias_correction_enabled) {
+        // Join T2w with T1w's skull mask by anatomical session
+        // Use combine() + filter() pattern (same as conform/registration)
+        def t2w_with_mask = t2w_conform_channels.for_bias
+            .combine(anat_skull_mask, by: 0)  // Combine by subject only
+            .filter { sub, ses, t2w_file, t2w_bids_name, anat_ses, mask_ses, mask_file ->
+                matchSessions(anat_ses, mask_ses)
+            }
+        
+        // Branch: real mask vs dummy mask
+        t2w_with_mask.branch {
+            with_mask: !it[6].toString().contains('.dummy')
+            no_mask: it[6].toString().contains('.dummy')
+        }.set { t2w_bias_branched }
+        
+        // ----------------------------------------
+        // Path 1: With real mask - run bias correction
+        // ----------------------------------------
+        // Use multiMap to create all needed channels from single consumption of branch
+        t2w_bias_branched.with_mask.multiMap { sub, ses, t2w_file, t2w_bids_name, anat_ses, mask_ses, mask_file ->
+            files: [sub, ses, t2w_file, t2w_bids_name]
+            masks: [sub, ses, mask_file]
+            anat_ses_lookup: [sub, ses, anat_ses, t2w_bids_name]  // Include bids_name for brain join
+        }.set { t2w_with_mask_channels }
+        
+        ANAT_BIAS_CORRECTION_T2W(t2w_with_mask_channels.files, t2w_with_mask_channels.masks, config_file)
+        
+        // Join output with anat_ses lookup to restore anat_ses
+        def t2w_with_mask_output = ANAT_BIAS_CORRECTION_T2W.out.output
+            .join(t2w_with_mask_channels.anat_ses_lookup, by: [0, 1])
+            .map { sub, ses, t2w_file, t2w_bids_name, anat_ses, orig_bids_name ->
+                [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+            }
+        // Join brain with anat_ses and bids_name from lookup
+        def t2w_with_mask_brain = ANAT_BIAS_CORRECTION_T2W.out.brain
+            .join(t2w_with_mask_output.map { sub, ses, t2w_file, t2w_bids_name, anat_ses -> 
+                [sub, ses, anat_ses, t2w_bids_name] 
+            }, by: [0, 1])
+            .map { sub, ses, brain_file, anat_ses, t2w_bids_name ->
+                [sub, ses, brain_file, t2w_bids_name, anat_ses]
+            }
+        
+        // ----------------------------------------
+        // Path 2: No mask (dummy) - passthrough
+        // ----------------------------------------
+        // Use multiMap to create all needed channels from single consumption of branch
+        t2w_bias_branched.no_mask.multiMap { sub, ses, t2w_file, t2w_bids_name, anat_ses, mask_ses, mask_file ->
+            files: [sub, ses, t2w_file, t2w_bids_name]
+            anat_ses_lookup: [sub, ses, anat_ses, t2w_bids_name]  // Include bids_name for brain join
+        }.set { t2w_no_mask_channels }
+        
+        ANAT_BIAS_CORRECTION_PASSTHROUGH_T2W(t2w_no_mask_channels.files, config_file)
+        
+        // Join output with anat_ses lookup to restore anat_ses
+        def t2w_no_mask_output = ANAT_BIAS_CORRECTION_PASSTHROUGH_T2W.out.output
+            .join(t2w_no_mask_channels.anat_ses_lookup, by: [0, 1])
+            .map { sub, ses, t2w_file, t2w_bids_name, anat_ses, orig_bids_name ->
+                [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+            }
+        // Join brain with anat_ses and bids_name from output
+        def t2w_no_mask_brain = ANAT_BIAS_CORRECTION_PASSTHROUGH_T2W.out.brain
+            .join(t2w_no_mask_output.map { sub, ses, t2w_file, t2w_bids_name, anat_ses -> 
+                [sub, ses, anat_ses, t2w_bids_name] 
+            }, by: [0, 1])
+            .map { sub, ses, brain_file, anat_ses, t2w_bids_name ->
+                [sub, ses, brain_file, t2w_bids_name, anat_ses]
+            }
+        
+        // ----------------------------------------
+        // Mix outputs from both paths
+        // ----------------------------------------
+        def t2w_bias_mixed = t2w_with_mask_output.mix(t2w_no_mask_output)
+        t2w_after_bias_brain = t2w_with_mask_brain.mix(t2w_no_mask_brain)
+        
+        // Create multiple copies for: publish, registration, QC bias, QC snap1
+        // (channels can only be consumed once)
+        t2w_bias_mixed.multiMap { sub, ses, t2w_file, t2w_bids_name, anat_ses ->
+            for_publish: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+            for_registration: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+            for_qc_bias: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+            for_qc_snap1: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+        }.set { t2w_after_bias_channels }
+        
+        t2w_after_bias = t2w_after_bias_channels.for_registration
+        t2w_after_bias_for_qc_bias = t2w_after_bias_channels.for_qc_bias
+        t2w_after_bias_for_qc_snap1 = t2w_after_bias_channels.for_qc_snap1
+        
+        // ----------------------------------------
+        // Publish T2w Phase 1 outputs (desc-preproc naming)
+        // ----------------------------------------
+        def t2w_publish_input = t2w_after_bias_channels.for_publish
+            .join(t2w_after_bias_brain, by: [0, 1])
+            .filter { sub, ses, t2w_file, t2w_bids, anat_ses, brain_file, brain_bids, brain_anat_ses ->
+                // Only publish if not dummy
+                !t2w_file.toString().contains('.dummy')
+            }
+            .map { sub, ses, t2w_file, t2w_bids, anat_ses, brain_file, brain_bids, brain_anat_ses ->
+                [sub, ses, t2w_file, brain_file, t2w_bids]
+            }
+        
+        ANAT_PUBLISH_T2W(t2w_publish_input, config_file)
+    } else {
+        // Bias correction disabled - pass through
+        // Create copies for registration and QC
+        t2w_conform_channels.for_bias.multiMap { sub, ses, t2w_file, t2w_bids_name, anat_ses ->
+            for_registration: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+            for_qc_snap1: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+        }.set { t2w_passthrough_channels }
+        
+        t2w_after_bias = t2w_passthrough_channels.for_registration
+        t2w_after_bias_for_qc_snap1 = t2w_passthrough_channels.for_qc_snap1
+    }
+    
+    // ============================================
+    // STEP 7: Apply T1w's registration transform to T2w
+    // ============================================
+    // Input: t2w_after_bias: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
     //        anat_reg_transforms: [sub, ses, forward_xfm, inverse_xfm] (keyed by T1w session)
     //        anat_reg_reference: [sub, ses, reference] (keyed by T1w session)
     // Output: t2w_after_apply_reg: [sub, ses, t2w_file, t2w_bids_name]
-    def t2w_after_apply_reg = t2w_after_apply_conform
+    // ============================================
+    def t2w_after_apply_reg = t2w_after_bias
     if (registration_enabled) {
         // IMPORTANT: Use combine() + filter() instead of join() because multiple T2w sessions
         // may reference the SAME T1w session. join() causes race condition.
@@ -885,24 +1035,24 @@ workflow ANAT_WF {
             .map { sub, ses, forward_xfm, inverse_xfm -> [sub, ses, forward_xfm] }
             .join(anat_reg_reference, by: [0, 1])
         
-        def t2w_for_apply_reg = t2w_after_apply_conform
-            .map { sub, ses, conformed_t2w, t2w_bids_name, anat_ses ->
-                [sub, ses, conformed_t2w, t2w_bids_name, anat_ses]
+        def t2w_for_apply_reg = t2w_after_bias
+            .map { sub, ses, t2w_file, t2w_bids_name, anat_ses ->
+                [sub, ses, t2w_file, t2w_bids_name, anat_ses]
             }
             .combine(anat_reg_data, by: 0)  // Combine by subject only
-            .filter { sub, ses, conformed_t2w, t2w_bids_name, anat_ses, reg_ses, forward_xfm, reference ->
+            .filter { sub, ses, t2w_file, t2w_bids_name, anat_ses, reg_ses, forward_xfm, reference ->
                 matchSessions(anat_ses, reg_ses)
             }
-            .map { sub, ses, conformed_t2w, t2w_bids_name, anat_ses, reg_ses, forward_xfm, reference ->
-                [sub, ses, conformed_t2w, t2w_bids_name, forward_xfm, reference]
+            .map { sub, ses, t2w_file, t2w_bids_name, anat_ses, reg_ses, forward_xfm, reference ->
+                [sub, ses, t2w_file, t2w_bids_name, forward_xfm, reference]
             }
         
         ANAT_APPLY_TRANSFORMATION(t2w_for_apply_reg, config_file)
         t2w_after_apply_reg = ANAT_APPLY_TRANSFORMATION.out.output
     } else {
-        t2w_after_apply_reg = t2w_after_apply_conform
-            .map { sub, ses, conformed_t2w, t2w_bids_name, anat_ses ->
-                [sub, ses, conformed_t2w, t2w_bids_name]
+        t2w_after_apply_reg = t2w_after_bias
+            .map { sub, ses, t2w_file, t2w_bids_name, anat_ses ->
+                [sub, ses, t2w_file, t2w_bids_name]
             }
     }
     
@@ -913,9 +1063,10 @@ workflow ANAT_WF {
     // ============================================
     // T2W QUALITY CONTROL
     // ============================================
-    // Two QC snaps for T2w with T1w:
-    // 1. T2w→T1w registration QC: T2w in T1w space (after T2w→T1w reg) with T1w brain contours
-    // 2. T2w in template space QC: T2w in template space (after all transforms) with template contours
+    // Three QC snaps for T2w with T1w:
+    // 1. T2w bias correction QC: Before/after bias correction comparison
+    // 2. T2w→T1w registration QC: T2w in T1w space (after bias correction) with T1w brain contours
+    // 3. T2w in template space QC: T2w in template space (after all transforms) with template contours
     // ============================================
     
     // Filter T1w brain images for QC
@@ -923,22 +1074,46 @@ workflow ANAT_WF {
         .filter(isT1wFile)
     
     // ============================================
+    // QC SNAP 0: T2w Bias Correction
+    // ============================================
+    // Compare T2w before and after bias correction
+    // Input: t2w_before_bias_for_qc: [sub, ses, t2w_file, t2w_bids_name, anat_ses] (before)
+    //        t2w_after_bias: [sub, ses, t2w_file, t2w_bids_name, anat_ses] (after)
+    // ============================================
+    if (anat_bias_correction_enabled) {
+        def t2w_bias_qc_input = t2w_before_bias_for_qc
+            .map { sub, ses, t2w_file, t2w_bids_name, anat_ses -> [sub, ses, t2w_file, t2w_bids_name] }
+            .join(t2w_after_bias_for_qc_bias
+                .filter { sub, ses, t2w_file, t2w_bids_name, anat_ses ->
+                    // Only generate QC for real bias-corrected files (not passthrough)
+                    !t2w_file.toString().contains('.dummy') && t2w_file.toString().contains('desc-biascorrect')
+                }
+                .map { sub, ses, t2w_file, t2w_bids_name, anat_ses -> [sub, ses, t2w_file, t2w_bids_name] },
+                by: [0, 1])
+            .map { sub, ses, before_file, before_bids, after_file, after_bids ->
+                [sub, ses, before_file, after_file, after_bids]
+            }
+        
+        QC_BIAS_CORRECTION_T2W(t2w_bias_qc_input, config_file)
+    }
+    
+    // ============================================
     // QC SNAP 1: T2w→T1w Registration
     // ============================================
-    // Underlay: Conformed T2w (after applying conform transform)
+    // Underlay: Bias-corrected T2w (after bias correction)
     // Overlay: T1w brain - contours will be generated
-    // Input: t2w_after_apply_conform: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
+    // Input: t2w_after_bias_for_qc_snap1: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
     //        t1w_brain: [sub, ses, t1w_file, t1w_bids_name] (keyed by anatomical session)
     // ============================================
     // IMPORTANT: Use combine() + filter() instead of join() because multiple T2w sessions
     // may reference the SAME T1w session. join() causes race condition.
-    def t2w_qc1_input = t2w_after_apply_conform
+    def t2w_qc1_input = t2w_after_bias_for_qc_snap1
         .map { sub, ses, t2w_file, t2w_bids_name, anat_ses ->
             [sub, ses, t2w_file, t2w_bids_name, anat_ses]
         }
         .combine(t1w_brain, by: 0)  // Combine by subject only
         .filter { sub, ses, t2w_file, t2w_bids_name, anat_ses, t1w_ses, t1w_file, t1w_bids_name ->
-            anat_ses == t1w_ses  // Keep only where T2w's anat_ses matches T1w session
+            matchSessions(anat_ses, t1w_ses)  // Keep only where T2w's anat_ses matches T1w session
         }
         .map { sub, ses, t2w_file, t2w_bids_name, anat_ses, t1w_ses, t1w_file, t1w_bids_name ->
             [sub, ses, t2w_file, t1w_file, t2w_bids_name]
@@ -960,13 +1135,13 @@ workflow ANAT_WF {
     // Underlay: T2w after all transforms (in template space)
     // Overlay: Template reference - contours will be generated
     // Input: t2w_after_apply_reg: [sub, ses, t2w_file, t2w_bids_name]
-    //        t2w_anat_selection: [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses] (to get anat_ses)
+    //        t2w_anat_selection_for_qc: [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses] (to get anat_ses)
     //        anat_reg_reference: [sub, ses, reference] (keyed by anatomical session)
     // ============================================
     // IMPORTANT: Use combine() + filter() instead of join() for the anat_reg_reference join
     // because multiple T2w sessions may reference the SAME T1w session. join() causes race condition.
     def t2w_qc2_input = t2w_after_apply_reg
-        .join(t2w_anat_selection
+        .join(t2w_anat_selection_for_qc
             .filter { sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses -> t1w_file != null }
             .map { sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses -> [sub, ses, anat_ses] },
             by: [0, 1])
@@ -975,7 +1150,7 @@ workflow ANAT_WF {
         }
         .combine(anat_reg_reference, by: 0)  // Combine by subject only
         .filter { sub, ses, registered_t2w_file, t2w_bids_name, anat_ses, ref_ses, template_ref ->
-            anat_ses == ref_ses  // Keep only where T2w's anat_ses matches reference session
+            matchSessions(anat_ses, ref_ses)  // Keep only where T2w's anat_ses matches reference session
         }
         .map { sub, ses, registered_t2w_file, t2w_bids_name, anat_ses, ref_ses, template_ref ->
             [sub, ses, registered_t2w_file, template_ref, t2w_bids_name]
@@ -1009,6 +1184,7 @@ workflow ANAT_WF {
     }
     if (anat_bias_correction_enabled) {
         anat_qc_channels = anat_qc_channels.mix(QC_BIAS_CORRECTION.out.metadata)
+        anat_qc_channels = anat_qc_channels.mix(QC_BIAS_CORRECTION_T2W.out.metadata)
     }
     if (anat_skullstripping_enabled) {
         anat_qc_channels = anat_qc_channels.mix(QC_SKULLSTRIPPING.out.metadata)

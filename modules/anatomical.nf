@@ -316,11 +316,12 @@ process ANAT_BIAS_CORRECTION {
     
     output:
     // Bias-corrected full head output: [sub, ses, biascorrected_file, bids_template]
-    // Use specific pattern to exclude brain file
-    tuple val(subject_id), val(session_id), path("*desc-biascorrect*_T1w.nii.gz"), val(bids_name), emit: output
+    // Use T?w pattern to match both T1w and T2w modalities
+    tuple val(subject_id), val(session_id), path("*desc-biascorrect*_T?w.nii.gz"), val(bids_name), emit: output
     // Brain output: [sub, ses, brain_file] - will be joined with bids_template in workflow
     // Use desc-biascorrect naming (not desc-preproc) - publishing step will handle preproc naming
-    tuple val(subject_id), val(session_id), path("*desc-biascorrect*_brain.nii.gz"), emit: brain
+    // Use T?w pattern to match both T1w and T2w modalities
+    tuple val(subject_id), val(session_id), path("*desc-biascorrect*_T?w_brain.nii.gz"), emit: brain
     path "*.json", emit: metadata
     
     script:
@@ -1062,12 +1063,13 @@ process ANAT_BIAS_CORRECTION_PASSTHROUGH {
     
     output:
     // Bias-corrected full head output (passthrough): [sub, ses, biascorrected_file, bids_template]
-    // Use specific pattern to exclude brain file
-    tuple val(subject_id), val(session_id), path("*desc-biascorrect*_T1w.nii.gz"), val(bids_name), emit: output
+    // Use T?w pattern to match both T1w and T2w modalities
+    tuple val(subject_id), val(session_id), path("*desc-biascorrect*_T?w.nii.gz"), val(bids_name), emit: output
     // Always output dummy brain for consistent structure (matches ANAT_BIAS_CORRECTION.out.brain)
     // Brain output: [sub, ses, brain_file] - will be joined with bids_template in workflow
     // Use desc-biascorrect naming (not desc-preproc) - publishing step will handle preproc naming
-    tuple val(subject_id), val(session_id), path("*desc-biascorrect*_brain.nii.gz"), emit: brain
+    // Use T?w pattern to match both T1w and T2w modalities
+    tuple val(subject_id), val(session_id), path("*desc-biascorrect*_T?w_brain.nii.gz"), emit: brain
     path "*.json", emit: metadata
     
     script:
