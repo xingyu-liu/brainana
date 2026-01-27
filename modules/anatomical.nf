@@ -417,7 +417,7 @@ process ANAT_SKULLSTRIPPING {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*desc-brain*.nii.gz',
+        pattern: '*desc-brain*',
         enabled: true
     
     input:
@@ -433,6 +433,7 @@ process ANAT_SKULLSTRIPPING {
     tuple val(subject_id), val(session_id), path("*_desc-brain_mask.nii.gz"), emit: brain_mask
     tuple val(subject_id), val(session_id), path("*_desc-brain_hemimask.nii.gz"), optional: true, emit: brain_hemimask
     tuple val(subject_id), val(session_id), path("*_desc-brain_atlas*.nii.gz"), optional: true, emit: brain_segmentation
+    tuple val(subject_id), val(session_id), path("*_desc-brain_atlas*.tsv"), optional: true, emit: brain_segmentation_lut
     val gpu_id, emit: gpu_token
     path "*.json", emit: metadata
     
@@ -531,6 +532,14 @@ if "hemimask" in result.additional_files:
 if "input_cropped" in result.additional_files:
     # Keep original name for input_cropped (or define BIDS name if needed)
     create_output_link(result.additional_files["input_cropped"], result.additional_files["input_cropped"].name)
+
+if "atlas_lut" in result.additional_files:
+    # LUT same base as segmentation: desc-brain_atlas{atlas_name}.tsv
+    if atlas_name:
+        bids_additional_name = f"{bids_prefix_wo_modality}_desc-brain_atlas{atlas_name}.tsv"
+    else:
+        bids_additional_name = f"{bids_prefix_wo_modality}_desc-brain_segmentation.tsv"
+    create_output_link(result.additional_files["atlas_lut"], bids_additional_name)
 
 # Save metadata
 save_metadata(result.metadata)

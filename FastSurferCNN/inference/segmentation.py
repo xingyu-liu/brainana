@@ -20,6 +20,7 @@ which generates segmentation, brain mask, and hemisphere mask outputs.
 """
 
 import logging
+import shutil
 from pathlib import Path
 from typing import Dict, Optional, Union, Literal
 
@@ -311,6 +312,18 @@ def run_segmentation(
             logger.info(f"Output: hemisphere_mask={seg_results.get('hemimask')}")
         if 'input_cropped' in seg_results:
             logger.info(f"Output: input_cropped={seg_results.get('input_cropped')}")
+        
+        # Save LUT alongside segmentation when available (multi-class with atlas)
+        if "segmentation" in seg_results and atlas_name is not None:
+            fastsurfercnn_dir = FASTSURFER_ROOT / "FastSurferCNN"
+            lut_path = fastsurfercnn_dir / "atlas" / f"atlas-{atlas_name}" / f"{atlas_name}_ColorLUT.tsv"
+            if lut_path.exists():
+                output_f = str(seg_results["segmentation"])
+                lut_out = output_f.replace(".nii.gz", "_lut.tsv").replace(".mgz", "_lut.tsv")
+                shutil.copy2(lut_path, lut_out)
+                logger.info(f"Output: LUT saved to {lut_out}")
+            else:
+                logger.debug(f"LUT not found at {lut_path}, skipping LUT save")
         
         # Apply ROI WM fixing if enabled
         if fix_roi_wm:

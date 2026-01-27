@@ -18,7 +18,7 @@ from FastSurferCNN.inference.segmentation import run_segmentation
 # # # anat 
 # input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/anat"
 # input_image = f"{input_dir}/anat_marge_upright.nii.gz"
-input_image = "/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/test_BC/anat/input_rescaled.nii.gz"
+input_image = "/mnt/DataDrive3/xliu/prep_test/banana_test/surf_recon/sub-032_ses-03months_reuse/others/T1wT2wCI.nii.gz"
 
 # surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/FastSurferCNN_training/test_surfrecon'
 # input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'

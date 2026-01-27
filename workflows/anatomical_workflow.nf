@@ -2,9 +2,8 @@
  * Anatomical Processing Workflow
  * 
  * Handles all anatomical processing steps including:
- * - Input validation and config reading
  * - Anatomical job parsing
- * - Anatomical processing pipeline (synthesis, reorient, conform, bias correction, skull stripping, registration)
+ * - Anatomical processing pipeline
  * - Surface reconstruction
  * - T2w special processing
  * - Anatomical QC steps
@@ -86,14 +85,10 @@ workflow ANAT_WF {
     // INITIALIZATION
     // ============================================
     // Initialize parameter resolver (if not already initialized in main.nf)
-    // This is safe to call multiple times - it will only load configs once
     configHelpers.ensureParamResolverInitialized(paramResolver, params, projectDir)
     
     // Use effective config file (generated in main.nf)
-    // Get path as string - Nextflow processes can accept string paths for 'path' inputs
     def config_file_path = configHelpers.getEffectiveConfigPath(params, projectDir)
-    // Pass string path directly - Nextflow will convert to file object when process executes
-    // This avoids early validation issues with file() in workflow blocks
     def config_file = config_file_path
     
     // ============================================
@@ -101,9 +96,6 @@ workflow ANAT_WF {
     // ============================================
     // Priority: CLI params → YAML config → defaults.yaml
     // All defaults come from defaults.yaml - no hardcoded values
-    
-    // Resolve YAML-only boolean parameters
-    // All defaults come from defaults.yaml
     def surf_recon_enabled = paramResolver.getYamlBool("anat.surface_reconstruction.enabled")
     def anat_reorient_enabled = paramResolver.getYamlBool("anat.reorient.enabled")
     def anat_conform_enabled = paramResolver.getYamlBool("anat.conform.enabled")
@@ -365,6 +357,9 @@ workflow ANAT_WF {
     // This ensures Nextflow can validate structure at parse time
     def anat_skull_mask = anat_skull_mask_dummy
     
+    // Atlas LUT (optional): only when skullstripping + multi-class atlas; empty when disabled
+    def anat_skull_seg_lut = Channel.empty()
+    
     if (anat_skullstripping_enabled) {
         ANAT_SKULLSTRIPPING(anat_after_conform, config_file, gpu_queue)
         ANAT_SKULLSTRIPPING.out.gpu_token.subscribe { gpu_queue << it }
@@ -392,6 +387,7 @@ workflow ANAT_WF {
                 [sub, ses, real_seg ?: seg_list[0]]
             }
         anat_skull_seg = skull_seg_with_fallback
+        anat_skull_seg_lut = ANAT_SKULLSTRIPPING.out.brain_segmentation_lut
     }
     
     // ============================================
@@ -404,8 +400,6 @@ workflow ANAT_WF {
     //         anat_after_bias_brain: [sub, ses, brain_file, bids_name] (bias-corrected brain _T1w_brain, always available - real or dummy)
     // Principle: anat_after_xxxstep = full head (_T1w), anat_after_xxxstep_brain = brain (_T1w_brain)
     // ============================================
-    // Initialize to ensure they're always defined (will be reassigned in if/else blocks)
-    // Use workflow-level variables (no 'def') so they're accessible to emit statement
     anat_after_bias = anat_after_conform.map(passThroughAnat)
     anat_after_bias_brain = Channel.empty()
     if (anat_bias_correction_enabled) {
@@ -844,13 +838,8 @@ workflow ANAT_WF {
         }
     
     // ============================================
-    // T2W APPLY PHASE (only for T2w with T1w)
+    // Apply T1w's conform transform to T2w
     // ============================================
-    // Apply T1w's computed transforms to T2w
-    // Flow: Apply conform → Apply registration
-    // ============================================
-    
-    // Step 5: Apply T1w's conform transform to T2w
     // Input: t2w_after_reg_to_t1w: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
     //        anat_conform_transforms: [sub, ses, forward_xfm, inverse_xfm] (keyed by T1w session)
     //        anat_conform_reference: [sub, ses, reference] (keyed by T1w session)
@@ -858,8 +847,6 @@ workflow ANAT_WF {
     def t2w_after_apply_conform = t2w_after_reg_to_t1w
     if (anat_conform_enabled) {
         // Join T2w with T1w's conform transform by anatomical session
-        // IMPORTANT: Use combine() + filter() instead of join() because multiple T2w sessions
-        // may reference the SAME T1w session. join() causes race condition, combine() creates
         // all subject-level combinations, then filter keeps only matching anat_ses.
         def anat_conform_data = anat_conform_transforms
             .map { sub, ses, forward_xfm, inverse_xfm -> [sub, ses, forward_xfm] }
@@ -869,7 +856,7 @@ workflow ANAT_WF {
             .map { sub, ses, t2w_file, t2w_bids_name, anat_ses ->
                 [sub, ses, t2w_file, t2w_bids_name, anat_ses]
             }
-            .combine(anat_conform_data, by: 0)  // Combine by subject only
+            .combine(anat_conform_data, by: 0)
             .filter { sub, ses, t2w_file, t2w_bids_name, anat_ses, conform_ses, forward_xfm, reference ->
                 matchSessions(anat_ses, conform_ses)
             }
@@ -883,9 +870,8 @@ workflow ANAT_WF {
         t2w_after_apply_conform = t2w_after_reg_to_t1w
     }
     
-
     // ============================================
-    // STEP 6: T2W BIAS CORRECTION
+    // T2W BIAS CORRECTION
     // ============================================
     // Apply bias correction to T2w using T1w's brain mask in conformed space
     // Input: t2w_after_apply_conform: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
@@ -1018,9 +1004,16 @@ workflow ANAT_WF {
         t2w_after_bias = t2w_passthrough_channels.for_registration
         t2w_after_bias_for_qc_snap1 = t2w_passthrough_channels.for_qc_snap1
     }
+
     
     // ============================================
-    // STEP 7: Apply T1w's registration transform to T2w
+    // Generate T1wT2wCombined image
+    // ============================================
+
+
+    
+    // ============================================
+    // Apply T1w's registration transform to T2w
     // ============================================
     // Input: t2w_after_bias: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
     //        anat_reg_transforms: [sub, ses, forward_xfm, inverse_xfm] (keyed by T1w session)

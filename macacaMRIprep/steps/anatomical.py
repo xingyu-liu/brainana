@@ -187,7 +187,8 @@ def anat_skullstripping(input: StepInput) -> StepOutput:
         input: StepInput with input_file, working_dir, config, metadata
         
     Returns:
-        StepOutput with skull-stripped file, brain mask, and segmentation
+        StepOutput with skull-stripped file, brain mask, segmentation,
+        atlas LUT (ColorLUT TSV, same base as segmentation), and optional hemimask
     """
     if not input.config.get("anat.skullstripping_segmentation.enabled", True):
         logger.info("Step: skull stripping skipped (disabled in configuration)")
@@ -217,6 +218,8 @@ def anat_skullstripping(input: StepInput) -> StepOutput:
         additional_files["hemimask"] = Path(result["hemimask"])
     if result.get("input_cropped"):
         additional_files["input_cropped"] = Path(result["input_cropped"])
+    if result.get("atlas_lut"):
+        additional_files["atlas_lut"] = Path(result["atlas_lut"])
     
     return StepOutput(
         output_file=output_file,

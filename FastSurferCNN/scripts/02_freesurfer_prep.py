@@ -17,13 +17,13 @@ from FastSurferCNN.utils.constants import FASTSURFER_ROOT
 
 # %%
 # Test paths
-common_dir = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/histology_test/surf'
+common_dir = '/mnt/DataDrive3/xliu/prep_test/banana_test/surf_recon/sub-032_ses-03months/mri/'
 skullstripped_dir = f'{common_dir}'
-output_dir = f'{skullstripped_dir}/sub-histology'
+output_dir = f'{skullstripped_dir}/test'
 
-t1w_f = f'{skullstripped_dir}/ugly_lh_res-05_conformed_fullbrain.nii.gz'
-seg_f = f'{skullstripped_dir}/atlas-ARM2_space-conformed_res-05_hemi-lh_WMCorrected_fullbrain.nii.gz'
-mask_f = f'{skullstripped_dir}/mask_improved_fullbrain_improved.nii.gz'
+t1w_f = f'{skullstripped_dir}/orig.mgz'
+seg_f = f'{skullstripped_dir}/aparc.ARM2atlas+aseg.orig.mgz'
+mask_f = f'{skullstripped_dir}/mask.mgz'
 
 # Checkpoint to extract atlas name from
 ckpt_f = '/home/star/github/banana/FastSurferCNN/pretrained_model/T1w_seg-ARM2_coronal.pkl'

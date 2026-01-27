@@ -1103,6 +1103,7 @@ def apply_segmentation(
         - 'brain_mask': Path to brain mask file
         - 'segmentation': Path to segmentation file (optional, if generated)
         - 'hemimask': Path to hemisphere mask file (optional, if generated)
+        - 'atlas_lut': Path to atlas ColorLUT TSV (optional, same base as segmentation, .tsv)
         - 'atlas_name': Name of atlas used (optional)
         - 'input_cropped': Path to cropped input (optional, if two-pass refinement used)
         
@@ -1136,6 +1137,7 @@ def apply_segmentation(
     brain_segmentation_path = None
     brain_hemimask_path = None
     brain_input_cropped_path = None
+    brain_lut_path = None
     atlas_name = None
 
     # FastSurferCNN segmentation
@@ -1208,6 +1210,12 @@ def apply_segmentation(
             brain_segmentation_path = work_dir / 'brain_segmentation.nii.gz'
             shutil.move(fastsurfercnn_seg_path, brain_segmentation_path)
             logger.info(f"Output: brain segmentation moved from {fastsurfercnn_seg_path} to {brain_segmentation_path}")
+            # Move LUT alongside segmentation (same base name, .nii.gz → .tsv)
+            fastsurfercnn_lut_path = temp_output_dir / 'segmentation_lut.tsv'
+            if fastsurfercnn_lut_path.exists():
+                brain_lut_path = work_dir / 'brain_segmentation.tsv'
+                shutil.move(str(fastsurfercnn_lut_path), str(brain_lut_path))
+                logger.info(f"Output: atlas LUT moved from {fastsurfercnn_lut_path.name} to {brain_lut_path.name}")
         
         # Move hemimask if it exists
         fastsurfercnn_hemimask_path = result.get('hemimask')
@@ -1273,6 +1281,8 @@ def apply_segmentation(
         return_dict["hemimask"] = brain_hemimask_path
     if brain_input_cropped_path is not None and os.path.exists(brain_input_cropped_path):
         return_dict["input_cropped"] = brain_input_cropped_path
+    if brain_lut_path is not None and os.path.exists(brain_lut_path):
+        return_dict["atlas_lut"] = brain_lut_path
 
     return return_dict
 
