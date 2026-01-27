@@ -548,7 +548,7 @@ process FUNC_BIAS_CORRECTION {
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.functional import func_bias_correction
 from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename, parse_bids_entities, create_bids_filename
+from macacaMRIprep.utils.bids import create_bids_output_filename, parse_bids_entities, create_bids_filename, get_bids_prefix
 from pathlib import Path
 import shutil
 import os
@@ -596,26 +596,9 @@ input_obj = StepInput(
 result = func_bias_correction(input_obj)
 
 # Generate BIDS-compliant output filename (bias correction operates on tmean, so use boldref)
-# For session-level processing (empty run_identifier), use session-level naming without run-specific entities
-if not run_identifier or run_identifier.strip() == "":
-    # Session-level: parse entities and keep only sub and ses (like FUNC_AVERAGE_TMEAN)
-    parsed = parse_bids_entities(str(bids_name))
-    filtered_entities = {}
-    if 'sub' in parsed:
-        filtered_entities['sub'] = parsed['sub']
-    if 'ses' in parsed:
-        filtered_entities['ses'] = parsed['ses']
-    # Add desc entity for bias correction (use lowercase to match output pattern)
-    filtered_entities['desc'] = 'biascorrect'
-    # Rebuild filename with suffix 'boldref'
-    bids_output_filename = create_bids_filename(filtered_entities, 'boldref', extension='.nii.gz')
-else:
-    # Run-level: preserve all entities from original template
-    bids_output_filename = create_bids_output_filename(
-        original_file_path=bids_name,
-        suffix='desc-biascorrect',
-        modality='boldref'
-    )
+# Use get_bids_prefix helper to determine session-level vs run-level naming
+bids_prefix = get_bids_prefix(bids_name, run_identifier)
+bids_output_filename = f"{bids_prefix}_desc-biascorrect_boldref.nii.gz"
 
 # Create BIDS-compliant symlink for Nextflow output and publishDir
 create_output_link(result.output_file, bids_output_filename)
@@ -656,7 +639,7 @@ process FUNC_COMPUTE_CONFORM {
     from macacaMRIprep.steps.functional import func_conform
     from macacaMRIprep.steps.types import StepInput
     from macacaMRIprep.utils.templates import resolve_template
-    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem, parse_bids_entities, create_bids_filename
+    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem, parse_bids_entities, create_bids_filename, get_bids_prefix
     from pathlib import Path
     import shutil
     import os
@@ -721,33 +704,16 @@ process FUNC_COMPUTE_CONFORM {
     result = func_conform(tmean_input_obj, target_file=target_file, bold_4d_file=None)
     
     # Generate BIDS-compliant output filename for conformed tmean
-    # For session-level processing (empty run_identifier), use session-level naming without run-specific entities
-    if not run_identifier or run_identifier.strip() == "":
-        # Session-level: parse entities and keep only sub and ses
-        parsed = parse_bids_entities(str(bids_name))
-        filtered_entities = {}
-        if 'sub' in parsed:
-            filtered_entities['sub'] = parsed['sub']
-        if 'ses' in parsed:
-            filtered_entities['ses'] = parsed['ses']
-        # Add desc entity for conform
-        filtered_entities['desc'] = 'conform'
-        # Rebuild filename with suffix 'boldref'
-        bids_output_filename_tmean = create_bids_filename(filtered_entities, 'boldref', extension='.nii.gz')
-    else:
-        # Run-level: preserve all entities from original template
-        bids_output_filename_tmean = create_bids_output_filename(
-            original_file_path=bids_name,
-            suffix='desc-conform',
-            modality='boldref'
-        )
+    # Use get_bids_prefix helper to determine session-level vs run-level naming
+    bids_prefix = get_bids_prefix(bids_name, run_identifier)
+    bids_output_filename_tmean = f"{bids_prefix}_desc-conform_boldref.nii.gz"
     
     # Create BIDS-compliant symlink for conformed tmean
     create_output_link(result.output_file, bids_output_filename_tmean)
     
     # Copy transform files with BIDS-compliant names
-    original_stem = get_filename_stem(bids_name)
-    bids_prefix = original_stem.replace('_bold', '')
+    # Use get_bids_prefix helper to determine session-level vs run-level naming
+    bids_prefix = get_bids_prefix(bids_name, run_identifier)
     
     conform_forward_transform_path = None
     conform_inverse_transform_path = None
@@ -1020,7 +986,7 @@ process FUNC_COMPUTE_BRAIN_MASK {
     \${PYTHON:-python3} <<EOF
     from macacaMRIprep.steps.functional import func_skullstripping
     from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.bids import get_filename_stem
+    from macacaMRIprep.utils.bids import get_filename_stem, get_bids_prefix
     from pathlib import Path
     import shutil
     import os
@@ -1067,28 +1033,9 @@ process FUNC_COMPUTE_BRAIN_MASK {
     result = func_skullstripping(input_obj)
     
     # Generate BIDS-compliant output filename for mask
-    # For session-level processing (empty run_identifier), use session-level naming without run-specific entities
-    from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename
-    
-    if not run_identifier or run_identifier.strip() == "":
-        # Session-level: parse entities and keep only sub and ses
-        parsed = parse_bids_entities(str(bids_name))
-        filtered_entities = {}
-        if 'sub' in parsed:
-            filtered_entities['sub'] = parsed['sub']
-        if 'ses' in parsed:
-            filtered_entities['ses'] = parsed['ses']
-        # Add desc entity for brain mask
-        filtered_entities['desc'] = 'brain'
-        # Rebuild filename with suffix 'mask'
-        bids_additional_name = create_bids_filename(filtered_entities, 'mask', extension='.nii.gz')
-        # Create prefix for brain file (without desc-brain_mask suffix)
-        bids_prefix_wobold = create_bids_filename(filtered_entities, '', extension='')
-    else:
-        # Run-level: preserve all entities from original template (except bold/boldref)
-        original_stem = get_filename_stem(bids_name)
-        bids_prefix_wobold = original_stem.replace("_bold", "").replace("_boldref", "")
-        bids_additional_name = f"{bids_prefix_wobold}_desc-brain_mask.nii.gz"
+    # Use get_bids_prefix helper to determine session-level vs run-level naming
+    bids_prefix_wobold = get_bids_prefix(bids_name, run_identifier)
+    bids_additional_name = f"{bids_prefix_wobold}_desc-brain_mask.nii.gz"
     
     # Create symlink for mask with BIDS-compliant name
     if "brain_mask" in result.additional_files:
@@ -1135,7 +1082,7 @@ process FUNC_COMPUTE_REGISTRATION {
     from macacaMRIprep.steps.functional import func_registration
     from macacaMRIprep.steps.types import StepInput
     from macacaMRIprep.utils.templates import resolve_template
-    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem, parse_bids_entities, create_bids_filename, get_bids_prefix
     from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
     from macacaMRIprep.utils import get_image_resolution, run_command
     from pathlib import Path
@@ -1225,8 +1172,8 @@ process FUNC_COMPUTE_REGISTRATION {
     
     # Create symlinks for transform files with BIDS-compliant names (both forward and inverse)
     # .h5 files can be large, so use symlinks until published - saves storage
-    original_stem = get_filename_stem(bids_name)
-    bids_prefix = original_stem.replace('_bold', '')
+    # Use get_bids_prefix helper to determine session-level vs run-level naming
+    bids_prefix = get_bids_prefix(bids_name, run_identifier)
     
     for key, f in result.additional_files.items():
         if key == 'forward_transform':
@@ -1312,7 +1259,7 @@ process FUNC_APPLY_TRANSFORMS {
     \${PYTHON:-python3} <<EOF
 from macacaMRIprep.steps.functional import func_apply_transforms
 from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem, get_bids_prefix
 from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
 from pathlib import Path
 import glob
@@ -1564,8 +1511,8 @@ if is_sequential:
         create_output_link(func_tmean_anat, intermediate_boldref_name)
         
         # Create intermediate reference file for QC (anat_reff used in func2anat transform)
-        # Use a simple naming pattern for the reference file
-        bids_prefix = get_filename_stem(bids_name).replace('_bold', '')
+        # Use get_bids_prefix helper for session-level vs run-level naming
+        bids_prefix = get_bids_prefix(bids_name, run_identifier)
         intermediate_reference_name = f"{bids_prefix}_desc-func2anat_reference.nii.gz"
         create_output_link(anat_reff, intermediate_reference_name)
         print(f"INFO: Created intermediate files for func2anat QC: {intermediate_boldref_name}, {intermediate_reference_name}", file=sys.stderr)
@@ -1641,7 +1588,8 @@ if is_sequential:
     # Output final reference file for QC: template at appropriate resolution
     # Sequential transforms: final space is template
     # Reuse template_reff (already resampled if needed) instead of resampling again
-    bids_prefix = get_filename_stem(bids_name).replace('_bold', '')
+    # Use get_bids_prefix helper for session-level vs run-level naming
+    bids_prefix = get_bids_prefix(bids_name, run_identifier)
     target_final_output = f"{bids_prefix}_target_final.nii.gz"
     target_final_path = Path(target_final_output)
     
@@ -1751,7 +1699,8 @@ else:
     
     # Output final reference file for QC: target at appropriate resolution
     # Use the same reference file that was used for the transform (already resampled if needed)
-    bids_prefix = get_filename_stem(bids_name).replace('_bold', '')
+    # Use get_bids_prefix helper for session-level vs run-level naming
+    bids_prefix = get_bids_prefix(bids_name, run_identifier)
     target_final_output = f"{bids_prefix}_target_final.nii.gz"
     target_final_path = Path(target_final_output)
     

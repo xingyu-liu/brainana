@@ -428,6 +428,15 @@ def validate_surface_reconstruction_config(config: Dict[str, Any]) -> None:
                 f"Please fix this in your configuration file."
             )
     
+    # Validate use_t1wt2wcombined flag
+    if "use_t1wt2wcombined" in config:
+        if not isinstance(config["use_t1wt2wcombined"], bool):
+            raise ValueError(
+                f"Configuration error in anat.surface_reconstruction: "
+                f"use_t1wt2wcombined must be boolean, got: {type(config['use_t1wt2wcombined']).__name__}. "
+                f"Please fix this in your configuration file."
+            )
+    
 
 def validate_paths(input_file: Union[str, Path], output_dir: Union[str, Path], 
                   template_file: Optional[Union[str, Path]] = None) -> None:

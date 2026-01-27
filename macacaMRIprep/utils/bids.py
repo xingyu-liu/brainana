@@ -195,6 +195,63 @@ def create_bids_output_filename(
     return output_filename
 
 
+def get_bids_prefix(
+    bids_name: Union[str, Path],
+    run_identifier: Optional[str] = None,
+    session_level: bool = False
+) -> str:
+    """
+    Generate BIDS prefix for output files, handling session-level vs run-level naming.
+    
+    This function provides a consistent way to generate BIDS prefixes across the pipeline,
+    especially for within-session coregistration scenarios where:
+    - Session-level processing: Keep only sub/ses entities (remove task/run/acq)
+    - Run-level processing: Preserve all entities from original template
+    
+    Args:
+        bids_name: Original BIDS filename or path
+        run_identifier: Run identifier string (empty/None for session-level)
+        session_level: Force session-level even if run_identifier is provided
+        
+    Returns:
+        BIDS prefix without modality suffix (e.g., '_bold', '_boldref')
+        
+    Examples:
+        >>> # Session-level: removes run-specific entities
+        >>> get_bids_prefix('sub-01_ses-001_task-rest_run-1_bold.nii.gz', run_identifier='')
+        'sub-01_ses-001'
+        
+        >>> # Run-level: preserves all entities
+        >>> get_bids_prefix('sub-01_ses-001_task-rest_run-1_bold.nii.gz', run_identifier='task-rest_run-1')
+        'sub-01_ses-001_task-rest_run-1'
+        
+        >>> # Force session-level
+        >>> get_bids_prefix('sub-01_ses-001_task-rest_run-1_bold.nii.gz', session_level=True)
+        'sub-01_ses-001'
+    """
+    # Determine if we should use session-level naming
+    is_session_level = session_level or not run_identifier or run_identifier.strip() == ""
+    
+    if is_session_level:
+        # Session-level: keep only sub and ses entities
+        parsed = parse_bids_entities(str(bids_name))
+        filtered_entities = {}
+        if 'sub' in parsed:
+            filtered_entities['sub'] = parsed['sub']
+        if 'ses' in parsed:
+            filtered_entities['ses'] = parsed['ses']
+        
+        # Create prefix without suffix
+        prefix = create_bids_filename(filtered_entities, '', extension='')
+        # Remove trailing underscore if present
+        return prefix.rstrip('_')
+    else:
+        # Run-level: preserve all entities from original template
+        original_stem = get_filename_stem(bids_name)
+        # Remove common modality suffixes
+        return original_stem.replace('_bold', '').replace('_boldref', '')
+
+
 def create_synthesized_bids_filename(
     original_file: Path,
     modality: str,

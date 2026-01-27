@@ -373,6 +373,13 @@
                     </div>
                     <div class="help-text">(perform surface reconstruction)</div>
                 </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="anat_surface_reconstruction_use_t1wt2wcombined" name="anat_surface_reconstruction_use_t1wt2wcombined" checked>
+                        <label for="anat_surface_reconstruction_use_t1wt2wcombined">use_t1wt2wcombined</label>
+                    </div>
+                    <div class="help-text">(use t1wt2wcombined image for surface recon if possible)</div>
+                </div>
             </div>
         </div>
 
@@ -705,7 +712,8 @@
                     }
                 },
                 surface_reconstruction: {
-                    enabled: true
+                    enabled: true,
+                    use_t1wt2wcombined: true
                 }
             },
             func: {
@@ -1078,6 +1086,7 @@
             }
             
             config.anat.surface_reconstruction.enabled = document.getElementById('anat_surface_reconstruction_enabled').checked;
+            config.anat.surface_reconstruction.use_t1wt2wcombined = document.getElementById('anat_surface_reconstruction_use_t1wt2wcombined').checked;
             
             // Functional
             config.func.coreg_runs_within_session = document.getElementById('func_coreg_runs_within_session').checked;

@@ -48,6 +48,7 @@ anat:
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
   surface_reconstruction:
     enabled: true  # bool: perform surface reconstruction
+    use_t1wt2wcombined: true  # bool: use t1wt2wcombined image for surface recon if possible
 
 func:
   coreg_runs_within_session: true

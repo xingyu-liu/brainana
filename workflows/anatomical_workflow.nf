@@ -99,6 +99,7 @@ workflow ANAT_WF {
     // Priority: CLI params → YAML config → defaults.yaml
     // All defaults come from defaults.yaml - no hardcoded values
     def surf_recon_enabled = paramResolver.getYamlBool("anat.surface_reconstruction.enabled")
+    def use_t1wt2wcombined = paramResolver.getYamlBool("anat.surface_reconstruction.use_t1wt2wcombined")
     def anat_reorient_enabled = paramResolver.getYamlBool("anat.reorient.enabled")
     def anat_conform_enabled = paramResolver.getYamlBool("anat.conform.enabled")
     def anat_bias_correction_enabled = paramResolver.getYamlBool("anat.bias_correction.enabled")
@@ -1182,9 +1183,12 @@ workflow ANAT_WF {
     def surf_recon_input = Channel.empty()
     def surf_qc_input = Channel.empty()
     if (surf_recon_enabled && anat_skullstripping_enabled) {
+        // Select anatomical channel for surface reconstruction based on config
+        def anat_for_surf_recon = use_t1wt2wcombined ? anat_after_t1wt2wcombined : anat_after_bias
+        
         // Step 0: Calculate session count per subject (for surface reconstruction naming)
         // Count unique sessions with anatomical data for each subject
-        def anat_sessions_per_subject = anat_after_t1wt2wcombined
+        def anat_sessions_per_subject = anat_for_surf_recon
             .map { sub, ses, anat_file, bids_name ->
                 [sub, ses]
             }
@@ -1198,7 +1202,7 @@ workflow ANAT_WF {
             }
 
         // Step 1: Join anatomical image with segmentation
-        def surf_recon_input_base = anat_after_t1wt2wcombined
+        def surf_recon_input_base = anat_for_surf_recon
             .join(anat_skull_seg.map { sub, ses, seg_file -> [sub, ses, seg_file] }, by: [0, 1], remainder: true)
             .map { sub, ses, anat_file, bids_name, seg_file ->
                 [sub, ses, anat_file, bids_name, seg_file]
@@ -1229,9 +1233,9 @@ workflow ANAT_WF {
         ANAT_SURFACE_RECONSTRUCTION(surf_recon_input, config_file)
         
         // Step 3: Prepare QC input channels
-        // Use a completely separate channel for QC - extract bids_name from anat_after_bias
+        // Use a completely separate channel for QC - extract bids_name from selected anatomical channel
         // Do NOT reference surf_recon_input here to avoid any channel mixing
-        def surf_qc_bids_lookup = anat_after_bias
+        def surf_qc_bids_lookup = anat_for_surf_recon
             .map { sub, ses, anat_file, bids_name ->
                 [sub, ses, bids_name]
             }
