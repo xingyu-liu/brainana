@@ -363,6 +363,108 @@ def create_bias_correction_qc(
         logger.error(f"QC: bias correction comparison generation failed - {e}")
         return {}
 
+
+def create_t1wt2w_combined_qc(
+    image_before: str,
+    image_combined: str,
+    save_f: Union[str, Path],
+    modality: str = "anat",
+    num_slices: int = 6,
+    mask_file: Optional[Union[str, Path]] = None,
+    logger: Optional[logging.Logger] = None,
+    **kwargs
+) -> Dict[str, str]:
+    """
+    Generate T1wT2wCombined quality control overlays.
+    
+    Shows before/after comparison: T1w after bias correction vs T1wT2wCombined image.
+    Optionally applies a brain mask to both images before visualization.
+    
+    Args:
+        image_before: Path to T1w image after bias correction (before)
+        image_combined: Path to T1wT2wCombined image (after)
+        save_f: Full path for output file (e.g., 'figures/sub-01_desc-T1wT2wCombined_T1w.png')
+        modality: Imaging modality ("anat" or "func")
+        num_slices: Number of slices per orientation
+        mask_file: Optional path to brain mask file (if provided, mask will be applied to both images)
+        logger: Logger instance
+        
+    Returns:
+        Dictionary with snapshot file paths
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
+    output_path = Path(save_f)
+    logger.info(f"QC: creating {modality} T1wT2wCombined comparison")
+    
+    try:
+        # Validate inputs
+        for file_path, name in [(image_before, "T1w before"), (image_combined, "T1wT2wCombined")]:
+            if not os.path.exists(file_path):
+                logger.error(f"QC: {name} file not found - {os.path.basename(file_path)}")
+                return {}
+        
+        # Apply mask if provided
+        if mask_file is not None:
+            if not os.path.exists(str(mask_file)):
+                logger.warning(f"QC: mask file not found - {os.path.basename(mask_file)}, proceeding without mask")
+            else:
+                logger.info(f"QC: applying mask to both images - {os.path.basename(mask_file)}")
+                mask_img = nib.load(str(mask_file))
+                mask_data = mask_img.get_fdata().astype(bool)
+                
+                # Load images
+                before_img = nib.load(str(image_before))
+                before_data = before_img.get_fdata()
+                if before_data.ndim == 4:
+                    before_data = np.nanmean(before_data, axis=-1)
+                
+                combined_img = nib.load(str(image_combined))
+                combined_data = combined_img.get_fdata()
+                if combined_data.ndim == 4:
+                    combined_data = np.nanmean(combined_data, axis=-1)
+
+                # Ensure mask and images have same shape
+                if mask_data.shape != before_data.shape:
+                    logger.warning(f"QC: mask shape {mask_data.shape} doesn't match image shape {before_data.shape}, skipping mask application")
+                else:
+                    # Apply mask to both images (set voxels outside mask to 0)
+                    before_data[~mask_data] = 0
+                    combined_data[~mask_data] = -1
+                    # save to temporary nifti files
+                    before_img = nib.Nifti1Image(before_data, before_img.affine, before_img.header)
+                    combined_img = nib.Nifti1Image(combined_data, combined_img.affine, combined_img.header)
+                    image_before_masked = output_path.parent / "before_masked.nii.gz"
+                    image_combined_masked = output_path.parent / "combined_masked.nii.gz"
+                    before_img.to_filename(str(image_before_masked))
+                    combined_img.to_filename(str(image_combined_masked))
+                    # update image_before and image_combined to the masked images
+                    image_before = image_before_masked
+                    image_combined = image_combined_masked
+
+        # Ensure the parent directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Create before/after comparison with two 3xN grids stacked vertically
+        # Pass numpy arrays directly (already masked if mask was provided)
+        _create_before_after_comparison(
+            image_before, 
+            image_combined,
+            num_cols=num_slices,
+            perspectives=["axial"],
+            before_after_labels=["T1w (after bias)", "T1wT2wCombined"],
+            save_f=output_path,
+            logger=logger
+        )
+        
+        logger.info(f"QC: T1wT2wCombined comparison saved - {os.path.basename(output_path)}")
+        return {f"{modality}_t1wt2w_combined_comparison": str(output_path)}
+        
+    except Exception as e:
+        logger.error(f"QC: T1wT2wCombined comparison generation failed - {e}")
+        return {}
+
 def create_atlas_segmentation_qc(
     underlay_file: str,
     atlas_file: str,

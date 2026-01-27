@@ -26,6 +26,8 @@ SNAPSHOT_MAPPINGS = {
     'func2anat': {'key': 'func2anat_registration_overlay', 'description': 'Functional to anatomical registration'},
     'func2target': {'key': 'func2target_registration_overlay', 'description': 'Functional to target registration'},
     'T2w2T1w': {'key': 'T2w2T1w_registration_overlay', 'description': 'T2w to T1w coregistration'},
+    'T2w2template': {'key': 'T2w2template_registration_overlay', 'description': 'T2w to template registration'},
+    'T1wT2wCombined': {'key': 't1wt2w_combined_comparison', 'description': 'T1wT2wCombined comparison'},
     'func_coreg': {'key': 'func_coreg_overlay', 'description': 'Within-session functional coregistration'},
     'motion': {'key': 'motion_parameters', 'description': 'Motion parameters'},
     'surfReconTissueSeg': {'key': 'surf_recon_tissue_seg_overlay', 'description': 'Surface reconstruction tissue segmentation'},
@@ -37,9 +39,11 @@ SNAPSHOT_ORDER = [
     'conform_overlay', 
     'skullstrip_overlay', 'atlas_segmentation_overlay', 
     'bias_correction_comparison', 
-    'surf_recon_tissue_seg_overlay', 'cortical_surf_and_measures_overlay',
     'anat2template_registration_overlay', 
     'T2w2T1w_registration_overlay', 
+    'T2w2template_registration_overlay',
+    't1wt2w_combined_comparison',
+    'surf_recon_tissue_seg_overlay', 'cortical_surf_and_measures_overlay',
     'func_coreg_overlay',  # Within-session coregistration (appears before run-specific snapshots)
     'func2anat_registration_overlay',  # Functional to anatomical (intermediate step in sequential transforms)
     'func2target_registration_overlay', 

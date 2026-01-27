@@ -37,6 +37,7 @@ include { ANAT_APPLY_TRANSFORMATION } from '../modules/anatomical.nf'
 include { ANAT_APPLY_TRANSFORM_MASK } from '../modules/anatomical.nf'
 include { ANAT_PUBLISH_PHASE1 } from '../modules/anatomical.nf'
 include { ANAT_PUBLISH_PHASE1 as ANAT_PUBLISH_T2W } from '../modules/anatomical.nf'
+include { ANAT_T1WT2W_COMBINED } from '../modules/anatomical.nf'
 
 // Include anatomical QC modules
 include { QC_CONFORM } from '../modules/qc.nf'
@@ -49,6 +50,7 @@ include { QC_CORTICAL_SURF_AND_MEASURES } from '../modules/qc.nf'
 include { QC_REGISTRATION } from '../modules/qc.nf'
 include { QC_T2W_TO_T1W_REGISTRATION } from '../modules/qc.nf'
 include { QC_T2W_TEMPLATE_SPACE } from '../modules/qc.nf'
+include { QC_T1WT2W_COMBINED } from '../modules/qc.nf'
 
 // Load external Groovy files for channel operations
 def channelHelpers = evaluate(new File("${projectDir}/workflows/channel_helpers.groovy").text)
@@ -432,6 +434,13 @@ workflow ANAT_WF {
                 [sub, ses, mask_file]
             }
         
+        // Extract bids_name lookup for with_mask path (needed for joining brain output)
+        // Create this BEFORE consuming bias_input_files in the process call
+        def bias_with_mask_bids_lookup = bias_correction_with_mask
+            .map { sub, ses, anat_file, bids_name, mask_file ->
+                [sub, ses, bids_name]
+            }
+        
         // Extract bids_name lookup for no_mask path (needed for joining brain output)
         def bias_no_mask_bids_lookup = bias_correction_no_mask
             .map { sub, ses, anat_file, bids_name ->
@@ -441,9 +450,9 @@ workflow ANAT_WF {
         // Run bias correction with mask (process will only run if channel has items)
         ANAT_BIAS_CORRECTION(bias_input_files, bias_input_masks, config_file)
         def bias_with_mask_output = ANAT_BIAS_CORRECTION.out.output
-        // Join brain output with bids_name from input files to match anat_after_skull structure [sub, ses, brain_file, bids_name]
+        // Join brain output with bids_name from lookup to match anat_after_skull structure [sub, ses, brain_file, bids_name]
         def bias_with_mask_brain = ANAT_BIAS_CORRECTION.out.brain
-            .join(bias_input_files.map { sub, ses, anat_file, bids_name -> [sub, ses, bids_name] }, by: [0, 1])
+            .join(bias_with_mask_bids_lookup, by: [0, 1])
             .map { sub, ses, brain_file, bids_name ->
                 [sub, ses, brain_file, bids_name]
             }
@@ -466,11 +475,15 @@ workflow ANAT_WF {
     } else {
         // If bias correction is disabled, use passthrough to maintain channel structure
         // Passthrough always outputs dummy brain for consistent structure
+        // Extract bids_name lookup BEFORE consuming anat_after_conform in process call
+        def bias_passthrough_bids_lookup = anat_after_conform
+            .map { sub, ses, anat_file, bids_name -> [sub, ses, bids_name] }
+        
         ANAT_BIAS_CORRECTION_PASSTHROUGH(anat_after_conform, config_file)
         anat_after_bias = ANAT_BIAS_CORRECTION_PASSTHROUGH.out.output
         // Join brain output with bids_template to match anat_after_skull structure [sub, ses, brain_file, bids_name]
         anat_after_bias_brain = ANAT_BIAS_CORRECTION_PASSTHROUGH.out.brain
-            .join(anat_after_conform.map { sub, ses, anat_file, bids_name -> [sub, ses, bids_name] }, by: [0, 1])
+            .join(bias_passthrough_bids_lookup, by: [0, 1])
             .map { sub, ses, brain_file, bids_name ->
                 [sub, ses, brain_file, bids_name]
             }
@@ -613,108 +626,6 @@ workflow ANAT_WF {
     }
     
     // ============================================
-    // SURFACE RECONSTRUCTION
-    // ============================================
-    // Generate cortical surfaces and measurements (requires skullstripping)
-    // Input: anat_after_bias (Phase 1 final output), anat_skull_seg, anat_skull_mask: [sub, ses, ...]
-    // Output: Surface reconstruction outputs and QC
-    // ============================================
-    def surf_recon_input = Channel.empty()
-    def surf_qc_input = Channel.empty()
-    if (surf_recon_enabled && anat_skullstripping_enabled) {
-        // Step 0: Calculate session count per subject (for surface reconstruction naming)
-        // Count unique sessions with anatomical data for each subject
-        def anat_sessions_per_subject = anat_after_bias
-            .map { sub, ses, anat_file, bids_name ->
-                [sub, ses]
-            }
-            .unique()
-            .groupTuple(by: 0)
-            .map { sub, ses_list ->
-                // Filter out empty strings and count unique sessions
-                def unique_sessions = ses_list.findAll { it && it != '' }.unique()
-                def session_count = unique_sessions.size()
-                [sub, session_count]
-            }
-        
-        // Step 1: Join bias-corrected image (Phase 1 final) with segmentation
-        // Both channels have [sub, ses] as first two elements, so use join() for exact matching
-        // Ensure clean structure: anat_after_bias = [sub, ses, anat_file, bids_name]
-        //                        anat_skull_seg = [sub, ses, seg_file]
-        def surf_recon_input_base = anat_after_bias
-            .join(anat_skull_seg.map { sub, ses, seg_file -> [sub, ses, seg_file] }, by: [0, 1])
-            .map { sub, ses, anat_file, bids_name, seg_file ->
-                [sub, ses, anat_file, bids_name, seg_file]
-            }
-        
-        // Step 2: Join with brain mask (both have [sub, ses] as first two elements)
-        // Ensure clean structure: anat_skull_mask = [sub, ses, mask_file]
-        def surf_recon_input_with_mask = surf_recon_input_base
-            .join(anat_skull_mask.map { sub, ses, mask_file -> [sub, ses, mask_file] }, by: [0, 1])
-            .map { sub, ses, anat_file, bids_name, seg_file, mask_file ->
-                [sub, ses, anat_file, bids_name, seg_file, mask_file ?: file("")]
-            }
-
-        
-        // Step 3: Join with session count (by subject only)
-        // Ensure clean structure: anat_sessions_per_subject = [sub, session_count]
-        // Use unique() to ensure only one session_count per subject
-        def anat_sessions_clean = anat_sessions_per_subject
-            .unique { sub, session_count -> sub }
-            .map { sub, session_count -> [sub, session_count] }
-        
-        surf_recon_input = surf_recon_input_with_mask
-            .combine(anat_sessions_clean, by: 0)
-            .map { sub, ses, anat_file, bids_name, seg_file, mask_file, session_count ->
-                // Ensure session_count is a single integer value, not a list
-                def count = session_count instanceof List ? session_count[0] : session_count
-                [sub, ses, anat_file, bids_name, seg_file, mask_file, count]
-            }
-        
-        // Call the process with surf_recon_input
-        // IMPORTANT: Do not reference surf_recon_input anywhere after this line to avoid channel reuse issues
-        ANAT_SURFACE_RECONSTRUCTION(surf_recon_input, config_file)
-        
-        // Step 3: Prepare QC input channels
-        // Use a completely separate channel for QC - extract bids_name from anat_after_bias
-        // Do NOT reference surf_recon_input here to avoid any channel mixing
-        def surf_qc_bids_lookup = anat_after_bias
-            .map { sub, ses, anat_file, bids_name ->
-                [sub, ses, bids_name]
-            }
-        
-        surf_qc_input = ANAT_SURFACE_RECONSTRUCTION.out.subject_dir
-            .join(ANAT_SURFACE_RECONSTRUCTION.out.actual_subject_id, by: [0, 1])
-            .join(ANAT_SURFACE_RECONSTRUCTION.out.metadata, by: [0, 1])
-            .join(surf_qc_bids_lookup, by: [0, 1])
-            .map { sub, ses, subject_dir, actual_subject_id_file, metadata_file, bids_name ->
-                def atlas_name = "ARM2"
-                try {
-                    def metadata = new groovy.json.JsonSlurper().parse(metadata_file)
-                    atlas_name = metadata.atlas_name ?: "ARM2"
-                } catch (Exception e) {
-                    println "Warning: Could not read atlas_name from metadata, using default: ${e.message}"
-                }
-                // Read actual subject ID from file
-                def actual_subject_id = actual_subject_id_file.text.trim()
-                [sub, ses, actual_subject_id, bids_name, atlas_name]
-            }
-        
-        // Step 4: Run QC processes
-        def surf_tissue_seg_qc_input = surf_qc_input
-            .map { sub, ses, actual_subject_id, bids_name, atlas_name ->
-                [sub, ses, actual_subject_id, bids_name]
-            }
-        QC_SURF_RECON_TISSUE_SEG(surf_tissue_seg_qc_input, config_file)
-        
-        QC_CORTICAL_SURF_AND_MEASURES(surf_qc_input, config_file)
-    } else {
-        if (surf_recon_enabled && !anat_skullstripping_enabled) {
-            println "Warning: Surface reconstruction is enabled but skullstripping is disabled. Skipping surface reconstruction."
-        }
-    }
-    
-    // ============================================
     // T2W PROCESSING
     // ============================================
     // Process all T2w files (both synthesized and single files)
@@ -743,14 +654,15 @@ workflow ANAT_WF {
     // Output: t2w_after_reorient: [sub, ses, anat_file, bids_name, needs_t1w_reg]
     def t2w_after_reorient = anat_t2w_all_jobs
     if (anat_reorient_enabled) {
-        anat_t2w_all_jobs
-            .map { sub, ses, anat_file, bids_name, needs_t1w_reg ->
-                [sub, ses, anat_file, bids_name]
-            }
-            .set { t2w_for_reorient }
-        ANAT_REORIENT_T2W(t2w_for_reorient, config_file)
+        // Use multiMap to create both channels from single consumption
+        anat_t2w_all_jobs.multiMap { sub, ses, anat_file, bids_name, needs_t1w_reg ->
+            for_reorient: [sub, ses, anat_file, bids_name]
+            needs_t1w_reg_lookup: [sub, ses, needs_t1w_reg]
+        }.set { t2w_reorient_channels }
+        
+        ANAT_REORIENT_T2W(t2w_reorient_channels.for_reorient, config_file)
         t2w_after_reorient = ANAT_REORIENT_T2W.out.output
-            .join(anat_t2w_all_jobs.map { sub, ses, anat_file, bids_name, needs_t1w_reg -> [sub, ses, needs_t1w_reg] }, by: [0, 1])
+            .join(t2w_reorient_channels.needs_t1w_reg_lookup, by: [0, 1])
             .map { sub, ses, anat_file, bids_name, needs_t1w_reg ->
                 [sub, ses, anat_file, bids_name, needs_t1w_reg]
             }
@@ -925,11 +837,9 @@ workflow ANAT_WF {
             .map { sub, ses, t2w_file, t2w_bids_name, anat_ses, orig_bids_name ->
                 [sub, ses, t2w_file, t2w_bids_name, anat_ses]
             }
-        // Join brain with anat_ses and bids_name from lookup
+        // Join brain with anat_ses and bids_name from lookup (use existing lookup channel, not output)
         def t2w_with_mask_brain = ANAT_BIAS_CORRECTION_T2W.out.brain
-            .join(t2w_with_mask_output.map { sub, ses, t2w_file, t2w_bids_name, anat_ses -> 
-                [sub, ses, anat_ses, t2w_bids_name] 
-            }, by: [0, 1])
+            .join(t2w_with_mask_channels.anat_ses_lookup, by: [0, 1])
             .map { sub, ses, brain_file, anat_ses, t2w_bids_name ->
                 [sub, ses, brain_file, t2w_bids_name, anat_ses]
             }
@@ -951,11 +861,9 @@ workflow ANAT_WF {
             .map { sub, ses, t2w_file, t2w_bids_name, anat_ses, orig_bids_name ->
                 [sub, ses, t2w_file, t2w_bids_name, anat_ses]
             }
-        // Join brain with anat_ses and bids_name from output
+        // Join brain with anat_ses and bids_name from lookup (use existing lookup channel, not output)
         def t2w_no_mask_brain = ANAT_BIAS_CORRECTION_PASSTHROUGH_T2W.out.brain
-            .join(t2w_no_mask_output.map { sub, ses, t2w_file, t2w_bids_name, anat_ses -> 
-                [sub, ses, anat_ses, t2w_bids_name] 
-            }, by: [0, 1])
+            .join(t2w_no_mask_channels.anat_ses_lookup, by: [0, 1])
             .map { sub, ses, brain_file, anat_ses, t2w_bids_name ->
                 [sub, ses, brain_file, t2w_bids_name, anat_ses]
             }
@@ -1005,13 +913,6 @@ workflow ANAT_WF {
         t2w_after_bias_for_qc_snap1 = t2w_passthrough_channels.for_qc_snap1
     }
 
-    
-    // ============================================
-    // Generate T1wT2wCombined image
-    // ============================================
-
-
-    
     // ============================================
     // Apply T1w's registration transform to T2w
     // ============================================
@@ -1022,8 +923,6 @@ workflow ANAT_WF {
     // ============================================
     def t2w_after_apply_reg = t2w_after_bias
     if (registration_enabled) {
-        // IMPORTANT: Use combine() + filter() instead of join() because multiple T2w sessions
-        // may reference the SAME T1w session. join() causes race condition.
         def anat_reg_data = anat_reg_transforms
             .map { sub, ses, forward_xfm, inverse_xfm -> [sub, ses, forward_xfm] }
             .join(anat_reg_reference, by: [0, 1])
@@ -1049,10 +948,136 @@ workflow ANAT_WF {
             }
     }
     
-    // Combine T2w outputs (with and without T1w)
-    def t2w_final_output = t2w_after_apply_reg
-        .mix(t2w_without_t1w_final)
+    // ============================================
+    // Generate T1wT2wCombined image
+    // ============================================
+    // Generate T1wT2wCombined image using T1w, T2w, and segmentation
+    // This is an enhanced T1w image, so output is keyed by T1w session (not T2w session)
+    // Input channels:
+    //   - t2w_after_bias: [sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses]
+    //   - ANAT_PUBLISH_PHASE1.out.output (filtered): [sub, t1w_ses, t1w_file, t1w_bids_name]
+    //   - anat_skull_seg: [sub, t1w_ses, seg_file]
+    //   - anat_skull_seg_lut: [sub, t1w_ses, lut_file]
+    // Output: [sub, t1w_ses, combined_file]
+    // Only runs when: skullstripping enabled (segmentation available) AND both T1w and T2w available
+    // ============================================
+    // Initialize unified channel (will be populated if skullstripping is enabled)
+    // Structure: [sub, ses, file, bids_name] - T1wT2wCombined if available, otherwise T1w
+    def anat_after_t1wt2wcombined = Channel.empty()
     
+    if (anat_skullstripping_enabled) {
+        // Get T1w files from published Phase 1 outputs
+        // Input: [sub, t1w_ses, t1w_file, t1w_bids_name]
+        def t1w_after_bias = ANAT_PUBLISH_PHASE1.out.output
+            .filter(isT1wFile)
+        
+        // Input: [sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses]
+        def t1wt2w_combined_input = t2w_after_bias
+            .map { sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses ->
+                // Keep structure: [sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses]
+                [sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses]
+            }
+            // Combine with T1w files by subject only (multiple T2w sessions may reference same T1w)
+            .combine(t1w_after_bias, by: 0)  // Combine by subject only
+            // Filter to keep only where T2w's anat_ses matches T1w session
+            .filter { sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses, t1w_ses, t1w_file, t1w_bids_name ->
+                matchSessions(anat_ses, t1w_ses)  // Keep only where T2w's anat_ses matches T1w session
+            }
+            // Map to reorganize and REPLACE ses with T1w session (critical!)
+            // Input: [sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses, t1w_ses, t1w_file, t1w_bids_name]
+            // Output: [sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, t1w_ses]
+            .map { sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses, t1w_ses, t1w_file, t1w_bids_name ->
+                [sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, t1w_ses]
+            }
+            //Combine with segmentation by subject only
+            .combine(anat_skull_seg, by: 0)
+            .filter { sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, t1w_ses_dup, seg_ses, seg_file ->
+                matchSessions(t1w_ses, seg_ses)
+            }
+            .map { sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, t1w_ses_dup, seg_ses, seg_file ->
+                [sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, seg_file]
+            }
+            // Combine with LUT by subject only
+            .combine(anat_skull_seg_lut, by: 0)
+            .filter { sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, seg_file, lut_ses, lut_file ->
+                matchSessions(t1w_ses, lut_ses)
+            }
+            // Final map to process input format
+            .map { sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, seg_file, lut_ses, lut_file ->
+                [sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, seg_file, lut_file]
+            }
+
+        // Process receives: [sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, seg_file, lut_file]
+        // Process outputs: [sub, t1w_ses, combined_file, t1w_bids_name]
+        ANAT_T1WT2W_COMBINED(t1wt2w_combined_input, config_file)
+        
+        // Create unified channel: T1wT2wCombined (if available) or T1w (passthrough)
+        // Structure: [sub, ses, file, bids_name]
+        def t1wt2w_combined_output = ANAT_T1WT2W_COMBINED.out.output
+            .map { sub, ses, combined_file, bids_name ->
+                [sub, ses, combined_file, bids_name]
+            }
+        
+        // Create passthrough channel for T1w sessions without T2w
+        // Strategy: Use left anti-join pattern with mix() + groupTuple()
+        // Extract [sub, ses] pairs from combined output
+        def t1wt2w_sessions = t1wt2w_combined_output
+            .map { sub, ses, file, bids_name -> [sub, ses] }
+            .unique()
+        
+        // Tag all T1w sessions and matched sessions, then find unmatched
+        def t1w_keys_tagged = t1w_after_bias
+            .map { sub, ses, t1w_file, t1w_bids_name -> [[sub, ses], 't1w'] }
+        
+        def matched_keys_tagged = t1wt2w_sessions
+            .map { sub, ses -> [[sub, ses], 'matched'] }
+        
+        // Find unmatched T1w sessions (those without combined output)
+        def unmatched_keys = t1w_keys_tagged
+            .mix(matched_keys_tagged)
+            .groupTuple(by: 0)
+            .filter { key, tags -> !tags.contains('matched') }
+            .map { key, tags -> key }  // key is [sub, ses]
+        
+        // Join unmatched keys back with t1w_after_bias to get full data
+        def t1w_passthrough = unmatched_keys
+            .join(t1w_after_bias, by: [0, 1])
+            .map { sub, ses, t1w_file, t1w_bids_name ->
+                [sub, ses, t1w_file, t1w_bids_name]
+            }
+        
+        // Mix combined and passthrough to create unified channel
+        anat_after_t1wt2wcombined = t1wt2w_combined_output.mix(t1w_passthrough)
+        
+        // ============================================
+        // QC: T1wT2wCombined comparison
+        // ============================================
+        // Generate QC snapshot comparing T1w after bias correction vs T1wT2wCombined
+        // Input: ANAT_T1WT2W_COMBINED.out.output: [sub, t1w_ses, combined_file, t1w_bids_name]
+        //        ANAT_PUBLISH_PHASE1.out.output: [sub, t1w_ses, t1w_file, t1w_bids_name] (filtered for T1w)
+        //        anat_skull_mask: [sub, t1w_ses, mask_file]
+        // ============================================
+        // Get T1w files from published Phase 1 outputs
+        def t1w_published = ANAT_PUBLISH_PHASE1.out.output
+            .filter(isT1wFile)
+        
+        // ANAT_T1WT2W_COMBINED.out.output: [sub, ses, combined_file, combined_bids_name]
+        // t1w_published: [sub, ses, t1w_file, t1w_bids_name]
+        // After join by [0, 1]: [sub, ses, combined_file, combined_bids_name, t1w_file, t1w_bids_name]
+        def t1wt2w_qc_input = ANAT_T1WT2W_COMBINED.out.output
+            .join(t1w_published, by: [0, 1])  // Join by subject and T1w session
+            .map { sub, t1w_ses, combined_file, combined_bids_name, t1w_file, t1w_bids_name ->
+                // Use original T1w bids_name for output naming
+                [sub, t1w_ses, t1w_file, combined_file, t1w_bids_name]
+            }
+            .join(anat_skull_mask, by: [0, 1])  // Join with mask by subject and T1w session
+            .map { sub, t1w_ses, t1w_file, combined_file, t1w_bids_name, mask_file ->
+                [sub, t1w_ses, t1w_file, combined_file, mask_file, t1w_bids_name]
+            }
+        
+        QC_T1WT2W_COMBINED(t1wt2w_qc_input, config_file)
+    }
+
     // ============================================
     // T2W QUALITY CONTROL
     // ============================================
@@ -1131,8 +1156,6 @@ workflow ANAT_WF {
     //        t2w_anat_selection_for_qc: [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses] (to get anat_ses)
     //        anat_reg_reference: [sub, ses, reference] (keyed by anatomical session)
     // ============================================
-    // IMPORTANT: Use combine() + filter() instead of join() for the anat_reg_reference join
-    // because multiple T2w sessions may reference the SAME T1w session. join() causes race condition.
     def t2w_qc2_input = t2w_after_apply_reg
         .join(t2w_anat_selection_for_qc
             .filter { sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses -> t1w_file != null }
@@ -1160,9 +1183,102 @@ workflow ANAT_WF {
     QC_T2W_TEMPLATE_SPACE(t2w_qc2_channels.combined, t2w_qc2_channels.bids_name, config_file)
     
     // ============================================
-    // COLLECT QC CHANNELS
+    // SURFACE RECONSTRUCTION
     // ============================================
-    // Aggregate all QC metadata channels for output
+    // Generate cortical surfaces and measurements (requires skullstripping, optionally T2w)
+    // Input: anat_after_bias (Phase 1 final output), anat_skull_seg, anat_skull_mask: [sub, ses, ...]
+    // Output: Surface reconstruction outputs and QC
+    // ============================================
+    def surf_recon_input = Channel.empty()
+    def surf_qc_input = Channel.empty()
+    if (surf_recon_enabled && anat_skullstripping_enabled) {
+        // Step 0: Calculate session count per subject (for surface reconstruction naming)
+        // Count unique sessions with anatomical data for each subject
+        def anat_sessions_per_subject = anat_after_bias
+            .map { sub, ses, anat_file, bids_name ->
+                [sub, ses]
+            }
+            .unique()
+            .groupTuple(by: 0)
+            .map { sub, ses_list ->
+                // Filter out empty strings and count unique sessions
+                def unique_sessions = ses_list.findAll { it && it != '' }.unique()
+                def session_count = unique_sessions.size()
+                [sub, session_count]
+            }
+
+        // Step 1: Join anatomical image with segmentation
+        def surf_recon_input_base = anat_after_bias
+            .join(anat_skull_seg.map { sub, ses, seg_file -> [sub, ses, seg_file] }, by: [0, 1], remainder: true)
+            .map { sub, ses, anat_file, bids_name, seg_file ->
+                [sub, ses, anat_file, bids_name, seg_file]
+            }
+        
+        // Step 2: Join with brain mask (both have [sub, ses] as first two elements)
+        // Use remainder:true to keep sessions without mask (they'll get dummy mask)
+        def surf_recon_input_with_mask = surf_recon_input_base
+            .join(anat_skull_mask.map { sub, ses, mask_file -> [sub, ses, mask_file] }, by: [0, 1], remainder: true)
+            .map { sub, ses, anat_file, bids_name, seg_file, mask_file ->
+                // Use dummy mask if missing
+                def final_mask = mask_file ?: file("${workDir}/dummy_brain_mask.dummy")
+                [sub, ses, anat_file, bids_name, seg_file, final_mask]
+            }
+        
+        // Step 3: Join with session count
+        def anat_sessions_clean = anat_sessions_per_subject
+            .unique { sub, session_count -> sub }
+            .map { sub, session_count -> [sub, session_count] }
+        
+        surf_recon_input = surf_recon_input_with_mask
+            .combine(anat_sessions_clean, by: 0)
+            .map { sub, ses, anat_file, bids_name, seg_file, mask_file, session_count ->
+                def count = session_count instanceof List ? session_count[0] : session_count
+                [sub, ses, anat_file, bids_name, seg_file, mask_file, count]
+            }
+        
+        ANAT_SURFACE_RECONSTRUCTION(surf_recon_input, config_file)
+        
+        // Step 3: Prepare QC input channels
+        // Use a completely separate channel for QC - extract bids_name from anat_after_bias
+        // Do NOT reference surf_recon_input here to avoid any channel mixing
+        def surf_qc_bids_lookup = anat_after_bias
+            .map { sub, ses, anat_file, bids_name ->
+                [sub, ses, bids_name]
+            }
+        
+        surf_qc_input = ANAT_SURFACE_RECONSTRUCTION.out.subject_dir
+            .join(ANAT_SURFACE_RECONSTRUCTION.out.actual_subject_id, by: [0, 1])
+            .join(ANAT_SURFACE_RECONSTRUCTION.out.metadata, by: [0, 1])
+            .join(surf_qc_bids_lookup, by: [0, 1])
+            .map { sub, ses, subject_dir, actual_subject_id_file, metadata_file, bids_name ->
+                def atlas_name = "ARM2"
+                try {
+                    def metadata = new groovy.json.JsonSlurper().parse(metadata_file)
+                    atlas_name = metadata.atlas_name ?: "ARM2"
+                } catch (Exception e) {
+                    println "Warning: Could not read atlas_name from metadata, using default: ${e.message}"
+                }
+                // Read actual subject ID from file
+                def actual_subject_id = actual_subject_id_file.text.trim()
+                [sub, ses, actual_subject_id, bids_name, atlas_name]
+            }
+        
+        // Step 4: Run QC processes
+        def surf_tissue_seg_qc_input = surf_qc_input
+            .map { sub, ses, actual_subject_id, bids_name, atlas_name ->
+                [sub, ses, actual_subject_id, bids_name]
+            }
+        QC_SURF_RECON_TISSUE_SEG(surf_tissue_seg_qc_input, config_file)
+        
+        QC_CORTICAL_SURF_AND_MEASURES(surf_qc_input, config_file)
+    } else {
+        if (surf_recon_enabled && !anat_skullstripping_enabled) {
+            println "Warning: Surface reconstruction is enabled but skullstripping is disabled. Skipping surface reconstruction."
+        }
+    }
+
+    // ============================================
+    // COLLECT QC CHANNELS
     // ============================================
     anat_qc_channels = Channel.empty()
     if (registration_enabled) {
@@ -1190,7 +1306,7 @@ workflow ANAT_WF {
     // EMIT OUTPUT CHANNELS
     // ============================================
     emit:
-    anat_after_bias_brain  // Phase 1 final output - brain (for functional workflow registration)
+    anat_after_bias_brain
     anat_reg_transforms
     anat_reg_reference
     anat_subjects_ch

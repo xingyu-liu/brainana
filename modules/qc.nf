@@ -120,6 +120,66 @@ EOF
     """
 }
 
+process QC_T1WT2W_COMBINED {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}/figures",
+        mode: 'copy',
+        pattern: '*.png'
+    
+    input:
+    tuple val(subject_id), val(session_id), path(t1w_before_file), path(t1wt2w_combined_file), path(mask_file), val(bids_naming_template)
+    path config_file
+    
+    output:
+    path "*.png", emit: qc_files
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from macacaMRIprep.steps.qc import qc_t1wt2w_combined
+from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from pathlib import Path
+
+# Load config
+from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+config = load_config('${config_file}')
+
+# Get original file path (for BIDS filename generation)
+bids_naming_template = Path('${bids_naming_template}')
+
+# Determine modality from original filename
+modality = detect_modality(bids_naming_template)
+
+# Generate BIDS-compliant QC output filename
+qc_output_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-T1wT2wCombined',
+    modality=modality
+).replace('.nii.gz', '.png')
+
+# Get mask file (optional - may be dummy)
+mask_file_path = Path('${mask_file}')
+mask_file_optional = mask_file_path if mask_file_path.exists() and not str(mask_file_path).endswith('.dummy') else None
+
+# Generate QC
+result = qc_t1wt2w_combined(
+    t1w_before_file=Path('${t1w_before_file}'),
+    t1wt2w_combined_file=Path('${t1wt2w_combined_file}'),
+    output_path=Path(qc_output_filename),
+    modality='anat',
+    mask_file=mask_file_optional,
+    config=config
+)
+
+# Save metadata
+save_metadata(result.metadata)
+EOF
+    """
+}
+
 process QC_SKULLSTRIPPING {
     label 'cpu'
     tag "${subject_id}_${session_id}"

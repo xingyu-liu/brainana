@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional
 from .types import StepInput, StepOutput
 from ..quality_control import (
     create_bias_correction_qc,
+    create_t1wt2w_combined_qc,
     create_skullstripping_qc,
     create_registration_qc,
     create_conform_qc,
@@ -574,5 +575,66 @@ def qc_within_ses_coreg(
         return StepOutput(
             output_file=output_path,
             metadata={"step": "qc_within_ses_coreg", "error": str(e)}
+        )
+
+
+def qc_t1wt2w_combined(
+    t1w_before_file: Path,
+    t1wt2w_combined_file: Path,
+    output_path: Path,
+    modality: str = "anat",
+    mask_file: Optional[Path] = None,
+    config: Optional[Dict[str, Any]] = None
+) -> StepOutput:
+    """
+    Generate T1wT2wCombined QC snapshot.
+    
+    Shows before/after comparison: T1w after bias correction vs T1wT2wCombined image.
+    Optionally applies a brain mask to both images before visualization.
+    
+    Args:
+        t1w_before_file: T1w image after bias correction (before)
+        t1wt2w_combined_file: T1wT2wCombined image (after)
+        output_path: Output path for QC snapshot
+        modality: Modality ('anat' or 'func')
+        mask_file: Optional brain mask file (if provided, mask will be applied to both images)
+        config: Configuration dictionary (optional)
+        
+    Returns:
+        StepOutput with QC file
+    """
+    if not config or not config.get("quality_control", {}).get("enabled", True):
+        logger.info("QC: T1wT2wCombined QC skipped (disabled in configuration)")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_t1wt2w_combined", "skipped": True}
+        )
+    
+    try:
+        result = create_t1wt2w_combined_qc(
+            image_before=str(t1w_before_file),
+            image_combined=str(t1wt2w_combined_file),
+            save_f=str(output_path),
+            modality=modality,
+            mask_file=str(mask_file) if mask_file else None,
+            logger=logger
+        )
+        
+        qc_file = Path(result.get(f"{modality}_t1wt2w_combined_comparison", output_path))
+        
+        return StepOutput(
+            output_file=qc_file,
+            metadata={
+                "step": "qc_t1wt2w_combined",
+                "modality": modality,
+                "mask_applied": mask_file is not None
+            },
+            qc_files=[qc_file]
+        )
+    except Exception as e:
+        logger.warning(f"QC: T1wT2wCombined QC failed - {e}")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_t1wt2w_combined", "error": str(e)}
         )
 

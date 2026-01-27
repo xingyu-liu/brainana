@@ -14,7 +14,8 @@ from ..operations.preprocessing import (
     reorient,
     conform_to_template,
     bias_correction,
-    apply_segmentation
+    apply_segmentation,
+    generate_t1wt2wcombined
 )
 from ..operations.registration import ants_register, ants_apply_transforms, flirt_register, flirt_apply_transforms
 
@@ -580,6 +581,67 @@ def anat_surface_reconstruction(input: StepInput, t1w_file: Path, segmentation_f
             "subject_id": subject_id,
             "atlas_name": atlas_name,
             "subjects_dir": str(subjects_dir)
+        }
+    )
+
+
+def anat_t1wt2wcombined(
+    t1w_file: Path,
+    t2w_file: Path,
+    segmentation_file: Path,
+    segmentation_lut_file: Path,
+    output_file: Path,
+    metadata: Optional[Dict[str, Any]] = None
+) -> StepOutput:
+    """
+    Generate T1wT2wCombined image from T1w, T2w, and segmentation.
+    
+    This is a step-level wrapper around generate_t1wt2wcombined() that provides
+    standardized input/output for Nextflow integration.
+    
+    Args:
+        t1w_file: Path to T1w image file
+        t2w_file: Path to T2w image file (must be in same space as T1w)
+        segmentation_file: Path to segmentation file (e.g., aparc+aseg.orig.nii.gz)
+        segmentation_lut_file: Path to segmentation LUT TSV file
+        output_file: Path for output combined image
+        config: Configuration dictionary
+        metadata: Optional metadata dictionary (subject_id, session_id, etc.)
+        
+    Returns:
+        StepOutput with combined image file and metadata
+    """
+    if metadata is None:
+        metadata = {}
+    
+    logger.info(f"Step: generating T1wT2wCombined image")
+    logger.info(f"  T1w: {t1w_file.name}")
+    logger.info(f"  T2w: {t2w_file.name}")
+    logger.info(f"  Segmentation: {segmentation_file.name}")
+    
+    # Call the preprocessing function
+    result = generate_t1wt2wcombined(
+        t1w_file=t1w_file,
+        t2w_file=t2w_file,
+        segmentation_file=segmentation_file,
+        segmentation_lut_file=segmentation_lut_file,
+        output_file=output_file,
+        logger=logger
+    )
+    
+    output_path = Path(result["combined_image"])
+    
+    return StepOutput(
+        output_file=output_path,
+        metadata={
+            "step": "t1wt2w_combined",
+            "modality": "anat",
+            "t1w_file": str(t1w_file),
+            "t2w_file": str(t2w_file),
+            "segmentation_file": str(segmentation_file),
+            "t1w_gm_intensity": result.get("t1w_gm_intensity"),
+            "t2w_gm_intensity": result.get("t2w_gm_intensity"),
+            **metadata
         }
     )
 

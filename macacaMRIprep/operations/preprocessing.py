@@ -1636,3 +1636,127 @@ def bias_correction(
     except Exception as e:
         logger.error(f"Workflow: bias field correction failed: {str(e)}")
         raise RuntimeError(f"Bias field correction failed: {e}") from e
+
+
+def generate_t1wt2wcombined(
+    t1w_file: Union[str, Path],
+    t2w_file: Union[str, Path],
+    segmentation_file: Union[str, Path],
+    segmentation_lut_file: Union[str, Path],
+    output_file: Union[str, Path],
+    logger: Optional[logging.Logger] = None,
+) -> Dict[str, str]:
+    """
+    Generate T1wT2wCombined image from T1w, T2w, and segmentation.
+    
+    The combined image is computed as: (T1w - sT2w) / (T1w + sT2w)
+    where sT2w is T2w scaled by gray matter intensity ratio:
+    sT2w = (T1w_GM_intensity / T2w_GM_intensity) * T2w
+    
+    Gray matter regions are identified from the segmentation LUT
+    where region == 'cortex'.
+    
+    Args:
+        t1w_file: Path to T1w image file
+        t2w_file: Path to T2w image file (must be in same space as T1w)
+        segmentation_file: Path to segmentation file (e.g., aparc+aseg.orig.nii.gz)
+        segmentation_lut_file: Path to segmentation LUT TSV file
+        output_file: Path for output combined image
+        logger: Optional logger instance
+        
+    Returns:
+        Dictionary with key 'combined_image' containing output file path
+        
+    Raises:
+        FileNotFoundError: If any input file is missing
+        ValueError: If segmentation LUT doesn't contain cortex regions
+        RuntimeError: If computation fails
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
+    t1w_file = Path(t1w_file)
+    t2w_file = Path(t2w_file)
+    segmentation_file = Path(segmentation_file)
+    segmentation_lut_file = Path(segmentation_lut_file)
+    output_file = Path(output_file)
+    
+    # Validate input files (NIfTI files only - LUT is TSV, validate separately)
+    validate_input_file(t1w_file, logger)
+    validate_input_file(t2w_file, logger)
+    validate_input_file(segmentation_file, logger)
+    
+    # Validate LUT file (TSV file, not NIfTI)
+    if not segmentation_lut_file.exists():
+        raise FileNotFoundError(f"Segmentation LUT file not found: {segmentation_lut_file}")
+    if not segmentation_lut_file.suffix == '.tsv':
+        raise ValueError(f"Segmentation LUT file must be a TSV file, got: {segmentation_lut_file.suffix}")
+    logger.info(f"Using segmentation LUT: {segmentation_lut_file.name}")
+    
+    try:
+        logger.info(f"Generating T1wT2wCombined image from {t1w_file.name} and {t2w_file.name}")
+        
+        # Load segmentation
+        seg_img = nib.load(str(segmentation_file))
+        seg = seg_img.get_fdata().astype(int)
+        
+        # Load T1w and T2w
+        t1w_img = nib.load(str(t1w_file))
+        t1w = t1w_img.get_fdata()
+        t2w_img = nib.load(str(t2w_file))
+        t2w = t2w_img.get_fdata()
+        
+        # Load segmentation LUT
+        seg_lut = pd.read_csv(str(segmentation_lut_file), sep='\t')
+        
+        # Get gray matter intensity from T1w image using seg
+        # mask should be keys with "region" column == 'cortex'
+        if 'region' not in seg_lut.columns:
+            raise ValueError(f"Segmentation LUT must have 'region' column. Found columns: {seg_lut.columns.tolist()}")
+        
+        gm_values = seg_lut[seg_lut['region'] == 'cortex']['ID'].values
+        if len(gm_values) == 0:
+            raise ValueError("No cortex regions found in segmentation LUT")
+        
+        gm_mask = np.isin(seg, gm_values).astype(bool)
+        
+        if not np.any(gm_mask):
+            raise ValueError("No gray matter voxels found in segmentation")
+        
+        # Get gray matter intensity from T1w and T2w image using seg
+        t1w_gm_intensity = t1w[gm_mask].mean()
+        t2w_gm_intensity = t2w[gm_mask].mean()
+        
+        if t2w_gm_intensity == 0:
+            raise ValueError("T2w gray matter intensity is zero, cannot compute scaling factor")
+        
+        logger.info(f"T1w GM intensity: {t1w_gm_intensity:.2f}, T2w GM intensity: {t2w_gm_intensity:.2f}")
+        
+        # Compute scaled T2w with T1w_GM_intensity / T2w_GM_intensity * T2w
+        sT2w = (t1w_gm_intensity / t2w_gm_intensity) * t2w
+        
+        # Compute CI from: (T1w−sT2w)/(T1w+sT2w)
+        dominator = t1w + sT2w
+        dominator[dominator == 0] = 1e-6
+        combined_image = (t1w - sT2w) / dominator
+
+        # clip the image to [-1, 1]
+        combined_image = np.nan_to_num(combined_image)
+        combined_image = np.clip(combined_image, -1, 1)
+        
+        # Save output using T1w header and affine
+        output_img = nib.Nifti1Image(combined_image, t1w_img.affine, t1w_img.header)
+        output_img.to_filename(str(output_file), dtype=np.float32)
+        
+        validate_output_file(output_file, logger)
+        logger.info(f"T1wT2wCombined image saved to {output_file.name}")
+        
+        return {
+            "combined_image": str(output_file),
+            "t1w_gm_intensity": float(t1w_gm_intensity),
+            "t2w_gm_intensity": float(t2w_gm_intensity)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to generate T1wT2wCombined image: {str(e)}")
+        raise RuntimeError(f"T1wT2wCombined generation failed: {e}") from e

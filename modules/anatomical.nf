@@ -1613,7 +1613,8 @@ process ANAT_PUBLISH_PHASE1 {
     path config_file
     
     output:
-    tuple val(subject_id), val(session_id), path("*desc-preproc*.nii.gz"), optional: true, emit: published_files
+    tuple val(subject_id), val(session_id), path("*desc-preproc_T*w.nii.gz"), val(bids_name), emit: output
+    tuple val(subject_id), val(session_id), path("*desc-preproc_brain.nii.gz", optional: true), emit: brain
     path "*.json", emit: metadata
     
     script:
@@ -1675,6 +1676,79 @@ save_metadata({
     "anat_file": str(anat_file),
     "brain_file": str(brain_file)
 })
+EOF
+    """
+}
+
+process ANAT_T1WT2W_COMBINED {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
+        mode: 'copy',
+        pattern: '*T1wT2wCombined*.nii.gz'
+    
+    input:
+    tuple val(subject_id), val(session_id), path(t1w_file), val(t1w_bids_name), path(t2w_file), path(segmentation_file), path(segmentation_lut)
+    path config_file
+    
+    output:
+    tuple val(subject_id), val(session_id), path("*T1wT2wCombined.nii.gz"), val(t1w_bids_name), emit: output
+    path "*.json", emit: metadata
+    
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from pathlib import Path
+from macacaMRIprep.steps.anatomical import anat_t1wt2wcombined
+from macacaMRIprep.utils.nextflow import save_metadata, create_output_link, init_cmd_log_for_nextflow, load_config
+from macacaMRIprep.utils.bids import get_filename_stem
+
+# Initialize command log file
+init_cmd_log_for_nextflow(
+    output_dir='${params.output_dir}',
+    subject_id='${subject_id}',
+    session_id='${session_id}' if '${session_id}' else None,
+    step_name='ANAT_T1WT2W_COMBINED'
+)
+
+# Load config
+config = load_config('${config_file}')
+
+# Get input files
+t1w_file = Path('${t1w_file}')
+t2w_file = Path('${t2w_file}')
+segmentation_file = Path('${segmentation_file}')
+segmentation_lut_file = Path('${segmentation_lut}')
+t1w_bids_name = Path('${t1w_bids_name}')
+
+# Generate output filename: replace "_T1w.nii.gz" with "_T1wT2wCombined.nii.gz"
+# Use the actual t1w_file name (which includes desc-preproc) instead of t1w_bids_name template
+# This preserves all BIDS entities (including desc-preproc) from the actual input filename
+t1w_name_str = t1w_file.name
+output_filename = t1w_name_str.replace('_T1w.nii.gz', '_T1wT2wCombined.nii.gz')
+
+# Call the step function
+result = anat_t1wt2wcombined(
+    t1w_file=t1w_file,
+    t2w_file=t2w_file,
+    segmentation_file=segmentation_file,
+    segmentation_lut_file=segmentation_lut_file,
+    output_file=Path(output_filename),
+    config=config,
+    metadata={
+        'subject_id': '${subject_id}',
+        'session_id': '${session_id}' if '${session_id}' else None
+    }
+)
+
+# The function already saved the file with the correct name, so result.output_file
+# should match output_filename. Verify and create link if needed for Nextflow pattern matching
+if result.output_file.name != output_filename:
+    create_output_link(result.output_file, output_filename)
+
+# Save metadata
+save_metadata(result.metadata)
 EOF
     """
 }
