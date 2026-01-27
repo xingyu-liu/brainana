@@ -949,7 +949,7 @@ workflow ANAT_WF {
     }
     
     // ============================================
-    // Generate T1wT2wCombined image
+    // Generate T1wT2wCombined image (only channels that have the same t2w_ses as t1w_ses)
     // ============================================
     // Generate T1wT2wCombined image using T1w, T2w, and segmentation
     // This is an enhanced T1w image, so output is keyed by T1w session (not T2w session)
@@ -966,35 +966,37 @@ workflow ANAT_WF {
     def anat_after_t1wt2wcombined = Channel.empty()
     
     if (anat_skullstripping_enabled) {
-        // Get T1w files from published Phase 1 outputs
+        // Get T1w files from published Phase 1 outputs (used for combined processing and QC)
         // Input: [sub, t1w_ses, t1w_file, t1w_bids_name]
         def t1w_after_bias = ANAT_PUBLISH_PHASE1.out.output
             .filter(isT1wFile)
         
+        // ============================================
+        // Build input for T1wT2wCombined process
+        // ============================================
         // Input: [sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses]
         def t1wt2w_combined_input = t2w_after_bias
-            .map { sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses ->
-                // Keep structure: [sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses]
-                [sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses]
-            }
             // Combine with T1w files by subject only (multiple T2w sessions may reference same T1w)
-            .combine(t1w_after_bias, by: 0)  // Combine by subject only
+            .combine(t1w_after_bias, by: 0)
             // Filter to keep only where T2w's anat_ses matches T1w session
             .filter { sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses, t1w_ses, t1w_file, t1w_bids_name ->
-                matchSessions(anat_ses, t1w_ses)  // Keep only where T2w's anat_ses matches T1w session
+                // Require that:
+                // 1) The chosen anatomical session for this T2w (anat_ses) matches the T1w session, AND
+                // 2) The T2w's own session matches the chosen anatomical session
+                matchSessions(anat_ses, t1w_ses) && matchSessions(t2w_ses, anat_ses)
             }
-            // Map to reorganize and REPLACE ses with T1w session (critical!)
+            // Reorganize and key by T1w session (critical!)
             // Input: [sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses, t1w_ses, t1w_file, t1w_bids_name]
-            // Output: [sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, t1w_ses]
+            // Output: [sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file]
             .map { sub, t2w_ses, t2w_file, t2w_bids_name, anat_ses, t1w_ses, t1w_file, t1w_bids_name ->
-                [sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, t1w_ses]
+                [sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file]
             }
-            //Combine with segmentation by subject only
+            // Combine with segmentation by subject only
             .combine(anat_skull_seg, by: 0)
-            .filter { sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, t1w_ses_dup, seg_ses, seg_file ->
+            .filter { sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, seg_ses, seg_file ->
                 matchSessions(t1w_ses, seg_ses)
             }
-            .map { sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, t1w_ses_dup, seg_ses, seg_file ->
+            .map { sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, seg_ses, seg_file ->
                 [sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, seg_file]
             }
             // Combine with LUT by subject only
@@ -1002,7 +1004,6 @@ workflow ANAT_WF {
             .filter { sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, seg_file, lut_ses, lut_file ->
                 matchSessions(t1w_ses, lut_ses)
             }
-            // Final map to process input format
             .map { sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, seg_file, lut_ses, lut_file ->
                 [sub, t1w_ses, t1w_file, t1w_bids_name, t2w_file, seg_file, lut_file]
             }
@@ -1011,12 +1012,11 @@ workflow ANAT_WF {
         // Process outputs: [sub, t1w_ses, combined_file, t1w_bids_name]
         ANAT_T1WT2W_COMBINED(t1wt2w_combined_input, config_file)
         
-        // Create unified channel: T1wT2wCombined (if available) or T1w (passthrough)
+        // ============================================
+        // Create unified channel with passthrough
+        // ============================================
         // Structure: [sub, ses, file, bids_name]
         def t1wt2w_combined_output = ANAT_T1WT2W_COMBINED.out.output
-            .map { sub, ses, combined_file, bids_name ->
-                [sub, ses, combined_file, bids_name]
-            }
         
         // Create passthrough channel for T1w sessions without T2w
         // Strategy: Use left anti-join pattern with mix() + groupTuple()
@@ -1042,9 +1042,6 @@ workflow ANAT_WF {
         // Join unmatched keys back with t1w_after_bias to get full data
         def t1w_passthrough = unmatched_keys
             .join(t1w_after_bias, by: [0, 1])
-            .map { sub, ses, t1w_file, t1w_bids_name ->
-                [sub, ses, t1w_file, t1w_bids_name]
-            }
         
         // Mix combined and passthrough to create unified channel
         anat_after_t1wt2wcombined = t1wt2w_combined_output.mix(t1w_passthrough)
@@ -1054,18 +1051,11 @@ workflow ANAT_WF {
         // ============================================
         // Generate QC snapshot comparing T1w after bias correction vs T1wT2wCombined
         // Input: ANAT_T1WT2W_COMBINED.out.output: [sub, t1w_ses, combined_file, t1w_bids_name]
-        //        ANAT_PUBLISH_PHASE1.out.output: [sub, t1w_ses, t1w_file, t1w_bids_name] (filtered for T1w)
+        //        t1w_after_bias: [sub, t1w_ses, t1w_file, t1w_bids_name]
         //        anat_skull_mask: [sub, t1w_ses, mask_file]
         // ============================================
-        // Get T1w files from published Phase 1 outputs
-        def t1w_published = ANAT_PUBLISH_PHASE1.out.output
-            .filter(isT1wFile)
-        
-        // ANAT_T1WT2W_COMBINED.out.output: [sub, ses, combined_file, combined_bids_name]
-        // t1w_published: [sub, ses, t1w_file, t1w_bids_name]
-        // After join by [0, 1]: [sub, ses, combined_file, combined_bids_name, t1w_file, t1w_bids_name]
         def t1wt2w_qc_input = ANAT_T1WT2W_COMBINED.out.output
-            .join(t1w_published, by: [0, 1])  // Join by subject and T1w session
+            .join(t1w_after_bias, by: [0, 1])  // Join by subject and T1w session
             .map { sub, t1w_ses, combined_file, combined_bids_name, t1w_file, t1w_bids_name ->
                 // Use original T1w bids_name for output naming
                 [sub, t1w_ses, t1w_file, combined_file, t1w_bids_name]
@@ -1186,7 +1176,7 @@ workflow ANAT_WF {
     // SURFACE RECONSTRUCTION
     // ============================================
     // Generate cortical surfaces and measurements (requires skullstripping, optionally T2w)
-    // Input: anat_after_bias (Phase 1 final output), anat_skull_seg, anat_skull_mask: [sub, ses, ...]
+    // Input: anat after t1wt2wcombined, anat_skull_seg, anat_skull_mask: [sub, ses, ...]
     // Output: Surface reconstruction outputs and QC
     // ============================================
     def surf_recon_input = Channel.empty()
@@ -1194,7 +1184,7 @@ workflow ANAT_WF {
     if (surf_recon_enabled && anat_skullstripping_enabled) {
         // Step 0: Calculate session count per subject (for surface reconstruction naming)
         // Count unique sessions with anatomical data for each subject
-        def anat_sessions_per_subject = anat_after_bias
+        def anat_sessions_per_subject = anat_after_t1wt2wcombined
             .map { sub, ses, anat_file, bids_name ->
                 [sub, ses]
             }
@@ -1208,7 +1198,7 @@ workflow ANAT_WF {
             }
 
         // Step 1: Join anatomical image with segmentation
-        def surf_recon_input_base = anat_after_bias
+        def surf_recon_input_base = anat_after_t1wt2wcombined
             .join(anat_skull_seg.map { sub, ses, seg_file -> [sub, ses, seg_file] }, by: [0, 1], remainder: true)
             .map { sub, ses, anat_file, bids_name, seg_file ->
                 [sub, ses, anat_file, bids_name, seg_file]

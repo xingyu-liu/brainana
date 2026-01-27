@@ -1701,7 +1701,7 @@ process ANAT_T1WT2W_COMBINED {
     \${PYTHON:-python3} <<EOF
 from pathlib import Path
 from macacaMRIprep.steps.anatomical import anat_t1wt2wcombined
-from macacaMRIprep.utils.nextflow import save_metadata, create_output_link, init_cmd_log_for_nextflow, load_config
+from macacaMRIprep.utils.nextflow import save_metadata, create_output_link, init_cmd_log_for_nextflow
 from macacaMRIprep.utils.bids import get_filename_stem
 
 # Initialize command log file
@@ -1711,9 +1711,6 @@ init_cmd_log_for_nextflow(
     session_id='${session_id}' if '${session_id}' else None,
     step_name='ANAT_T1WT2W_COMBINED'
 )
-
-# Load config
-config = load_config('${config_file}')
 
 # Get input files
 t1w_file = Path('${t1w_file}')
@@ -1735,7 +1732,6 @@ result = anat_t1wt2wcombined(
     segmentation_file=segmentation_file,
     segmentation_lut_file=segmentation_lut_file,
     output_file=Path(output_filename),
-    config=config,
     metadata={
         'subject_id': '${subject_id}',
         'session_id': '${session_id}' if '${session_id}' else None
