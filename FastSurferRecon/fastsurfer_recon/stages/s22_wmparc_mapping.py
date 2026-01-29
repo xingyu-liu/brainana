@@ -1,5 +1,5 @@
 """
-Stage 21: WM Parcellation Mapping
+Stage 22: WM Parcellation Mapping
 
 Maps surface parcellation to white matter volume to create wmparc.mapped.mgz.
 """
@@ -42,7 +42,6 @@ class WMParcMapping(PipelineStage):
         mri_surf2volseg(
             output_vol=wmparc_mapped,
             input_aseg=aparc_mapped,
-            subject=self.config.subject_id,
             lh_annot=self.sd.label_dir / f"lh.aparc.{self.config.atlas.name}atlas.mapped.annot",
             rh_annot=self.sd.label_dir / f"rh.aparc.{self.config.atlas.name}atlas.mapped.annot",
             lh_cortex_mask=self.sd.label_dir / "lh.cortex.label",

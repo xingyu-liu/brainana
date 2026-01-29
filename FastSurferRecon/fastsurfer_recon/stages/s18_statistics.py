@@ -1,5 +1,5 @@
 """
-Stage 17: Statistics
+Stage 18: Statistics
 
 Computes surface statistics and morphometry.
 """

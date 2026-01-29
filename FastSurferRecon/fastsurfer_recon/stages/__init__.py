@@ -24,12 +24,13 @@ from .s12_topology_fix import TopologyFix
 from .s13_white_preaparc import WhitePreaparc
 from .s14_parcellation import Parcellation
 from .s15_surface_placement import SurfacePlacement
-from .s16_registration import Registration
-from .s17_statistics import Statistics
-from .s18_cortical_ribbon import CorticalRibbon
-from .s19_aseg_refinement import AsegRefinement
-from .s20_aparc_mapping import AparcMapping
-from .s21_wmparc_mapping import WMParcMapping
+from .s16_compute_morphometry import ComputeMorphometry
+from .s17_registration import Registration
+from .s18_statistics import Statistics
+from .s19_cortical_ribbon import CorticalRibbon
+from .s20_aseg_refinement import AsegRefinement
+from .s21_aparc_mapping import AparcMapping
+from .s22_wmparc_mapping import WMParcMapping
 
 __all__ = [
     # Base classes
@@ -52,6 +53,7 @@ __all__ = [
     "WhitePreaparc",
     "Parcellation",
     "SurfacePlacement",
+    "ComputeMorphometry",
     "Registration",
     "Statistics",
     "CorticalRibbon",

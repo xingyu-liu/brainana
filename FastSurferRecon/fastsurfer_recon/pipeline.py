@@ -30,6 +30,7 @@ from .stages import (
     WhitePreaparc,
     Parcellation,
     SurfacePlacement,
+    ComputeMorphometry,
     Registration,
     Statistics,
     CorticalRibbon,
@@ -196,8 +197,9 @@ class ReconSurfPipeline:
         - s13: White preaparc
         - s14: Parcellation mapping
         - s15: Surface placement
-        - s16: Registration (optional)
-        - s17: Statistics
+        - s16: Compute morphometry
+        - s17: Registration (optional)
+        - s18: Statistics
         """
         logger.info("=" * 60)
         logger.info("Phase 2: Surface Creation")
@@ -219,6 +221,7 @@ class ReconSurfPipeline:
                 WhitePreaparc(self.config, self.sd, hemi),
                 Parcellation(self.config, self.sd, hemi),
                 SurfacePlacement(self.config, self.sd, hemi),
+                ComputeMorphometry(self.config, self.sd, hemi),
                 Registration(self.config, self.sd, hemi),
             ]
             

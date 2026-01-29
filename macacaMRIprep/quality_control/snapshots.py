@@ -732,30 +732,18 @@ def create_surf_recon_tissue_seg_qc(
         lh_pial_gii = work_dir / 'lh.pial.surf.gii'
         rh_pial_gii = work_dir / 'rh.pial.surf.gii'
         
-        subprocess.run(
-            ['mris_convert', str(lh_white_f), str(lh_white_gii)],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        subprocess.run(
-            ['mris_convert', str(rh_white_f), str(rh_white_gii)],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        subprocess.run(
-            ['mris_convert', str(lh_pial_f), str(lh_pial_gii)],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        subprocess.run(
-            ['mris_convert', str(rh_pial_f), str(rh_pial_gii)],
-            check=True,
-            capture_output=True,
-            text=True
-        )
+        for in_surf, out_gii in [
+            (lh_white_f, lh_white_gii),
+            (rh_white_f, rh_white_gii),
+            (lh_pial_f, lh_pial_gii),
+            (rh_pial_f, rh_pial_gii),
+        ]:
+            subprocess.run(
+                ['mris_convert', str(in_surf), str(out_gii)],
+                check=True,
+                capture_output=True,
+                text=True
+            )
         
         # Step 7: Convert volume to NIfTI
         logger.info("QC: converting volume to NIfTI format...")
@@ -793,30 +781,18 @@ def create_surf_recon_tissue_seg_qc(
         # Step 9: Apply affine transformation to surfaces
         logger.info("QC: applying affine transformation to surfaces...")
         # Apply affine to each surface (in-place, overwriting the original GIFTI files)
-        subprocess.run(
-            ['wb_command', '-surface-apply-affine', str(lh_white_gii), str(affine_mat), str(lh_white_gii)],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        subprocess.run(
-            ['wb_command', '-surface-apply-affine', str(rh_white_gii), str(affine_mat), str(rh_white_gii)],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        subprocess.run(
-            ['wb_command', '-surface-apply-affine', str(lh_pial_gii), str(affine_mat), str(lh_pial_gii)],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        subprocess.run(
-            ['wb_command', '-surface-apply-affine', str(rh_pial_gii), str(affine_mat), str(rh_pial_gii)],
-            check=True,
-            capture_output=True,
-            text=True
-        )
+        for in_surf, out_gii in [
+            (lh_white_gii, lh_white_gii),
+            (rh_white_gii, rh_white_gii),
+            (lh_pial_gii, lh_pial_gii),
+            (rh_pial_gii, rh_pial_gii),
+        ]:
+            subprocess.run(
+                ['wb_command', '-surface-apply-affine', str(in_surf), str(affine_mat), str(out_gii)],
+                check=True,
+                capture_output=True,
+                text=True
+            )
         
         # Step 10: Copy scene file to working directory
         logger.info("QC: copying scene file to working directory...")

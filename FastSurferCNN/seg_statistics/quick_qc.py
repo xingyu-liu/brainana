@@ -88,18 +88,15 @@ def check_volume(asegdkt_segfile:np.ndarray, voxvol: float, thres: float = None)
         Always returns True (for backward compatibility).
     """
     print("Segmentation volume statistics:")
-    mask = asegdkt_segfile > 0
+    mask = asegdkt_segfile != 0
     total_voxels = np.sum(mask)
     total_vol_mm3 = total_voxels * voxvol
     total_vol_ml = total_vol_mm3 / 1000
-    total_vol_liter = total_vol_mm3 / 1000000
     
     print(f"  Voxel size: {voxvol:.4f} mm³")
     print(f"  Segmented voxels: {total_voxels:,}")
-    print(f"  Total volume: {total_vol_ml:.2f} mL ({total_vol_liter:.3f} L)")
-    
-    # For reference (no judgment):
-    print(f"  [Reference: Human brain ~1200-1500 mL, Macaque ~80-95 mL]")
+    print(f"  Total volume: {total_vol_ml:.2f} mL")
+
     
     return True
 

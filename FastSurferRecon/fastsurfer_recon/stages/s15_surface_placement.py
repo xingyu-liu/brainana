@@ -4,17 +4,11 @@ Stage 15: Surface Placement
 Places white and pial surfaces.
 """
 
-from pathlib import Path
 import logging
 import shutil
 
 from .base import HemisphereStage
-from ..wrappers.mris import (
-    mris_place_surface,
-    mris_place_surface_curv_map,
-    mris_place_surface_area_map,
-    mris_place_surface_thickness,
-)
+from ..wrappers.mris import mris_place_surface
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +20,14 @@ class SurfacePlacement(HemisphereStage):
     description = "White and pial surface placement"
     
     def _run(self) -> None:
-        """Place white and pial surfaces and compute morphometry.
+        """Place white and pial surfaces.
         
         This stage performs the final surface placement:
         1. Place white surface from white.preaparc
         2. Place pial surface from white surface
-        3. Compute morphometry (curvature, area, thickness)
         
         The white and pial surfaces are the final cortical boundaries used for
-        statistics and analysis. Morphometry files provide surface-based measurements.
+        statistics and analysis.
         """
         white = self.hemi_path("white")
         pial = self.hemi_path("pial")
@@ -113,78 +106,11 @@ class SurfacePlacement(HemisphereStage):
                 shutil.copy(pial_t1, pial)
             else:
                 raise FileNotFoundError(f"pial.T1 not found for {self.hemi}")
-        
-        # Step 3: Compute morphometry
-        # Morphometry files provide surface-based measurements used for analysis:
-        #   - Curvature: local surface curvature (Gaussian and mean curvature)
-        #   - Area: surface area per vertex
-        #   - Thickness: cortical thickness (distance between white and pial surfaces)
-        logger.info(f"Computing morphometry for {self.hemi}...")
-        
-        # Curvature maps: measure local surface curvature
-        # These are computed separately for white and pial surfaces
-        curv_white = self.hemi_path("curv")
-        if not curv_white.exists():
-            mris_place_surface_curv_map(
-                surface=white,
-                output_curv=curv_white,
-                n_smooth=2,  # Smoothing iterations for curvature computation
-                n_iterations=10,  # Iterations for curvature estimation
-                log_file=self.config.log_file,
-                subject_dir=self.sd.subject_dir,
-            )
-        
-        curv_pial = self.hemi_path("curv.pial")
-        if not curv_pial.exists():
-            mris_place_surface_curv_map(
-                surface=pial,
-                output_curv=curv_pial,
-                n_smooth=2,
-                n_iterations=10,
-                log_file=self.config.log_file,
-                subject_dir=self.sd.subject_dir,
-            )
-        
-        # Area maps: surface area per vertex
-        # These measure the local surface area around each vertex
-        area_white = self.hemi_path("area")
-        if not area_white.exists():
-            mris_place_surface_area_map(
-                surface=white,
-                output_area=area_white,
-                log_file=self.config.log_file,
-                subject_dir=self.sd.subject_dir,
-            )
-        
-        area_pial = self.hemi_path("area.pial")
-        if not area_pial.exists():
-            mris_place_surface_area_map(
-                surface=pial,
-                output_area=area_pial,
-                log_file=self.config.log_file,
-                subject_dir=self.sd.subject_dir,
-            )
-        
-        # Thickness: cortical thickness map
-        # Measures the distance between white and pial surfaces at each vertex.
-        # This is a key morphometric measure used in many neuroimaging analyses.
-        thickness = self.hemi_path("thickness")
-        if not thickness.exists():
-            mris_place_surface_thickness(
-                white_surf=white,
-                pial_surf=pial,
-                output_thickness=thickness,
-                n_smooth=20,  # Smoothing iterations for thickness map
-                n_iterations=5,  # Iterations for thickness computation
-                log_file=self.config.log_file,
-                subject_dir=self.sd.subject_dir,
-            )
     
     def should_skip(self) -> bool:
-        """Skip if white, pial, and morphometry exist."""
+        """Skip if white and pial exist."""
         return (
             self.hemi_path("white").exists() and
-            self.hemi_path("pial").exists() and
-            self.hemi_path("thickness").exists()
+            self.hemi_path("pial").exists()
         )
 

@@ -1,5 +1,5 @@
 """
-Stage 20: Aparc Volume Mapping
+Stage 21: Aparc Volume Mapping
 
 Maps surface parcellation to volume to create aparc+aseg.mapped.mgz.
 """
@@ -36,7 +36,6 @@ class AparcMapping(PipelineStage):
         mri_surf2volseg(
             output_vol=aparc_mapped,
             input_aseg=aseg,
-            subject=self.config.subject_id,
             lh_annot=self.sd.label_dir / f"lh.aparc.{self.config.atlas.name}atlas.mapped.annot",
             rh_annot=self.sd.label_dir / f"rh.aparc.{self.config.atlas.name}atlas.mapped.annot",
             lh_cortex_mask=self.sd.label_dir / "lh.cortex.label",

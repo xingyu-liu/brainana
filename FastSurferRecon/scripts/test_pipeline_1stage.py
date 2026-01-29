@@ -2,8 +2,8 @@
 """
 Test script for FastSurfer surface reconstruction pipeline with step control.
 
-Allows testing arguments and parameters for each step by specifying a stop point.
-Edit the STOP_STEP variable below to specify where to stop.
+Runs a single stage only (no preceding stages). Edit RUN_STEP below to choose
+which stage to run.
 """
 
 import sys
@@ -48,13 +48,12 @@ from fastsurfer_recon.stages import (
 # Configuration - Edit these variables as needed
 # ============================================================================
 
-# Stop at this step (e.g., "s07", "s12", "s21")
-# Pipeline will run all steps up to and including this step
-STOP_STEP = "s07"
+# RUN_STEPS = ['s14']
+RUN_STEPS = [f's{i}' for i in range(16, 23)]
 
 # Test subject
-subject_root = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/")
-subject_dir = subject_root / "NMT2Sym"
+subject_root = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon")
+subject_dir = subject_root / "sub-NMT2Sym"
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 
@@ -82,16 +81,16 @@ def get_stage_number(step: str) -> int:
         raise ValueError(f"Invalid step format: {step}")
 
 
-def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
-    """Run pipeline up to and including the specified step."""
+def run_single_stage(config: ReconSurfConfig, run_step: str):
+    """Run only the specified single stage (no preceding stages)."""
     sd = SubjectsDir(config.subjects_dir, config.subject_id)
     
     # Setup directories
     sd.setup()
-    
+
     # set hemis
-    hemis = ["lh"]
-    
+    hemis = ["lh", "rh"]
+
     # Setup logging
     if config.log_file:
         log_path = config.log_file
@@ -110,9 +109,9 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
     with open(log_path, "a") as f:
         start_time = datetime.now()
         f.write(f"\n{'='*80}\n")
-        f.write(f"FastSurfer Recon Pipeline Log (Step Test)\n")
+        f.write(f"FastSurfer Recon Pipeline Log (Single Stage Test)\n")
         f.write(f"Subject: {config.subject_id}\n")
-        f.write(f"Stop Step: {stop_step}\n")
+        f.write(f"Run Step: {run_step}\n")
         f.write(f"Start: {start_time}\n")
         f.write(f"{'='*80}\n\n")
     
@@ -123,25 +122,21 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
     with open(cmd_log_path, "a") as f:
         timestamp = datetime.now().strftime("%a %b %d %H:%M:%S %Z %Y")
         f.write(f"\n\n#---------------------------------\n")
-        f.write(f"# New invocation of fastsurfer-recon (step test) {timestamp} \n")
-        f.write(f"# Stop Step: {stop_step}\n")
+        f.write(f"# New invocation of fastsurfer-recon (single stage) {timestamp} \n")
+        f.write(f"# Run Step: {run_step}\n")
         f.write(f"#--------------------------------------------\n")
     # Set global cmd log file so all commands are logged
     set_cmd_log_file(cmd_log_path)
     
-    stop_num = get_stage_number(stop_step)
+    run_num = get_stage_number(run_step)
     
     print("=" * 80)
-    print(f"Running Pipeline up to Step: {stop_step}")
+    print(f"Running single stage: {run_step}")
     print("=" * 80)
     print()
     
     # Phase 1: Volume Processing (s01-s07)
-    if stop_num >= 1:
-        print("=" * 60)
-        print("Phase 1: Volume Processing")
-        print("=" * 60)
-        
+    if 1 <= run_num <= 7:
         volume_stages = [
             ("s01", VolumePrep),
             ("s02", BiasCorrection),
@@ -153,25 +148,18 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
         ]
         
         for step_name, stage_class in volume_stages:
-            step_num = get_stage_number(step_name)
-            if step_num > stop_num:
-                break
-            
-            print(f"\nRunning {step_name}: {stage_class.__name__}")
-            print("-" * 60)
+            if get_stage_number(step_name) != run_num:
+                continue
+            print("=" * 60)
+            print(f"Phase 1: Volume — {step_name}: {stage_class.__name__}")
+            print("=" * 60)
             stage = stage_class(config, sd)
             stage.run()
-            
-            if step_num == stop_num:
-                print(f"\nStopped at {step_name} as requested.")
-                return
+            print(f"\nCompleted {step_name}.")
+            return
     
     # Phase 2: Surface Creation (s08-s18)
-    if stop_num >= 8:
-        print("\n" + "=" * 60)
-        print("Phase 2: Surface Creation")
-        print("=" * 60)
-        
+    if 8 <= run_num <= 18:
         surface_stages = [
             ("s08", Tessellation),
             ("s09", Smoothing),
@@ -187,14 +175,12 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
         ]
         
         for step_name, stage_class in surface_stages:
-            step_num = get_stage_number(step_name)
-            if step_num > stop_num:
-                break
+            if get_stage_number(step_name) != run_num:
+                continue
+            print("=" * 60)
+            print(f"Phase 2: Surface — {step_name}: {stage_class.__name__}")
+            print("=" * 60)
             
-            print(f"\nRunning {step_name}: {stage_class.__name__}")
-            print("-" * 60)
-            
-            # Statistics (s18) needs special handling - run sequentially for both hemispheres
             if step_name == "s18":
                 print("Computing statistics for both hemispheres (sequential)")
                 for hemi in hemis:
@@ -202,10 +188,9 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
                     stage = stage_class(config, sd, hemi)
                     stage.run()
             else:
-                # Other surface stages run per hemisphere
                 if config.processing.parallel_hemis:
                     print(f"Running for both hemispheres in parallel...")
-                    logger = logging.getLogger(__name__)
+                    log = logging.getLogger(__name__)
                     
                     def process_hemi(hemi: str):
                         stage = stage_class(config, sd, hemi)
@@ -218,7 +203,7 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
                             try:
                                 future.result()
                             except Exception as e:
-                                logger.error(f"Error processing {hemi}: {e}")
+                                log.error(f"Error processing {hemi}: {e}")
                                 raise
                 else:
                     print(f"Running for both hemispheres sequentially...")
@@ -226,17 +211,11 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
                         print(f"  Processing {hemi}...")
                         stage = stage_class(config, sd, hemi)
                         stage.run()
-            
-            if step_num == stop_num:
-                print(f"\nStopped at {step_name} as requested.")
-                return
+            print(f"\nCompleted {step_name}.")
+            return
     
     # Phase 3: Post-Surface (s19-s22)
-    if stop_num >= 19:
-        print("\n" + "=" * 60)
-        print("Phase 3: Post-Surface Processing")
-        print("=" * 60)
-        
+    if 19 <= run_num <= 22:
         post_surface_stages = [
             ("s19", CorticalRibbon),
             ("s20", AsegRefinement),
@@ -245,31 +224,27 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
         ]
         
         for step_name, stage_class in post_surface_stages:
-            step_num = get_stage_number(step_name)
-            if step_num > stop_num:
-                break
-            
-            print(f"\nRunning {step_name}: {stage_class.__name__}")
-            print("-" * 60)
+            if get_stage_number(step_name) != run_num:
+                continue
+            print("=" * 60)
+            print(f"Phase 3: Post-Surface — {step_name}: {stage_class.__name__}")
+            print("=" * 60)
             stage = stage_class(config, sd)
             stage.run()
-            
-            if step_num == stop_num:
-                print(f"\nStopped at {step_name} as requested.")
-                return
+            print(f"\nCompleted {step_name}.")
+            return
     
-    print("\n" + "=" * 80)
-    print(f"Pipeline completed up to step {stop_step}")
-    print("=" * 80)
+    print(f"\nNo stage matched {run_step} (internal error).")
 
 
 def main():
     """Main entry point."""
-    # Validate stop step
-    if STOP_STEP not in VALID_STEPS:
-        print(f"Error: Invalid step '{STOP_STEP}'")
-        print(f"Valid steps are: {', '.join(sorted(VALID_STEPS))}")
-        sys.exit(1)
+    # Validate run step
+    for run_step in RUN_STEPS:
+        if run_step not in VALID_STEPS:
+            print(f"Error: Invalid step '{run_step}'")
+            print(f"Valid steps are: {', '.join(sorted(VALID_STEPS))}")
+            sys.exit(1)
     
     # Setup logging
     setup_logging()
@@ -289,22 +264,22 @@ def main():
         verbose=2,  # DEBUG
     )
     
-    # Run pipeline to specified step
-    try:
-        run_pipeline_to_step(config, STOP_STEP)
-        print()
-        print("=" * 80)
-        print(f"Pipeline Test Completed Successfully (stopped at {STOP_STEP})!")
-        print("=" * 80)
-    except Exception as e:
-        print()
-        print("=" * 80)
-        print(f"Pipeline Test Failed: {e}")
-        print("=" * 80)
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-
+    # Run single stage only
+    for run_step in RUN_STEPS:
+        try:
+            run_single_stage(config, run_step)
+            print()
+            print("=" * 80)
+            print(f"Single-stage test completed ({run_step})")
+            print("=" * 80)
+        except Exception as e:
+            print()
+            print("=" * 80)
+            print(f"Single-stage test failed: {e}")
+            print("=" * 80)
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()

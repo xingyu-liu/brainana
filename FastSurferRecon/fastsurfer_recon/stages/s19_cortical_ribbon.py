@@ -1,5 +1,5 @@
 """
-Stage 18: Cortical Ribbon
+Stage 19: Cortical Ribbon
 
 Creates cortical ribbon volume from white and pial surfaces.
 """

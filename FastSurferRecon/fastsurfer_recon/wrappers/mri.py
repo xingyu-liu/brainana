@@ -350,7 +350,6 @@ def mri_cc(
 def mri_surf2volseg(
     output_vol: Path,
     input_aseg: Path,
-    subject: str,
     lh_annot: Optional[Path] = None,
     rh_annot: Optional[Path] = None,
     lh_cortex_mask: Optional[Path] = None,
@@ -602,7 +601,6 @@ def mri_label2label(
     surface: Path,
     aseg: Path,
     output_label: Path,
-    cortex_only: bool = True,
     include_hipamyg: bool = False,
     log_file: Optional[Path] = None,
     subject_dir: Optional[Path] = None,

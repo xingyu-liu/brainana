@@ -35,7 +35,6 @@ class WhitePreaparc(HemisphereStage):
         # Step 1: Auto-detect gray/white stats
         # This file is required by stage 15 (surface placement) for placing white
         # and pial surfaces. It must exist even if white.preaparc already exists.
-        # Note: recon-all creates autodet.gw.stats.{hemi}.dat (not {hemi}.autodet.gw.stats.dat)
         autodet_stats = self.sdir / f"autodet.gw.stats.{self.hemi}.dat"
         if not autodet_stats.exists():
             logger.info(f"Auto-detecting GW stats for {self.hemi}...")

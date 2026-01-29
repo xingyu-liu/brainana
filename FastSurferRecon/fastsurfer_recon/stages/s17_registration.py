@@ -1,5 +1,5 @@
 """
-Stage 16: Surface Registration
+Stage 17: Surface Registration
 
 Registers surface to fsaverage (optional).
 """

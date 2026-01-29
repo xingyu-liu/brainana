@@ -1,5 +1,5 @@
 """
-Stage 19: Aseg Refinement
+Stage 20: Aseg Refinement
 
 Creates aseg.mgz from aseg.presurf.hypos.mgz using surfaces and ribbon.
 """
