@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 import logging
 
-from .base import run_fs_command, FreeSurferError, to_relative_path
+from .base import run_fs_command, to_relative_path
 
 logger = logging.getLogger(__name__)
 
@@ -597,99 +597,6 @@ def mri_fill(
     return output_vol
 
 
-def mri_label2label(
-    surface: Path,
-    aseg: Path,
-    output_label: Path,
-    include_hipamyg: bool = False,
-    log_file: Optional[Path] = None,
-    subject_dir: Optional[Path] = None,
-) -> Path:
-    """
-    Create cortex label from surface and aseg.
-
-    Parameters
-    ----------
-    surface : Path
-        Surface file (e.g., white.preaparc)
-    aseg : Path
-        Aseg segmentation (e.g., aseg.presurf.mgz)
-    output_label : Path
-        Output label file (e.g., cortex.label or cortex+hipamyg.label)
-    cortex_only : bool, default=True
-        Label cortex only (0) vs cortex+hipamyg (1)
-    include_hipamyg : bool, default=False
-        Include hippocampus and amygdala in label
-    log_file : Path, optional
-        Log file path
-
-    Returns
-    -------
-    Path
-        Output label file path
-    """
-    # Convert paths to relative if subject_dir provided
-    if subject_dir:
-        subject_dir = Path(subject_dir).resolve()
-        surface = to_relative_path(surface, subject_dir)
-        aseg = to_relative_path(aseg, subject_dir)
-        output_label = to_relative_path(output_label, subject_dir)
-    
-    cmd = [
-        "mri_label2label",
-        "--label-cortex",
-        str(surface),
-        str(aseg),
-        "1" if include_hipamyg else "0",
-        str(output_label),
-    ]
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
-    return output_label
-
-
-def mri_relabel_hypointensities(
-    input_aseg: Path,
-    surf_dir: Path,
-    output_aseg: Path,
-    log_file: Optional[Path] = None,
-    subject_dir: Optional[Path] = None,
-) -> Path:
-    """
-    Relabel hypointensities in aseg.
-
-    Parameters
-    ----------
-    input_aseg : Path
-        Input aseg (e.g., aseg.presurf.mgz)
-    surf_dir : Path
-        Surface directory (e.g., ../surf)
-    output_aseg : Path
-        Output aseg with hypointensities relabeled (e.g., aseg.presurf.hypos.mgz)
-    log_file : Path, optional
-        Log file path
-
-    Returns
-    -------
-    Path
-        Output aseg path
-    """
-    # Convert paths to relative if subject_dir provided
-    if subject_dir:
-        subject_dir = Path(subject_dir).resolve()
-        input_aseg = to_relative_path(input_aseg, subject_dir)
-        surf_dir = to_relative_path(surf_dir, subject_dir)
-        output_aseg = to_relative_path(output_aseg, subject_dir)
-    
-    cmd = [
-        "mri_relabel_hypointensities",
-        str(input_aseg),
-        str(surf_dir),
-        str(output_aseg),
-    ]
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
-    return output_aseg
-
-
 __all__ = [
     "mri_convert",
     "mri_pretess",
@@ -700,7 +607,5 @@ __all__ = [
     "mri_surf2volseg",
     "mri_add_xform_to_header",
     "mri_fill",
-    "mri_label2label",
-    "mri_relabel_hypointensities",
 ]
 
