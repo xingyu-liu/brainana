@@ -158,15 +158,30 @@ class Parcellation(HemisphereStage):
                 # Update smoothwm path reference for inflation step
                 smoothwm = self.hemi_path("smoothwm")
                 
-                # Re-inflate inflated with configured iterations (inflate2 for visualization)
-                # This creates a visualization-optimized inflated surface with custom
-                # inflation iterations (typically 3 for monkey data vs default ~15-20)
-                logger.info(f"Re-inflating {self.hemi}.inflated with {self.config.processing.inflate2_iterations} iterations (visualization inflation)...")
+                # Optional extra smooth only for inflation input (smoothwm unchanged)
+                # When set, smooth smoothwm -> smoothwm.forinflate, inflate from that, then remove forinflate.
+                n_smooth = self.config.processing.inflate2_smooth_iterations
+                if n_smooth and n_smooth > 0:
+                    logger.info(f"Re-smoothing {self.hemi}.smoothwm with {n_smooth} iterations (inflation input only)...")
+                    smoothwm_forinflate = self.hemi_path("smoothwm.forinflate")
+                    mris_smooth(
+                        input_surf=smoothwm,
+                        output_surf=smoothwm_forinflate,
+                        n_iterations=n_smooth,
+                        nw=True,
+                        seed=1234,
+                        log_file=self.config.log_file,
+                        subject_dir=self.sd.subject_dir,
+                    )
+                    inflate_input = smoothwm_forinflate
+                else:
+                    inflate_input = smoothwm
                 
-                # Create temporary inflated version to avoid corrupting original if process fails
+                # Re-inflate inflated with configured iterations (inflate2 for visualization)
+                logger.info(f"Re-inflating {self.hemi}.inflated with {self.config.processing.inflate2_iterations} iterations (visualization inflation)...")
                 inflated_adjusted = self.hemi_path("inflated.adjusted")
                 mris_inflate(
-                    input_surf=smoothwm,  # Use the newly adjusted smoothwm
+                    input_surf=inflate_input,
                     output_surf=inflated_adjusted,
                     n_iterations=self.config.processing.inflate2_iterations,
                     no_save_sulc=False,  # For visualization, we want to keep sulc file
@@ -177,6 +192,13 @@ class Parcellation(HemisphereStage):
                 # Atomically replace original with adjusted version
                 inflated_adjusted.replace(inflated)
                 logger.info(f"Replaced {self.hemi}.inflated with adjusted version ({self.config.processing.inflate2_iterations} iterations)")
+                
+                # Remove temporary smoothwm.forinflate (used only for inflation)
+                if n_smooth and n_smooth > 0:
+                    smoothwm_forinflate = self.hemi_path("smoothwm.forinflate")
+                    if smoothwm_forinflate.exists():
+                        smoothwm_forinflate.unlink()
+                        logger.debug(f"Removed temporary {self.hemi}.smoothwm.forinflate")
     
     def should_skip(self) -> bool:
         """Skip if mapped parcellation exists."""

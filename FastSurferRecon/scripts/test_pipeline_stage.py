@@ -50,11 +50,11 @@ from fastsurfer_recon.stages import (
 
 # Stop at this step (e.g., "s07", "s12", "s21")
 # Pipeline will run all steps up to and including this step
-STOP_STEP = "s07"
+STOP_STEP = "s22"
 
 # Test subject
 subject_root = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/")
-subject_dir = subject_root / "NMT2Sym"
+subject_dir = subject_root / "sub-MEBRAIN"
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 
@@ -90,7 +90,7 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
     sd.setup()
     
     # set hemis
-    hemis = ["lh"]
+    hemis = ["lh", "rh"]
     
     # Setup logging
     if config.log_file:

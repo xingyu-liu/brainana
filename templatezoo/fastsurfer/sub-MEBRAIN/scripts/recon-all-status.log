@@ -1,0 +1,161 @@
+status file for recon-all
+Thu Jan 29 13:53:16 EST 2026
+Linux SAS-664VW04 6.8.0-90-generic #91~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Nov 20 15:20:45 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+
+recon-all -s MEBRAIN_resue exited with ERRORS at Thu Jan 29 13:53:16 EST 2026
+
+
+
+
+#New# invocation of recon-all 
+
+
+
+status file for recon-all
+Thu Jan 29 14:50:24 EST 2026
+recon-all -s sub-MEBRAIN finished without error at Thu Jan 29 14:50:25 EST 2026
+
+
+
+#New# invocation of recon-all 
+
+
+
+status file for recon-all
+Thu Jan 29 14:50:27 EST 2026
+recon-all -s sub-MEBRAIN finished without error at Thu Jan 29 14:50:29 EST 2026
+
+
+
+#New# invocation of recon-all 
+
+
+
+status file for recon-all
+Thu Jan 29 14:50:38 EST 2026
+#@# white curv lh Thu Jan 29 14:50:48 EST 2026
+#@# white area lh Thu Jan 29 14:50:49 EST 2026
+#@# pial curv lh Thu Jan 29 14:50:50 EST 2026
+#@# pial area lh Thu Jan 29 14:50:51 EST 2026
+#@# thickness lh Thu Jan 29 14:50:52 EST 2026
+#@# area and vertex vol lh Thu Jan 29 14:51:01 EST 2026
+recon-all -s sub-MEBRAIN finished without error at Thu Jan 29 14:51:03 EST 2026
+
+
+
+#New# invocation of recon-all 
+
+
+
+status file for recon-all
+Thu Jan 29 14:51:12 EST 2026
+#@# white curv rh Thu Jan 29 14:51:22 EST 2026
+#@# white area rh Thu Jan 29 14:51:23 EST 2026
+#@# pial curv rh Thu Jan 29 14:51:23 EST 2026
+#@# pial area rh Thu Jan 29 14:51:25 EST 2026
+#@# thickness rh Thu Jan 29 14:51:25 EST 2026
+#@# area and vertex vol rh Thu Jan 29 14:51:35 EST 2026
+recon-all -s sub-MEBRAIN finished without error at Thu Jan 29 14:51:36 EST 2026
+
+
+
+#New# invocation of recon-all 
+
+
+
+status file for recon-all
+Thu Jan 29 14:52:13 EST 2026
+#@# white curv lh Thu Jan 29 14:52:13 EST 2026
+#@# white area lh Thu Jan 29 14:52:14 EST 2026
+#@# pial curv lh Thu Jan 29 14:52:14 EST 2026
+#@# pial area lh Thu Jan 29 14:52:15 EST 2026
+#@# thickness lh Thu Jan 29 14:52:15 EST 2026
+#@# area and vertex vol lh Thu Jan 29 14:52:15 EST 2026
+#@# Curvature Stats lh Thu Jan 29 14:52:17 EST 2026
+recon-all -s sub-MEBRAIN finished without error at Thu Jan 29 14:52:18 EST 2026
+
+
+
+#New# invocation of recon-all 
+
+
+
+status file for recon-all
+Thu Jan 29 14:52:23 EST 2026
+#@# white curv rh Thu Jan 29 14:52:23 EST 2026
+#@# white area rh Thu Jan 29 14:52:24 EST 2026
+#@# pial curv rh Thu Jan 29 14:52:24 EST 2026
+#@# pial area rh Thu Jan 29 14:52:25 EST 2026
+#@# thickness rh Thu Jan 29 14:52:25 EST 2026
+#@# area and vertex vol rh Thu Jan 29 14:52:25 EST 2026
+#@# Curvature Stats rh Thu Jan 29 14:52:27 EST 2026
+recon-all -s sub-MEBRAIN finished without error at Thu Jan 29 14:52:28 EST 2026
+
+
+
+#New# invocation of recon-all 
+
+
+
+status file for recon-all
+Thu Jan 29 14:52:32 EST 2026
+#@# white curv lh Thu Jan 29 14:52:32 EST 2026
+#@# white area lh Thu Jan 29 14:52:32 EST 2026
+#@# pial curv lh Thu Jan 29 14:52:33 EST 2026
+#@# pial area lh Thu Jan 29 14:52:33 EST 2026
+#@# thickness lh Thu Jan 29 14:52:34 EST 2026
+#@# area and vertex vol lh Thu Jan 29 14:52:34 EST 2026
+#@# white curv rh Thu Jan 29 14:52:35 EST 2026
+#@# white area rh Thu Jan 29 14:52:35 EST 2026
+#@# pial curv rh Thu Jan 29 14:52:36 EST 2026
+#@# pial area rh Thu Jan 29 14:52:36 EST 2026
+#@# thickness rh Thu Jan 29 14:52:37 EST 2026
+#@# area and vertex vol rh Thu Jan 29 14:52:37 EST 2026
+#@# Cortical ribbon mask Thu Jan 29 14:52:38 EST 2026
+recon-all -s sub-MEBRAIN finished without error at Thu Jan 29 14:54:16 EST 2026
+
+
+
+#New# invocation of recon-all 
+
+
+
+status file for recon-all
+Thu Jan 29 14:54:17 EST 2026
+#@# white curv lh Thu Jan 29 14:54:17 EST 2026
+#@# white area lh Thu Jan 29 14:54:17 EST 2026
+#@# pial curv lh Thu Jan 29 14:54:18 EST 2026
+#@# pial area lh Thu Jan 29 14:54:18 EST 2026
+#@# thickness lh Thu Jan 29 14:54:19 EST 2026
+#@# area and vertex vol lh Thu Jan 29 14:54:19 EST 2026
+#@# white curv rh Thu Jan 29 14:54:20 EST 2026
+#@# white area rh Thu Jan 29 14:54:20 EST 2026
+#@# pial curv rh Thu Jan 29 14:54:21 EST 2026
+#@# pial area rh Thu Jan 29 14:54:21 EST 2026
+#@# thickness rh Thu Jan 29 14:54:22 EST 2026
+#@# area and vertex vol rh Thu Jan 29 14:54:22 EST 2026
+#@# Relabel Hypointensities Thu Jan 29 14:54:23 EST 2026
+recon-all -s sub-MEBRAIN finished without error at Thu Jan 29 14:54:41 EST 2026
+
+
+
+#New# invocation of recon-all 
+
+
+
+status file for recon-all
+Thu Jan 29 14:54:42 EST 2026
+#@# white curv lh Thu Jan 29 14:54:42 EST 2026
+#@# white area lh Thu Jan 29 14:54:42 EST 2026
+#@# pial curv lh Thu Jan 29 14:54:43 EST 2026
+#@# pial area lh Thu Jan 29 14:54:43 EST 2026
+#@# thickness lh Thu Jan 29 14:54:44 EST 2026
+#@# area and vertex vol lh Thu Jan 29 14:54:44 EST 2026
+#@# white curv rh Thu Jan 29 14:54:45 EST 2026
+#@# white area rh Thu Jan 29 14:54:45 EST 2026
+#@# pial curv rh Thu Jan 29 14:54:46 EST 2026
+#@# pial area rh Thu Jan 29 14:54:46 EST 2026
+#@# thickness rh Thu Jan 29 14:54:47 EST 2026
+#@# area and vertex vol rh Thu Jan 29 14:54:47 EST 2026
+#@# APas-to-ASeg Thu Jan 29 14:54:48 EST 2026
+recon-all -s sub-MEBRAIN finished without error at Thu Jan 29 14:55:01 EST 2026

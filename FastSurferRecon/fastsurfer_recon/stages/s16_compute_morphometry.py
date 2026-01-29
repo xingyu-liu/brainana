@@ -25,8 +25,7 @@ class ComputeMorphometry(HemisphereStage):
     def _run(self) -> None:
         """Compute morphometry from surfaces.
         
-        This stage computes morphometry:
-        3. Compute morphometry (curvature, area, thickness)
+        This stage computes morphometry(curvature, area, thickness)
         
         Morphometry files provide surface-based measurements used for analysis:
           - Curvature: local surface curvature (Gaussian and mean curvature)

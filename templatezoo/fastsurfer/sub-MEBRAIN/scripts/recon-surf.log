@@ -1,0 +1,528 @@
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: MEBRAIN_resue
+Run Step: s01
+Start: 2026-01-29 13:43:09.228835
+================================================================================
+
+2026-01-29 13:43:09 - fastsurfer_recon.stages.volume_prep - INFO - Skipping s01 volume_prep (already complete)
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: MEBRAIN_resue
+Run Step: s02
+Start: 2026-01-29 13:43:09.229379
+================================================================================
+
+2026-01-29 13:43:09 - fastsurfer_recon.stages.bias_correction - INFO - Starting s02 bias_correction
+2026-01-29 13:43:09 - fastsurfer_recon.stages.bias_correction - INFO - Starting s02 bias_correction
+2026-01-29 13:43:09 - fastsurfer_recon.stages.s02_bias_correction - INFO - Running N4 bias field correction...
+2026-01-29 13:43:09 - fastsurfer_recon.stages.s02_bias_correction - INFO - Running N4 bias field correction...
+2026-01-29 13:43:09 - fastsurfer_recon.processing.bias_correction - INFO - Reading input: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/orig.mgz
+2026-01-29 13:43:09 - fastsurfer_recon.processing.bias_correction - INFO - Reading input: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/orig.mgz
+2026-01-29 13:43:09 - fastsurfer_recon.processing.bias_correction - INFO - Reading mask: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/mask.mgz
+2026-01-29 13:43:09 - fastsurfer_recon.processing.bias_correction - INFO - Reading mask: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/mask.mgz
+2026-01-29 13:43:09 - fastsurfer_recon.processing.bias_correction - INFO - Running N4 bias correction...
+2026-01-29 13:43:09 - fastsurfer_recon.processing.bias_correction - INFO - Running N4 bias correction...
+2026-01-29 13:43:12 - fastsurfer_recon.processing.bias_correction - INFO - Normalizing using aseg segmentation...
+2026-01-29 13:43:12 - fastsurfer_recon.processing.bias_correction - INFO - Normalizing using aseg segmentation...
+2026-01-29 13:43:13 - fastsurfer_recon.processing.bias_correction - INFO - Source WM intensity: 156.87
+2026-01-29 13:43:13 - fastsurfer_recon.processing.bias_correction - INFO - Source WM intensity: 156.87
+2026-01-29 13:43:13 - fastsurfer_recon.processing.bias_correction - INFO - Source BG intensity: 0.00
+2026-01-29 13:43:13 - fastsurfer_recon.processing.bias_correction - INFO - Source BG intensity: 0.00
+2026-01-29 13:43:13 - fastsurfer_recon.processing.bias_correction - INFO - Converting to UCHAR...
+2026-01-29 13:43:13 - fastsurfer_recon.processing.bias_correction - INFO - Converting to UCHAR...
+2026-01-29 13:43:13 - fastsurfer_recon.processing.bias_correction - INFO - Writing output: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/orig_nu.mgz
+2026-01-29 13:43:13 - fastsurfer_recon.processing.bias_correction - INFO - Writing output: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/orig_nu.mgz
+2026-01-29 13:43:13 - fastsurfer_recon.stages.bias_correction - INFO - Completed s02 bias_correction in 4.0s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.bias_correction - INFO - Completed s02 bias_correction in 4.0s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: MEBRAIN_resue
+Run Step: s03
+Start: 2026-01-29 13:43:13.218782
+================================================================================
+
+2026-01-29 13:43:13 - fastsurfer_recon.stages.mask_aseg - INFO - Starting s03 mask_aseg
+2026-01-29 13:43:13 - fastsurfer_recon.stages.mask_aseg - INFO - Starting s03 mask_aseg
+2026-01-29 13:43:13 - fastsurfer_recon.stages.mask_aseg - INFO - Starting s03 mask_aseg
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s03_mask_aseg - INFO - Creating aseg.presurf.mgz from aseg.auto_noCCseg.mgz
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s03_mask_aseg - INFO - Creating aseg.presurf.mgz from aseg.auto_noCCseg.mgz
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s03_mask_aseg - INFO - Creating aseg.presurf.mgz from aseg.auto_noCCseg.mgz
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s03_mask_aseg - INFO - Applying mask /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/mask.mgz to aseg
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s03_mask_aseg - INFO - Applying mask /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/mask.mgz to aseg
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s03_mask_aseg - INFO - Applying mask /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/mask.mgz to aseg
+2026-01-29 13:43:13 - fastsurfer_recon.stages.mask_aseg - INFO - Completed s03 mask_aseg in 0.2s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.mask_aseg - INFO - Completed s03 mask_aseg in 0.2s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.mask_aseg - INFO - Completed s03 mask_aseg in 0.2s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: MEBRAIN_resue
+Run Step: s04
+Start: 2026-01-29 13:43:13.396544
+================================================================================
+
+2026-01-29 13:43:13 - fastsurfer_recon.stages.talairach - INFO - Starting s04 talairach
+2026-01-29 13:43:13 - fastsurfer_recon.stages.talairach - INFO - Starting s04 talairach
+2026-01-29 13:43:13 - fastsurfer_recon.stages.talairach - INFO - Starting s04 talairach
+2026-01-29 13:43:13 - fastsurfer_recon.stages.talairach - INFO - Starting s04 talairach
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - Skipping Talairach registration (--no-talairach flag set)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - Skipping Talairach registration (--no-talairach flag set)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - Skipping Talairach registration (--no-talairach flag set)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - Skipping Talairach registration (--no-talairach flag set)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - NOTE: eTIV (estimated total intracranial volume) will not be calculated.
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - NOTE: eTIV (estimated total intracranial volume) will not be calculated.
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - NOTE: eTIV (estimated total intracranial volume) will not be calculated.
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - NOTE: eTIV (estimated total intracranial volume) will not be calculated.
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO -       This does not affect surface reconstruction or morphometry.
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO -       This does not affect surface reconstruction or morphometry.
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO -       This does not affect surface reconstruction or morphometry.
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO -       This does not affect surface reconstruction or morphometry.
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - Copying orig_nu.mgz to nu.mgz (no Talairach transform)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - Copying orig_nu.mgz to nu.mgz (no Talairach transform)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - Copying orig_nu.mgz to nu.mgz (no Talairach transform)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - Copying orig_nu.mgz to nu.mgz (no Talairach transform)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - Creating dummy identity talairach.xfm for compatibility
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - Creating dummy identity talairach.xfm for compatibility
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - Creating dummy identity talairach.xfm for compatibility
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s04_talairach - INFO - Creating dummy identity talairach.xfm for compatibility
+2026-01-29 13:43:13 - fastsurfer_recon.stages.talairach - INFO - Completed s04 talairach in 0.0s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.talairach - INFO - Completed s04 talairach in 0.0s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.talairach - INFO - Completed s04 talairach in 0.0s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.talairach - INFO - Completed s04 talairach in 0.0s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: MEBRAIN_resue
+Run Step: s05
+Start: 2026-01-29 13:43:13.399726
+================================================================================
+
+2026-01-29 13:43:13 - fastsurfer_recon.stages.norm_t1 - INFO - Starting s05 norm_t1
+2026-01-29 13:43:13 - fastsurfer_recon.stages.norm_t1 - INFO - Starting s05 norm_t1
+2026-01-29 13:43:13 - fastsurfer_recon.stages.norm_t1 - INFO - Starting s05 norm_t1
+2026-01-29 13:43:13 - fastsurfer_recon.stages.norm_t1 - INFO - Starting s05 norm_t1
+2026-01-29 13:43:13 - fastsurfer_recon.stages.norm_t1 - INFO - Starting s05 norm_t1
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Creating norm.mgz (masked nu.mgz)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Creating norm.mgz (masked nu.mgz)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Creating norm.mgz (masked nu.mgz)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Creating norm.mgz (masked nu.mgz)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Creating norm.mgz (masked nu.mgz)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Linking T1.mgz to nu.mgz (skipping normalization, keeping skull)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Linking T1.mgz to nu.mgz (skipping normalization, keeping skull)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Linking T1.mgz to nu.mgz (skipping normalization, keeping skull)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Linking T1.mgz to nu.mgz (skipping normalization, keeping skull)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Linking T1.mgz to nu.mgz (skipping normalization, keeping skull)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Linking brainmask.mgz to norm.mgz
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Linking brainmask.mgz to norm.mgz
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Linking brainmask.mgz to norm.mgz
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Linking brainmask.mgz to norm.mgz
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s05_norm_t1 - INFO - Linking brainmask.mgz to norm.mgz
+2026-01-29 13:43:13 - fastsurfer_recon.stages.norm_t1 - INFO - Completed s05 norm_t1 in 0.2s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.norm_t1 - INFO - Completed s05 norm_t1 in 0.2s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.norm_t1 - INFO - Completed s05 norm_t1 in 0.2s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.norm_t1 - INFO - Completed s05 norm_t1 in 0.2s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.norm_t1 - INFO - Completed s05 norm_t1 in 0.2s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: MEBRAIN_resue
+Run Step: s06
+Start: 2026-01-29 13:43:13.602078
+================================================================================
+
+2026-01-29 13:43:13 - fastsurfer_recon.stages.cc_segmentation - INFO - Starting s06 cc_segmentation
+2026-01-29 13:43:13 - fastsurfer_recon.stages.cc_segmentation - INFO - Starting s06 cc_segmentation
+2026-01-29 13:43:13 - fastsurfer_recon.stages.cc_segmentation - INFO - Starting s06 cc_segmentation
+2026-01-29 13:43:13 - fastsurfer_recon.stages.cc_segmentation - INFO - Starting s06 cc_segmentation
+2026-01-29 13:43:13 - fastsurfer_recon.stages.cc_segmentation - INFO - Starting s06 cc_segmentation
+2026-01-29 13:43:13 - fastsurfer_recon.stages.cc_segmentation - INFO - Starting s06 cc_segmentation
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s06_cc_segmentation - INFO - Skipping CC segmentation (--no-cc flag set)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s06_cc_segmentation - INFO - Skipping CC segmentation (--no-cc flag set)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s06_cc_segmentation - INFO - Skipping CC segmentation (--no-cc flag set)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s06_cc_segmentation - INFO - Skipping CC segmentation (--no-cc flag set)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s06_cc_segmentation - INFO - Skipping CC segmentation (--no-cc flag set)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s06_cc_segmentation - INFO - Skipping CC segmentation (--no-cc flag set)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s06_cc_segmentation - INFO - Copying aseg.auto_noCCseg.mgz to aseg.auto.mgz (no CC)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s06_cc_segmentation - INFO - Copying aseg.auto_noCCseg.mgz to aseg.auto.mgz (no CC)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s06_cc_segmentation - INFO - Copying aseg.auto_noCCseg.mgz to aseg.auto.mgz (no CC)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s06_cc_segmentation - INFO - Copying aseg.auto_noCCseg.mgz to aseg.auto.mgz (no CC)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s06_cc_segmentation - INFO - Copying aseg.auto_noCCseg.mgz to aseg.auto.mgz (no CC)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s06_cc_segmentation - INFO - Copying aseg.auto_noCCseg.mgz to aseg.auto.mgz (no CC)
+2026-01-29 13:43:13 - fastsurfer_recon.stages.cc_segmentation - INFO - Completed s06 cc_segmentation in 0.0s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.cc_segmentation - INFO - Completed s06 cc_segmentation in 0.0s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.cc_segmentation - INFO - Completed s06 cc_segmentation in 0.0s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.cc_segmentation - INFO - Completed s06 cc_segmentation in 0.0s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.cc_segmentation - INFO - Completed s06 cc_segmentation in 0.0s
+2026-01-29 13:43:13 - fastsurfer_recon.stages.cc_segmentation - INFO - Completed s06 cc_segmentation in 0.0s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: MEBRAIN_resue
+Run Step: s07
+Start: 2026-01-29 13:43:13.603287
+================================================================================
+
+2026-01-29 13:43:13 - fastsurfer_recon.stages.wm_filled - INFO - Starting s07 wm_filled
+2026-01-29 13:43:13 - fastsurfer_recon.stages.wm_filled - INFO - Starting s07 wm_filled
+2026-01-29 13:43:13 - fastsurfer_recon.stages.wm_filled - INFO - Starting s07 wm_filled
+2026-01-29 13:43:13 - fastsurfer_recon.stages.wm_filled - INFO - Starting s07 wm_filled
+2026-01-29 13:43:13 - fastsurfer_recon.stages.wm_filled - INFO - Starting s07 wm_filled
+2026-01-29 13:43:13 - fastsurfer_recon.stages.wm_filled - INFO - Starting s07 wm_filled
+2026-01-29 13:43:13 - fastsurfer_recon.stages.wm_filled - INFO - Starting s07 wm_filled
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating wm.mgz from aseg...
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating wm.mgz from aseg...
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating wm.mgz from aseg...
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating wm.mgz from aseg...
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating wm.mgz from aseg...
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating wm.mgz from aseg...
+2026-01-29 13:43:13 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating wm.mgz from aseg...
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading LUT: /home/star/github/banana/FastSurferCNN/atlas/atlas-ARM2/ARM2_ColorLUT.tsv
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading LUT: /home/star/github/banana/FastSurferCNN/atlas/atlas-ARM2/ARM2_ColorLUT.tsv
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading LUT: /home/star/github/banana/FastSurferCNN/atlas/atlas-ARM2/ARM2_ColorLUT.tsv
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading LUT: /home/star/github/banana/FastSurferCNN/atlas/atlas-ARM2/ARM2_ColorLUT.tsv
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading LUT: /home/star/github/banana/FastSurferCNN/atlas/atlas-ARM2/ARM2_ColorLUT.tsv
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading LUT: /home/star/github/banana/FastSurferCNN/atlas/atlas-ARM2/ARM2_ColorLUT.tsv
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading LUT: /home/star/github/banana/FastSurferCNN/atlas/atlas-ARM2/ARM2_ColorLUT.tsv
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading segmentation: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/aseg.auto.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading segmentation: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/aseg.auto.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading segmentation: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/aseg.auto.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading segmentation: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/aseg.auto.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading segmentation: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/aseg.auto.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading segmentation: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/aseg.auto.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Loading segmentation: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/aseg.auto.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Creating WM segmentation...
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Creating WM segmentation...
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Creating WM segmentation...
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Creating WM segmentation...
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Creating WM segmentation...
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Creating WM segmentation...
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Creating WM segmentation...
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - WM segmentation: BG=731723, WM(110)=525551, Vent(250)=6609
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - WM segmentation: BG=731723, WM(110)=525551, Vent(250)=6609
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - WM segmentation: BG=731723, WM(110)=525551, Vent(250)=6609
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - WM segmentation: BG=731723, WM(110)=525551, Vent(250)=6609
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - WM segmentation: BG=731723, WM(110)=525551, Vent(250)=6609
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - WM segmentation: BG=731723, WM(110)=525551, Vent(250)=6609
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - WM segmentation: BG=731723, WM(110)=525551, Vent(250)=6609
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/wm.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/wm.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/wm.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/wm.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/wm.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/wm.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.processing.segmentation - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri/wm.mgz
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.mgz (normalized norm.mgz)...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.mgz (normalized norm.mgz)...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.mgz (normalized norm.mgz)...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.mgz (normalized norm.mgz)...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.mgz (normalized norm.mgz)...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.mgz (normalized norm.mgz)...
+2026-01-29 13:43:15 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.mgz (normalized norm.mgz)...
+2026-01-29 13:44:21 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.finalsurfs.mgz (masked brain.mgz)...
+2026-01-29 13:44:21 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.finalsurfs.mgz (masked brain.mgz)...
+2026-01-29 13:44:21 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.finalsurfs.mgz (masked brain.mgz)...
+2026-01-29 13:44:21 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.finalsurfs.mgz (masked brain.mgz)...
+2026-01-29 13:44:21 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.finalsurfs.mgz (masked brain.mgz)...
+2026-01-29 13:44:21 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.finalsurfs.mgz (masked brain.mgz)...
+2026-01-29 13:44:21 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating brain.finalsurfs.mgz (masked brain.mgz)...
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz from wm.mgz...
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz from wm.mgz...
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz from wm.mgz...
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz from wm.mgz...
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz from wm.mgz...
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz from wm.mgz...
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - INFO - Creating filled.mgz from wm.mgz...
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - WARNING - ponscc.cut.log not found at /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/scripts/ponscc.cut.log (may not be available for non-human data)
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - WARNING - ponscc.cut.log not found at /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/scripts/ponscc.cut.log (may not be available for non-human data)
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - WARNING - ponscc.cut.log not found at /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/scripts/ponscc.cut.log (may not be available for non-human data)
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - WARNING - ponscc.cut.log not found at /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/scripts/ponscc.cut.log (may not be available for non-human data)
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - WARNING - ponscc.cut.log not found at /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/scripts/ponscc.cut.log (may not be available for non-human data)
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - WARNING - ponscc.cut.log not found at /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/scripts/ponscc.cut.log (may not be available for non-human data)
+2026-01-29 13:44:22 - fastsurfer_recon.stages.s07_wm_filled - WARNING - ponscc.cut.log not found at /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/scripts/ponscc.cut.log (may not be available for non-human data)
+2026-01-29 13:44:28 - fastsurfer_recon.stages.s07_wm_filled - INFO - Copying filled.mgz to filled.auto.mgz
+2026-01-29 13:44:28 - fastsurfer_recon.stages.s07_wm_filled - INFO - Copying filled.mgz to filled.auto.mgz
+2026-01-29 13:44:28 - fastsurfer_recon.stages.s07_wm_filled - INFO - Copying filled.mgz to filled.auto.mgz
+2026-01-29 13:44:28 - fastsurfer_recon.stages.s07_wm_filled - INFO - Copying filled.mgz to filled.auto.mgz
+2026-01-29 13:44:28 - fastsurfer_recon.stages.s07_wm_filled - INFO - Copying filled.mgz to filled.auto.mgz
+2026-01-29 13:44:28 - fastsurfer_recon.stages.s07_wm_filled - INFO - Copying filled.mgz to filled.auto.mgz
+2026-01-29 13:44:28 - fastsurfer_recon.stages.s07_wm_filled - INFO - Copying filled.mgz to filled.auto.mgz
+2026-01-29 13:44:28 - fastsurfer_recon.stages.wm_filled - INFO - Completed s07 wm_filled in 75.1s
+2026-01-29 13:44:28 - fastsurfer_recon.stages.wm_filled - INFO - Completed s07 wm_filled in 75.1s
+2026-01-29 13:44:28 - fastsurfer_recon.stages.wm_filled - INFO - Completed s07 wm_filled in 75.1s
+2026-01-29 13:44:28 - fastsurfer_recon.stages.wm_filled - INFO - Completed s07 wm_filled in 75.1s
+2026-01-29 13:44:28 - fastsurfer_recon.stages.wm_filled - INFO - Completed s07 wm_filled in 75.1s
+2026-01-29 13:44:28 - fastsurfer_recon.stages.wm_filled - INFO - Completed s07 wm_filled in 75.1s
+2026-01-29 13:44:28 - fastsurfer_recon.stages.wm_filled - INFO - Completed s07 wm_filled in 75.1s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: sub-MEBRAIN
+Run Step: s11
+Start: 2026-01-29 14:50:09.630131
+================================================================================
+
+2026-01-29 14:50:09 - fastsurfer_recon.stages.spherical_projection - INFO - Starting s11 spherical_projection (lh)
+2026-01-29 14:50:09 - fastsurfer_recon.stages.s11_spherical_projection - INFO - Using spectral projection for lh
+2026-01-29 14:50:09 - fastsurfer_recon.processing.spherical - INFO - Loading surface: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/surf/lh.smoothwm.nofix
+2026-01-29 14:50:09 - fastsurfer_recon.processing.spherical - INFO - Projecting to sphere...
+2026-01-29 14:50:09 - fastsurfer_recon.processing.spherical - INFO - Computing Laplace-Beltrami eigenfunctions...
+2026-01-29 14:50:12 - fastsurfer_recon.processing.spherical - INFO - Applying mean curvature flow...
+2026-01-29 14:50:15 - fastsurfer_recon.processing.spherical - INFO - Projecting to unit sphere...
+2026-01-29 14:50:15 - fastsurfer_recon.processing.spherical - INFO - Flipped triangle area: 0.00%
+2026-01-29 14:50:15 - fastsurfer_recon.processing.spherical - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/surf/lh.qsphere.nofix
+2026-01-29 14:50:15 - fastsurfer_recon.stages.spherical_projection - INFO - Completed s11 spherical_projection (lh) in 5.6s
+2026-01-29 14:50:15 - fastsurfer_recon.stages.spherical_projection - INFO - Starting s11 spherical_projection (rh)
+2026-01-29 14:50:15 - fastsurfer_recon.stages.s11_spherical_projection - INFO - Using spectral projection for rh
+2026-01-29 14:50:15 - fastsurfer_recon.processing.spherical - INFO - Loading surface: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/surf/rh.smoothwm.nofix
+2026-01-29 14:50:15 - fastsurfer_recon.processing.spherical - INFO - Projecting to sphere...
+2026-01-29 14:50:15 - fastsurfer_recon.processing.spherical - INFO - Computing Laplace-Beltrami eigenfunctions...
+2026-01-29 14:50:18 - fastsurfer_recon.processing.spherical - INFO - Applying mean curvature flow...
+2026-01-29 14:50:20 - fastsurfer_recon.processing.spherical - INFO - Projecting to unit sphere...
+2026-01-29 14:50:20 - fastsurfer_recon.processing.spherical - INFO - Flipped triangle area: 0.00%
+2026-01-29 14:50:20 - fastsurfer_recon.processing.spherical - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/surf/rh.qsphere.nofix
+2026-01-29 14:50:20 - fastsurfer_recon.stages.spherical_projection - INFO - Completed s11 spherical_projection (rh) in 5.4s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: sub-MEBRAIN
+Run Step: s14
+Start: 2026-01-29 14:50:37.644026
+================================================================================
+
+2026-01-29 14:50:37 - fastsurfer_recon.stages.parcellation - INFO - Starting s14 parcellation (lh)
+2026-01-29 14:50:37 - fastsurfer_recon.stages.s14_parcellation - INFO - Creating lh.cortex.label...
+2026-01-29 14:51:03 - fastsurfer_recon.stages.s14_parcellation - INFO - Mapping parcellation to lh surface...
+2026-01-29 14:51:03 - fastsurfer_recon.stages.s14_parcellation - INFO - Loading surface: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/surf/lh.white.preaparc
+2026-01-29 14:51:03 - fastsurfer_recon.processing.parcellation - INFO - Loading segmentation: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/mri/aparc.ARM2atlas+aseg.orig.mgz
+2026-01-29 14:51:03 - fastsurfer_recon.processing.parcellation - INFO - Loading cortex label: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/label/lh.cortex.label
+2026-01-29 14:51:03 - fastsurfer_recon.processing.parcellation - INFO - Sampling volume to surface...
+2026-01-29 14:51:03 - fastsurfer_recon.processing.parcellation - INFO - Searching 1562 zero samples within radius 2.0
+2026-01-29 14:51:03 - fastsurfer_recon.processing.parcellation - INFO - Translating labels...
+2026-01-29 14:51:03 - fastsurfer_recon.processing.parcellation - INFO - Finding label islands...
+2026-01-29 14:51:03 - fastsurfer_recon.processing.parcellation - INFO - Smoothing parcellation...
+2026-01-29 14:51:05 - fastsurfer_recon.processing.parcellation - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/label/lh.aparc.ARM2atlas.mapped.prefix.annot
+2026-01-29 14:51:05 - fastsurfer_recon.processing.parcellation - INFO - Loading annotation: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/label/lh.aparc.ARM2atlas.mapped.prefix.annot
+2026-01-29 14:51:05 - fastsurfer_recon.processing.parcellation - INFO - Loading cortex label: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/label/lh.cortex.label
+2026-01-29 14:51:05 - fastsurfer_recon.processing.parcellation - INFO - Smoothing parcellation...
+2026-01-29 14:51:05 - fastsurfer_recon.processing.parcellation - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/label/lh.aparc.ARM2atlas.mapped.annot
+2026-01-29 14:51:05 - fastsurfer_recon.stages.s14_parcellation - INFO - Applying post-processing adjustments for lh (visualization smoothing/inflation)...
+2026-01-29 14:51:05 - fastsurfer_recon.stages.s14_parcellation - INFO - Re-smoothing lh.smoothwm with 5 iterations (visualization smoothing)...
+2026-01-29 14:51:06 - fastsurfer_recon.stages.s14_parcellation - INFO - Replaced lh.smoothwm with adjusted version (5 iterations)
+2026-01-29 14:51:06 - fastsurfer_recon.stages.s14_parcellation - INFO - Re-smoothing lh.smoothwm with 50 iterations (inflation input only)...
+2026-01-29 14:51:07 - fastsurfer_recon.stages.s14_parcellation - INFO - Re-inflating lh.inflated with 3 iterations (visualization inflation)...
+2026-01-29 14:51:11 - fastsurfer_recon.stages.s14_parcellation - INFO - Replaced lh.inflated with adjusted version (3 iterations)
+2026-01-29 14:51:11 - fastsurfer_recon.stages.parcellation - INFO - Completed s14 parcellation (lh) in 34.2s
+2026-01-29 14:51:11 - fastsurfer_recon.stages.parcellation - INFO - Starting s14 parcellation (rh)
+2026-01-29 14:51:11 - fastsurfer_recon.stages.s14_parcellation - INFO - Creating rh.cortex.label...
+2026-01-29 14:51:36 - fastsurfer_recon.stages.s14_parcellation - INFO - Mapping parcellation to rh surface...
+2026-01-29 14:51:36 - fastsurfer_recon.stages.s14_parcellation - INFO - Loading surface: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/surf/rh.white.preaparc
+2026-01-29 14:51:36 - fastsurfer_recon.processing.parcellation - INFO - Loading segmentation: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/mri/aparc.ARM2atlas+aseg.orig.mgz
+2026-01-29 14:51:37 - fastsurfer_recon.processing.parcellation - INFO - Loading cortex label: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/label/rh.cortex.label
+2026-01-29 14:51:37 - fastsurfer_recon.processing.parcellation - INFO - Sampling volume to surface...
+2026-01-29 14:51:37 - fastsurfer_recon.processing.parcellation - INFO - Searching 1134 zero samples within radius 2.0
+2026-01-29 14:51:37 - fastsurfer_recon.processing.parcellation - INFO - Translating labels...
+2026-01-29 14:51:37 - fastsurfer_recon.processing.parcellation - INFO - Finding label islands...
+2026-01-29 14:51:37 - fastsurfer_recon.processing.parcellation - INFO - Smoothing parcellation...
+2026-01-29 14:51:38 - fastsurfer_recon.processing.parcellation - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/label/rh.aparc.ARM2atlas.mapped.prefix.annot
+2026-01-29 14:51:38 - fastsurfer_recon.processing.parcellation - INFO - Loading annotation: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/label/rh.aparc.ARM2atlas.mapped.prefix.annot
+2026-01-29 14:51:38 - fastsurfer_recon.processing.parcellation - INFO - Loading cortex label: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/label/rh.cortex.label
+2026-01-29 14:51:38 - fastsurfer_recon.processing.parcellation - INFO - Smoothing parcellation...
+2026-01-29 14:51:39 - fastsurfer_recon.processing.parcellation - INFO - Saved: /mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN/label/rh.aparc.ARM2atlas.mapped.annot
+2026-01-29 14:51:39 - fastsurfer_recon.stages.s14_parcellation - INFO - Applying post-processing adjustments for rh (visualization smoothing/inflation)...
+2026-01-29 14:51:39 - fastsurfer_recon.stages.s14_parcellation - INFO - Re-smoothing rh.smoothwm with 5 iterations (visualization smoothing)...
+2026-01-29 14:51:40 - fastsurfer_recon.stages.s14_parcellation - INFO - Replaced rh.smoothwm with adjusted version (5 iterations)
+2026-01-29 14:51:40 - fastsurfer_recon.stages.s14_parcellation - INFO - Re-smoothing rh.smoothwm with 50 iterations (inflation input only)...
+2026-01-29 14:51:41 - fastsurfer_recon.stages.s14_parcellation - INFO - Re-inflating rh.inflated with 3 iterations (visualization inflation)...
+2026-01-29 14:51:45 - fastsurfer_recon.stages.s14_parcellation - INFO - Replaced rh.inflated with adjusted version (3 iterations)
+2026-01-29 14:51:45 - fastsurfer_recon.stages.parcellation - INFO - Completed s14 parcellation (rh) in 34.0s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: sub-MEBRAIN
+Run Step: s16
+Start: 2026-01-29 14:51:50.808827
+================================================================================
+
+2026-01-29 14:51:50 - fastsurfer_recon.stages.compute_morphometry - INFO - Starting s16 compute_morphometry (lh)
+2026-01-29 14:51:50 - fastsurfer_recon.stages.s16_compute_morphometry - INFO - Computing morphometry for lh...
+2026-01-29 14:52:01 - fastsurfer_recon.stages.compute_morphometry - INFO - Completed s16 compute_morphometry (lh) in 11.2s
+2026-01-29 14:52:01 - fastsurfer_recon.stages.compute_morphometry - INFO - Starting s16 compute_morphometry (rh)
+2026-01-29 14:52:01 - fastsurfer_recon.stages.s16_compute_morphometry - INFO - Computing morphometry for rh...
+2026-01-29 14:52:13 - fastsurfer_recon.stages.compute_morphometry - INFO - Completed s16 compute_morphometry (rh) in 11.3s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: sub-MEBRAIN
+Run Step: s17
+Start: 2026-01-29 14:52:13.259361
+================================================================================
+
+2026-01-29 14:52:13 - fastsurfer_recon.stages.registration - INFO - Skipping s17 registration (lh) (disabled)
+2026-01-29 14:52:13 - fastsurfer_recon.stages.registration - INFO - Skipping s17 registration (lh) (disabled)
+2026-01-29 14:52:13 - fastsurfer_recon.stages.registration - INFO - Skipping s17 registration (rh) (disabled)
+2026-01-29 14:52:13 - fastsurfer_recon.stages.registration - INFO - Skipping s17 registration (rh) (disabled)
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: sub-MEBRAIN
+Run Step: s18
+Start: 2026-01-29 14:52:13.259781
+================================================================================
+
+2026-01-29 14:52:13 - fastsurfer_recon.stages.statistics - INFO - Starting s18 statistics (lh)
+2026-01-29 14:52:13 - fastsurfer_recon.stages.statistics - INFO - Starting s18 statistics (lh)
+2026-01-29 14:52:13 - fastsurfer_recon.stages.statistics - INFO - Starting s18 statistics (lh)
+2026-01-29 14:52:13 - fastsurfer_recon.stages.s18_statistics - INFO - Computing curvature statistics for lh...
+2026-01-29 14:52:13 - fastsurfer_recon.stages.s18_statistics - INFO - Computing curvature statistics for lh...
+2026-01-29 14:52:13 - fastsurfer_recon.stages.s18_statistics - INFO - Computing curvature statistics for lh...
+2026-01-29 14:52:18 - fastsurfer_recon.stages.s18_statistics - INFO - Computing anatomical stats for lh...
+2026-01-29 14:52:18 - fastsurfer_recon.stages.s18_statistics - INFO - Computing anatomical stats for lh...
+2026-01-29 14:52:18 - fastsurfer_recon.stages.s18_statistics - INFO - Computing anatomical stats for lh...
+2026-01-29 14:52:23 - fastsurfer_recon.stages.statistics - INFO - Completed s18 statistics (lh) in 10.0s
+2026-01-29 14:52:23 - fastsurfer_recon.stages.statistics - INFO - Completed s18 statistics (lh) in 10.0s
+2026-01-29 14:52:23 - fastsurfer_recon.stages.statistics - INFO - Completed s18 statistics (lh) in 10.0s
+2026-01-29 14:52:23 - fastsurfer_recon.stages.statistics - INFO - Starting s18 statistics (rh)
+2026-01-29 14:52:23 - fastsurfer_recon.stages.statistics - INFO - Starting s18 statistics (rh)
+2026-01-29 14:52:23 - fastsurfer_recon.stages.statistics - INFO - Starting s18 statistics (rh)
+2026-01-29 14:52:23 - fastsurfer_recon.stages.s18_statistics - INFO - Computing curvature statistics for rh...
+2026-01-29 14:52:23 - fastsurfer_recon.stages.s18_statistics - INFO - Computing curvature statistics for rh...
+2026-01-29 14:52:23 - fastsurfer_recon.stages.s18_statistics - INFO - Computing curvature statistics for rh...
+2026-01-29 14:52:28 - fastsurfer_recon.stages.s18_statistics - INFO - Computing anatomical stats for rh...
+2026-01-29 14:52:28 - fastsurfer_recon.stages.s18_statistics - INFO - Computing anatomical stats for rh...
+2026-01-29 14:52:28 - fastsurfer_recon.stages.s18_statistics - INFO - Computing anatomical stats for rh...
+2026-01-29 14:52:31 - fastsurfer_recon.stages.statistics - INFO - Completed s18 statistics (rh) in 8.5s
+2026-01-29 14:52:31 - fastsurfer_recon.stages.statistics - INFO - Completed s18 statistics (rh) in 8.5s
+2026-01-29 14:52:31 - fastsurfer_recon.stages.statistics - INFO - Completed s18 statistics (rh) in 8.5s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: sub-MEBRAIN
+Run Step: s19
+Start: 2026-01-29 14:52:31.786617
+================================================================================
+
+2026-01-29 14:52:31 - fastsurfer_recon.stages.cortical_ribbon - INFO - Starting s19 cortical_ribbon
+2026-01-29 14:52:31 - fastsurfer_recon.stages.cortical_ribbon - INFO - Starting s19 cortical_ribbon
+2026-01-29 14:52:31 - fastsurfer_recon.stages.cortical_ribbon - INFO - Starting s19 cortical_ribbon
+2026-01-29 14:52:31 - fastsurfer_recon.stages.cortical_ribbon - INFO - Starting s19 cortical_ribbon
+2026-01-29 14:52:31 - fastsurfer_recon.stages.s19_cortical_ribbon - INFO - Creating cortical ribbon...
+2026-01-29 14:52:31 - fastsurfer_recon.stages.s19_cortical_ribbon - INFO - Creating cortical ribbon...
+2026-01-29 14:52:31 - fastsurfer_recon.stages.s19_cortical_ribbon - INFO - Creating cortical ribbon...
+2026-01-29 14:52:31 - fastsurfer_recon.stages.s19_cortical_ribbon - INFO - Creating cortical ribbon...
+2026-01-29 14:54:16 - fastsurfer_recon.stages.cortical_ribbon - INFO - Completed s19 cortical_ribbon in 104.8s
+2026-01-29 14:54:16 - fastsurfer_recon.stages.cortical_ribbon - INFO - Completed s19 cortical_ribbon in 104.8s
+2026-01-29 14:54:16 - fastsurfer_recon.stages.cortical_ribbon - INFO - Completed s19 cortical_ribbon in 104.8s
+2026-01-29 14:54:16 - fastsurfer_recon.stages.cortical_ribbon - INFO - Completed s19 cortical_ribbon in 104.8s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: sub-MEBRAIN
+Run Step: s20
+Start: 2026-01-29 14:54:16.630601
+================================================================================
+
+2026-01-29 14:54:16 - fastsurfer_recon.stages.aseg_refinement - INFO - Starting s20 aseg_refinement
+2026-01-29 14:54:16 - fastsurfer_recon.stages.aseg_refinement - INFO - Starting s20 aseg_refinement
+2026-01-29 14:54:16 - fastsurfer_recon.stages.aseg_refinement - INFO - Starting s20 aseg_refinement
+2026-01-29 14:54:16 - fastsurfer_recon.stages.aseg_refinement - INFO - Starting s20 aseg_refinement
+2026-01-29 14:54:16 - fastsurfer_recon.stages.aseg_refinement - INFO - Starting s20 aseg_refinement
+2026-01-29 14:54:16 - fastsurfer_recon.stages.s20_aseg_refinement - INFO - Creating aseg.presurf.hypos.mgz...
+2026-01-29 14:54:16 - fastsurfer_recon.stages.s20_aseg_refinement - INFO - Creating aseg.presurf.hypos.mgz...
+2026-01-29 14:54:16 - fastsurfer_recon.stages.s20_aseg_refinement - INFO - Creating aseg.presurf.hypos.mgz...
+2026-01-29 14:54:16 - fastsurfer_recon.stages.s20_aseg_refinement - INFO - Creating aseg.presurf.hypos.mgz...
+2026-01-29 14:54:16 - fastsurfer_recon.stages.s20_aseg_refinement - INFO - Creating aseg.presurf.hypos.mgz...
+2026-01-29 14:54:41 - fastsurfer_recon.stages.s20_aseg_refinement - INFO - Creating aseg.mgz from aseg.presurf.hypos with surfaces...
+2026-01-29 14:54:41 - fastsurfer_recon.stages.s20_aseg_refinement - INFO - Creating aseg.mgz from aseg.presurf.hypos with surfaces...
+2026-01-29 14:54:41 - fastsurfer_recon.stages.s20_aseg_refinement - INFO - Creating aseg.mgz from aseg.presurf.hypos with surfaces...
+2026-01-29 14:54:41 - fastsurfer_recon.stages.s20_aseg_refinement - INFO - Creating aseg.mgz from aseg.presurf.hypos with surfaces...
+2026-01-29 14:54:41 - fastsurfer_recon.stages.s20_aseg_refinement - INFO - Creating aseg.mgz from aseg.presurf.hypos with surfaces...
+2026-01-29 14:55:01 - fastsurfer_recon.stages.aseg_refinement - INFO - Completed s20 aseg_refinement in 45.2s
+2026-01-29 14:55:01 - fastsurfer_recon.stages.aseg_refinement - INFO - Completed s20 aseg_refinement in 45.2s
+2026-01-29 14:55:01 - fastsurfer_recon.stages.aseg_refinement - INFO - Completed s20 aseg_refinement in 45.2s
+2026-01-29 14:55:01 - fastsurfer_recon.stages.aseg_refinement - INFO - Completed s20 aseg_refinement in 45.2s
+2026-01-29 14:55:01 - fastsurfer_recon.stages.aseg_refinement - INFO - Completed s20 aseg_refinement in 45.2s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: sub-MEBRAIN
+Run Step: s21
+Start: 2026-01-29 14:55:01.833444
+================================================================================
+
+2026-01-29 14:55:01 - fastsurfer_recon.stages.aparc_mapping - INFO - Starting s21 aparc_mapping
+2026-01-29 14:55:01 - fastsurfer_recon.stages.aparc_mapping - INFO - Starting s21 aparc_mapping
+2026-01-29 14:55:01 - fastsurfer_recon.stages.aparc_mapping - INFO - Starting s21 aparc_mapping
+2026-01-29 14:55:01 - fastsurfer_recon.stages.aparc_mapping - INFO - Starting s21 aparc_mapping
+2026-01-29 14:55:01 - fastsurfer_recon.stages.aparc_mapping - INFO - Starting s21 aparc_mapping
+2026-01-29 14:55:01 - fastsurfer_recon.stages.aparc_mapping - INFO - Starting s21 aparc_mapping
+2026-01-29 14:55:01 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Mapping surface parcellation to volume...
+2026-01-29 14:55:01 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Mapping surface parcellation to volume...
+2026-01-29 14:55:01 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Mapping surface parcellation to volume...
+2026-01-29 14:55:01 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Mapping surface parcellation to volume...
+2026-01-29 14:55:01 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Mapping surface parcellation to volume...
+2026-01-29 14:55:01 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Mapping surface parcellation to volume...
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Creating symlink: aparc.ARM2atlas+aseg.mgz
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Creating symlink: aparc.ARM2atlas+aseg.mgz
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Creating symlink: aparc.ARM2atlas+aseg.mgz
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Creating symlink: aparc.ARM2atlas+aseg.mgz
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Creating symlink: aparc.ARM2atlas+aseg.mgz
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Creating symlink: aparc.ARM2atlas+aseg.mgz
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Creating symlink: aparc+aseg.mgz
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Creating symlink: aparc+aseg.mgz
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Creating symlink: aparc+aseg.mgz
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Creating symlink: aparc+aseg.mgz
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Creating symlink: aparc+aseg.mgz
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s21_aparc_mapping - INFO - Creating symlink: aparc+aseg.mgz
+2026-01-29 14:55:45 - fastsurfer_recon.stages.aparc_mapping - INFO - Completed s21 aparc_mapping in 43.8s
+2026-01-29 14:55:45 - fastsurfer_recon.stages.aparc_mapping - INFO - Completed s21 aparc_mapping in 43.8s
+2026-01-29 14:55:45 - fastsurfer_recon.stages.aparc_mapping - INFO - Completed s21 aparc_mapping in 43.8s
+2026-01-29 14:55:45 - fastsurfer_recon.stages.aparc_mapping - INFO - Completed s21 aparc_mapping in 43.8s
+2026-01-29 14:55:45 - fastsurfer_recon.stages.aparc_mapping - INFO - Completed s21 aparc_mapping in 43.8s
+2026-01-29 14:55:45 - fastsurfer_recon.stages.aparc_mapping - INFO - Completed s21 aparc_mapping in 43.8s
+
+================================================================================
+FastSurfer Recon Pipeline Log (Single Stage Test)
+Subject: sub-MEBRAIN
+Run Step: s22
+Start: 2026-01-29 14:55:45.672836
+================================================================================
+
+2026-01-29 14:55:45 - fastsurfer_recon.stages.wmparc_mapping - INFO - Starting s22 wmparc_mapping
+2026-01-29 14:55:45 - fastsurfer_recon.stages.wmparc_mapping - INFO - Starting s22 wmparc_mapping
+2026-01-29 14:55:45 - fastsurfer_recon.stages.wmparc_mapping - INFO - Starting s22 wmparc_mapping
+2026-01-29 14:55:45 - fastsurfer_recon.stages.wmparc_mapping - INFO - Starting s22 wmparc_mapping
+2026-01-29 14:55:45 - fastsurfer_recon.stages.wmparc_mapping - INFO - Starting s22 wmparc_mapping
+2026-01-29 14:55:45 - fastsurfer_recon.stages.wmparc_mapping - INFO - Starting s22 wmparc_mapping
+2026-01-29 14:55:45 - fastsurfer_recon.stages.wmparc_mapping - INFO - Starting s22 wmparc_mapping
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Mapping surface parcellation to white matter volume...
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Mapping surface parcellation to white matter volume...
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Mapping surface parcellation to white matter volume...
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Mapping surface parcellation to white matter volume...
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Mapping surface parcellation to white matter volume...
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Mapping surface parcellation to white matter volume...
+2026-01-29 14:55:45 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Mapping surface parcellation to white matter volume...
+2026-01-29 14:56:00 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Creating symlink: wmparc.mgz
+2026-01-29 14:56:00 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Creating symlink: wmparc.mgz
+2026-01-29 14:56:00 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Creating symlink: wmparc.mgz
+2026-01-29 14:56:00 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Creating symlink: wmparc.mgz
+2026-01-29 14:56:00 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Creating symlink: wmparc.mgz
+2026-01-29 14:56:00 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Creating symlink: wmparc.mgz
+2026-01-29 14:56:00 - fastsurfer_recon.stages.s22_wmparc_mapping - INFO - Creating symlink: wmparc.mgz
+2026-01-29 14:56:00 - fastsurfer_recon.stages.wmparc_mapping - INFO - Completed s22 wmparc_mapping in 14.5s
+2026-01-29 14:56:00 - fastsurfer_recon.stages.wmparc_mapping - INFO - Completed s22 wmparc_mapping in 14.5s
+2026-01-29 14:56:00 - fastsurfer_recon.stages.wmparc_mapping - INFO - Completed s22 wmparc_mapping in 14.5s
+2026-01-29 14:56:00 - fastsurfer_recon.stages.wmparc_mapping - INFO - Completed s22 wmparc_mapping in 14.5s
+2026-01-29 14:56:00 - fastsurfer_recon.stages.wmparc_mapping - INFO - Completed s22 wmparc_mapping in 14.5s
+2026-01-29 14:56:00 - fastsurfer_recon.stages.wmparc_mapping - INFO - Completed s22 wmparc_mapping in 14.5s
+2026-01-29 14:56:00 - fastsurfer_recon.stages.wmparc_mapping - INFO - Completed s22 wmparc_mapping in 14.5s

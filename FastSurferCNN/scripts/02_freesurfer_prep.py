@@ -17,7 +17,7 @@ from FastSurferCNN.utils.constants import FASTSURFER_ROOT
 
 # %%
 # Test paths
-common_dir = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/NMT2Sym/mri'
+common_dir = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/MEBRAIN_resue/mri'
 skullstripped_dir = f'{common_dir}'
 output_dir = f'{skullstripped_dir}/test'
 

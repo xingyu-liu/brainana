@@ -12,6 +12,7 @@ from .base import HemisphereStage
 from ..wrappers.mris import mris_fix_topology, mris_remove_intersection
 from ..wrappers.mris import mris_smooth, mris_inflate
 from ..processing.surface_fix import fix_surface_orientation
+from ..processing.spherical import spherically_project_surface
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,9 @@ class TopologyFix(HemisphereStage):
         3. Remove surface intersections
         4. Clean up temporary files (inflated.nofix)
         5. Fix surface orientation
-        6. Create smoothwm from fixed orig (smooth2)
-        7. Create inflated from smoothwm (inflate2)
+        6. Recreate smoothwm from fixed orig 
+        7. Recreate inflated from smoothwm 
+        8. Recreate sphere from smoothwm
         
         The topology fix is critical for ensuring the surface has correct topology
         (genus 0, no handles) required for spherical mapping and parcellation.
@@ -108,16 +110,16 @@ class TopologyFix(HemisphereStage):
                 logger.info(f"Copying {self.hemi}.orig.premesh to {self.hemi}.orig...")
                 shutil.copy(premesh, orig)
             
-            # # Step 3: Remove surface intersections
-            # # Even after topology fix, the surface may have self-intersections.
-            # # This step removes any remaining intersections to ensure a clean surface.
-            # logger.info(f"Removing intersections from {self.hemi}.orig...")
-            # mris_remove_intersection(
-            #     input_surf=orig,
-            #     output_surf=orig,  # In-place operation
-            #     log_file=self.config.log_file,
-            #     subject_dir=self.sd.subject_dir,
-            # )
+            # Step 3: Remove surface intersections
+            # Even after topology fix, the surface may have self-intersections.
+            # This step removes any remaining intersections to ensure a clean surface.
+            logger.info(f"Removing intersections from {self.hemi}.orig...")
+            mris_remove_intersection(
+                input_surf=orig,
+                output_surf=orig,  # In-place operation
+                log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
+            )
             
             # Step 4: Clean up temporary files
             # inflated.nofix is no longer needed after topology fix (it was only needed as input).
@@ -135,44 +137,47 @@ class TopologyFix(HemisphereStage):
                 backup_path=self.hemi_path("orig.noorient"),
             )
         
-        # Step 6: Create smoothwm from fixed orig (smooth2)
-        # After topology fix, create a smoothed version of the fixed orig surface.
-        # This is "smooth2" (second smoothing pass) which creates smoothwm from the
-        # topology-fixed orig surface. This is different from smooth1 (stage 09) which
-        # created smoothwm.nofix from orig.nofix before topology fix.
-        # The smooth2_iterations parameter controls the amount of smoothing (typically 3 for monkey data).
+        # Step 6: re-create smoothwm from fixed orig after topology fix
         smoothwm = self.hemi_path("smoothwm")
         if not smoothwm.exists():
-            logger.info(f"Creating {self.hemi}.smoothwm from fixed {self.hemi}.orig (smooth2, {self.config.processing.smooth2_iterations} iterations)...")
+            logger.info(f"Creating {self.hemi}.smoothwm from fixed {self.hemi}.orig (smooth, {self.config.processing.smooth_iterations} iterations)...")
             mris_smooth(
                 input_surf=orig,
                 output_surf=smoothwm,
-                n_iterations=self.config.processing.smooth2_iterations,
-                nw=True,  # Normalize weights
+                n_iterations=self.config.processing.smooth_iterations,
+                nw=True,
                 seed=1234,
                 log_file=self.config.log_file,
                 subject_dir=self.sd.subject_dir,
             )
         
-        # Step 7: Create inflated from smoothwm (inflate2)
-        # After topology fix, create an inflated version for visualization.
-        # This is "inflate2" (second inflation pass) which creates inflated from smoothwm.
-        # This is different from inflate1 (stage 10) which created inflated.nofix from
-        # smoothwm.nofix before topology fix.
-        # For inflate2, we save the sulc file (sulcal depth) which is useful for visualization.
-        # The inflate2_iterations parameter controls the amount of inflation (typically 3 for monkey data).
+        # Step 7: re-create inflated from smoothwm after topology fix
         inflated = self.hemi_path("inflated")
         if not inflated.exists():
             logger.info(f"Creating {self.hemi}.inflated from {self.hemi}.smoothwm (inflate2, {self.config.processing.inflate2_iterations or 'default'} iterations)...")
             mris_inflate(
                 input_surf=smoothwm,
                 output_surf=inflated,
-                n_iterations=self.config.processing.inflate2_iterations,
+                n_iterations=self.config.processing.inflate_iterations,
                 no_save_sulc=False,  # Save sulc file for visualization
                 log_file=self.config.log_file,
                 subject_dir=self.sd.subject_dir,
             )
-    
+        
+        # Step 8: Re-create sphere from smoothwm after topology fix
+        # So sphere has the same vertex count as orig/smoothwm/white/pial (post-fix mesh).
+        smoothwm = self.hemi_path("smoothwm")
+        sphere = self.hemi_path("sphere")
+        qsphere = self.hemi_path("qsphere")
+
+        logger.info(f"Re-creating {self.hemi}.sphere from {self.hemi}.smoothwm (post-topology-fix)...")
+        spherically_project_surface(
+            input_path=smoothwm,
+            output_path=sphere,
+            threads=self.threads,
+        )
+        shutil.copy(sphere, qsphere)
+
     def should_skip(self) -> bool:
         """Skip if orig exists."""
         return self.hemi_path("orig").exists()

@@ -111,9 +111,9 @@ class ProcessingConfig(BaseModel):
     # Method choices
     use_fs_tessellation: bool = Field(
         description="Use FreeSurfer mri_tesselate instead of marching cubes"
-    )
-    use_fs_qsphere: bool = Field(
-        description="Use FreeSurfer qsphere instead of spectral projection"
+    # )
+    # use_fs_qsphere: bool = Field(
+    #     description="Use FreeSurfer qsphere instead of spectral projection"
     )
     use_fs_aparc: bool = Field(
         description="Use FreeSurfer aparc instead of mapped parcellation"
@@ -152,6 +152,10 @@ class ProcessingConfig(BaseModel):
         ge=1, 
         description="Surface inflation iterations for inflate2 (Stage 14, after topology fix, for visualization). None = use FreeSurfer default. Use 3 for monkey data (less inflation for visualization)."
     )
+    inflate2_smooth_iterations: Optional[int] = Field(
+        ge=0,
+        description="Extra smoothing iterations applied only to the surface used as input to inflate2 (Stage 14). Output written to smoothwm.forinflate, not smoothwm. None or 0 = skip; inflate from smoothwm directly."
+    )
     inflate_no_save_sulc: bool = Field(
         description="Skip saving sulc file during inflation"
     )
@@ -172,10 +176,10 @@ class ProcessingConfig(BaseModel):
         """Alias for use_fs_tessellation."""
         return self.use_fs_tessellation
     
-    @property
-    def fsqsphere(self) -> bool:
-        """Alias for use_fs_qsphere."""
-        return self.use_fs_qsphere
+    # @property
+    # def fsqsphere(self) -> bool:
+    #     """Alias for use_fs_qsphere."""
+    #     return self.use_fs_qsphere
     
     @property
     def fsaparc(self) -> bool:

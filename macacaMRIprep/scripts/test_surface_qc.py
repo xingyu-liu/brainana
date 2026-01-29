@@ -30,8 +30,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Test directory
-fs_subject_dir = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-NMT2Sym")
-output_dir = fs_subject_dir / "tmp"
+fs_subject_dir = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/sub-MEBRAIN")
+output_dir = fs_subject_dir / "QC"
 output_dir.mkdir(parents=True, exist_ok=True)
 
 def main():
