@@ -1,0 +1,13 @@
+------------------------------
+SUBJECT sub-NMT2Sym
+START_TIME Thu Jan 29 15:00:46 EST 2026
+END_TIME Thu Jan 29 15:00:55 EST 2026
+RUNTIME_HOURS 0.002
+USER star
+HOST SAS-664VW04
+PROCESSOR x86_64
+OS Linux
+UNAME Linux SAS-664VW04 6.8.0-90-generic #91~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Nov 20 15:20:45 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+VERSION 7.4.1 (freesurfer-linux-ubuntu22_x86_64-7.4.1-20230614-7eb8460)
+CMDPATH /usr/local/freesurfer/7.4.1/bin/recon-all
+CMDARGS -s sub-NMT2Sym -apas2aseg -hires -threads 8 -itkthreads 8 -no-isrunning -umask 022

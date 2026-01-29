@@ -1,7 +1,7 @@
 """
 Stage 17: Surface Registration
 
-Registers surface to fsaverage (optional).
+Registers surface to fsaverage (human) or a custom template (e.g. sub-MEBRAIN for macaque).
 """
 
 import logging
@@ -14,23 +14,42 @@ from ..processing.spherical import compute_sphere_rotation
 logger = logging.getLogger(__name__)
 
 
+def _template_paths(config, hemi: str):
+    """Resolve template sphere, annot, and folding atlas paths.
+
+    Choice A (single path): config.registration_template is path to template subject dir.
+    Choice A (convention): fsaverage uses aparc.annot; custom template uses aparc.{atlas.name}atlas.mapped.annot.
+    """
+    template_dir = getattr(config, "registration_template", None) and config.registration_template
+    if template_dir:
+        sphere = template_dir / "surf" / f"{hemi}.sphere"
+        annot = template_dir / "label" / f"{hemi}.aparc.{config.atlas.name}atlas.mapped.annot"
+        folding_atlas = template_dir / "atlas" / f"{hemi}.folding.atlas.tif"
+        return sphere, annot, folding_atlas, True  # use_custom_template
+    fs_home = get_fs_home()
+    sphere = fs_home / "subjects" / "fsaverage" / "surf" / f"{hemi}.sphere"
+    annot = fs_home / "subjects" / "fsaverage" / "label" / f"{hemi}.aparc.annot"
+    folding_atlas = fs_home / "average" / f"{hemi}.folding.atlas.acfb40.noaparc.i12.2016-08-02.tif"
+    return sphere, annot, folding_atlas, False
+
+
 class Registration(HemisphereStage):
-    """Register surface to fsaverage."""
-    
+    """Register surface to fsaverage or custom template (e.g. sub-MEBRAIN)."""
+
     name = "registration"
-    description = "Surface registration to fsaverage"
-    
+    description = "Surface registration to template"
+
     def _run(self) -> None:
         """Register surface."""
         if not (self.config.processing.fsaparc or self.config.processing.fssurfreg):
             logger.info(f"Skipping registration for {self.hemi} (not requested)")
             return
-        
+
         sphere_reg = self.hemi_path("sphere.reg")
         if sphere_reg.exists():
             logger.info(f"{self.hemi}.sphere.reg already exists, skipping")
             return
-        
+
         # Create sphere if needed
         sphere = self.hemi_path("sphere")
         if not sphere.exists():
@@ -47,13 +66,13 @@ class Registration(HemisphereStage):
                 log_file=self.config.log_file,
                 subjects_dir=self.config.subjects_dir,
             )
-        
-        # Get fsaverage paths
-        fs_home = get_fs_home()
-        fsaverage_sphere = fs_home / "subjects" / "fsaverage" / "surf" / f"{self.hemi}.sphere"
-        fsaverage_aparc = fs_home / "subjects" / "fsaverage" / "label" / f"{self.hemi}.aparc.annot"
-        folding_atlas = fs_home / "average" / f"{self.hemi}.folding.atlas.acfb40.noaparc.i12.2016-08-02.tif"
-        
+
+        template_sphere, template_aparc, folding_atlas, use_custom_template = _template_paths(
+            self.config, self.hemi
+        )
+        if use_custom_template:
+            logger.info(f"Using registration template: {self.config.registration_template}")
+
         # Compute rotation angles
         angles_file = self.hemi_path("angles.txt")
         if not angles_file.exists():
@@ -62,17 +81,17 @@ class Registration(HemisphereStage):
             compute_sphere_rotation(
                 src_sphere_path=sphere,
                 src_aparc_path=aparc_mapped,
-                trg_sphere_path=fsaverage_sphere,
-                trg_aparc_path=fsaverage_aparc,
+                trg_sphere_path=template_sphere,
+                trg_aparc_path=template_aparc,
                 output_path=angles_file,
             )
-        
+
         # Read rotation angles
         with open(angles_file) as f:
             angles = f.read().strip()
-        
+
         # Register sphere
-        logger.info(f"Registering {self.hemi} sphere to fsaverage...")
+        logger.info(f"Registering {self.hemi} sphere to template...")
         mris_register(
             input_sphere=sphere,
             target_atlas=folding_atlas,
@@ -83,9 +102,10 @@ class Registration(HemisphereStage):
             threads=self.threads,
             log_file=self.config.log_file,
         )
-        
-        # Create FS aparc if requested
-        if self.config.processing.fsaparc:
+
+        # Create FS aparc only for fsaverage (human); skip when using custom template (no GCS atlas)
+        if self.config.processing.fsaparc and not use_custom_template:
+            fs_home = get_fs_home()
             aparc_fs = self.hemi_label("aparc.annot")
             if not aparc_fs.exists():
                 logger.info(f"Creating FS aparc for {self.hemi}...")
@@ -101,7 +121,7 @@ class Registration(HemisphereStage):
                     seed=1234,
                     log_file=self.config.log_file,
                 )
-        
+
         # Compute jacobian and avgcurv
         logger.info(f"Computing jacobian and avgcurv for {self.hemi}...")
         flags = []

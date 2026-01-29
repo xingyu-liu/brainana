@@ -35,12 +35,16 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_multiple_v5"
 # BIDS_DIR="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids"
 # OUTPUT_DIR="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_baby25_v1"
-BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_UNC
-OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_UNC_v1
+
+# BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_UNC
+# OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_UNC_v1
+BIDS_DIR=/mnt/DataDrive2/macaque/data_raw/macaque_mri/MEBRAIN/bids
+OUTPUT_DIR=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/MEBRAIN/
 
 # CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_easy.yaml"
 # CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_full.yaml"
-CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_UNC.yaml"
+# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_UNC.yaml"
+CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_MEBRAIN.yaml"
 
 WORKING_DIR=${OUTPUT_DIR}_wd
 

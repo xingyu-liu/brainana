@@ -1,0 +1,11 @@
+-s
+sub-NMT2Sym
+-apas2aseg
+-hires
+-threads
+8
+-itkthreads
+8
+-no-isrunning
+-umask
+022

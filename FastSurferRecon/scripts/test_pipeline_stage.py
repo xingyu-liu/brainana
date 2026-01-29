@@ -54,7 +54,7 @@ STOP_STEP = "s22"
 
 # Test subject
 subject_root = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon/")
-subject_dir = subject_root / "sub-MEBRAIN"
+subject_dir = subject_root / "sub-NMT2Sym"
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 

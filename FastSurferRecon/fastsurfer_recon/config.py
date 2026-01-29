@@ -9,6 +9,9 @@ from typing import Optional, Literal
 import os
 
 import yaml
+
+# Banana repo root (parent of FastSurferRecon package). Used to resolve relative registration_template.
+_BANANA_ROOT = Path(__file__).resolve().parent.parent.parent
 import nibabel as nib
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -211,7 +214,11 @@ class ReconSurfConfig(BaseModel):
     
     # Optional inputs
     mask: Optional[Path] = Field(default=None, description="Brain mask file")
-    
+    registration_template: Optional[Path] = Field(
+        default=None,
+        description="Path to registration template subject dir (e.g. sub-MEBRAIN). If set, use its surf/label/atlas; else use fsaverage from FREESURFER_HOME. When set, fsaparc (mris_ca_label) is skipped."
+    )
+
     # Sub-configurations
     atlas: AtlasConfig = Field()
     processing: ProcessingConfig = Field()
@@ -246,6 +253,17 @@ class ReconSurfConfig(BaseModel):
         if v is None:
             return None
         return Path(v).expanduser().resolve()
+
+    @field_validator("registration_template", mode="before")
+    @classmethod
+    def resolve_registration_template(cls, v: Path | str | None) -> Path | None:
+        """Resolve registration_template to absolute. Relative paths are resolved against banana repo root."""
+        if v is None:
+            return None
+        p = Path(v).expanduser()
+        if not p.is_absolute():
+            p = (_BANANA_ROOT / p).resolve()
+        return p
     
     @model_validator(mode="after")
     def validate_inputs(self) -> "ReconSurfConfig":

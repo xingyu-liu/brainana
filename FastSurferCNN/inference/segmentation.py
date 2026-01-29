@@ -60,7 +60,6 @@ def run_segmentation(
     modal: str,
     output_dir: Union[str, Path],
     device_id: Union[int, str] = 'auto',
-    logger: Optional[logging.Logger] = None,
     output_data_format: Literal["mgz", "nifti"] = "nifti",
     enable_crop_2round: bool = False,
     plane_weight_coronal: Optional[float] = None,
@@ -74,6 +73,7 @@ def run_segmentation(
     wm_thr: float = 0.5,
     save_debug_intermediates: bool = False,
     registration_threads: Optional[int] = None,
+    logger: Optional[logging.Logger] = None,
 ) -> Dict[str, str]:
     """
     Perform multi-class atlas segmentation using FastSurferCNN.
