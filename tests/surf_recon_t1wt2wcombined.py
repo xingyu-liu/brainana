@@ -20,7 +20,7 @@ from macacaMRIprep.steps.qc import qc_surf_recon_tissue_seg, qc_cortical_surf_an
 
 
 # %%
-dataset_dir = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_UNC_v1'
+dataset_dir = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_UNC_batch1'
 sub_ses_list = [['sub-004', 'ses-16months'], 
                 ['sub-004', 'ses-20months'],
                 ['sub-004', 'ses-24months'],
@@ -32,7 +32,8 @@ sub_ses_list = [['sub-004', 'ses-16months'],
                 ['sub-032', 'ses-09months'],
                 ['sub-032', 'ses-12months']]
 
-working_dir = Path(dataset_dir) / 'fastsurfer_t1wt2wcombined'
+anat_type = 'T1w'  # 'T1w' or 'T1wT2wCombined'
+working_dir = Path(dataset_dir) / f'fastsurfer_{anat_type}'
 lut_file = Path(working_dir) / 'lut.tsv'
 config_file = Path(dataset_dir) / 'nextflow_reports' / 'config.yaml'
 config = load_config(config_file)
@@ -40,24 +41,25 @@ config = load_config(config_file)
 figure_dir = Path(working_dir) / 'figures'
 
 # %%
-# generate the t1wt2wcombined image
-for sub_ses in sub_ses_list:
-    sub, ses = sub_ses
-    sub_dir = Path(dataset_dir) / sub / ses / 'anat'
-    
-    seg_file = sub_dir / f'{sub}_{ses}_desc-brain_atlasARM2.nii.gz'
-    mask_file = sub_dir / f'{sub}_{ses}_desc-brain_mask.nii.gz'
-    t1w_file = sub_dir / f'{sub}_{ses}_desc-preproc_T1w.nii.gz'
-    t2w_file = sub_dir / f'{sub}_{ses}_desc-preproc_T2w.nii.gz'
+# # generate the t1wt2wcombined image
+# if anat_type == 'T1wT2wCombined':
+#     for sub_ses in sub_ses_list:
+#         sub, ses = sub_ses
+#         sub_dir = Path(dataset_dir) / sub / ses / 'anat'
+        
+#         seg_file = sub_dir / f'{sub}_{ses}_desc-brain_atlasARM2.nii.gz'
+#         mask_file = sub_dir / f'{sub}_{ses}_desc-brain_mask.nii.gz'
+#         t1w_file = sub_dir / f'{sub}_{ses}_desc-preproc_T1w.nii.gz'
+#         t2w_file = sub_dir / f'{sub}_{ses}_desc-preproc_T2w.nii.gz'
 
-    t1wt2wcombined_file = sub_dir / f'{sub}_{ses}_desc-preproc_T1wT2wCombined.nii.gz'
-    anat_t1wt2wcombined(
-        t1w_file=t1w_file,
-        t2w_file=t2w_file,
-        segmentation_file=seg_file,
-        segmentation_lut_file=lut_file,
-        output_file=t1wt2wcombined_file
-    )
+#         t1wt2wcombined_file = sub_dir / f'{sub}_{ses}_desc-preproc_T1wT2wCombined.nii.gz'
+#         anat_t1wt2wcombined(
+#             t1w_file=t1w_file,
+#             t2w_file=t2w_file,
+#             segmentation_file=seg_file,
+#             segmentation_lut_file=lut_file,
+#             output_file=t1wt2wcombined_file
+#         )
 
 # %%
 # post preproc t1wt2wcombined, mask and seg to freesurfer recon_all input
@@ -67,12 +69,12 @@ for sub_ses in sub_ses_list:
     
     seg_file = sub_dir / f'{sub}_{ses}_desc-brain_atlasARM2.nii.gz'
     mask_file = sub_dir / f'{sub}_{ses}_desc-brain_mask.nii.gz'
-    t1wt2wcombined_file = sub_dir / f'{sub}_{ses}_desc-preproc_T1wT2wCombined.nii.gz'
+    anat_file = sub_dir / f'{sub}_{ses}_desc-preproc_{anat_type}.nii.gz'
     try:
         print(f"Processing {sub_ses}")
         anat_surface_reconstruction(
             input=StepInput(
-                input_file=t1wt2wcombined_file,
+                input_file=anat_file,
                 working_dir=working_dir,
                 config=config,
                 metadata={
@@ -81,7 +83,7 @@ for sub_ses in sub_ses_list:
                     'session_count': 5
                 }
             ),
-            t1w_file=t1wt2wcombined_file,
+            t1w_file=anat_file,
             segmentation_file=seg_file,
             brain_mask=mask_file
         )
@@ -97,7 +99,7 @@ for sub_ses in sub_ses_list:
     try:
         qc_surf_recon_tissue_seg(
             fs_subject_dir=fs_subject_dir,
-            output_path=figure_dir / f'{sub}_{ses}_desc-surfReconTissueSeg.png',
+            output_path=figure_dir / f'{sub}_{ses}_desc-surfReconTissueSeg_T1w.png',
             modality='anat',
             config=config
         )
@@ -107,7 +109,7 @@ for sub_ses in sub_ses_list:
     try:
         qc_cortical_surf_and_measures(
             fs_subject_dir=fs_subject_dir,
-            output_path=figure_dir / f'{sub}_{ses}_desc-corticalSurfAndMeasures.png',
+            output_path=figure_dir / f'{sub}_{ses}_desc-corticalSurfAndMeasures_T1w.png',
             modality='anat',
             config=config
         )

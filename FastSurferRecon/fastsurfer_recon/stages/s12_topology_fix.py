@@ -13,6 +13,7 @@ from ..wrappers.mris import mris_fix_topology, mris_remove_intersection
 from ..wrappers.mris import mris_smooth, mris_inflate
 from ..processing.surface_fix import fix_surface_orientation
 from ..processing.spherical import spherically_project_surface
+from ..processing.topology_fix import get_euler_number, repair_surface_pymeshfix
 
 logger = logging.getLogger(__name__)
 
@@ -104,11 +105,44 @@ class TopologyFix(HemisphereStage):
                     subjects_dir=self.config.subjects_dir,
                 )
             
+            # If premesh has Euler != 2, run pymeshfix iteratively (max 5) to close boundary
+            # edges and fix orientation; stop when Euler == 2.
+            premesh_for_orig = premesh
+            euler = get_euler_number(premesh)
+            if euler is not None and euler != 2:
+                premesh_pymeshfix = self.hemi_path("orig.premesh.pymeshfix")
+                max_iterations = 5
+                logger.info(f"Premesh Euler number {euler} (target 2). Running pymeshfix up to {max_iterations} iterations...")
+                current_input = premesh
+                for iteration in range(max_iterations):
+                    # Use temp output when input and output would be the same path
+                    if current_input.resolve() == premesh_pymeshfix.resolve():
+                        output_path = premesh_pymeshfix.parent / (premesh_pymeshfix.name + ".tmp")
+                    else:
+                        output_path = premesh_pymeshfix
+                    if not repair_surface_pymeshfix(current_input, output_path):
+                        logger.warning(f"pymeshfix failed at iteration {iteration + 1}, using current mesh")
+                        break
+                    if output_path.suffix == ".tmp":
+                        shutil.move(output_path, premesh_pymeshfix)
+                    euler_after = get_euler_number(premesh_pymeshfix)
+                    logger.info(f"  Iteration {iteration + 1}: Euler = {euler_after}")
+                    if euler_after is not None and euler_after == 2:
+                        logger.info(f"  Topology corrected (Euler=2) after {iteration + 1} iteration(s)")
+                        premesh_for_orig = premesh_pymeshfix
+                        break
+                    current_input = premesh_pymeshfix
+                else:
+                    premesh_for_orig = premesh_pymeshfix
+                    logger.warning(f"Euler still != 2 after {max_iterations} iterations; using pymeshfix result")
+            elif euler is not None and euler == 2:
+                logger.info(f"Premesh already has correct topology (Euler=2), skipping pymeshfix")
+
             # Step 2: Copy premesh to orig (final fixed surface)
-            # The premesh is the topology-fixed version that becomes the final orig surface.
+            # The premesh (or pymeshfix result) is the topology-fixed version that becomes the final orig surface.
             if not orig.exists():
                 logger.info(f"Copying {self.hemi}.orig.premesh to {self.hemi}.orig...")
-                shutil.copy(premesh, orig)
+                shutil.copy(premesh_for_orig, orig)
             
             # Step 3: Remove surface intersections
             # Even after topology fix, the surface may have self-intersections.

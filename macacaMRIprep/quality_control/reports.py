@@ -628,7 +628,7 @@ def generate_qc_report(
     snapshot_dir: Union[str, Path],
     report_path: Union[str, Path],
     config: Dict[str, Any],
-    logger: logging.Logger,
+    logger: Optional[logging.Logger] = None,
     snapshot_paths: Optional[Dict[str, str]] = None,
     dataset_context: Optional[Dict[str, Any]] = None,
     **kwargs
@@ -636,6 +636,9 @@ def generate_qc_report(
     """Generate comprehensive HTML quality control report."""
     snapshot_dir, report_path = Path(snapshot_dir), Path(report_path)
     
+    if logger is None:
+        logger = logging.getLogger(__name__)
+        
     try:
         # Discover and parse snapshots
         snapshot_data = SnapshotProcessor.discover_and_parse(snapshot_dir, logger, snapshot_paths)
