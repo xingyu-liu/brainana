@@ -49,12 +49,11 @@ from fastsurfer_recon.stages import (
 # ============================================================================
 # RUN_STEPS = [f's{i:02d}' for i in range(1, 8)]
 # RUN_STEPS = ['s11']
-# RUN_STEPS = ['s14']
-RUN_STEPS = [f's{i:02d}' for i in range(16, 23)]
+RUN_STEPS = ['s14'] + [f's{i:02d}' for i in range(16, 23)]
 
 # Test subject
 subject_root = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/surf_recon")
-subject_dir = subject_root / "sub-NMT2Sym"
+subject_dir = subject_root / "sub-MEBRAIN_amy"
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 
