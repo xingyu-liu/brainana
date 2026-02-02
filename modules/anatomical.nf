@@ -1,5 +1,5 @@
 /*
- * Anatomical processing modules for macacaMRIprep Nextflow pipeline
+ * Anatomical processing modules for nhp_mri_prep Nextflow pipeline
  */
 
 process ANAT_SYNTHESIS {
@@ -23,9 +23,9 @@ process ANAT_SYNTHESIS {
     def first_file = anat_files[0]
     """
     \${PYTHON:-python3} <<'PYTHON_EOF' > /dev/null
-from macacaMRIprep.steps.anatomical import anat_synthesis
-from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename
-from macacaMRIprep.utils.nextflow import (
+from nhp_mri_prep.steps.anatomical import anat_synthesis
+from nhp_mri_prep.utils.bids import parse_bids_entities, create_bids_filename
+from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
 )
 from pathlib import Path
@@ -35,7 +35,7 @@ import os
 
 # Initialize command log file
 # Handle empty string session_id (subject-level synthesis)
-from macacaMRIprep.utils.nextflow import normalize_session_id
+from nhp_mri_prep.utils.nextflow import normalize_session_id
 
 session_id_raw = '${session_id}'
 session_id_py = normalize_session_id(session_id_raw)
@@ -73,7 +73,7 @@ synthesized = result.metadata.get("synthesized", False)
 is_subject_level = (session_id_py is None)
 
 # Generate BIDS filename and path using utility function
-from macacaMRIprep.utils.bids import create_synthesized_bids_filename
+from nhp_mri_prep.utils.bids import create_synthesized_bids_filename
 
 bids_output_filename, bids_name_for_downstream = create_synthesized_bids_filename(
     original_file=bids_name,
@@ -115,11 +115,11 @@ process ANAT_REORIENT {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.anatomical import anat_reorient
-from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.templates import resolve_template
-from macacaMRIprep.utils.bids import create_bids_output_filename
-from macacaMRIprep.utils.nextflow import (
+from nhp_mri_prep.steps.anatomical import anat_reorient
+from nhp_mri_prep.steps.types import StepInput
+from nhp_mri_prep.utils.templates import resolve_template
+from nhp_mri_prep.utils.bids import create_bids_output_filename
+from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
 )
 from pathlib import Path
@@ -211,11 +211,11 @@ process ANAT_CONFORM {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.anatomical import anat_conform
-from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.templates import resolve_template
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.nextflow import (
+from nhp_mri_prep.steps.anatomical import anat_conform
+from nhp_mri_prep.steps.types import StepInput
+from nhp_mri_prep.utils.templates import resolve_template
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
 )
 from pathlib import Path
@@ -330,10 +330,10 @@ process ANAT_BIAS_CORRECTION {
     # Python code reads OMP_NUM_THREADS from environment
     
     \${PYTHON:-python3} <<'PYTHON_EOF'
-from macacaMRIprep.steps.anatomical import anat_bias_correction
-from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename
-from macacaMRIprep.utils.nextflow import (
+from nhp_mri_prep.steps.anatomical import anat_bias_correction
+from nhp_mri_prep.steps.types import StepInput
+from nhp_mri_prep.utils.bids import create_bids_output_filename
+from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
 )
 from pathlib import Path
@@ -390,7 +390,7 @@ create_output_link(result.output_file, bids_output_filename)
 # Always output brain (real if available, dummy if not) for consistent structure
 # Structure: [sub, ses, brain_file] - will be joined with bids_template in workflow
 # Use desc-biascorrect naming (not desc-preproc) - publishing step will handle preproc naming
-from macacaMRIprep.utils.bids import get_filename_stem
+from nhp_mri_prep.utils.bids import get_filename_stem
 original_stem = get_filename_stem(bids_name)
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 bids_brain_filename = f"{bids_prefix_wo_modality}_desc-biascorrect_{modality}_brain.nii.gz"
@@ -444,10 +444,10 @@ process ANAT_SKULLSTRIPPING {
     echo "[GPU Assignment] Task ${task.index} -> GPU ${gpu_id} (of ${params.gpu_count} available)"
     
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.anatomical import anat_skullstripping
-from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename
-from macacaMRIprep.utils.nextflow import (
+from nhp_mri_prep.steps.anatomical import anat_skullstripping
+from nhp_mri_prep.steps.types import StepInput
+from nhp_mri_prep.utils.bids import create_bids_output_filename
+from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
 )
 from pathlib import Path
@@ -489,7 +489,7 @@ result = anat_skullstripping(input_obj)
 # Generate BIDS-compliant output filenames
 # Principle: anat_after_xxxstep = full head (_T1w), anat_after_xxxstep_brain = brain (_T1w_brain)
 # Use desc-skullstrip naming to indicate this step (similar to desc-conform, desc-biascorrect)
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 original_stem = get_filename_stem(bids_name)
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 
@@ -581,9 +581,9 @@ process ANAT_SURFACE_RECONSTRUCTION {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.anatomical import anat_surface_reconstruction
-from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.nextflow import (
+from nhp_mri_prep.steps.anatomical import anat_surface_reconstruction
+from nhp_mri_prep.steps.types import StepInput
+from nhp_mri_prep.utils.nextflow import (
     load_config, init_cmd_log_for_nextflow, save_metadata
 )
 from pathlib import Path
@@ -720,7 +720,7 @@ process ANAT_REGISTRATION {
     """
     # Get effective_output_space from effective config file
     EFFECTIVE_OUTPUT_SPACE=\$(\${PYTHON:-python3} <<'PYTHON_OUTPUT_SPACE'
-from macacaMRIprep.utils.nextflow import load_config
+from nhp_mri_prep.utils.nextflow import load_config
 config = load_config('${config_file}')
 effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
 print(effective_output_space)
@@ -732,11 +732,11 @@ PYTHON_OUTPUT_SPACE
     # Python code reads OMP_NUM_THREADS from environment
     
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.anatomical import anat_registration
-from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.templates import resolve_template
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.nextflow import (
+from nhp_mri_prep.steps.anatomical import anat_registration
+from nhp_mri_prep.steps.types import StepInput
+from nhp_mri_prep.utils.templates import resolve_template
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
 )
 from pathlib import Path
@@ -791,7 +791,7 @@ result = anat_registration(input_obj, template_file=template_file, template_name
 
 # If unskullstripped version is provided and different, apply transform to it instead
 if use_unskullstripped:
-    from macacaMRIprep.operations.registration import ants_apply_transforms
+    from nhp_mri_prep.operations.registration import ants_apply_transforms
     
     # Get the forward transform file
     forward_transform = result.additional_files.get("forward_transform")
@@ -891,10 +891,10 @@ process ANAT_T2W_TO_T1W_REGISTRATION {
     # Python code reads OMP_NUM_THREADS from environment
     
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.anatomical import anat_t2w_to_t1w_registration
-from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.nextflow import (
+from nhp_mri_prep.steps.anatomical import anat_t2w_to_t1w_registration
+from nhp_mri_prep.steps.types import StepInput
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
 )
 from pathlib import Path
@@ -1001,8 +1001,8 @@ process ANAT_CONFORM_PASSTHROUGH {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.nextflow import detect_modality, save_metadata, create_output_link
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.utils.nextflow import detect_modality, save_metadata, create_output_link
 from pathlib import Path
 import shutil
 import os
@@ -1084,8 +1084,8 @@ process ANAT_BIAS_CORRECTION_PASSTHROUGH {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.nextflow import detect_modality, save_metadata, create_output_link
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.utils.nextflow import detect_modality, save_metadata, create_output_link
 from pathlib import Path
 import os
 
@@ -1154,7 +1154,7 @@ process ANAT_REGISTRATION_PASSTHROUGH {
     """
     # Get effective_output_space from effective config file
     EFFECTIVE_OUTPUT_SPACE=\$(\${PYTHON:-python3} <<'PYTHON_OUTPUT_SPACE'
-from macacaMRIprep.utils.nextflow import load_config
+from nhp_mri_prep.utils.nextflow import load_config
 config = load_config('${config_file}')
 effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
 print(effective_output_space)
@@ -1163,9 +1163,9 @@ PYTHON_OUTPUT_SPACE
     TEMPLATE_NAME=\$(echo "\$EFFECTIVE_OUTPUT_SPACE" | cut -d':' -f1)
     
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.templates import resolve_template
-from macacaMRIprep.utils.nextflow import detect_modality, save_metadata, create_output_link, load_config
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.utils.templates import resolve_template
+from nhp_mri_prep.utils.nextflow import detect_modality, save_metadata, create_output_link, load_config
 from pathlib import Path
 import os
 import subprocess
@@ -1296,9 +1296,9 @@ process ANAT_APPLY_CONFORM {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.operations.registration import flirt_apply_transforms
-from macacaMRIprep.utils.bids import create_bids_output_filename
-from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
+from nhp_mri_prep.operations.registration import flirt_apply_transforms
+from nhp_mri_prep.utils.bids import create_bids_output_filename
+from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
 from pathlib import Path
 
 # Initialize command log file
@@ -1409,9 +1409,9 @@ process ANAT_APPLY_TRANSFORMATION {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.operations.registration import ants_apply_transforms
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
+from nhp_mri_prep.operations.registration import ants_apply_transforms
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
 from pathlib import Path
 import re
 import shutil
@@ -1506,9 +1506,9 @@ process ANAT_APPLY_TRANSFORM_MASK {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.operations.registration import ants_apply_transforms
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
+from nhp_mri_prep.operations.registration import ants_apply_transforms
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
 from pathlib import Path
 import re
 
@@ -1560,7 +1560,7 @@ if not mask_result.get("imagef_registered"):
 mask_stem = get_filename_stem(mask_file)
 # Parse entities from original mask filename
 import json
-from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename
+from nhp_mri_prep.utils.bids import parse_bids_entities, create_bids_filename
 
 try:
     # Try to parse BIDS entities from original mask filename
@@ -1623,7 +1623,7 @@ process ANAT_PUBLISH_PHASE1 {
 from pathlib import Path
 import re
 import sys
-from macacaMRIprep.utils.nextflow import save_metadata, create_output_link
+from nhp_mri_prep.utils.nextflow import save_metadata, create_output_link
 
 # Get input files
 anat_file = Path('${anat_file}')
@@ -1700,9 +1700,9 @@ process ANAT_T1WT2W_COMBINED {
     """
     \${PYTHON:-python3} <<EOF
 from pathlib import Path
-from macacaMRIprep.steps.anatomical import anat_t1wt2wcombined
-from macacaMRIprep.utils.nextflow import save_metadata, create_output_link, init_cmd_log_for_nextflow
-from macacaMRIprep.utils.bids import get_filename_stem
+from nhp_mri_prep.steps.anatomical import anat_t1wt2wcombined
+from nhp_mri_prep.utils.nextflow import save_metadata, create_output_link, init_cmd_log_for_nextflow
+from nhp_mri_prep.utils.bids import get_filename_stem
 
 # Initialize command log file
 init_cmd_log_for_nextflow(

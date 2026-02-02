@@ -1,6 +1,6 @@
 # Logging System Walkthrough
 
-This document explains the multi-layered logging system in macacaMRIprep, especially in the Nextflow context.
+This document explains the multi-layered logging system in nhp_mri_prep, especially in the Nextflow context.
 
 ## Overview
 
@@ -19,14 +19,14 @@ The logging system has **three main layers**:
 The Python logging system uses a centralized logger hierarchy:
 
 ```
-macacaMRIprep (root logger)
-├── macacaMRIprep.step.{step_name} (step-specific loggers)
-└── macacaMRIprep.{workflow_name} (workflow loggers)
+nhp_mri_prep (root logger)
+├── nhp_mri_prep.step.{step_name} (step-specific loggers)
+└── nhp_mri_prep.{workflow_name} (workflow loggers)
 ```
 
 ### Key Components
 
-**Location**: `macacaMRIprep/utils/logger.py`
+**Location**: `nhp_mri_prep/utils/logger.py`
 
 #### Main Functions
 
@@ -55,7 +55,7 @@ In Nextflow processes, Python logging goes to:
 
 **Example**:
 ```python
-from macacaMRIprep.utils import get_logger
+from nhp_mri_prep.utils import get_logger
 
 logger = get_logger(__name__)
 logger.info("Processing started")
@@ -96,7 +96,7 @@ reports/
 
 **Configuration**:
 ```python
-from macacaMRIprep.utils import set_cmd_log_rotation_config
+from nhp_mri_prep.utils import set_cmd_log_rotation_config
 
 # Customize rotation settings (before initializing log file)
 set_cmd_log_rotation_config(
@@ -108,7 +108,7 @@ set_cmd_log_rotation_config(
 
 ### Architecture
 
-**Location**: `macacaMRIprep/utils/system.py`
+**Location**: `nhp_mri_prep/utils/system.py`
 
 #### Key Functions
 
@@ -131,7 +131,7 @@ set_cmd_log_rotation_config(
 The command log file uses a format similar to FreeSurfer:
 
 ```
-# Command log file for macacaMRIprep
+# Command log file for nhp_mri_prep
 # Created: 2024-01-15 10:30:45
 # Output directory: /path/to/output
 #--------------------------------------------
@@ -151,7 +151,7 @@ mcflirt -in input.nii.gz -out output -dof 6 -reffile ref.nii.gz -mats -plots
 In each Nextflow process, command logging is automatically initialized:
 
 ```python
-from macacaMRIprep.utils import init_cmd_log_file
+from nhp_mri_prep.utils import init_cmd_log_file
 
 # Initialize command log file (saves to output_dir/reports/commands.log)
 init_cmd_log_file('${params.output_dir}')
@@ -331,7 +331,7 @@ Let's trace what happens when `run_command(['3dTshift', ...])` is called:
 If you want to disable command logging:
 
 ```python
-from macacaMRIprep.utils import set_cmd_log_file
+from nhp_mri_prep.utils import set_cmd_log_file
 
 # Disable command logging
 set_cmd_log_file(None)
@@ -340,7 +340,7 @@ set_cmd_log_file(None)
 ### Custom Command Log Location
 
 ```python
-from macacaMRIprep.utils import set_cmd_log_file
+from nhp_mri_prep.utils import set_cmd_log_file
 from pathlib import Path
 
 # Use custom location

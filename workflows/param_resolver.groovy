@@ -66,7 +66,7 @@ def initialize = { params, projectDir ->
     }
     
     // Load defaults.yaml
-    def defaultsPath = "${projectDir}/macacaMRIprep/config/defaults.yaml"
+    def defaultsPath = "${projectDir}/src/nhp_mri_prep/config/defaults.yaml"
     try {
         defaultsConfig = loadYamlConfig(defaultsPath)
     } catch (Exception e) {
@@ -74,7 +74,7 @@ def initialize = { params, projectDir ->
     }
     
     // Load user config file if provided
-    def configFilePath = params.config_file ?: "${projectDir}/macacaMRIprep/config/defaults.yaml"
+    def configFilePath = params.config_file ?: "${projectDir}/src/nhp_mri_prep/config/defaults.yaml"
     try {
         yamlConfig = loadYamlConfig(configFilePath)
     } catch (Exception e) {

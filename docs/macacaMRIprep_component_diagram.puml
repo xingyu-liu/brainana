@@ -1,4 +1,4 @@
-@startuml macacaMRIprep_Component_Architecture
+@startuml nhp_mri_prep_Component_Architecture
 
 !theme plain
 skinparam componentStyle rectangle
@@ -6,7 +6,7 @@ skinparam componentFontSize 10
 skinparam packageFontSize 12
 skinparam packageFontStyle bold
 
-package "macacaMRIprep System" {
+package "nhp_mri_prep System" {
     
     component "Command Line Interface" as CLI {
         [preproc.main] as cli_main

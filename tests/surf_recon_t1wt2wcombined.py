@@ -7,16 +7,16 @@ import sys
 from pathlib import Path
 
 
-# Add parent directory to path so we can import FastSurferCNN
-_file_dir = Path(__file__).resolve().parent
-if str(_file_dir.parent) not in sys.path:
-    sys.path.insert(0, str(_file_dir.parent))
+# Add src/ to path for nhp_mri_prep, fastsurfer_nn imports (tests/ -> banana -> src)
+_src_dir = Path(__file__).resolve().parent.parent / "src"
+if str(_src_dir) not in sys.path:
+    sys.path.insert(0, str(_src_dir))
 
-from macacaMRIprep.steps.types import StepInput
-# from macacaMRIprep.steps.anatomical import anat_t1wt2wcombined
-from macacaMRIprep.steps.anatomical import anat_surface_reconstruction
-from macacaMRIprep.utils.nextflow import load_config
-from macacaMRIprep.steps.qc import qc_surf_recon_tissue_seg, qc_cortical_surf_and_measures
+from nhp_mri_prep.steps.types import StepInput
+# from nhp_mri_prep.steps.anatomical import anat_t1wt2wcombined
+from nhp_mri_prep.steps.anatomical import anat_surface_reconstruction
+from nhp_mri_prep.utils.nextflow import load_config
+from nhp_mri_prep.steps.qc import qc_surf_recon_tissue_seg, qc_cortical_surf_and_measures
 
 
 # %%

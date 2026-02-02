@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-Simple test script for skullstripping function using FastSurferCNN
+Simple test script for skullstripping function using fastsurfer_nn
 """
 
 import sys
 import logging
 from pathlib import Path
 
-# Add parent directory to path so we can import FastSurferCNN
-_file_dir = Path(__file__).resolve().parent
-if str(_file_dir.parent) not in sys.path:
-    sys.path.insert(0, str(_file_dir.parent))
+# Add src/ to path for fastsurfer_nn imports (tests/ -> banana -> src)
+_src_dir = Path(__file__).resolve().parent.parent / "src"
+if str(_src_dir) not in sys.path:
+    sys.path.insert(0, str(_src_dir))
 
-from FastSurferCNN.inference.segmentation import run_segmentation
+from fastsurfer_nn.inference.segmentation import run_segmentation
 
 # Setup logging
 logging.basicConfig(
@@ -26,17 +26,17 @@ def main():
     # Test parameters
     input_image = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/training_output/test/EPI/site-caltech_sub-032184_ses-001_task-movie_run-3_EPI.nii.gz'
     modal = 'func'
-    # FastSurferCNN uses output_dir (directory) instead of output_path (file)
+    # fastsurfer_nn uses output_dir (directory) instead of output_path (file)
     output_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/training_output/test/EPI/test_skullstripping_fscnn'
     
-    # FastSurferCNN configuration
+    # fastsurfer_nn configuration
     config = {
         'batch_size': 1,
         'threads': 8
     }
     
     logger.info("=" * 80)
-    logger.info("Test: testing FastSurferCNN segmentation function")
+    logger.info("Test: testing fastsurfer_nn segmentation function")
     logger.info("=" * 80)
     logger.info(f"Test: input_image={input_image}")
     logger.info(f"Test: modal={modal}")

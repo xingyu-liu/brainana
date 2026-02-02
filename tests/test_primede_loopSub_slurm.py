@@ -53,7 +53,7 @@ def wait_for_user_job_slot(max_concurrent_jobs, check_interval=60):
 def main():
 
     # Default n_procs, can be overridden by SLURM_CPUS_PER_TASK
-    # This ensures macacaMRIprep uses the same number of CPUs that Slurm allocated
+    # This ensures nhp_mri_prep uses the same number of CPUs that Slurm allocated
     n_procs = int(os.environ.get("SLURM_CPUS_PER_TASK", "40"))
     # Maximum concurrent jobs to submit to Slurm (configurable via environment variable)
     max_concurrent_jobs = int(os.environ.get("MAX_CONCURRENT_JOBS", "1"))
@@ -118,7 +118,7 @@ def main():
         
         # Build command arguments
         cmd = [
-            sys.executable, "-m", "macacaMRIprep.cli.preproc",
+            sys.executable, "-m", "nhp_mri_prep.cli.preproc",
             input_path,
             output_path,
             "--config", config_path,
@@ -182,7 +182,7 @@ def main():
             print(f"Error running preprocessing for {sub}: {e}")
             return e.returncode
         except FileNotFoundError:
-            print("Error: macacaMRIprep module not found. Make sure it's installed and in your Python path.")
+            print("Error: nhp_mri_prep module not found. Make sure it's installed and in your Python path.")
             return 1
     
     print("All batches processed successfully!")

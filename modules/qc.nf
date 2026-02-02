@@ -1,5 +1,5 @@
 /*
- * Quality control modules for macacaMRIprep Nextflow pipeline
+ * Quality control modules for nhp_mri_prep Nextflow pipeline
  */
 
 // ============================================
@@ -25,12 +25,12 @@ process QC_CONFORM {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_conform
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.steps.qc import qc_conform
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -84,12 +84,12 @@ process QC_BIAS_CORRECTION {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_bias_correction
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.steps.qc import qc_bias_correction
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -139,12 +139,12 @@ process QC_T1WT2W_COMBINED {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_t1wt2w_combined
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.steps.qc import qc_t1wt2w_combined
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -199,12 +199,12 @@ process QC_SKULLSTRIPPING {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_skullstripping
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.steps.qc import qc_skullstripping
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -254,15 +254,15 @@ process QC_ATLAS_SEGMENTATION {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_atlas_segmentation
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.steps.qc import qc_atlas_segmentation
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -319,12 +319,12 @@ process QC_REGISTRATION {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_registration
-from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename, create_bids_output_filename
+from nhp_mri_prep.steps.qc import qc_registration
+from nhp_mri_prep.utils.bids import parse_bids_entities, create_bids_filename, create_bids_output_filename
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get the registered file and reference file directly from input
@@ -385,12 +385,12 @@ process QC_T2W_TO_T1W_REGISTRATION {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_registration
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.steps.qc import qc_registration
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get T1w brain file (skullstripped T1w for contour overlay)
@@ -450,12 +450,12 @@ process QC_T2W_TEMPLATE_SPACE {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_registration
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.steps.qc import qc_registration
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get template reference file (for contour overlay)
@@ -514,12 +514,12 @@ process QC_SURF_RECON_TISSUE_SEG {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_surf_recon_tissue_seg
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.steps.qc import qc_surf_recon_tissue_seg
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -580,12 +580,12 @@ process QC_CORTICAL_SURF_AND_MEASURES {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_cortical_surf_and_measures
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.steps.qc import qc_cortical_surf_and_measures
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -655,12 +655,12 @@ process QC_MOTION_CORRECTION {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_motion_correction
-from macacaMRIprep.utils.bids import create_bids_output_filename
+from nhp_mri_prep.steps.qc import qc_motion_correction
+from nhp_mri_prep.utils.bids import create_bids_output_filename
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -706,12 +706,12 @@ process QC_BIAS_CORRECTION_FUNC {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_bias_correction
-from macacaMRIprep.utils.bids import create_bids_output_filename
+from nhp_mri_prep.steps.qc import qc_bias_correction
+from nhp_mri_prep.utils.bids import create_bids_output_filename
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -759,12 +759,12 @@ process QC_CONFORM_FUNC {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_conform
-from macacaMRIprep.utils.bids import create_bids_output_filename
+from nhp_mri_prep.steps.qc import qc_conform
+from nhp_mri_prep.utils.bids import create_bids_output_filename
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, save_metadata
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -815,12 +815,12 @@ process QC_SKULLSTRIPPING_FUNC {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_skullstripping
-from macacaMRIprep.utils.bids import create_bids_output_filename
+from nhp_mri_prep.steps.qc import qc_skullstripping
+from nhp_mri_prep.utils.bids import create_bids_output_filename
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -868,14 +868,14 @@ process QC_REGISTRATION_FUNC {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_registration
+from nhp_mri_prep.steps.qc import qc_registration
 from pathlib import Path
 import glob
 import os
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
-from macacaMRIprep.utils.templates import resolve_template
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.templates import resolve_template
 config = load_config('${config_file}')
 
 # Get registered file and reference file
@@ -890,7 +890,7 @@ if ' ' in registered_file_str:
     file_paths = registered_file_str.split()
     # Get template name from output_space (e.g., "NMT2Sym:res-1" -> "NMT2Sym")
     # Get effective_output_space from effective config file
-    from macacaMRIprep.utils.nextflow import load_config
+    from nhp_mri_prep.utils.nextflow import load_config
     config = load_config('${config_file}')
     effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
     template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
@@ -920,7 +920,7 @@ bids_name = Path('${bids_name}') if '${bids_name}' else None
 # Construct QC output filename
 # For intermediate files (func2anat), use bids_name directly since intermediate file names aren't BIDS-compliant
 # For final files (func2target), try to parse from registered_file first, fallback to bids_name
-from macacaMRIprep.utils.bids import parse_bids_entities, create_bids_filename, create_bids_output_filename
+from nhp_mri_prep.utils.bids import parse_bids_entities, create_bids_filename, create_bids_output_filename
 if qc_modality == 'func2anat' and bids_name:
     # Use create_bids_output_filename for intermediate case
     qc_output_filename = create_bids_output_filename(
@@ -984,12 +984,12 @@ process QC_WITHIN_SES_COREG {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_within_ses_coreg
-from macacaMRIprep.utils.bids import create_bids_output_filename, parse_bids_entities, create_bids_filename
+from nhp_mri_prep.steps.qc import qc_within_ses_coreg
+from nhp_mri_prep.utils.bids import create_bids_output_filename, parse_bids_entities, create_bids_filename
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, save_metadata
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -1040,11 +1040,11 @@ process QC_GENERATE_REPORT {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.qc import qc_generate_report
+from nhp_mri_prep.steps.qc import qc_generate_report
 from pathlib import Path
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config, detect_modality, save_metadata
+from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
 config = load_config('${config_file}')
 
 # Set paths:

@@ -89,8 +89,8 @@ workflow {
     // QC REPORT GENERATION (per subject)
     // ============================================
     // Read anat_only directly from config/params (cannot extract from async channel in workflow block)
-    def config_file_path = params.config_file ?: "${projectDir}/macacaMRIprep/config/defaults.yaml"
-    def batch_script = "${projectDir}/macacaMRIprep/nextflow_scripts/read_yaml_config.py"
+    def config_file_path = params.config_file ?: "${projectDir}/src/nhp_mri_prep/config/defaults.yaml"
+    def batch_script = "${projectDir}/src/nhp_mri_prep/nextflow_scripts/read_yaml_config.py"
     def anat_only_from_config = false
     try {
         def cmd = ["python3", batch_script, config_file_path, "general.anat_only", "--defaults=false"]

@@ -178,7 +178,7 @@ ENV SUBJECTS_DIR=${FREESURFER_HOME}/subjects \
     MNI_DATAPATH=${FREESURFER_HOME}/mni/data \
     MNI_PERL5LIB=${FREESURFER_HOME}/mni/share/perl5 \
     PERL5LIB=${FREESURFER_HOME}/mni/share/perl5 \
-    PYTHONPATH=/opt/banana
+    PYTHONPATH=/opt/banana/src
 
 # Create a shell script to source environments
 RUN printf '#!/bin/bash\n\
@@ -217,7 +217,7 @@ if [ "$PS1" ]; then\n\
     echo "--------------------------------------------------------------------------------"\n\
     echo "Usage Examples:"\n\
     echo "  ./run_nextflow.sh run main.nf --bids_dir /data --output_dir /output --output_space \"NMT2Sym:res-1\""\n\
-    echo "  python3 -m macacaMRIprep.config.config_generator_cli"\n\
+    echo "  python3 -m nhp_mri_prep.config.config_generator_cli"\n\
     echo "================================================================================"\n\
 fi\n' \
     "${FSLDIR}" "${AFNI_HOME}" "${AFNIPATH}" "${ANTSPATH}" "${FREESURFER_HOME}" "${FS_LICENSE}" \

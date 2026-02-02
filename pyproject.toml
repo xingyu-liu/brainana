@@ -41,7 +41,7 @@ dependencies = [
     "matplotlib>=3.10.3",
     "pandas>=2.3.0",
     "packaging>=20.0",
-    # PyTorch for FastSurferCNN models
+    # PyTorch for fastsurfer_nn models
     "torch>=2.0.0",
     "torchvision>=0.15.0",
     "torchio>=0.18.0",
@@ -49,10 +49,10 @@ dependencies = [
     "Pillow>=8.0.0",
     "scikit-image>=0.20.0",
     "SimpleITK>=2.1.0",
-    # FastSurferCNN dependencies
+    # fastsurfer_nn dependencies
     "yacs>=0.1.8",
     "h5py>=3.8.0",
-    # FastSurferRecon dependencies
+    # fastsurfer_surfrecon dependencies
     "pydantic>=2.0.0",
     "lapy>=1.0.0",
     # BIDS support
@@ -87,25 +87,25 @@ Repository = "https://github.com/yourusername/banana"
 Issues = "https://github.com/yourusername/banana/issues"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["macacaMRIprep*", "FastSurferCNN*", "FastSurferRecon*", "NHPskullstripNN*"]
+where = ["src"]
+include = ["nhp_mri_prep*", "fastsurfer_nn*", "fastsurfer_surfrecon*", "nhp_skullstrip_nn*"]
 
 [tool.setuptools.package-data]
-"macacaMRIprep" = [
+"nhp_mri_prep" = [
     "config/*.yaml",
     "config/*.html",
     "quality_control/resources/*.scene",
 ]
-"FastSurferCNN" = [
+"fastsurfer_nn" = [
     "config/*.yaml",
     "atlas/**/*",
     "pretrained_model/*.pkl",
 ]
-"FastSurferRecon" = [
+"fastsurfer_surfrecon" = [
     "config/*.yaml",
     "fastsurfer_recon/atlas/**/*",
 ]
-"NHPskullstripNN" = [
+"nhp_skullstrip_nn" = [
     "config_example/*.yaml",
     "pretrained_model/*.pth",
 ]

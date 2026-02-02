@@ -1,6 +1,6 @@
 # %%
 """
-[OUTDATED] Test script for BIDS dataset processing using macacaMRIprep.
+[OUTDATED] Test script for BIDS dataset processing using nhp_mri_prep.
 
 NOTE: This test file references the old workflow classes (AnatomicalProcessor) which no longer exist.
 The project now uses Nextflow for orchestration. See README_NEXTFLOW.md for current usage.
@@ -32,11 +32,11 @@ import sys
 from pathlib import Path
 import logging
 
-from macacaMRIprep.workflow.anat2template import AnatomicalProcessor
-from macacaMRIprep.config import get_config
-from macacaMRIprep.utils import setup_logging, get_logger
-from macacaMRIprep.environment import check_environment
-from macacaMRIprep.quality_control.reports import generate_qc_report
+from nhp_mri_prep.workflow.anat2template import AnatomicalProcessor
+from nhp_mri_prep.config import get_config
+from nhp_mri_prep.utils import setup_logging, get_logger
+from nhp_mri_prep.environment import check_environment
+from nhp_mri_prep.quality_control.reports import generate_qc_report
 import multiprocessing
 
 # %%

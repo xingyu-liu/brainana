@@ -9,7 +9,7 @@ import pytest
 import numpy as np
 import logging
 from unittest.mock import Mock
-from macacaMRIprep.operations.preprocessing import _determine_tpattern as determine_tpattern
+from nhp_mri_prep.operations.preprocessing import _determine_tpattern as determine_tpattern
 
 
 class TestSliceTimingPatternAnalysis:

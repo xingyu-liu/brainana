@@ -19,7 +19,7 @@ The build process uses `uv` for extremely fast installation of Python dependenci
 
 ## 2. Prerequisites (FreeSurfer License)
 
-To use FreeSurfer-based features (e.g., `FastSurferRecon`), a valid license file is required.
+To use FreeSurfer-based features (e.g., `fastsurfer_surfrecon`), a valid license file is required.
 Ensure you have a `license.txt` file on your host machine. 
 
 If you do not have a FreeSurfer license yet, you can request one for free at the [FreeSurfer Website](https://surfer.nmr.mgh.harvard.edu/fswiki/License).
@@ -89,7 +89,7 @@ Upon entry, a welcome message will display the versions of installed tools.
 
 *   **Launch Config Generator (GUI)**:
     ```bash
-    python3 -m macacaMRIprep.config.config_generator_cli --dataset-dir /data
+    python3 -m nhp_mri_prep.config.config_generator_cli --dataset-dir /data
     ```
     *Then access the URL (usually http://localhost:8050) from your host browser.*
 

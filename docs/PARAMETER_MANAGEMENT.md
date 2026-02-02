@@ -10,7 +10,7 @@ Parameters are resolved with the following priority (highest to lowest):
 
 1. **Command-line arguments** (`--param value`) - highest priority
 2. **YAML config file** (user-provided or `defaults.yaml`) - medium priority
-3. **defaults.yaml** (`macacaMRIprep/config/defaults.yaml`) - lowest priority
+3. **defaults.yaml** (`nhp_mri_prep/config/defaults.yaml`) - lowest priority
 
 ## Parameter Types
 
@@ -131,7 +131,7 @@ Invalid values will cause the workflow to error and stop execution.
 
 ## Default Values
 
-All default values are defined in `macacaMRIprep/config/defaults.yaml`. The `nextflow.config` file no longer contains default values for parameters that can be set via YAML.
+All default values are defined in `nhp_mri_prep/config/defaults.yaml`. The `nextflow.config` file no longer contains default values for parameters that can be set via YAML.
 
 ## Migration Notes
 

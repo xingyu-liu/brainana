@@ -22,7 +22,7 @@ Resource measurements collected from test dataset run (`dataset_multiple_v5`) wi
 
 | Process | Duration | CPU % | Peak RAM | Peak VMEM | Notes |
 |---------|----------|-------|----------|-----------|-------|
-| **ANAT_SYNTHESIS** | 4m - 32m | 91-158% | 1.7-5.2 GB | 7.5-11.4 GB | GPU process (FastSurferCNN) |
+| **ANAT_SYNTHESIS** | 4m - 32m | 91-158% | 1.7-5.2 GB | 7.5-11.4 GB | GPU process (fastsurfer_nn) |
 | **ANAT_BIAS_CORRECTION** | 1m - 13m | 83-110% | 1.8-7.3 GB | 7.5-13.1 GB | N4 bias field correction |
 | **ANAT_CONFORM** | 4m - 11m | 15-57% | 2.1-5.5 GB | 18.4-21.8 GB | FLIRT registration, low CPU |
 

@@ -1,5 +1,5 @@
 /*
- * Functional processing modules for macacaMRIprep Nextflow pipeline
+ * Functional processing modules for nhp_mri_prep Nextflow pipeline
  */
 
 process FUNC_REORIENT {
@@ -21,11 +21,11 @@ process FUNC_REORIENT {
     script:
     """
     \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.steps.functional import func_reorient
-    from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.templates import resolve_template
-    from macacaMRIprep.utils.bids import create_bids_output_filename
-    from macacaMRIprep.utils.nextflow import load_config, save_metadata, create_output_link, init_cmd_log_for_nextflow
+    from nhp_mri_prep.steps.functional import func_reorient
+    from nhp_mri_prep.steps.types import StepInput
+    from nhp_mri_prep.utils.templates import resolve_template
+    from nhp_mri_prep.utils.bids import create_bids_output_filename
+    from nhp_mri_prep.utils.nextflow import load_config, save_metadata, create_output_link, init_cmd_log_for_nextflow
     from pathlib import Path
     import shutil
     import os
@@ -118,13 +118,13 @@ process FUNC_SLICE_TIMING {
     script:
     """
     \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.steps.functional import func_slice_timing_correction
-    from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.bids import create_bids_output_filename
+    from nhp_mri_prep.steps.functional import func_slice_timing_correction
+    from nhp_mri_prep.steps.types import StepInput
+    from nhp_mri_prep.utils.bids import create_bids_output_filename
     from pathlib import Path
     import shutil
     import os
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
     
     # Initialize command log file
     # Extract task and run from run_identifier if needed
@@ -145,15 +145,15 @@ process FUNC_SLICE_TIMING {
     )
     
     # Load config
-    from macacaMRIprep.utils.nextflow import load_config
+    from nhp_mri_prep.utils.nextflow import load_config
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
     bids_name = Path('${bids_name}')
     
     # Load BIDS metadata from JSON file and update config
-    from macacaMRIprep.utils.bids import find_bids_metadata
-    from macacaMRIprep.config.bids_adapter import update_config_from_bids_metadata
+    from nhp_mri_prep.utils.bids import find_bids_metadata
+    from nhp_mri_prep.config.bids_adapter import update_config_from_bids_metadata
     import logging
     logger = logging.getLogger(__name__)
     
@@ -237,13 +237,13 @@ process FUNC_MOTION_CORRECTION {
     script:
     """
     \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.steps.functional import func_motion_correction
-    from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.bids import create_bids_output_filename
+    from nhp_mri_prep.steps.functional import func_motion_correction
+    from nhp_mri_prep.steps.types import StepInput
+    from nhp_mri_prep.utils.bids import create_bids_output_filename
     from pathlib import Path
     import shutil
     import os
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
     
     # Initialize command log file
     # Extract task and run from run_identifier if needed
@@ -264,7 +264,7 @@ process FUNC_MOTION_CORRECTION {
     )
     
     # Load config
-    from macacaMRIprep.utils.nextflow import load_config
+    from nhp_mri_prep.utils.nextflow import load_config
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
@@ -311,7 +311,7 @@ process FUNC_MOTION_CORRECTION {
         elif key == 'motion_params':
             # Create BIDS-compliant name for motion parameters
             # Keep as copy - small file, may need to be actual file for Nextflow
-            from macacaMRIprep.utils.bids import get_filename_stem
+            from nhp_mri_prep.utils.bids import get_filename_stem
             original_stem = get_filename_stem(bids_name)
             bids_prefix = original_stem.replace('_bold', '')
             motion_bids_name = f"{bids_prefix}_desc-confounds_timeseries.tsv"
@@ -345,9 +345,9 @@ process FUNC_GENERATE_TMEAN {
     script:
     """
     \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.utils.mri import calculate_func_tmean
-    from macacaMRIprep.utils.bids import create_bids_output_filename
-    from macacaMRIprep.utils.nextflow import load_config, save_metadata, create_output_link, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.mri import calculate_func_tmean
+    from nhp_mri_prep.utils.bids import create_bids_output_filename
+    from nhp_mri_prep.utils.nextflow import load_config, save_metadata, create_output_link, init_cmd_log_for_nextflow
     from pathlib import Path
     import shutil
     import os
@@ -440,13 +440,13 @@ process FUNC_DESPIKE {
     script:
     """
     \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.steps.functional import func_despike
-    from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.bids import create_bids_output_filename
+    from nhp_mri_prep.steps.functional import func_despike
+    from nhp_mri_prep.steps.types import StepInput
+    from nhp_mri_prep.utils.bids import create_bids_output_filename
     from pathlib import Path
     import shutil
     import os
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
     
     # Initialize command log file
     # Extract task and run from run_identifier if needed
@@ -467,7 +467,7 @@ process FUNC_DESPIKE {
     )
     
     # Load config
-    from macacaMRIprep.utils.nextflow import load_config
+    from nhp_mri_prep.utils.nextflow import load_config
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
@@ -546,13 +546,13 @@ process FUNC_BIAS_CORRECTION {
     # Python code reads OMP_NUM_THREADS from environment
     
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.functional import func_bias_correction
-from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename, parse_bids_entities, create_bids_filename, get_bids_prefix
+from nhp_mri_prep.steps.functional import func_bias_correction
+from nhp_mri_prep.steps.types import StepInput
+from nhp_mri_prep.utils.bids import create_bids_output_filename, parse_bids_entities, create_bids_filename, get_bids_prefix
 from pathlib import Path
 import shutil
 import os
-from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
 
 # Initialize command log file
 # Extract task and run from run_identifier if needed
@@ -573,7 +573,7 @@ init_cmd_log_for_nextflow(
 )
 
 # Load config
-from macacaMRIprep.utils.nextflow import load_config
+from nhp_mri_prep.utils.nextflow import load_config
 config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
@@ -636,15 +636,15 @@ process FUNC_COMPUTE_CONFORM {
     script:
     """
     \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.steps.functional import func_conform
-    from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.templates import resolve_template
-    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem, parse_bids_entities, create_bids_filename, get_bids_prefix
+    from nhp_mri_prep.steps.functional import func_conform
+    from nhp_mri_prep.steps.types import StepInput
+    from nhp_mri_prep.utils.templates import resolve_template
+    from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem, parse_bids_entities, create_bids_filename, get_bids_prefix
     from pathlib import Path
     import shutil
     import os
     import sys
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
     
     # Initialize command log file
     run_identifier = '${run_identifier}'
@@ -664,7 +664,7 @@ process FUNC_COMPUTE_CONFORM {
     )
     
     # Load config
-    from macacaMRIprep.utils.nextflow import load_config
+    from nhp_mri_prep.utils.nextflow import load_config
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
@@ -777,9 +777,9 @@ process FUNC_APPLY_CONFORM {
     script:
     """
     \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.operations.registration import flirt_apply_transforms
-    from macacaMRIprep.utils.bids import create_bids_output_filename
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from nhp_mri_prep.operations.registration import flirt_apply_transforms
+    from nhp_mri_prep.utils.bids import create_bids_output_filename
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
     from pathlib import Path
     import sys
     import os
@@ -803,7 +803,7 @@ process FUNC_APPLY_CONFORM {
     )
     
     # Load config
-    from macacaMRIprep.utils.nextflow import load_config
+    from nhp_mri_prep.utils.nextflow import load_config
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
@@ -984,13 +984,13 @@ process FUNC_COMPUTE_BRAIN_MASK {
     echo "[GPU Assignment] Task ${task.index} -> GPU ${gpu_id} (of ${params.gpu_count} available)"
     
     \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.steps.functional import func_skullstripping
-    from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.bids import get_filename_stem, get_bids_prefix
+    from nhp_mri_prep.steps.functional import func_skullstripping
+    from nhp_mri_prep.steps.types import StepInput
+    from nhp_mri_prep.utils.bids import get_filename_stem, get_bids_prefix
     from pathlib import Path
     import shutil
     import os
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
     
     # Initialize command log file
     run_identifier = '${run_identifier}'
@@ -1010,7 +1010,7 @@ process FUNC_COMPUTE_BRAIN_MASK {
     )
     
     # Load config
-    from macacaMRIprep.utils.nextflow import load_config
+    from nhp_mri_prep.utils.nextflow import load_config
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
@@ -1079,12 +1079,12 @@ process FUNC_COMPUTE_REGISTRATION {
     script:
     """
     \${PYTHON:-python3} <<EOF
-    from macacaMRIprep.steps.functional import func_registration
-    from macacaMRIprep.steps.types import StepInput
-    from macacaMRIprep.utils.templates import resolve_template
-    from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem, parse_bids_entities, create_bids_filename, get_bids_prefix
-    from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
-    from macacaMRIprep.utils import get_image_resolution, run_command
+    from nhp_mri_prep.steps.functional import func_registration
+    from nhp_mri_prep.steps.types import StepInput
+    from nhp_mri_prep.utils.templates import resolve_template
+    from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem, parse_bids_entities, create_bids_filename, get_bids_prefix
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils import get_image_resolution, run_command
     from pathlib import Path
     import shutil
     import os
@@ -1109,7 +1109,7 @@ process FUNC_COMPUTE_REGISTRATION {
     )
     
     # Load config
-    from macacaMRIprep.utils.nextflow import load_config
+    from nhp_mri_prep.utils.nextflow import load_config
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
@@ -1257,10 +1257,10 @@ process FUNC_APPLY_TRANSFORMS {
     script:
     """
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.functional import func_apply_transforms
-from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem, get_bids_prefix
-from macacaMRIprep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
+from nhp_mri_prep.steps.functional import func_apply_transforms
+from nhp_mri_prep.steps.types import StepInput
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem, get_bids_prefix
+from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
 from pathlib import Path
 import glob
 import shutil
@@ -1409,9 +1409,9 @@ if target_space == 'T1w' and (is_dummy_anat2template or is_dummy_anat_reg):
     is_sequential = False
 
 # Import additional modules needed for sequential transforms
-from macacaMRIprep.operations.registration import ants_apply_transforms as ants_apply_transforms_op
-from macacaMRIprep.utils.templates import resolve_template
-from macacaMRIprep.utils import get_image_resolution, run_command
+from nhp_mri_prep.operations.registration import ants_apply_transforms as ants_apply_transforms_op
+from nhp_mri_prep.utils.templates import resolve_template
+from nhp_mri_prep.utils import get_image_resolution, run_command
 import numpy as np
 
 working_dir = Path('work')
@@ -1776,10 +1776,10 @@ process FUNC_WITHIN_SES_COREG {
     # Python code reads OMP_NUM_THREADS from environment
     
     \${PYTHON:-python3} <<EOF
-from macacaMRIprep.steps.functional import func_within_ses_coreg
-from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.utils.bids import create_bids_output_filename, get_filename_stem
-from macacaMRIprep.utils.nextflow import (
+from nhp_mri_prep.steps.functional import func_within_ses_coreg
+from nhp_mri_prep.steps.types import StepInput
+from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
 )
 from pathlib import Path
@@ -1906,9 +1906,9 @@ process FUNC_AVERAGE_TMEAN {
     """
     
     \${PYTHON:-python3} <<'PYTHON_EOF'
-from macacaMRIprep.steps.functional import func_average_tmean
-from macacaMRIprep.utils.bids import create_bids_output_filename, parse_bids_entities, create_bids_filename
-from macacaMRIprep.utils.nextflow import (
+from nhp_mri_prep.steps.functional import func_average_tmean
+from nhp_mri_prep.utils.bids import create_bids_output_filename, parse_bids_entities, create_bids_filename
+from nhp_mri_prep.utils.nextflow import (
     load_config, init_cmd_log_for_nextflow, save_metadata, create_output_link
 )
 from pathlib import Path

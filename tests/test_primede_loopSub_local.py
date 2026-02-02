@@ -57,7 +57,7 @@ def main():
         
         # Build command arguments
         cmd = [
-            sys.executable, "-m", "macacaMRIprep.cli.preproc",
+            sys.executable, "-m", "nhp_mri_prep.cli.preproc",
             input_path,
             output_path,
             "--config", config_path,
@@ -75,7 +75,7 @@ def main():
             print(f"Error running preprocessing for batch {i//sub_batch_size + 1}: {e}")
             return e.returncode
         except FileNotFoundError:
-            print("Error: macacaMRIprep module not found. Make sure it's installed and in your Python path.")
+            print("Error: nhp_mri_prep module not found. Make sure it's installed and in your Python path.")
             return 1
     
     print("All batches processed successfully!")
