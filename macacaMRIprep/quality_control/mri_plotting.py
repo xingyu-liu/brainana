@@ -973,7 +973,7 @@ def _create_colorbar(
     cbar.set_label(label, rotation=90, labelpad=CBAR_LABEL_PAD, fontsize=CBAR_LABEL_FONTSIZE)
     cbar.ax.yaxis.set_label_position('left')
     ax.tick_params(labelsize=CBAR_TICK_FONTSIZE)
-    fig.tight_layout()
+    # fig.tight_layout()
     
     temp_path = temp_dir / f"{label.lower().replace(' ', '_')}_colorbar.png"
     fig.savefig(temp_path, dpi=dpi, bbox_inches='tight', pad_inches=0.1, facecolor='white')
@@ -1004,7 +1004,7 @@ def _create_label_image(
     ax.set_yticks([])
     for spine in ax.spines.values():
         spine.set_visible(False)
-    fig.tight_layout()
+    # fig.tight_layout()
     
     temp_path = temp_dir / f"{label.lower()}_label.png"
     fig.savefig(temp_path, dpi=dpi, bbox_inches='tight', pad_inches=0.1, facecolor='white')

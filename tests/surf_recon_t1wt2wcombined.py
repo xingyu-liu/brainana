@@ -13,14 +13,14 @@ if str(_file_dir.parent) not in sys.path:
     sys.path.insert(0, str(_file_dir.parent))
 
 from macacaMRIprep.steps.types import StepInput
-from macacaMRIprep.steps.anatomical import anat_t1wt2wcombined
+# from macacaMRIprep.steps.anatomical import anat_t1wt2wcombined
 from macacaMRIprep.steps.anatomical import anat_surface_reconstruction
 from macacaMRIprep.utils.nextflow import load_config
 from macacaMRIprep.steps.qc import qc_surf_recon_tissue_seg, qc_cortical_surf_and_measures
 
 
 # %%
-dataset_dir = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_UNC_batch1'
+dataset_dir = '/mnt/DataDrive2/macaque/data_preproc/macaque_mri/UNC-Wisconsin_banana'
 sub_ses_list = [['sub-004', 'ses-16months'], 
                 ['sub-004', 'ses-20months'],
                 ['sub-004', 'ses-24months'],
@@ -116,4 +116,5 @@ for sub_ses in sub_ses_list:
     except Exception as e:
         print(f"Error for {sub_ses}: {e}")
         continue
+    
 # %%

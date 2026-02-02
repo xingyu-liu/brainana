@@ -523,7 +523,8 @@ def conform_to_template(
             '3dresample',
             '-dxyz', str(target_voxel_sizes[0]), str(target_voxel_sizes[1]), str(target_voxel_sizes[2]),
             '-input', str(template_f_for_reg),
-            '-prefix', str(template_f_for_xfm)
+            '-prefix', str(template_f_for_xfm),
+            '-rmode', 'Cu'
         ]
         logger.debug(f"Command: {' '.join(cmd)}")
         try:

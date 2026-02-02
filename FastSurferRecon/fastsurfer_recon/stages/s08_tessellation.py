@@ -123,7 +123,7 @@ class Tessellation(HemisphereStage):
             # Decimate for hires (try less decimation first on "too small" errors)
             if self.config.hires:
                 orig_nofix_final = self.hemi_path("orig.nofix")
-                desired_face_areas = np.arange(0.1, 0.5, 0.05)
+                desired_face_areas = np.arange(0.1, 0.5, 0.02)
                 last_error = None
                 for desired_face_area in desired_face_areas:
                     try:

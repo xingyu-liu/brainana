@@ -462,8 +462,8 @@ def anat_surface_reconstruction(input: StepInput, t1w_file: Path, segmentation_f
         sys.path.insert(0, str(fastsurfer_recon_dir))
     
     # Import FastSurferRecon modules
-    from fastsurfer_recon.pipeline import ReconSurfPipeline
-    from fastsurfer_recon.config import ReconSurfConfig, AtlasConfig
+    from FastSurferRecon.fastsurfer_recon.pipeline import ReconSurfPipeline
+    from FastSurferRecon.fastsurfer_recon.config import ReconSurfConfig, AtlasConfig
     
     # Get subject ID from metadata or derive from input
     base_subject_id = input.metadata.get("subject_id") or "unknown"

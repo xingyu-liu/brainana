@@ -212,7 +212,8 @@ cmd = [
     '3dresample',
     '-dxyz', str(target_voxel_sizes[0]), str(target_voxel_sizes[1]), str(target_voxel_sizes[2]),
     '-input', template_f,
-    '-prefix', template_resampled_f
+    '-prefix', template_resampled_f,
+    '-rmode', 'Cu'
 ]
 print(f"Running 3dresample to resample template to the same resolution as the input...")
 print(f"Command: {' '.join(cmd)}")
