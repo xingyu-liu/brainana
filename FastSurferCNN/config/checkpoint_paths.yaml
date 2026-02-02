@@ -1,4 +1,0 @@
-checkpoint:
-  axial: "pretrained_model/T1w_seg-ARM2_axial.pkl"
-  coronal: "pretrained_model/T1w_seg-ARM2_coronal.pkl"
-  sagittal: "pretrained_model/T1w_seg-ARM2_sagittal.pkl"
