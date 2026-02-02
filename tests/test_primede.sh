@@ -364,7 +364,7 @@ python3 -m nhp_mri_prep.cli.preproc \
 # ================================================
 # test fastsurfercnn
 # ================================================
-dataset_root=/mnt/DataDrive3/xliu/prep_test/banana_test
+dataset_root=/mnt/DataDrive3/xliu/prep_test/brainana_test
 config_f=${dataset_root}/preproc/config_linReg.yaml
 
 # dataset_dir=${dataset_root}/dataset_2pass
@@ -392,9 +392,9 @@ python3 -m nhp_mri_prep.cli.preproc ${dataset_dir} ${output_dir} \
     --config ${config_f}
 
 # ================================================
-# test banana
+# test brainana
 # ================================================
-dataset_root=/mnt/DataDrive3/xliu/prep_test/banana_test
+dataset_root=/mnt/DataDrive3/xliu/prep_test/brainana_test
 dataset_name=dataset_misorient
 dataset_dir=${dataset_root}/${dataset_name}
 output_dir=${dataset_root}/preproc/${dataset_name}_v5

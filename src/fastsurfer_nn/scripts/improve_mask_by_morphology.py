@@ -32,7 +32,7 @@ from fastsurfer_nn.utils.constants import (
 
 # Directory containing input mask volumes
 root_dir = Path(
-    "/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/histology_test/surf"
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/histology_test/surf"
 )
 
 # If set to a relative path (starting with '/'), only that file will be processed,

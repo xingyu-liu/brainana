@@ -1,12 +1,12 @@
 # 3. Design and Architecture (Expanded)
 
-This section describes the high-level design of banana: how the pipeline is orchestrated, how data flows from BIDS input to derivatives, and how modularity is achieved across the Nextflow workflow, Python step logic, and low-level operations.
+This section describes the high-level design of brainana: how the pipeline is orchestrated, how data flows from BIDS input to derivatives, and how modularity is achieved across the Nextflow workflow, Python step logic, and low-level operations.
 
 ---
 
 ## 3.1 High-Level Design
 
-banana is built around **Nextflow** as the central orchestrator. The pipeline is designed for:
+brainana is built around **Nextflow** as the central orchestrator. The pipeline is designed for:
 
 - **Per-step parallelization**: Each processing step (reorient, bias correction, skull stripping, registration, etc.) is a separate Nextflow process. Subjects, sessions, and runs can be processed in parallel where dependencies allow.
 - **Resumability**: Nextflow tracks process outputs and can resume from the last successful step after a failure, avoiding full re-runs.

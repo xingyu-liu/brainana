@@ -178,7 +178,7 @@ ENV SUBJECTS_DIR=${FREESURFER_HOME}/subjects \
     MNI_DATAPATH=${FREESURFER_HOME}/mni/data \
     MNI_PERL5LIB=${FREESURFER_HOME}/mni/share/perl5 \
     PERL5LIB=${FREESURFER_HOME}/mni/share/perl5 \
-    PYTHONPATH=/opt/banana/src
+    PYTHONPATH=/opt/brainana/src
 
 # Create a shell script to source environments
 RUN printf '#!/bin/bash\n\
@@ -204,7 +204,7 @@ fi\n\
 # Welcome Message\n\
 if [ "$PS1" ]; then\n\
     echo "================================================================================"\n\
-    echo "Welcome to banana Interactive Environment"\n\
+    echo "Welcome to brainana Interactive Environment"\n\
     echo "--------------------------------------------------------------------------------"\n\
     echo "Installed Tools:"\n\
     echo "  - FSL:        \$(fslval 2>/dev/null | head -n 1 || echo \"Installed\")"\n\
@@ -232,8 +232,8 @@ RUN echo "source /etc/profile.d/neuroenv.sh" >> /etc/bash.bashrc && \
 #################
 # Project Install
 #################
-WORKDIR /opt/banana
-COPY . /opt/banana
+WORKDIR /opt/brainana
+COPY . /opt/brainana
 
 ENV VIRTUAL_ENV=/opt/venv
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
@@ -243,11 +243,11 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 ENV MPLCONFIGDIR=/tmp/matplotlib \
     PYTHONPYCACHEPREFIX=/tmp/pycache
 
-RUN mkdir -p /opt/banana/tmp /tmp/matplotlib /tmp/pycache && \
-    TMPDIR=/opt/banana/tmp uv venv $VIRTUAL_ENV && \
-    TMPDIR=/opt/banana/tmp uv pip install --no-cache -e /opt/banana && \
-    rm -rf /opt/banana/tmp && \
-    chown -R neuro:neuro /opt/banana $VIRTUAL_ENV && \
+RUN mkdir -p /opt/brainana/tmp /tmp/matplotlib /tmp/pycache && \
+    TMPDIR=/opt/brainana/tmp uv venv $VIRTUAL_ENV && \
+    TMPDIR=/opt/brainana/tmp uv pip install --no-cache -e /opt/brainana && \
+    rm -rf /opt/brainana/tmp && \
+    chown -R neuro:neuro /opt/brainana $VIRTUAL_ENV && \
     chmod -R 777 /tmp/matplotlib /tmp/pycache /home/neuro
 
 USER neuro

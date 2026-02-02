@@ -10,8 +10,8 @@ import os
 
 import yaml
 
-# Banana repo root (config.py -> fastsurfer_recon -> fastsurfer_surfrecon -> src -> banana)
-_BANANA_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+# Brainana repo root (config.py -> fastsurfer_recon -> fastsurfer_surfrecon -> src -> brainana)
+_BRAINANA_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 import nibabel as nib
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -47,7 +47,7 @@ class AtlasConfig(BaseModel):
         
         # Try fastsurfer_nn atlas directory (common when both packages are in same repo)
         # src/fastsurfer_nn/atlas/atlas-{name}/{name}_ColorLUT.tsv
-        fastsurfercnn_lut = _BANANA_ROOT / "src" / "fastsurfer_nn" / "atlas" / f"atlas-{self.name}" / f"{self.name}_ColorLUT.tsv"
+        fastsurfercnn_lut = _BRAINANA_ROOT / "src" / "fastsurfer_nn" / "atlas" / f"atlas-{self.name}" / f"{self.name}_ColorLUT.tsv"
         if fastsurfercnn_lut.exists():
             return fastsurfercnn_lut
         
@@ -257,12 +257,12 @@ class ReconSurfConfig(BaseModel):
     @field_validator("registration_template", mode="before")
     @classmethod
     def resolve_registration_template(cls, v: Path | str | None) -> Path | None:
-        """Resolve registration_template to absolute. Relative paths are resolved against banana repo root."""
+        """Resolve registration_template to absolute. Relative paths are resolved against brainana repo root."""
         if v is None:
             return None
         p = Path(v).expanduser()
         if not p.is_absolute():
-            p = (_BANANA_ROOT / p).resolve()
+            p = (_BRAINANA_ROOT / p).resolve()
         return p
     
     @model_validator(mode="after")

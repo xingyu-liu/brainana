@@ -1,6 +1,6 @@
-# banana Docker Usage Guide
+# brainana Docker Usage Guide
 
-This Docker image provides a complete environment for `banana`, including neuroimaging toolkits (FSL, ANTs, AFNI, FreeSurfer) and a pre-configured Python environment. It supports GUI interaction, GPU acceleration, and automatic permission management.
+This Docker image provides a complete environment for `brainana`, including neuroimaging toolkits (FSL, ANTs, AFNI, FreeSurfer) and a pre-configured Python environment. It supports GUI interaction, GPU acceleration, and automatic permission management.
 
 ## 1. Build the Image
 
@@ -10,7 +10,7 @@ Build the image from the project root. We recommend passing your local `USER_ID`
 docker build \
     --build-arg USER_ID=$(id -u) \
     --build-arg GROUP_ID=$(id -g) \
-    -t banana:latest .
+    -t brainana:latest .
 ```
 
 The build process uses `uv` for extremely fast installation of Python dependencies.
@@ -46,19 +46,19 @@ docker run -it --rm \
     --env="DISPLAY=$DISPLAY" \
     --env="QT_X11_NO_MITSHM=1" \
     --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" \
-    --volume="$(pwd):/opt/banana" \
+    --volume="$(pwd):/opt/brainana" \
     --volume="$HOME/.cache/uv:/home/neuro/.cache/uv" \
     --volume="/home/yinzi/dataset/testing_dataset:/data" \
-    --volume="/nvmessd/yinzi/banana/license.txt:/opt/freesurfer/license.txt" \
-    --workdir="/opt/banana" \
-    banana:latest
+    --volume="/nvmessd/yinzi/brainana/license.txt:/opt/freesurfer/license.txt" \
+    --workdir="/opt/brainana" \
+    brainana:latest
 ```
 
 **Parameter Breakdown:**
 - `--gpus all`: Enables GPU acceleration (requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)).
 - `--network host`: Uses the host's network stack. This is required for the GUI config generator to be easily accessible via localhost and for optimal network performance.
 - `--user $(id -u):$(id -g)`: Ensures files created inside the container are owned by your host user.
-- `--volume="$(pwd):/opt/banana"`: Mounts the current source code. Since it's installed in `editable` mode (`-e`), any changes you make locally are reflected immediately inside the container.
+- `--volume="$(pwd):/opt/brainana"`: Mounts the current source code. Since it's installed in `editable` mode (`-e`), any changes you make locally are reflected immediately inside the container.
 - `--volume="$HOME/.cache/uv:/home/neuro/.cache/uv"`: Shares the `uv` package cache between the host and container. This prevents `uv` from re-downloading large packages (like PyTorch) when you run `uv add` or `uv sync` inside the container.
 - `--env="DISPLAY"` & `--volume="/tmp/.X11-unix"`: Forwards the GUI from the container to your host display.
 
@@ -75,9 +75,9 @@ docker run --rm \
     --volume="$HOME/.cache/uv:/home/neuro/.cache/uv" \
     --volume="/home/yinzi/dataset/testing_dataset:/data" \
     --volume="/path/to/output_dir:/output" \
-    --volume="/nvmessd/yinzi/banana/license.txt:/opt/freesurfer/license.txt" \
-    --workdir="/opt/banana" \
-    banana:latest \
+    --volume="/nvmessd/yinzi/brainana/license.txt:/opt/freesurfer/license.txt" \
+    --workdir="/opt/brainana" \
+    brainana:latest \
     ./run_nextflow.sh run main.nf --bids_dir /data --output_dir /output --output_space "NMT2Sym:res-1" --config_file /data/my_config.yaml
 ```
 
@@ -112,5 +112,5 @@ A: Run `xhost +local:root` on your host machine. If you are using SSH, ensure X1
 A: If you have the NVIDIA Container Toolkit installed, add `--gpus all` to your `docker run` command.
 
 **Q: Do I need to rebuild the image after editing code?**
-A: No. Because we use `--volume="$(pwd):/opt/banana"` and the package is installed in `editable` mode, your local changes are applied instantly.
+A: No. Because we use `--volume="$(pwd):/opt/brainana"` and the package is installed in `editable` mode, your local changes are applied instantly.
 

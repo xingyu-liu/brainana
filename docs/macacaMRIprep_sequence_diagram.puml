@@ -1,4 +1,4 @@
-@startuml banana_Nextflow_Workflow_Sequence
+@startuml brainana_Nextflow_Workflow_Sequence
 
 !theme plain
 skinparam sequenceMessageAlign center

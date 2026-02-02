@@ -7,7 +7,7 @@ import sys
 import logging
 from pathlib import Path
 
-# Add src/ to path for fastsurfer_nn imports (tests/ -> banana -> src)
+# Add src/ to path for fastsurfer_nn imports (tests/ -> brainana -> src)
 _src_dir = Path(__file__).resolve().parent.parent / "src"
 if str(_src_dir) not in sys.path:
     sys.path.insert(0, str(_src_dir))

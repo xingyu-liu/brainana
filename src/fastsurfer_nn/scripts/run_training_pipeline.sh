@@ -16,7 +16,7 @@
 # CONFIGURATION - Source centralized config
 # ============================================================================
 
-# Get script directory and project root (scripts/ -> fastsurfer_nn -> src -> banana)
+# Get script directory and project root (scripts/ -> fastsurfer_nn -> src -> brainana)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 

@@ -15,13 +15,13 @@ from nhp_skullstrip_nn.model import ModelLoader
 # # %%
 # # anat
 # test_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/anat'
-# # model_f = '/home/star/github/banana/nhp_skullstrip_nn/pretrained_model/T1w_brainmask.pth'
+# # model_f = '/home/star/github/brainana/nhp_skullstrip_nn/pretrained_model/T1w_brainmask.pth'
 # model_f = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/nhp_skullstrip_nn_training/training_output/T1w_seg-brainmask_v2/checkpoints/best_model.pth'
 # model_name = 'v2'
 
 # func
-test_dir = '/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/test_func_ss'
-model_f = '/home/star/github/banana/nhp_skullstrip_nn/pretrained_model/EPI_brainmask.pth'
+test_dir = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/test_func_ss'
+model_f = '/home/star/github/brainana/nhp_skullstrip_nn/pretrained_model/EPI_brainmask.pth'
 # model_f = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/nhp_skullstrip_nn_training/training_output/EPI_seg-brainmask_v1/checkpoints/best_model.pth'
 model_name = 'v1'
 

@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 
-# Add src/ to path for nhp_mri_prep, fastsurfer_nn imports (tests/ -> banana -> src)
+# Add src/ to path for nhp_mri_prep, fastsurfer_nn imports (tests/ -> brainana -> src)
 _src_dir = Path(__file__).resolve().parent.parent / "src"
 if str(_src_dir) not in sys.path:
     sys.path.insert(0, str(_src_dir))
@@ -20,7 +20,7 @@ from nhp_mri_prep.steps.qc import qc_surf_recon_tissue_seg, qc_cortical_surf_and
 
 
 # %%
-dataset_dir = '/mnt/DataDrive2/macaque/data_preproc/macaque_mri/UNC-Wisconsin_banana'
+dataset_dir = '/mnt/DataDrive2/macaque/data_preproc/macaque_mri/UNC-Wisconsin_brainana'
 sub_ses_list = [['sub-004', 'ses-16months'], 
                 ['sub-004', 'ses-20months'],
                 ['sub-004', 'ses-24months'],

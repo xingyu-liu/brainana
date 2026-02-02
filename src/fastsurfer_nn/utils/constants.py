@@ -20,7 +20,7 @@ This module contains shared constants used across the fastsurfer_nn package.
 
 from pathlib import Path
 
-# Banana repo root (utils/ -> fastsurfer_nn -> src -> banana)
+# Brainana repo root (utils/ -> fastsurfer_nn -> src -> brainana)
 REPO_ROOT = Path(__file__).parents[3]
 # Pretrained checkpoints live inside fastsurfer_nn (utils/ -> fastsurfer_nn)
 PRETRAINED_MODEL_DIR = Path(__file__).parents[1] / "pretrained_model"

@@ -1,5 +1,5 @@
 /*
- * Main Nextflow workflow for banana
+ * Main Nextflow workflow for brainana
  * 
  * This workflow processes BIDS datasets using per-step parallelization
  * for maximum efficiency.

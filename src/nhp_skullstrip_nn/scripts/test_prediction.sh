@@ -60,7 +60,7 @@ python -m macacaMRINN.scripts.run_prediction \
     --no-save-prob-map
 
 # test marge neonate brainmask
-model=/home/star/github/banana/nhp_skullstrip_nn/pretrained_model/T1w_brainmask.pth
+model=/home/star/github/brainana/nhp_skullstrip_nn/pretrained_model/T1w_brainmask.pth
 # input=/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_reorient/sub-baby31/ses-240710/anat/sub-baby31_ses-240710_T1w.nii.gz
 # input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/test_freddie_mixed/input.nii.gz
 # input=/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/test_mebrain.nii.gz

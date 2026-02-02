@@ -127,7 +127,7 @@ workflow ANAT_WF {
     println "  ANAT: reorient=${anat_reorient_enabled}, conform=${anat_conform_enabled}, bias_correction=${anat_bias_correction_enabled}, skullstripping=${anat_skullstripping_enabled}, registration=${registration_enabled}"
     
     println "============================================"
-    println "banana Nextflow Pipeline - Anatomical"
+    println "brainana Nextflow Pipeline - Anatomical"
     println "============================================"
     println "BIDS directory: ${params.bids_dir}"
     println "Output directory: ${params.output_dir}"

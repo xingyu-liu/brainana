@@ -26,7 +26,7 @@ from fastsurfer_recon.utils.logging import setup_logging
 
 # %%
 # Test subject
-subject_root = Path("/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/histology_test/surf")
+subject_root = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/histology_test/surf")
 subject_dir = subject_root / "sub-histology"
 # subject_dir = subject_root / "arcaro_baby1_fixV1_separate" / "sub-baby1"
 

@@ -11,7 +11,7 @@ from typing import Any, Literal, TextIO, TypedDict, cast, get_args
 
 
 class DEFAULTS:
-    # utils/ -> fastsurfer_nn -> src -> banana
+    # utils/ -> fastsurfer_nn -> src -> brainana
     PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
     BUILD_TXT = PROJECT_ROOT / "BUILD.info"
     PROJECT_TOML = PROJECT_ROOT / "pyproject.toml"

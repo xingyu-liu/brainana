@@ -1,4 +1,4 @@
-# Paper Outline: Introducing banana (Macaque Neuroimaging Preprocessing)
+# Paper Outline: Introducing brainana (Macaque Neuroimaging Preprocessing)
 
 ## 1. Abstract
 
@@ -11,7 +11,7 @@
 
 - **Motivation**: Need for reproducible, standardized preprocessing of non-human primate (NHP) MRI; limitations of human-focused tools (e.g. fMRIPrep) for macaque data.
 - **BIDS and NHP**: BIDS extension for NHP; role of BIDS in discovery and derivatives.
-- **Scope**: banana as a dedicated macaque preprocessing pipeline (anatomical → functional, with optional surface analysis).
+- **Scope**: brainana as a dedicated macaque preprocessing pipeline (anatomical → functional, with optional surface analysis).
 
 ---
 
@@ -84,7 +84,7 @@
 
 ## 11. Conclusion
 
-- Short recap: banana as a dedicated, BIDS-based, Nextflow-driven pipeline for macaque MRI preprocessing (and optional segmentation/surface reconstruction), with QC and reproducibility in mind.
+- Short recap: brainana as a dedicated, BIDS-based, Nextflow-driven pipeline for macaque MRI preprocessing (and optional segmentation/surface reconstruction), with QC and reproducibility in mind.
 - Intended users (NHP imaging labs, method developers) and invitation to use/contribute.
 
 ---

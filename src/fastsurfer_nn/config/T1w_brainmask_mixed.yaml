@@ -36,7 +36,7 @@ TRAIN:
   NUM_EPOCHS: 100
   NUM_STEPS: 10
   FINE_TUNE: true
-  PRETRAINED_MODEL: "/home/star/github/banana/fastsurfer_nn/pretrained_model/ras_aug/T1w_seg-ARM2_axial.pkl"
+  PRETRAINED_MODEL: "/home/star/github/brainana/fastsurfer_nn/pretrained_model/ras_aug/T1w_seg-ARM2_axial.pkl"
   CHECKPOINT_PERIOD: 1
   NUM_WORKERS: 6  # Reduced for network storage I/O optimization
   EARLY_STOPPING: true

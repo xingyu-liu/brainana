@@ -36,7 +36,7 @@ class TemplateManager:
             return Path(custom_dir)
         
         # Templates are always in project_root/template_zoo
-        # nhp_mri_prep/utils/templates.py -> nhp_mri_prep -> src -> banana
+        # nhp_mri_prep/utils/templates.py -> nhp_mri_prep -> src -> brainana
         project_root = Path(__file__).parent.parent.parent.parent
         template_dir = project_root / 'template_zoo'
         

@@ -1,6 +1,6 @@
 # 4. Core Components and Methods (Expanded)
 
-This section describes each major component of banana and the methods (algorithms and tools) used within them. Section 5 (Methods/Algorithms) from the outline is incorporated here under the relevant subsections.
+This section describes each major component of brainana and the methods (algorithms and tools) used within them. Section 5 (Methods/Algorithms) from the outline is incorporated here under the relevant subsections.
 
 ---
 

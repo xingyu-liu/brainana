@@ -1,13 +1,13 @@
 # Import Management Improvement Plan
 
-This document outlines a phased plan to standardize and improve import handling across the banana project. It addresses the issues identified in the import review: inconsistent `sys.path` manipulation, library code that modifies import paths, and scripts without a consistent execution strategy.
+This document outlines a phased plan to standardize and improve import handling across the brainana project. It addresses the issues identified in the import review: inconsistent `sys.path` manipulation, library code that modifies import paths, and scripts without a consistent execution strategy.
 
 ---
 
 ## Guiding Principles
 
 1. **Library code never modifies `sys.path`** — assume the package is installed or `PYTHONPATH` is set correctly.
-2. **Scripts run as installed entry points** — users run `banana-xyz` commands, not `python path/to/script.py`.
+2. **Scripts run as installed entry points** — users run `brainana-xyz` commands, not `python path/to/script.py`.
 3. **Single source of truth for paths** — no duplicated `Path(__file__).parent.parent...` logic.
 4. **Backward compatibility** — Nextflow, Docker, and tests continue to work throughout the migration.
 
@@ -21,8 +21,8 @@ This document outlines a phased plan to standardize and improve import handling 
 
 | File | Current | Correct |
 |------|---------|---------|
-| `src/nhp_mri_prep/scripts/generate_report_only.py` | `banana/` (project root) | `src/` |
-| `src/nhp_mri_prep/scripts/correct_orientation_mismatch.py` | `banana/` | `src/` |
+| `src/nhp_mri_prep/scripts/generate_report_only.py` | `brainana/` (project root) | `src/` |
+| `src/nhp_mri_prep/scripts/correct_orientation_mismatch.py` | `brainana/` | `src/` |
 
 **Approach:** Replace `Path(__file__).parent.parent.parent.parent` with logic that resolves `src/` (e.g., `Path(__file__).parent.parent.parent` since scripts/ → nhp_mri_prep → src).
 
@@ -32,17 +32,17 @@ This document outlines a phased plan to standardize and improve import handling 
 
 ## Phase 2: Add Console Script Entry Points (Medium Risk)
 
-**Goal:** Expose key scripts as `banana-*` commands so users run them as installed tools, not as raw Python files.
+**Goal:** Expose key scripts as `brainana-*` commands so users run them as installed tools, not as raw Python files.
 
 **1. Identify scripts to expose**
 
 | Script | Suggested command | Priority |
 |--------|-------------------|----------|
-| `scripts/generate_surface_qc.py` | `banana-generate-surface-qc` | High (commonly used) |
-| `scripts/generate_report_only.py` | `banana-generate-report` | High |
-| `scripts/correct_orientation_mismatch.py` | `banana-correct-orientation` | Medium |
-| `scripts/run_antsregistration.py` | `banana-run-ants` | Low (looks like dev/debug) |
-| `nextflow_scripts/discover_bids_for_nextflow.py` | `banana-discover-bids` | High (pipeline entry) |
+| `scripts/generate_surface_qc.py` | `brainana-generate-surface-qc` | High (commonly used) |
+| `scripts/generate_report_only.py` | `brainana-generate-report` | High |
+| `scripts/correct_orientation_mismatch.py` | `brainana-correct-orientation` | Medium |
+| `scripts/run_antsregistration.py` | `brainana-run-ants` | Low (looks like dev/debug) |
+| `nextflow_scripts/discover_bids_for_nextflow.py` | `brainana-discover-bids` | High (pipeline entry) |
 | `nextflow_scripts/read_yaml_config.py` | Internal to Nextflow | Skip (called by .nf) |
 
 **2. Refactor scripts for entry point pattern**
@@ -53,15 +53,15 @@ Each script needs a `main()` (or similar) and an `if __name__ == "__main__":` gu
 
 ```toml
 [project.scripts]
-banana-generate-surface-qc = "nhp_mri_prep.scripts.generate_surface_qc:main"
-banana-generate-report = "nhp_mri_prep.scripts.generate_report_only:main"
-banana-correct-orientation = "nhp_mri_prep.scripts.correct_orientation_mismatch:main"
-banana-discover-bids = "nhp_mri_prep.nextflow_scripts.discover_bids_for_nextflow:main"
+brainana-generate-surface-qc = "nhp_mri_prep.scripts.generate_surface_qc:main"
+brainana-generate-report = "nhp_mri_prep.scripts.generate_report_only:main"
+brainana-correct-orientation = "nhp_mri_prep.scripts.correct_orientation_mismatch:main"
+brainana-discover-bids = "nhp_mri_prep.nextflow_scripts.discover_bids_for_nextflow:main"
 ```
 
 **4. Remove sys.path manipulation from these scripts** — they will run as installed modules.
 
-**Verification:** After `uv sync` or `pip install -e .`, run `banana-generate-surface-qc --help` (or equivalent) from anywhere. Confirm Nextflow still invokes `discover_bids_for_nextflow.py` correctly (Nextflow may need to call `banana-discover-bids` instead of `python path/to/discover_bids_for_nextflow.py`).
+**Verification:** After `uv sync` or `pip install -e .`, run `brainana-generate-surface-qc --help` (or equivalent) from anywhere. Confirm Nextflow still invokes `discover_bids_for_nextflow.py` correctly (Nextflow may need to call `brainana-discover-bids` instead of `python path/to/discover_bids_for_nextflow.py`).
 
 ---
 
@@ -76,7 +76,7 @@ banana-discover-bids = "nhp_mri_prep.nextflow_scripts.discover_bids_for_nextflow
 | `nhp_mri_prep/operations/preprocessing.py` | Adds `src/` before importing fastsurfer_nn, nhp_skullstrip_nn | Remove sys.path block; use direct `from fastsurfer_nn...`, `from nhp_skullstrip_nn...` |
 | `nhp_mri_prep/steps/anatomical.py` | Adds `src/` inside `anat_surface_reconstruction()` before importing fastsurfer_surfrecon | Remove sys.path block; move imports to top of file with direct `from fastsurfer_surfrecon...` |
 
-**Prerequisite:** Ensure Docker `PYTHONPATH` and local dev setup both include `src/` (or the package is installed). Docker already sets `PYTHONPATH=/opt/banana/src`; local dev should use `uv sync` or `pip install -e .`.
+**Prerequisite:** Ensure Docker `PYTHONPATH` and local dev setup both include `src/` (or the package is installed). Docker already sets `PYTHONPATH=/opt/brainana/src`; local dev should use `uv sync` or `pip install -e .`.
 
 **Verification:** Run full anatomical pipeline (or at least surface reconstruction) in Docker and locally with editable install. Run tests.
 
@@ -156,9 +156,9 @@ Configure `import-linter` or `layer-linter` to enforce:
 
 ## Nextflow Integration Notes
 
-- **discover_bids_for_nextflow.py:** Nextflow workflows call this before the main pipeline. Update the workflow to invoke `banana-discover-bids` (or `python -m nhp_mri_prep.nextflow_scripts.discover_bids_for_nextflow`) instead of a raw script path, once entry points are in place.
+- **discover_bids_for_nextflow.py:** Nextflow workflows call this before the main pipeline. Update the workflow to invoke `brainana-discover-bids` (or `python -m nhp_mri_prep.nextflow_scripts.discover_bids_for_nextflow`) instead of a raw script path, once entry points are in place.
 - **read_yaml_config.py:** Similar consideration if it is invoked as a subprocess.
-- **Docker:** Keep `PYTHONPATH=/opt/banana/src`; it aligns with the `src` layout and works for both installed and non-installed runs.
+- **Docker:** Keep `PYTHONPATH=/opt/brainana/src`; it aligns with the `src` layout and works for both installed and non-installed runs.
 
 ---
 

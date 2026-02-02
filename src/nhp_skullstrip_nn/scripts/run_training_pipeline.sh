@@ -21,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # If running from the project root directory, use it directly
-# This handles cases where script is run from /home/star/github/banana
+# This handles cases where script is run from /home/star/github/brainana
 CURRENT_DIR="$(pwd)"
 if [ -d "$CURRENT_DIR/src/nhp_skullstrip_nn" ] && [ -f "$CURRENT_DIR/src/nhp_skullstrip_nn/scripts/run_training_pipeline.sh" ]; then
     PROJECT_ROOT="$CURRENT_DIR"
@@ -31,8 +31,8 @@ fi
 export PYTHONPATH="$PROJECT_ROOT/src:$PYTHONPATH"
 
 # YAML config file (SINGLE SOURCE OF TRUTH)
-# YAML_CONFIG="$PROJECT_ROOT/src/nhp_skullstrip_nn/config_example/T1w_brainmask.yaml"
-YAML_CONFIG="$PROJECT_ROOT/src/nhp_skullstrip_nn/config_example/EPI_brainmask.yaml"
+# YAML_CONFIG="$PROJECT_ROOT/src/nhp_skullstrip_nn/config/T1w_brainmask.yaml"
+YAML_CONFIG="$PROJECT_ROOT/src/nhp_skullstrip_nn/config/EPI_brainmask.yaml"
 
 # # ============================================================================
 # # STEP 1: Split Data into Train/Val/Test

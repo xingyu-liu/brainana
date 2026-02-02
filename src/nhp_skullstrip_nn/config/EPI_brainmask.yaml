@@ -21,7 +21,7 @@ num_conv_block: 5
 kernel_root: 16
 use_inst_norm: true
 num_classes: 2  # 0:non-brain, 1:CSF, 2:gray matter, 3:subcortex, 4:white matter 5:others
-pretrained_model_path: /home/star/github/banana/nhp_skullstrip_nn/pretrained_model/EPI_brainmask.pth
+pretrained_model_path: /home/star/github/brainana/nhp_skullstrip_nn/pretrained_model/EPI_brainmask.pth
 
 # ============================================================================
 # TRAINING CONFIGURATION

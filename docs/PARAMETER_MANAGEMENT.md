@@ -2,7 +2,7 @@
 
 ## Overview
 
-The banana Nextflow pipeline uses a centralized parameter management system with clear priority ordering. All parameters are resolved through `workflows/param_resolver.groovy`, which ensures consistency across all workflows and modules.
+The brainana Nextflow pipeline uses a centralized parameter management system with clear priority ordering. All parameters are resolved through `workflows/param_resolver.groovy`, which ensures consistency across all workflows and modules.
 
 ## Parameter Priority
 

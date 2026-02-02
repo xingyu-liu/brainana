@@ -25,29 +25,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
-BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_easy_downsampled_multianat
-OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_downsampled_multianat_v4
-# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_easy_downsampled"
-# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_easy_downsampled_v6"
-# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_2pass"
-# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_2pass_nextflow"
-# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_multiple"
-# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_multiple_v5"
+BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
+OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v4
+# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled"
+# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_v6"
+# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_2pass"
+# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_2pass_nextflow"
+# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_multiple"
+# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_multiple_v5"
 # BIDS_DIR="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids"
 # OUTPUT_DIR="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_baby25_v1"
 
-# BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/banana_test/dataset_UNC_batch1
-# OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/dataset_UNC_batch1
+# BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_UNC_batch1
+# OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_UNC_batch1
 # BIDS_DIR=/mnt/DataDrive2/macaque/data_raw/macaque_mri/MEBRAIN/bids
 # OUTPUT_DIR=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/MEBRAIN/
 # BIDS_DIR=/mnt/DataDrive2/macaque/data_raw/macaque_mri/ElectrodeLocalization/bids
 # OUTPUT_DIR=/mnt/DataDrive2/macaque/data_raw/macaque_mri/ElectrodeLocalization/bids_preproc
 
-CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_easy.yaml"
-# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_full.yaml"
-# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_UNC.yaml"
-# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_MEBRAIN.yaml"
-# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/banana_test/preproc/config_marge_EL.yaml"
+CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_easy.yaml"
+# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_full.yaml"
+# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_UNC.yaml"
+# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_MEBRAIN.yaml"
+# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_marge_EL.yaml"
 
 WORKING_DIR=${OUTPUT_DIR}_wd
 

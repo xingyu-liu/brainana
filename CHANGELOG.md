@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to banana will be documented in this file.
+All notable changes to brainana will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -8,9 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **Project renamed**: Project renamed from nhp_mri_prep to banana
+- **Project renamed**: Project renamed from nhp_mri_prep to brainana
 - **Architecture migration**: Migrated from CLI-based workflow to Nextflow-based pipeline for maximum parallelization
-- **Docker image**: Docker image name changed from `macacamriprep:latest` to `banana:latest`
+- **Docker image**: Docker image name changed from `macacamriprep:latest` to `brainana:latest`
 - **Removed CLI**: Removed command-line interface (`nhp_mri_prep-preproc`); use Nextflow pipeline instead
 - **Step-based architecture**: Processing now uses individual step functions orchestrated by Nextflow modules
 
@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2024-01-01
 
 ### Added
-- Initial release of banana (formerly nhp_mri_prep)
+- Initial release of brainana (formerly nhp_mri_prep)
 - BIDS dataset processing support
 - Anatomical and functional preprocessing workflows
 - Template registration capabilities
