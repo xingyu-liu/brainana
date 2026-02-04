@@ -48,7 +48,7 @@ class PipelineStage(ABC):
         self.config = config
         self.sd = subjects_dir
         self.hemi = hemi
-        self.logger = logging.getLogger(f"fastsurfer_recon.stages.{self.name}")
+        self.logger = logging.getLogger(f"fastsurfer_surfrecon.stages.{self.name}")
         
         # Timing
         self._start_time: Optional[float] = None
@@ -117,7 +117,7 @@ class PipelineStage(ABC):
         Get stage identifier (e.g., 's07_wm_filled') from module name.
         
         Extracts the identifier from the module name which follows
-        the pattern 'fastsurfer_recon.stages.s##_name'.
+        the pattern 'fastsurfer_surfrecon.stages.s##_name'.
         
         Returns
         -------
@@ -129,7 +129,7 @@ class PipelineStage(ABC):
         if module:
             module_name = module.__name__
             # Extract stage identifier from module name
-            # e.g., 'fastsurfer_recon.stages.s07_wm_filled' -> 's07_wm_filled'
+            # e.g., 'fastsurfer_surfrecon.stages.s07_wm_filled' -> 's07_wm_filled'
             if '.stages.' in module_name:
                 stage_id = module_name.split('.stages.')[-1]
                 return stage_id

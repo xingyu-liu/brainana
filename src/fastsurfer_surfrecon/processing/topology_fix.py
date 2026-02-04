@@ -6,12 +6,15 @@ Provides:
 - pymeshfix-based mesh repair (closes boundary edges, fixes orientation).
 """
 
+import logging
 import re
 import subprocess
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def get_euler_number(surface_path: Path) -> Optional[int]:
@@ -69,7 +72,8 @@ def repair_surface_pymeshfix(input_path: Path, output_path: Path) -> bool:
     try:
         import nibabel.freesurfer as fs
         import pymeshfix
-    except ImportError:
+    except ImportError as e:
+        logger.warning("pymeshfix repair skipped: %s", e)
         return False
 
     try:
@@ -84,5 +88,6 @@ def repair_surface_pymeshfix(input_path: Path, output_path: Path) -> bool:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         fs.write_geometry(output_path, v_repaired, f_repaired, volume_info=metadata)
         return True
-    except Exception:
+    except Exception as e:
+        logger.warning("pymeshfix repair failed for %s: %s", input_path, e)
         return False

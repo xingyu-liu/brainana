@@ -9,6 +9,7 @@
 process QC_CONFORM {
     label 'cpu'
     tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -68,6 +69,7 @@ EOF
 process QC_BIAS_CORRECTION {
     label 'cpu'
     tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -123,6 +125,7 @@ EOF
 process QC_T1WT2W_COMBINED {
     label 'cpu'
     tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -183,6 +186,7 @@ EOF
 process QC_SKULLSTRIPPING {
     label 'cpu'
     tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -238,6 +242,7 @@ EOF
 process QC_ATLAS_SEGMENTATION {
     label 'cpu'
     tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -303,6 +308,7 @@ EOF
 process QC_REGISTRATION {
     label 'cpu'
     tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -368,6 +374,7 @@ EOF
 process QC_T2W_TO_T1W_REGISTRATION {
     label 'cpu'
     tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -433,6 +440,7 @@ EOF
 process QC_T2W_TEMPLATE_SPACE {
     label 'cpu'
     tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -498,6 +506,7 @@ EOF
 process QC_SURF_RECON_TISSUE_SEG {
     label 'cpu'
     tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -564,6 +573,7 @@ EOF
 process QC_CORTICAL_SURF_AND_MEASURES {
     label 'cpu'
     tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -639,6 +649,7 @@ EOF
 process QC_MOTION_CORRECTION {
     label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -690,6 +701,7 @@ EOF
 process QC_BIAS_CORRECTION_FUNC {
     label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -743,6 +755,7 @@ EOF
 process QC_CONFORM_FUNC {
     label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -799,6 +812,7 @@ EOF
 process QC_SKULLSTRIPPING_FUNC {
     label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -851,6 +865,7 @@ EOF
 process QC_REGISTRATION_FUNC {
     label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -968,6 +983,7 @@ EOF
 process QC_WITHIN_SES_COREG {
     label 'cpu'
     tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}/sub-${subject_id}/figures",
         mode: 'copy',
@@ -1025,6 +1041,7 @@ EOF
 process QC_GENERATE_REPORT {
     label 'cpu'
     tag "${subject_id}"
+    errorStrategy 'ignore'
     
     publishDir "${params.output_dir}",
         mode: 'copy',

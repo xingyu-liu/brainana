@@ -10,8 +10,8 @@ import os
 
 import yaml
 
-# Brainana repo root (config.py -> fastsurfer_recon -> fastsurfer_surfrecon -> src -> brainana)
-_BRAINANA_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+# Brainana repo root (config.py -> fastsurfer_surfrecon -> src -> brainana)
+_BRAINANA_ROOT = Path(__file__).resolve().parent.parent.parent
 import nibabel as nib
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -363,7 +363,7 @@ class ReconSurfConfig(BaseModel):
             Path to default config file if found, None otherwise
         """
         # Try to find config/default.yaml relative to this file
-        package_root = Path(__file__).parent.parent
+        package_root = Path(__file__).parent
         default_config = package_root / "config" / "default.yaml"
         if default_config.exists():
             return default_config

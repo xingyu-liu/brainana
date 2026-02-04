@@ -15,14 +15,14 @@ from pathlib import Path
 # respect the thread limits.
 n_threads = 8
 
-# Add fastsurfer_surfrecon/ to path for fastsurfer_recon imports (scripts/ -> fastsurfer_surfrecon)
-_fs_surfrecon_dir = Path(__file__).resolve().parent.parent
-if str(_fs_surfrecon_dir) not in sys.path:
-    sys.path.insert(0, str(_fs_surfrecon_dir))
+# Add src/ to path for fastsurfer_surfrecon package (scripts/ -> fastsurfer_surfrecon -> src)
+_src = Path(__file__).resolve().parent.parent.parent
+if str(_src) not in sys.path:
+    sys.path.insert(0, str(_src))
 
-from fastsurfer_recon.config import ReconSurfConfig, AtlasConfig, ProcessingConfig
-from fastsurfer_recon.pipeline import ReconSurfPipeline
-from fastsurfer_recon.utils.logging import setup_logging
+from fastsurfer_surfrecon.config import ReconSurfConfig, AtlasConfig, ProcessingConfig
+from fastsurfer_surfrecon.pipeline import ReconSurfPipeline
+from fastsurfer_surfrecon.utils.logging import setup_logging
 
 # %%
 # Test subject

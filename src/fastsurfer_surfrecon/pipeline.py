@@ -131,7 +131,7 @@ class ReconSurfPipeline:
         file_handler.setFormatter(
             logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt='%Y-%m-%d %H:%M:%S')
         )
-        logging.getLogger("fastsurfer_recon").addHandler(file_handler)
+        logging.getLogger("fastsurfer_surfrecon").addHandler(file_handler)
         
         # Write header
         with open(log_path, "a") as f:
@@ -141,7 +141,7 @@ class ReconSurfPipeline:
             f.write(f"Start: {self.start_time}\n")
             f.write(f"{'='*80}\n\n")
         
-        # Initialize cmd log file (fastsurfer_recon.cmd)
+        # Initialize cmd log file (fastsurfer_recon.cmd on disk)
         cmd_log_path = self.config.cmd_log_file
         cmd_log_path.parent.mkdir(parents=True, exist_ok=True)
         from .wrappers.base import set_cmd_log_file
@@ -199,7 +199,8 @@ class ReconSurfPipeline:
         - s15: Surface placement
         - s16: Compute morphometry
         - s17: Registration (optional)
-        - s18: Statistics
+        - s18: Cortical ribbon
+        - s19: Statistics
         """
         logger.info("=" * 60)
         logger.info("Phase 2: Surface Creation")
@@ -239,15 +240,19 @@ class ReconSurfPipeline:
             for hemi in hemis:
                 process_hemisphere(hemi)
         
-        # Statistics must run sequentially after both hemispheres complete surface placement
-        # because mris_anatomical_stats requires both hemispheres' pial surfaces
+        # Cortical ribbon must be created before statistics because brainvol.stats
+        # needs ribbon.mgz to compute cortical gray matter volume
+        logger.info("Creating cortical ribbon (needs both hemispheres' surfaces)")
+        CorticalRibbon(self.config, self.sd).run()
+        
+        # Statistics must run sequentially after cortical ribbon is created
+        # because brainvol.stats needs ribbon.mgz for cortical volume computation
         logger.info("Computing statistics for both hemispheres (sequential)")
         for hemi in hemis:
             Statistics(self.config, self.sd, hemi).run()
         
-        # Post-surface volume stages (need both hemispheres' surfaces)
+        # Post-surface volume stages (need both hemispheres' surfaces and ribbon)
         post_surface_stages = [
-            CorticalRibbon(self.config, self.sd),
             AsegRefinement(self.config, self.sd),
             AparcMapping(self.config, self.sd),
             WMParcMapping(self.config, self.sd),

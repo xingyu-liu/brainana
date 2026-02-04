@@ -10,7 +10,6 @@ import shutil
 import pandas as pd
 import numpy as np
 import logging
-import time
 from typing import Dict, Any, Optional, Union, List
 from pathlib import Path
 import nibabel as nib
@@ -943,7 +942,7 @@ def motion_correction(
         if os.path.exists(motion_params):
             # convert motion parameters to a tsv
             motion_params_df = pd.read_table(motion_params, sep=r'\s+', header=None)
-            motion_params_df.columns = ['trans_x', 'trans_y', 'trans_z', 'rot_x', 'rot_y', 'rot_z']
+            motion_params_df.columns = ['rot_x', 'rot_y', 'rot_z', 'trans_x', 'trans_y', 'trans_z']
             tsv_path = output_prefix + '.tsv'
             motion_params_df.to_csv(tsv_path, sep='\t', index=False)
             outputs["motion_parameters"] = tsv_path

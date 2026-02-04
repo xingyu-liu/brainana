@@ -654,8 +654,8 @@ def create_motion_plot(
     
     Args:
         motion_data: Motion parameters array (n_timepoints x 6)
-                    First 3 columns: translations (mm)
-                    Last 3 columns: rotations (radians)
+                    First 3 columns: rotations (radians)
+                    Last 3 columns: translations (mm)
         title: Plot title
         figsize: Figure size
         
@@ -666,20 +666,20 @@ def create_motion_plot(
 
     colors = ['#636295', '#7EA3A8', '#C86043']
     
-    # Plot translations (mm)
-    ax1.plot(motion_data[:, 0], label='X', color=colors[0], lw=2)
-    ax1.plot(motion_data[:, 1], label='Y', color=colors[1], lw=2)
-    ax1.plot(motion_data[:, 2], label='Z', color=colors[2], lw=2)
-    ax1.set_ylabel('Translation (mm)')
-    yrange = np.max(np.abs(motion_data[:, :3])) * 1.1
+    # Plot rotations (radians to degrees) - first 3 columns
+    ax1.plot(np.degrees(motion_data[:, 0]), label='X', color=colors[0], lw=2)
+    ax1.plot(np.degrees(motion_data[:, 1]), label='Y', color=colors[1], lw=2)
+    ax1.plot(np.degrees(motion_data[:, 2]), label='Z', color=colors[2], lw=2)
+    ax1.set_ylabel('Rotation (degrees)')
+    yrange = np.max(np.abs(np.degrees(motion_data[:, :3]))) * 1.1
     ax1.set_ylim(-yrange, yrange)
     
-    # Plot rotations (radians to degrees)
-    ax2.plot(np.degrees(motion_data[:, 3]), label='X', color=colors[0], lw=2)
-    ax2.plot(np.degrees(motion_data[:, 4]), label='Y', color=colors[1], lw=2)
-    ax2.plot(np.degrees(motion_data[:, 5]), label='Z', color=colors[2], lw=2)
-    ax2.set_ylabel('Rotation (degrees)')
-    yrange = np.max(np.abs(np.degrees(motion_data[:, 3:]))) * 1.1
+    # Plot translations (mm) - last 3 columns
+    ax2.plot(motion_data[:, 3], label='X', color=colors[0], lw=2)
+    ax2.plot(motion_data[:, 4], label='Y', color=colors[1], lw=2)
+    ax2.plot(motion_data[:, 5], label='Z', color=colors[2], lw=2)
+    ax2.set_ylabel('Translation (mm)')
+    yrange = np.max(np.abs(motion_data[:, 3:])) * 1.1
     ax2.set_ylim(-yrange, yrange)
 
     ax1.set_title(title)

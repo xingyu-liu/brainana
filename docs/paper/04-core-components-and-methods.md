@@ -94,7 +94,7 @@ Session-level synthesis combines multiple runs within one session; subject-level
 
 **Behavior**:
 - **Input**: Preprocessed anatomical and segmentation (e.g. from fastsurfer_nn). Optionally uses T1wT2w combined image when configured.
-- **Method**: Surface reconstruction follows a FastSurfer-like pipeline: mesh extraction, inflation, and registration to an atlas, with atlas and config under `fastsurfer_surfrecon/` (e.g. `fastsurfer_recon/atlas/`).
+- **Method**: Surface reconstruction follows a FastSurfer-like pipeline: mesh extraction, inflation, and registration to an atlas, with atlas and config under `fastsurfer_surfrecon/` (e.g. `atlas/`).
 - **Output**: Surface meshes and derived measures; outputs are written in BIDS derivatives where applicable.
 - **Resource usage**: This step is typically long-running and memory-intensive (see `docs/RESOURCE_USAGE_SUMMARY.md`); it is optional so that users can skip it when only volume-based preprocessing is needed.
 

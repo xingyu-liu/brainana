@@ -26,8 +26,8 @@ from .s14_parcellation import Parcellation
 from .s15_surface_placement import SurfacePlacement
 from .s16_compute_morphometry import ComputeMorphometry
 from .s17_registration import Registration
-from .s18_statistics import Statistics
-from .s19_cortical_ribbon import CorticalRibbon
+from .s18_cortical_ribbon import CorticalRibbon
+from .s19_statistics import Statistics
 from .s20_aseg_refinement import AsegRefinement
 from .s21_aparc_mapping import AparcMapping
 from .s22_wmparc_mapping import WMParcMapping
@@ -55,8 +55,8 @@ __all__ = [
     "SurfacePlacement",
     "ComputeMorphometry",
     "Registration",
-    "Statistics",
     "CorticalRibbon",
+    "Statistics",
     "AsegRefinement",
     "AparcMapping",
     "WMParcMapping",

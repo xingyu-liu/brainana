@@ -18,8 +18,8 @@ from ..operations.preprocessing import (
     generate_t1wt2wcombined
 )
 from ..operations.registration import ants_register, ants_apply_transforms, flirt_register, flirt_apply_transforms
-from fastsurfer_surfrecon.fastsurfer_recon.config import AtlasConfig, ReconSurfConfig
-from fastsurfer_surfrecon.fastsurfer_recon.pipeline import ReconSurfPipeline
+from fastsurfer_surfrecon.config import AtlasConfig, ReconSurfConfig
+from fastsurfer_surfrecon.pipeline import ReconSurfPipeline
 
 logger = logging.getLogger(__name__)
 

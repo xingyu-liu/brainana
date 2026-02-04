@@ -72,5 +72,5 @@ def get_logger(name: str) -> Logger:
     Logger
         Logger instance
     """
-    return getLogger(f"fastsurfer_recon.{name}")
+    return getLogger(f"fastsurfer_surfrecon.{name}")
 

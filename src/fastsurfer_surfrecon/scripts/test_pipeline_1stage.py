@@ -11,15 +11,15 @@ import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Add fastsurfer_surfrecon/ to path for fastsurfer_recon imports (scripts/ -> fastsurfer_surfrecon)
-_fs_surfrecon_dir = Path(__file__).resolve().parent.parent
-if str(_fs_surfrecon_dir) not in sys.path:
-    sys.path.insert(0, str(_fs_surfrecon_dir))
+# Add src/ to path for fastsurfer_surfrecon package (scripts/ -> fastsurfer_surfrecon -> src)
+_src = Path(__file__).resolve().parent.parent.parent
+if str(_src) not in sys.path:
+    sys.path.insert(0, str(_src))
 
-from fastsurfer_recon.config import ReconSurfConfig
-from fastsurfer_recon.io.subjects_dir import SubjectsDir
-from fastsurfer_recon.utils.logging import setup_logging
-from fastsurfer_recon.stages import (
+from fastsurfer_surfrecon.config import ReconSurfConfig
+from fastsurfer_surfrecon.io.subjects_dir import SubjectsDir
+from fastsurfer_surfrecon.utils.logging import setup_logging
+from fastsurfer_surfrecon.stages import (
     # Volume stages
     VolumePrep,
     BiasCorrection,
@@ -55,12 +55,12 @@ RUN_STEPS = ['s14'] + [f's{i:02d}' for i in range(16, 23)]
 
 # Test subject
 subject_root = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon")
-subject_dir = subject_root / "sub-NMT2Sym_amy"
+subject_dir = subject_root / "sub-MEBRAINS_amy"
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 
 n_threads = 8
-parallel_hemis = False
+parallel_hemis = True
 
 # ============================================================================
 
@@ -99,7 +99,7 @@ def run_single_stage(config: ReconSurfConfig, run_step: str):
     else:
         log_path = sd.log_file
     
-    logger = logging.getLogger("fastsurfer_recon")
+    logger = logging.getLogger("fastsurfer_surfrecon")
     file_handler = logging.FileHandler(log_path, mode="a")
     file_handler.setFormatter(
         logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt='%Y-%m-%d %H:%M:%S')
@@ -120,7 +120,7 @@ def run_single_stage(config: ReconSurfConfig, run_step: str):
     # Initialize cmd log file (fastsurfer_recon.cmd)
     cmd_log_path = config.cmd_log_file
     cmd_log_path.parent.mkdir(parents=True, exist_ok=True)
-    from fastsurfer_recon.wrappers.base import set_cmd_log_file
+    from fastsurfer_surfrecon.wrappers.base import set_cmd_log_file
     with open(cmd_log_path, "a") as f:
         timestamp = datetime.now().strftime("%a %b %d %H:%M:%S %Z %Y")
         f.write(f"\n\n#---------------------------------\n")
@@ -160,8 +160,8 @@ def run_single_stage(config: ReconSurfConfig, run_step: str):
             print(f"\nCompleted {step_name}.")
             return
     
-    # Phase 2: Surface Creation (s08-s18)
-    if 8 <= run_num <= 18:
+    # Phase 2: Surface Creation (s08-s17)
+    if 8 <= run_num <= 17:
         surface_stages = [
             ("s08", Tessellation),
             ("s09", Smoothing),
@@ -173,7 +173,6 @@ def run_single_stage(config: ReconSurfConfig, run_step: str):
             ("s15", SurfacePlacement),
             ("s16", ComputeMorphometry),
             ("s17", Registration),
-            ("s18", Statistics),
         ]
         
         for step_name, stage_class in surface_stages:
@@ -183,43 +182,59 @@ def run_single_stage(config: ReconSurfConfig, run_step: str):
             print(f"Phase 2: Surface — {step_name}: {stage_class.__name__}")
             print("=" * 60)
             
-            if step_name == "s18":
-                print("Computing statistics for both hemispheres (sequential)")
+            if config.processing.parallel_hemis:
+                print(f"Running for both hemispheres in parallel...")
+                log = logging.getLogger(__name__)
+                
+                def process_hemi(hemi: str):
+                    stage = stage_class(config, sd, hemi)
+                    stage.run()
+                
+                with ThreadPoolExecutor(max_workers=len(hemis)) as executor:
+                    futures = {executor.submit(process_hemi, hemi): hemi for hemi in hemis}
+                    for future in as_completed(futures):
+                        hemi = futures[future]
+                        try:
+                            future.result()
+                        except Exception as e:
+                            log.error(f"Error processing {hemi}: {e}")
+                            raise
+            else:
+                print(f"Running for both hemispheres sequentially...")
                 for hemi in hemis:
                     print(f"  Processing {hemi}...")
                     stage = stage_class(config, sd, hemi)
                     stage.run()
-            else:
-                if config.processing.parallel_hemis:
-                    print(f"Running for both hemispheres in parallel...")
-                    log = logging.getLogger(__name__)
-                    
-                    def process_hemi(hemi: str):
-                        stage = stage_class(config, sd, hemi)
-                        stage.run()
-                    
-                    with ThreadPoolExecutor(max_workers=len(hemis)) as executor:
-                        futures = {executor.submit(process_hemi, hemi): hemi for hemi in hemis}
-                        for future in as_completed(futures):
-                            hemi = futures[future]
-                            try:
-                                future.result()
-                            except Exception as e:
-                                log.error(f"Error processing {hemi}: {e}")
-                                raise
-                else:
-                    print(f"Running for both hemispheres sequentially...")
-                    for hemi in hemis:
-                        print(f"  Processing {hemi}...")
-                        stage = stage_class(config, sd, hemi)
-                        stage.run()
             print(f"\nCompleted {step_name}.")
             return
     
-    # Phase 3: Post-Surface (s19-s22)
-    if 19 <= run_num <= 22:
+    # Phase 3: Post-Surface (s18-s22)
+    # s18: CorticalRibbon - creates ribbon.mgz (needs both hemispheres' surfaces)
+    # s19: Statistics - computes brainvol.stats (needs ribbon.mgz for cortical volume)
+    if 18 <= run_num <= 22:
+        # s18: CorticalRibbon (runs once for both hemispheres)
+        if run_num == 18:
+            print("=" * 60)
+            print(f"Phase 3: Post-Surface — s18: CorticalRibbon")
+            print("=" * 60)
+            CorticalRibbon(config, sd).run()
+            print(f"\nCompleted s18.")
+            return
+        
+        # s19: Statistics (runs per hemisphere, needs ribbon.mgz)
+        if run_num == 19:
+            print("=" * 60)
+            print(f"Phase 3: Post-Surface — s19: Statistics")
+            print("=" * 60)
+            print("Computing statistics for both hemispheres (sequential)")
+            for hemi in hemis:
+                print(f"  Processing {hemi}...")
+                Statistics(config, sd, hemi).run()
+            print(f"\nCompleted s19.")
+            return
+        
+        # s20-s22: Other post-surface stages
         post_surface_stages = [
-            ("s19", CorticalRibbon),
             ("s20", AsegRefinement),
             ("s21", AparcMapping),
             ("s22", WMParcMapping),

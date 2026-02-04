@@ -117,7 +117,6 @@ def create_conform_qc(
 def create_motion_correction_qc(
     motion_params: str,
     save_f: Union[str, Path],
-    input_file: Union[str, Path],
     logger: Optional[logging.Logger] = None,
     **kwargs
 ) -> Dict[str, str]:
@@ -150,7 +149,7 @@ def create_motion_correction_qc(
         if motion_params.endswith('.tsv'):
             motion_df = pd.read_csv(motion_params, sep='\t')
             # Ensure we have the expected columns in the right order
-            expected_cols = ['trans_x', 'trans_y', 'trans_z', 'rot_x', 'rot_y', 'rot_z']
+            expected_cols = ['rot_x', 'rot_y', 'rot_z', 'trans_x', 'trans_y', 'trans_z']
             if all(col in motion_df.columns for col in expected_cols):
                 motion_data = motion_df[expected_cols].values
             else:
@@ -453,7 +452,7 @@ def create_t1wt2w_combined_qc(
             image_combined,
             num_cols=num_slices,
             perspectives=["axial"],
-            before_after_labels=["T1w (after bias)", "T1wT2wCombined"],
+            before_after_labels=["T1w", "T1wT2wCombined"],
             save_f=output_path,
             logger=logger
         )
