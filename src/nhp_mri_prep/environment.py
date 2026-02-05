@@ -38,10 +38,7 @@ def _load_dependencies_from_pyproject() -> Tuple[Dict[str, str], Dict[str, str]]
     optional = {}
     
     # Use same pattern as info.py for reading pyproject.toml
-    try:
-        import tomllib
-    except ImportError:
-        import tomli as tomllib
+    import tomllib  # Python 3.11+ built-in
     
     pyproject_path = Path(__file__).parent.parent.parent / "pyproject.toml"
     if not pyproject_path.exists():
@@ -709,7 +706,7 @@ def print_environment_report(env_results: Dict[str, Any]) -> None:
         env_results: Results from check_environment()
     """
     print("\n" + "="*60)
-    print("MACACAMRIPREP ENVIRONMENT REPORT")
+    print("NHP_MRI_PREP ENVIRONMENT REPORT")
     print("="*60)
     
     # Summary

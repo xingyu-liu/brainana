@@ -1,5 +1,5 @@
 """
-Core Trainer Class for macacaMRINN - Simplified
+Core Trainer Class for nhp_skullstrip_nn - Simplified
 """
 
 import os
@@ -25,7 +25,7 @@ from .train_plot import PlottingCallback
 
 
 class Trainer:
-    """Clean trainer for macacaMRINN."""
+    """Clean trainer for nhp_skullstrip_nn."""
     
     def __init__(self, config: TrainingConfig):
         self.config = config

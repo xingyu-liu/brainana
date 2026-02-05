@@ -1,5 +1,5 @@
 """
-Inference module for macacaMRINN.
+Inference module for nhp_skullstrip_nn.
 
 This module contains prediction and inference functionality.
 """

@@ -17,7 +17,7 @@ from fastsurfer_nn.utils.constants import REPO_ROOT
 
 # %%
 # Test paths
-common_dir = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/MEBRAIN_amy_resue/mri'
+common_dir = '/home/star/github/atlas/macaque/macaque_template_surfaces/sub-NMT2Asym/mri'
 skullstripped_dir = f'{common_dir}'
 output_dir = f'{skullstripped_dir}/test'
 
@@ -26,7 +26,7 @@ seg_f = f'{skullstripped_dir}/segmentation.nii.gz'
 mask_f = f'{skullstripped_dir}/mask.nii.gz'
 
 # Checkpoint to extract atlas name from
-ckpt_f = '/home/star/github/brainana/fastsurfer_nn/pretrained_model/T1w_seg-ARM2_coronal.pkl'
+ckpt_f = '/home/star/github/brainana/src/fastsurfer_nn/pretrained_model/T1w_seg-ARM2_coronal.pkl'
 
 # Extract LUT path from checkpoint
 checkpoint_path = Path(ckpt_f)

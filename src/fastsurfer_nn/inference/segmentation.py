@@ -27,9 +27,34 @@ from typing import Dict, Optional, Union, Literal
 from fastsurfer_nn.inference.api import segmentation
 from fastsurfer_nn.inference.predictor_utils import setup_atlas_from_checkpoints
 from fastsurfer_nn.utils.checkpoint import extract_atlas_metadata, is_binary_checkpoint
-from fastsurfer_nn.utils.constants import REPO_ROOT, PRETRAINED_MODEL_DIR, TEMPLATE_DIR
+from fastsurfer_nn.utils.constants import (
+    REPO_ROOT,
+    PRETRAINED_MODEL_DIR,
+    TEMPLATE_ZOO_ATLAS,
+    TEMPLATE_ZOO_TEMPLATES,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_template_path(filename: str) -> Path:
+    """Resolve a template filename under template_zoo/template/ (first match)."""
+    matches = list(TEMPLATE_ZOO_TEMPLATES.glob(f"**/{filename}"))
+    if not matches:
+        raise FileNotFoundError(
+            f"Template file not found: {filename} under {TEMPLATE_ZOO_TEMPLATES}"
+        )
+    return matches[0]
+
+
+def _resolve_atlas_path(filename: str) -> Path:
+    """Resolve an atlas filename under template_zoo/atlas/ (first match)."""
+    matches = list(TEMPLATE_ZOO_ATLAS.glob(f"**/{filename}"))
+    if not matches:
+        raise FileNotFoundError(
+            f"Atlas file not found: {filename} under {TEMPLATE_ZOO_ATLAS}"
+        )
+    return matches[0]
 
 
 def _extract_atlas_from_checkpoint(ckpt_path: Path) -> Optional[str]:
@@ -125,7 +150,7 @@ def run_segmentation(
         fix_roi_wm: bool, default=False
             If True, apply ROI white matter fixing using template registration after segmentation.
             This fixes missing thin WM in the specified ROI by registering template ROI WM to individual space.
-            Template files are automatically located in TEMPLATE_DIR. LUT path is automatically determined
+            Template files are resolved from template_zoo/template/ and template_zoo/atlas/. LUT path is automatically determined
             from checkpoint metadata (atlas_name).
         roi_name: str, default='V1'
             ROI name for WM fixing. Default is 'V1'.
@@ -371,10 +396,10 @@ def run_segmentation(
                     )
                 logger.info(f"LUT path (from checkpoint): {lut_path}")
                 
-                # Construct template file paths from TEMPLATE_DIR
-                tpl_T1w_f = TEMPLATE_DIR / "tpl-NMT2Sym_res-05_T1w_brain.nii.gz"
-                tpl_seg_f = TEMPLATE_DIR / f"atlas-{atlas_name}_space-NMT2Sym_res-05.nii.gz"
-                tpl_roi_wm_f = TEMPLATE_DIR / f"tpl-NMT2Sym_res-05_T1w_WM_{roi_name}.nii.gz"
+                # Resolve template file paths from template_zoo/template/ and template_zoo/atlas/
+                tpl_T1w_f = _resolve_template_path("tpl-NMT2Sym_res-05_T1w_brain.nii.gz")
+                tpl_roi_wm_f = _resolve_template_path(f"tpl-NMT2Sym_res-05_T1w_WM_{roi_name}.nii.gz")
+                tpl_seg_f = _resolve_atlas_path(f"atlas-{atlas_name}_space-NMT2Sym_res-05.nii.gz")
                 
                 # Validate template files exist
                 if not tpl_seg_f.exists():

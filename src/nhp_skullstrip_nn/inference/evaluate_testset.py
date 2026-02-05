@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Evaluation module for macacaMRINN test sets.
+Evaluation module for nhp_skullstrip_nn test sets.
 """
 
 import os
@@ -47,7 +47,7 @@ def evaluate_test_set_from_training(training_output_dir: str,
     Returns:
         Dictionary containing evaluation results and statistics
     """
-    logger = setup_logging('macacaMRINN.test_evaluation') if verbose else None
+    logger = setup_logging('nhp_skullstrip_nn.test_evaluation') if verbose else None
     
     if logger:
         logger.info("🧪 Starting comprehensive test set evaluation...")
@@ -165,7 +165,7 @@ def evaluate_test_set_from_paths(test_images: List[str],
     Returns:
         Dictionary containing evaluation results and statistics
     """
-    logger = setup_logging('macacaMRINN.test_evaluation') if verbose else None
+    logger = setup_logging('nhp_skullstrip_nn.test_evaluation') if verbose else None
     
     if logger:
         logger.info("🧪 Starting test set evaluation from explicit paths...")

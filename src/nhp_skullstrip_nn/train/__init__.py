@@ -1,5 +1,5 @@
 """
-Clean Training Module for macacaMRINN
+Clean Training Module for nhp_skullstrip_nn
 
 Streamlined training components focused on simplicity and efficiency.
 """

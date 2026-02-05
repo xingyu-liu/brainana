@@ -1,5 +1,5 @@
 """
-Prediction module for macacaMRINN.
+Prediction module for nhp_skullstrip_nn.
 """
 
 import os
@@ -523,10 +523,10 @@ def skullstripping(
     config: Optional[Dict[str, Any]] = None
 ) -> Dict[str, str]:
     """
-    Perform skullstripping using macacaMRINN UNet model.
+    Perform skullstripping using nhp_skullstrip_nn UNet model.
     
     This function provides the same interface as the old skullstripping_bak API
-    but uses macacaMRINN internally for brain mask generation.
+    but uses nhp_skullstrip_nn internally for brain mask generation.
     
     Args:
         input_image: Path to the input image (T1w, EPI, etc.)
@@ -559,7 +559,7 @@ def skullstripping(
             logger.addHandler(handler)
             logger.setLevel(logging.INFO)
     
-    logger.info(f"Starting skullstripping for {modal} modality using macacaMRINN")
+    logger.info(f"Starting skullstripping for {modal} modality using nhp_skullstrip_nn")
     
     # Validate inputs
     input_image = Path(input_image)
@@ -591,7 +591,7 @@ def skullstripping(
     logger.info(f"Using model: {model_path}")
     
     try:
-        # Load model using macacaMRINN's ModelLoader
+        # Load model using nhp_skullstrip_nn's ModelLoader
         model = ModelLoader.load_model_from_file(
             model_path=str(model_path),
             device_id=device_id,

@@ -25,6 +25,8 @@ REPO_ROOT = Path(__file__).parents[3]
 # Pretrained checkpoints live inside fastsurfer_nn (utils/ -> fastsurfer_nn)
 PRETRAINED_MODEL_DIR = Path(__file__).parents[1] / "pretrained_model"
 TEMPLATE_DIR = REPO_ROOT / "template_zoo"
+TEMPLATE_ZOO_TEMPLATES = TEMPLATE_DIR / "template"
+TEMPLATE_ZOO_ATLAS = TEMPLATE_DIR / "atlas"
 
 # Brain mask creation parameters
 MASK_DILATION_SIZE_MM = 2.0  # Dilation size in millimeters for mask creation

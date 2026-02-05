@@ -1,5 +1,5 @@
 """
-General plotting utilities for macacaMRINN.
+General plotting utilities for nhp_skullstrip_nn.
 """
 
 import matplotlib.pyplot as plt

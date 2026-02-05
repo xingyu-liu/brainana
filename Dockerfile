@@ -32,6 +32,39 @@ RUN mkdir -p /opt/ants && \
     cmake --install . && \
     test -d /opt/ants && ls -la /opt/ants || (echo "ERROR: /opt/ants not found after install" && exit 1)
 
+###########################
+# Python env builder      #
+# (build-essential only  #
+#  here, not in final)   #
+###########################
+FROM debian:bookworm-slim AS python-builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      build-essential \
+      ca-certificates \
+      curl \
+      libsuitesparse-dev \
+      python3 \
+      python3-dev \
+      python3-venv && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:0.5.14 /uv /uvx /bin/
+
+WORKDIR /opt/brainana
+COPY pyproject.toml uv.lock setup.cfg ./
+COPY . .
+
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+RUN mkdir -p /opt/brainana/tmp && \
+    uv venv /opt/venv && \
+    TMPDIR=/opt/brainana/tmp uv sync --python /opt/venv/bin/python --frozen --no-cache || \
+    TMPDIR=/opt/brainana/tmp uv pip install --no-cache -e . && \
+    rm -rf /opt/brainana/tmp
+
 #########################
 # Runtime with all libs #
 #########################
@@ -43,8 +76,8 @@ ARG FREESURFER_VERSION=7.4.1
 ARG FREESURFER_TARBALL=freesurfer-linux-ubuntu22_amd64-${FREESURFER_VERSION}.tar.gz
 ARG AFNI_TARBALL=linux_rocky_8.tgz
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# Install uv (pinned version for reproducibility)
+COPY --from=ghcr.io/astral-sh/uv:0.5.14 /uv /uvx /bin/
 
 ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
@@ -57,19 +90,21 @@ RUN apt-get update && \
       curl \
       dc \
       git \
+      gosu \
       locales \
       netpbm \
       perl \
       python3 \
       python3-pip \
-      python3-dev \
       python3-venv \
       tar \
       tcsh \
       wget \
-      vim \
-      bash-completion \
-      openjdk-17-jdk \
+      openjdk-17-jre-headless \
+      # procps provides 'ps', required by Nextflow to collect task metrics \
+      procps \
+      # CHOLMOD runtime for scikit-sparse (no build-essential in final image) \
+      libcholmod3 \
       # graphics/openGL + X11 runtime for AFNI/FSL/FreeSurfer \
       freeglut3-dev \
       libfontconfig1 \
@@ -106,7 +141,11 @@ RUN apt-get update && \
       libxshmfence1 \
       libxt6 \
       libxxf86vm1 \
-      zlib1g && \
+      zlib1g \
+      # Connectome Workbench for QC surface snapshots (wb_command) and xvfb for headless rendering \
+      connectome-workbench \
+      xauth \
+      xvfb && \
     sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
     locale-gen && \
     rm -rf /var/lib/apt/lists/*
@@ -143,11 +182,14 @@ RUN mkdir -p "${AFNI_HOME}" && \
 
 ################
 # Install FreeSurfer
+# Ubuntu 22 build is the best match for Debian bookworm (similar glibc 2.35/2.36).
+# See https://surfer.nmr.mgh.harvard.edu/fswiki/rel7downloads
 ################
 ENV FREESURFER_HOME=/usr/local/freesurfer
 RUN curl -fsSL "https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/${FREESURFER_VERSION}/${FREESURFER_TARBALL}" -o /tmp/freesurfer.tar.gz && \
     tar --no-same-owner -xzvf /tmp/freesurfer.tar.gz -C /usr/local && \
-    rm /tmp/freesurfer.tar.gz
+    rm /tmp/freesurfer.tar.gz && \
+    rm -rf "${FREESURFER_HOME}/docs" "${FREESURFER_HOME}/matlab" "${FREESURFER_HOME}/average" "${FREESURFER_HOME}/trctrain" 2>/dev/null || true
 
 ##############
 # Environment
@@ -157,7 +199,7 @@ ENV ANTSPATH=/opt/ants/bin/ \
     AFNI_HOME=/usr/local/afni \
     AFNIPATH=/usr/local/afni \
     FREESURFER_HOME=/usr/local/freesurfer \
-    FS_LICENSE=/opt/freesurfer/license.txt \
+    FS_LICENSE=/fs_license.txt \
     JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
 ENV PATH=${FSLDIR}/bin:${AFNI_HOME}:${ANTSPATH}:${FREESURFER_HOME}/bin:${JAVA_HOME}/bin:${PATH}
@@ -190,14 +232,14 @@ export ANTSPATH=%s\n\
 export FREESURFER_HOME=%s\n\
 export FS_LICENSE=%s\n\
 export FSLOUTPUTTYPE=NIFTI_GZ\n\
-export PATH=$FSLDIR/bin:$AFNI_HOME:$ANTSPATH:$FREESURFER_HOME/bin:$PATH\n\
+export PATH=$FSLDIR/bin:$AFNI_HOME:$ANTSPATH:$FREESURFER_HOME/bin:${JAVA_HOME}/bin:/usr/local/bin:$PATH\n\
 \n\
 # License check\n\
 if [ ! -f "$FS_LICENSE" ]; then\n\
     echo "--------------------------------------------------------------------------------"\n\
     echo "WARNING: FreeSurfer license not found at $FS_LICENSE"\n\
     echo "To run FreeSurfer tools, please mount your license file:"\n\
-    echo "  docker run -it -v /path/to/license.txt:/opt/freesurfer/license.txt ..."\n\
+    echo "  docker run ... -v /path/to/license.txt:/fs_license.txt ..."\n\
     echo "--------------------------------------------------------------------------------"\n\
 fi\n\
 \n\
@@ -214,9 +256,11 @@ if [ "$PS1" ]; then\n\
     echo "  - Python:     \$(python3 --version)"\n\
     echo "  - Java:       \$(java -version 2>&1 | head -n 1)"\n\
     echo "  - uv:         \$(uv --version)"\n\
+    echo "  - Nextflow:   \$(nextflow -version 2>/dev/null | head -n 1 || echo \"Installed\")"\n\
+    echo "  - Workbench:  \$(wb_command -version 2>/dev/null | head -n 1 || echo \"Installed\")"\n\
     echo "--------------------------------------------------------------------------------"\n\
     echo "Usage Examples:"\n\
-    echo "  ./run_nextflow.sh run main.nf --bids_dir /data --output_dir /output --output_space \"NMT2Sym:res-1\""\n\
+    echo "  ./run_brainana.sh run main.nf --bids_dir /data --output_dir /output"\n\
     echo "  python3 -m nhp_mri_prep.config.config_generator_cli"\n\
     echo "================================================================================"\n\
 fi\n' \
@@ -229,27 +273,59 @@ RUN echo "source /etc/profile.d/neuroenv.sh" >> /etc/bash.bashrc && \
     echo "alias ls='ls --color=auto'" >> /etc/bash.bashrc && \
     echo "alias ll='ls -alF'" >> /etc/bash.bashrc
 
+##############
+# Nextflow
+##############
+ARG NEXTFLOW_VERSION=25.10.2
+# Pin version at runtime to prevent auto-update and version drift
+ENV NXF_VER=${NEXTFLOW_VERSION}
+# Pre-cache framework JAR so no network is needed at runtime
+ENV NXF_HOME=/opt/nextflow
+
+WORKDIR /tmp
+RUN curl -s https://get.nextflow.io | bash && \
+    chmod +x nextflow && \
+    mv nextflow /usr/local/bin/ && \
+    nextflow -version && \
+    chmod -R a+rX /opt/nextflow
+
 #################
-# Project Install
+# Project Install (from builder – no gcc/build-essential in final image)
 #################
 WORKDIR /opt/brainana
-COPY . /opt/brainana
 
 ENV VIRTUAL_ENV=/opt/venv
-ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Redirect caches to writable locations to support arbitrary UIDs
 ENV MPLCONFIGDIR=/tmp/matplotlib \
     PYTHONPYCACHEPREFIX=/tmp/pycache
 
-RUN mkdir -p /opt/brainana/tmp /tmp/matplotlib /tmp/pycache && \
-    TMPDIR=/opt/brainana/tmp uv venv $VIRTUAL_ENV && \
-    TMPDIR=/opt/brainana/tmp uv pip install --no-cache -e /opt/brainana && \
-    rm -rf /opt/brainana/tmp && \
-    chown -R neuro:neuro /opt/brainana $VIRTUAL_ENV && \
-    chmod -R 777 /tmp/matplotlib /tmp/pycache /home/neuro
+COPY --from=python-builder /opt/venv /opt/venv
+COPY --from=python-builder /opt/brainana /opt/brainana
 
-USER neuro
-WORKDIR /home/neuro
-CMD ["/bin/bash"]
+# World-writable temp dirs so any UID (via -u or gosu) can use them
+# .nextflow/ in project dir must be writable (Nextflow writes session metadata there)
+RUN mkdir -p /tmp/matplotlib /tmp/pycache /tmp/.X11-unix /tmp/home && \
+    chmod 1777 /tmp/matplotlib /tmp/pycache /tmp/.X11-unix /tmp/home && \
+    chmod -R 755 /opt/brainana /opt/venv /home/neuro && \
+    chmod +x /opt/brainana/entrypoint.sh && \
+    mkdir -p /opt/brainana/.nextflow && \
+    chmod 1777 /opt/brainana/.nextflow
+
+# NOTE: No "USER neuro" here. The entrypoint starts as root,
+# detects the UID of /output, and drops to that user via gosu.
+WORKDIR /opt/brainana
+
+# Health check to verify the container is functional
+HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=3 \
+    CMD python3 -c "import nhp_mri_prep; print('OK')" || exit 1
+
+# Labels for image metadata
+LABEL org.opencontainers.image.title="brainana" \
+      org.opencontainers.image.description="Macaque MRI preprocessing pipeline" \
+      org.opencontainers.image.version="0.1.0" \
+      org.opencontainers.image.source="https://github.com/yourusername/brainana"
+
+ENTRYPOINT ["/opt/brainana/entrypoint.sh"]
+CMD ["/input", "/output"]

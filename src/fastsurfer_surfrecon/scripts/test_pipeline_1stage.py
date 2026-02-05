@@ -54,8 +54,8 @@ from fastsurfer_surfrecon.stages import (
 RUN_STEPS = ['s14'] + [f's{i:02d}' for i in range(16, 23)]
 
 # Test subject
-subject_root = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon")
-subject_dir = subject_root / "sub-MEBRAINS_amy"
+subject_root = Path("/home/star/github/atlas/macaque/macaque_template_surfaces")
+subject_dir = subject_root / "sub-NMT2Asym"
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 

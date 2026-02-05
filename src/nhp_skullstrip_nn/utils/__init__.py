@@ -1,5 +1,5 @@
 """
-Utility module for macacaMRINN.
+Utility module for nhp_skullstrip_nn.
 
 This module contains I/O utilities, GPU utilities, morphological operations,
 and general plotting functions.

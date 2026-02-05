@@ -47,14 +47,21 @@ class TemplateManager:
         return template_dir
     
     def _discover_templates(self) -> Dict[str, Dict[str, str]]:
-        """Discover available templates.
+        """Discover available templates under template_zoo/template/.
         
+        Volume templates live in template_zoo/template/<Space>/ (e.g. NMT2Sym, MEBRAINS).
         Parses: tpl-{name}_res-{resolution}[_{components}]*_T1w[_{desc}].nii.gz
         Returns: Dict mapping template_name -> {spec: file_path}
         """
+        template_root = self.template_dir / "template"
+        if not template_root.is_dir():
+            raise FileNotFoundError(
+                f"Template subdirectory not found: {template_root}. "
+                "Expected template_zoo/template/ with volume templates."
+            )
         templates = defaultdict(dict)
         
-        for template_file in self.template_dir.glob('*.nii.gz'):
+        for template_file in template_root.glob("**/*.nii.gz"):
             parsed = self._parse_template_filename(template_file)
             if parsed:
                 template_name, components, spec = parsed

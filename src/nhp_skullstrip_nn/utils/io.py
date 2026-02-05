@@ -1,5 +1,5 @@
 """
-I/O utilities for macacaMRINN.
+I/O utilities for nhp_skullstrip_nn.
 """
 
 import os

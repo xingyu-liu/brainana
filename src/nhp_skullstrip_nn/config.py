@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Configuration management for macacaMRINN training and inference.
+Configuration management for nhp_skullstrip_nn training and inference.
 """
 
 import os

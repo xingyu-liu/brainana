@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Logging utilities for macacaMRINN.
+Logging utilities for nhp_skullstrip_nn.
 Provides consistent logging patterns and GPU information logging.
 """
 
@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 class MacacaLogger:
-    """Centralized logger for macacaMRINN with consistent formatting and configuration."""
+    """Centralized logger for nhp_skullstrip_nn with consistent formatting and configuration."""
     
     def __init__(self, name: str, output_dir: Optional[str] = None, log_level: str = 'INFO'):
         """Initialize the logger.
@@ -63,7 +63,7 @@ class MacacaLogger:
             log_dir.mkdir(parents=True, exist_ok=True)
             
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            log_file = log_dir / f'macacaMRINN_{timestamp}.log'
+            log_file = log_dir / f'nhp_skullstrip_nn_{timestamp}.log'
             
             file_handler = logging.FileHandler(log_file)
             file_handler.setLevel(getattr(logging, self.log_level))
@@ -81,7 +81,7 @@ class MacacaLogger:
 
 
 def setup_logging(
-    name: str = 'macacaMRINN',
+    name: str = 'nhp_skullstrip_nn',
     output_dir: Optional[str] = None,
     log_level: str = 'INFO'
 ) -> logging.Logger:
@@ -111,7 +111,7 @@ def get_logger(name: str = None) -> logging.Logger:
     if name is None:
         # Get the calling module's name
         frame = inspect.currentframe().f_back
-        name = frame.f_globals.get('__name__', 'macacaMRINN')
+        name = frame.f_globals.get('__name__', 'nhp_skullstrip_nn')
     
     return logging.getLogger(name)
 
@@ -119,7 +119,7 @@ def get_logger(name: str = None) -> logging.Logger:
 # Convenience functions for common logging patterns
 def log_training_start(logger: logging.Logger, config: dict):
     """Log training start information."""
-    logger.info("🚀 Starting macacaMRINN Training")
+    logger.info("🚀 Starting nhp_skullstrip_nn Training")
     logger.info("=" * 40)
     logger.info(f"Configuration: {config}")
 
@@ -196,7 +196,7 @@ def log_data_info(logger: logging.Logger, image_files: list, label_files: list, 
 
 def log_prediction_info(logger: logging.Logger, model_path: str, input_path: str, output_path: str, device: str):
     """Log prediction setup information."""
-    logger.info("🧠 Running macacaMRINN Prediction")
+    logger.info("🧠 Running nhp_skullstrip_nn Prediction")
     logger.info("=" * 40)
     logger.info(f"📁 Model: {model_path}")
     logger.info(f"📥 Input: {input_path}")
@@ -218,4 +218,4 @@ def log_prediction_failed(logger: logging.Logger, error: Exception):
 # Legacy compatibility - these functions maintain the old interface
 def setup_training_logging(output_dir: str, log_level: str = 'INFO') -> logging.Logger:
     """Legacy function for backward compatibility."""
-    return setup_logging('macacaMRINN.training', output_dir, log_level)
+    return setup_logging('nhp_skullstrip_nn.training', output_dir, log_level)

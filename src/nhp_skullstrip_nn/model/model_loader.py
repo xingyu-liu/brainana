@@ -1,5 +1,5 @@
 """
-Model loading utilities for macacaMRINN.
+Model loading utilities for nhp_skullstrip_nn.
 """
 
 import torch

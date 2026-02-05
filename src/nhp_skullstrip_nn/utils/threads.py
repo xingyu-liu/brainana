@@ -1,5 +1,5 @@
 """
-Thread configuration utilities for macacaMRINN.
+Thread configuration utilities for nhp_skullstrip_nn.
 
 Provides default thread count that avoids resource cap issues on systems
 with many CPU cores.

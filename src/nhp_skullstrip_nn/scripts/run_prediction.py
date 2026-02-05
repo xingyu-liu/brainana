@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Prediction script for macacaMRINN.
+Prediction script for nhp_skullstrip_nn.
 """
 
 import sys
@@ -19,7 +19,7 @@ from ..model import ModelLoader
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Run prediction with trained macacaMRINN model',
+        description='Run prediction with trained nhp_skullstrip_nn model',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -87,7 +87,7 @@ Examples:
     args = parser.parse_args()
     
     # Setup logging
-    logger = setup_logging('macacaMRINN.prediction')
+    logger = setup_logging('nhp_skullstrip_nn.prediction')
     
     # Validate model file
     if not Path(args.model).exists():

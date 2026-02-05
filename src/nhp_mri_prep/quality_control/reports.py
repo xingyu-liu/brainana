@@ -383,8 +383,9 @@ class HtmlGenerator:
     def create_summary_section(report_data: Dict[str, Any], config: Dict[str, Any]) -> str:
         """Create summary section."""
         subject_id = report_data["metadata"]["subject_id"]
-        
-        # Use original counts from dataset_context if available
+        organized = report_data["organized_snapshots"]
+
+        # Use original counts from dataset_context if available; otherwise derive from snapshots
         dataset_context = report_data.get("dataset_context", {})
         if "subject_file_counts" in dataset_context:
             # Use detailed subject counts if available (preferred)
@@ -397,30 +398,43 @@ class HtmlGenerator:
             t2w_count = 0  # Cannot determine T2w count from legacy data
             func_count = dataset_context["job_file_counts"]["functional"]
         else:
-            # Handle missing data gracefully
-            t1w_count = "N/A"
-            t2w_count = "N/A"
-            func_count = "N/A"
-        
+            # Derive counts from organized snapshots (what actually has QC in this report)
+            anat_counts = HtmlGenerator._count_anatomical_by_modality(organized["anatomical"])
+            t1w_count = anat_counts["t1w"]
+            t2w_count = anat_counts["t2w"]
+            func_count = HtmlGenerator._count_unique_images(organized["functional"])
+
         # Field mapping count from snapshots (not tracked in job counts)
-        fmap_count = HtmlGenerator._count_unique_images(report_data["organized_snapshots"]["field_mapping"])
-        
+        fmap_count = HtmlGenerator._count_unique_images(organized["field_mapping"])
+
         # Build structural images description
         structural_desc = []
         if t1w_count and t1w_count != "N/A" and t1w_count > 0:
             structural_desc.append(f"{t1w_count} T1w")
         if t2w_count and t2w_count != "N/A" and t2w_count > 0:
             structural_desc.append(f"{t2w_count} T2w")
-        
+
         if structural_desc:
             structural_text = ", ".join(structural_desc)
         elif t1w_count == "N/A":
             structural_text = "N/A"
         else:
             structural_text = "0"
-        
+
+        # Standard output space: template.output_space (e.g. "NMT2Sym:res-05") -> display template name
+        output_space_raw = (
+            config.get("template", {}).get("output_space")
+            or config.get("output_spaces")
+            or "NMT2Sym"
+        )
+        output_space_display = str(output_space_raw).split(":")[0] if output_space_raw else "NMT2Sym"
+
+        # FreeSurfer: show "Applicable" if this report includes surface reconstruction QC
+        has_surf = HtmlGenerator._has_surface_recon_snapshots(organized["anatomical"])
+        freesurfer_text = "Applicable" if has_surf else "Not applicable"
+
         content = f'''<div class="boiler-html">
-<p><strong>Configuration:</strong> For detailed processing parameters and configuration settings, 
+<p><strong>Configuration:</strong> For detailed processing parameters and configuration settings,
 please refer to the nhp_mri_prep configuration files in your preprocessing directory.</p>
 </div>
 <ul class="elem-desc">
@@ -428,11 +442,11 @@ please refer to the nhp_mri_prep configuration files in your preprocessing direc
 <li>Structural images: {structural_text}</li>
 <li>Functional images: {func_count}</li>
 <li>Field mapping images: {fmap_count}</li>
-<li>Standard output spaces: {config.get("output_spaces", "NMT2Sym")}</li>
+<li>Standard output spaces: {output_space_display}</li>
 <li>Non-standard output spaces: </li>
-<li>FreeSurfer reconstruction: Not applicable</li>
+<li>FreeSurfer reconstruction: {freesurfer_text}</li>
 </ul>'''
-        
+
         return HtmlGenerator.create_section("Summary", "Summary", content)
     
     @staticmethod
@@ -602,6 +616,54 @@ please refer to the nhp_mri_prep configuration files in your preprocessing direc
         
         collect_unique_entities(data)
         return len(unique_images)
+
+    @staticmethod
+    def _count_anatomical_by_modality(data: Dict[str, Any]) -> Dict[str, int]:
+        """Count unique T1w and T2w images from organized anatomical snapshots."""
+        t1w_ids: set = set()
+        t2w_ids: set = set()
+
+        def collect(level_data: Dict[str, Any]) -> None:
+            for value in level_data.values():
+                if isinstance(value, dict):
+                    if 'path' in value and 'entities' in value:
+                        entities = value['entities']
+                        image_id = tuple(sorted(
+                            (k, v) for k, v in entities.items()
+                            if k not in ['desc', 'sub']
+                        ))
+                        suffix = (entities.get('suffix') or '').lower()
+                        if suffix == 't2w':
+                            t2w_ids.add(image_id)
+                        else:
+                            # T1w or unspecified anatomical
+                            t1w_ids.add(image_id)
+                    else:
+                        collect(value)
+
+        if data:
+            collect(data)
+        return {"t1w": len(t1w_ids), "t2w": len(t2w_ids)}
+
+    @staticmethod
+    def _has_surface_recon_snapshots(data: Dict[str, Any]) -> bool:
+        """Return True if any anatomical snapshot is from surface reconstruction QC."""
+        if not data:
+            return False
+
+        def collect(level_data: Dict[str, Any]) -> bool:
+            for value in level_data.values():
+                if isinstance(value, dict):
+                    if 'path' in value and 'snapshot_type' in value:
+                        st = (value.get('snapshot_type') or '').lower()
+                        if 'surf' in st or 'cortical' in st:
+                            return True
+                    else:
+                        if collect(value):
+                            return True
+            return False
+
+        return collect(data)
     
     @staticmethod
     def create_about_section(report_data: Dict[str, Any]) -> str:

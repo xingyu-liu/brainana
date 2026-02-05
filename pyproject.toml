@@ -23,6 +23,7 @@ keywords = [
     "registration",
     "freesurfer",
     "fastsurfer",
+    "connectome-workbench",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -75,9 +76,8 @@ dependencies = [
     "seaborn>=0.13.0",
     "surfplot>=0.2.0",
     "tensorboard>=2.15.0",
-    # For reading pyproject.toml in Python < 3.11
-    "tomli>=2.0.0; python_version<'3.11'",
 ]
+# Note: tomli not needed since requires-python >= 3.11 (has built-in tomllib)
 
 [project.optional-dependencies]
 dev = [
@@ -87,6 +87,14 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0",
 ]
+docs = [
+    "sphinx>=7.0",
+    "myst-parser>=2.0",
+    "sphinx-rtd-theme>=2.0",
+]
+
+# System dependencies (not Python packages): Connectome Workbench (wb_command) for QC surface snapshots
+# Install: apt install connectome-workbench (Debian/Ubuntu) or see https://humanconnectome.org/software/connectome-workbench
 
 [project.urls]
 Homepage = "https://github.com/yourusername/brainana"

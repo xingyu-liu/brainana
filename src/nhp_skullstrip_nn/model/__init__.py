@@ -1,5 +1,5 @@
 """
-Model module for macacaMRINN.
+Model module for nhp_skullstrip_nn.
 """
 
 from .unet import UNet2d

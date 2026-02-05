@@ -1,15 +1,22 @@
 # %%
 import os
+import sys
 from pathlib import Path
+
+# Add src/ to path for nhp_mri_prep package (scripts/ -> nhp_mri_prep -> src)
+_src = Path(__file__).resolve().parent.parent.parent
+if str(_src) not in sys.path:
+    sys.path.insert(0, str(_src))
+
 from nhp_mri_prep.operations.registration import ants_register
 import logging
 
 # %%
-moving_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/mebrain/mri/xfm/tpl-NMT2Sym_res-05_T1w_brain.nii.gz'
-fixed_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/mebrain/mri/xfm/mebrain_T1w_brain.nii.gz'
+moving_f = '/home/star/github/atlas/macaque/NMT2/NMT2Sym/volume/tpl-NMT2Sym_res-025_T1w_brain.nii.gz'
+fixed_f = '/home/star/github/atlas/macaque/D99/tpl-D99_res-025_T1w.nii.gz'
 xfm_type = 'syn'
 
-output_f = moving_f.replace('.nii.gz', f'_{xfm_type}.nii.gz')
+output_f = '/home/star/github/atlas/macaque/xfm/from-NMT2Sym_to-D99.nii.gz'
 
 # %%
 # Set up working directory and output prefix

@@ -1,5 +1,5 @@
 """
-Scripts module for macacaMRINN.
+Scripts module for nhp_skullstrip_nn.
 
 This module contains command-line scripts for training and inference.
 """

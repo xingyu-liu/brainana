@@ -23,7 +23,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 # Set PYTHONPATH to include src/ for module imports
 export PYTHONPATH="$PROJECT_ROOT/src:$PYTHONPATH"
 
-# YAML config file (SINGLE SOURCE OF TRUTH - like macacaMRINN!)
+# YAML config file (SINGLE SOURCE OF TRUTH - like nhp_skullstrip_nn!)
 YAML_CONFIG="$PROJECT_ROOT/src/fastsurfer_nn/config/T1w_ARM2_coronal_lia.yaml"
 # YAML_CONFIG="$PROJECT_ROOT/src/fastsurfer_nn/config/T1w_brainmask_mixed.yaml"
 # YAML_CONFIG="$PROJECT_ROOT/src/fastsurfer_nn/config/EPI_brainmask_mixed.yaml"

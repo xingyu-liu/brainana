@@ -1,5 +1,5 @@
 """
-Data module for macacaMRINN.
+Data module for nhp_skullstrip_nn.
 
 This module contains datasets and transforms for medical image processing.
 """

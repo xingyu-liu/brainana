@@ -1,5 +1,5 @@
 """
-Training plotting and visualization utilities for macacaMRINN.
+Training plotting and visualization utilities for nhp_skullstrip_nn.
 Simple and clear implementation of peripheral training functions.
 """
 

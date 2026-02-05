@@ -1,11 +1,8 @@
 """
-macacaMRINN: Macaque Brain Extraction using Deep Learning
+nhp_skullstrip_nn: NHP brain extraction using deep learning (brainana package).
 
-A simple, focused deep learning framework for automatic brain extraction from macaque MRI scans.
+A focused deep learning framework for automatic brain extraction from macaque/NHP MRI scans.
 """
-
-__version__ = "1.0.0"
-__author__ = "NHP-BrainExtraction_XL Team"
 
 # Import main modules
 from . import data

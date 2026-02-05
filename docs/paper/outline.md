@@ -92,7 +92,7 @@
 ## Suggested Figures/Tables
 
 - **Figure 1**: High-level pipeline flowchart (anatomical + functional + QC), e.g. from ANAT_SYNTHESIS_FLOW and main.nf.
-- **Figure 2**: Component diagram (e.g. from macacaMRIprep_component_diagram.puml), simplified for the paper.
+- **Figure 2**: Component diagram (e.g. from brainana_component_diagram.puml), simplified for the paper.
 - **Figure 3**: Example QC outputs (motion, skull stripping, registration).
 - **Table 1**: Pipeline steps (anatomical vs functional) with main tool per step.
 - **Table 2**: Software/dependency versions and execution environment (optional).

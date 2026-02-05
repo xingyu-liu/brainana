@@ -1,5 +1,5 @@
 """
-Training metrics for macacaMRINN - streamlined and unified metric computation
+Training metrics for nhp_skullstrip_nn - streamlined and unified metric computation
 """
 
 import torch

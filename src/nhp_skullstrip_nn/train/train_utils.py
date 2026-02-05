@@ -1,5 +1,5 @@
 """
-Training utilities for macacaMRINN.
+Training utilities for nhp_skullstrip_nn.
 """
 
 import os
@@ -56,7 +56,7 @@ def setup_logging(output_dir: str, log_level: str = None) -> logging.Logger:
     pil_logger = logging.getLogger('PIL')
     pil_logger.setLevel(logging.WARNING)
     
-    logger = logging.getLogger('macacaMRINN.training')
+    logger = logging.getLogger('nhp_skullstrip_nn.training')
     logger.info(f"Logging: initialized with file {os.path.basename(log_file)}")
     
     return logger
