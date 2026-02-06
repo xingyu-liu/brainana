@@ -44,17 +44,8 @@ setup_runtime_user() {
     export HOME="/tmp/home"
     mkdir -p "$HOME" 2>/dev/null || true
 
-    # Nextflow needs a writable home for .nextflow/
-    export NXF_HOME="$HOME/.nextflow"
-    mkdir -p "$NXF_HOME" 2>/dev/null || true
-
     # Redirect Nextflow temp files to /tmp (not the read-only project dir)
     export NXF_TEMP=/tmp
-
-    # Symlink pre-cached framework JAR so Nextflow doesn't need network at runtime
-    if [ -d /opt/nextflow/framework ] && [ ! -e "$NXF_HOME/framework" ]; then
-        ln -s /opt/nextflow/framework "$NXF_HOME/framework"
-    fi
 }
 
 # Check if we were started as non-root (user passed -u UID:GID)
@@ -102,6 +93,9 @@ export FS_LICENSE="${FS_LICENSE:-/fs_license.txt}"
 # We are inside the container - do NOT spawn nested Docker for Nextflow processes
 export NXF_NO_DOCKER=1
 
+# Use colored ANSI output (override with -e NXF_ANSI_LOG=false if piping to file)
+export NXF_ANSI_LOG="${NXF_ANSI_LOG:-true}"
+
 # Default executor resources (recommended: 8 CPUs, 20 GB) - override with -e NXF_MAX_CPUS / NXF_MAX_MEMORY
 export NXF_MAX_CPUS="${NXF_MAX_CPUS:-8}"
 export NXF_MAX_MEMORY="${NXF_MAX_MEMORY:-20g}"
@@ -110,9 +104,16 @@ export NXF_MAX_MEMORY="${NXF_MAX_MEMORY:-20g}"
 DEFAULT_CONFIG="/opt/brainana/src/nhp_mri_prep/config/defaults.yaml"
 PROJECT_ROOT="/opt/brainana"
 
-# Parse --config from extra args; build filtered EXTRA_ARGS without it
-# Handles: --config /path  and  --config=/path
+# Resolve input/output paths first (needed for default work dir)
+INPUT_DIR="${1:-/input}"
+OUTPUT_DIR="${2:-/output}"
+
+# Parse args from position 3: --config, -w/--work-dir, --no-resume; rest go to EXTRA_ARGS
+# Work dir: -w PATH or --work-dir PATH. Default: ${OUTPUT_DIR}_wd (persists, visible for cleanup).
+# Resume: on by default; use --no-resume to run from scratch.
 CONFIG="$DEFAULT_CONFIG"
+WORK_DIR=""   # empty = use default after OUTPUT_DIR is validated
+RESUME_BY_DEFAULT=1
 EXTRA_ARGS=()
 i=3
 while [ $i -le $# ]; do
@@ -122,6 +123,11 @@ while [ $i -le $# ]; do
     elif [[ "$arg" == --config ]]; then
         ((i++))
         [ $i -le $# ] && CONFIG="${!i}"
+    elif [[ "$arg" == -w ]] || [[ "$arg" == --work-dir ]]; then
+        ((i++))
+        [ $i -le $# ] && WORK_DIR="${!i}"
+    elif [[ "$arg" == --no-resume ]]; then
+        RESUME_BY_DEFAULT=0
     else
         EXTRA_ARGS+=("$arg")
     fi
@@ -137,10 +143,6 @@ if [ $# -gt 0 ]; then
             ;;
     esac
 fi
-
-# Resolve input/output paths
-INPUT_DIR="${1:-/input}"
-OUTPUT_DIR="${2:-/output}"
 
 # Validate
 if [ ! -d "$INPUT_DIR" ]; then
@@ -165,6 +167,21 @@ if ! [ -w "$OUTPUT_DIR" ]; then
     exit 1
 fi
 
+# Nextflow work dir and resume: default <output_dir>_wd so it persists and is visible for cleanup
+if [ -z "$WORK_DIR" ]; then
+    WORK_DIR="${OUTPUT_DIR}_wd"
+fi
+export NXF_HOME="$WORK_DIR"
+export NXF_WORK="${WORK_DIR}/work"
+mkdir -p "$NXF_HOME" "$NXF_WORK" 2>/dev/null || true
+# Symlink pre-cached framework JAR so Nextflow doesn't re-download at runtime
+if [ -d /opt/nextflow/framework ] && [ ! -e "$NXF_HOME/framework" ]; then
+    ln -s /opt/nextflow/framework "$NXF_HOME/framework" 2>/dev/null || true
+fi
+if [ "$RESUME_BY_DEFAULT" -eq 1 ]; then
+    EXTRA_ARGS+=("-resume")
+fi
+
 if [ ! -f "$FS_LICENSE" ]; then
     echo "WARNING: FreeSurfer license not found at $FS_LICENSE" >&2
     echo "         Mount with: -v /path/to/license.txt:/fs_license.txt" >&2
@@ -175,10 +192,11 @@ cd "$PROJECT_ROOT"
 
 echo "============================================"
 echo "brainana pipeline"
-echo "  Input:  $INPUT_DIR"
-echo "  Output: $OUTPUT_DIR"
-echo "  Config: $CONFIG"
-echo "  User:   $(id -u):$(id -g)"
+echo "  Input:   $INPUT_DIR"
+echo "  Output:  $OUTPUT_DIR"
+echo "  Config:  $CONFIG"
+echo "  Work:    $NXF_HOME (resume: $([ "$RESUME_BY_DEFAULT" -eq 1 ] && echo on || echo off))"
+echo "  User:    $(id -u):$(id -g)"
 echo "============================================"
 
 # Virtual display for headless QC snaps (wb_command -show-scene)

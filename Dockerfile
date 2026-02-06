@@ -29,8 +29,9 @@ RUN mkdir -p /opt/ants && \
       -DCMAKE_INSTALL_PREFIX=/opt/ants \
       /usr/local/src/ants && \
     cmake --build . --parallel && \
+    cd ANTS-build && \
     cmake --install . && \
-    test -d /opt/ants && ls -la /opt/ants || (echo "ERROR: /opt/ants not found after install" && exit 1)
+    test -x /opt/ants/bin/antsRegistration || (echo "ERROR: antsRegistration not found after install" && exit 1)
 
 ###########################
 # Python env builder      #
@@ -80,7 +81,8 @@ ARG AFNI_TARBALL=linux_rocky_8.tgz
 COPY --from=ghcr.io/astral-sh/uv:0.5.14 /uv /uvx /bin/
 
 ENV LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8
+    LC_ALL=en_US.UTF-8 \
+    TERM=xterm-256color
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -313,13 +315,20 @@ RUN mkdir -p /tmp/matplotlib /tmp/pycache /tmp/.X11-unix /tmp/home && \
     mkdir -p /opt/brainana/.nextflow && \
     chmod 1777 /opt/brainana/.nextflow
 
+# Pre-generate matplotlib font cache at build time so any UID can read it.
+# Without this, the HEALTHCHECK (root) or first runtime import creates it as
+# root-owned, and non-root pipeline users get "Permission denied".
+RUN python3 -c "import matplotlib.font_manager" 2>/dev/null || true && \
+    chmod -R a+rw /tmp/matplotlib 2>/dev/null || true
+
 # NOTE: No "USER neuro" here. The entrypoint starts as root,
 # detects the UID of /output, and drops to that user via gosu.
 WORKDIR /opt/brainana
 
-# Health check to verify the container is functional
+# Health check: lightweight probe that doesn't import matplotlib (which would
+# create a root-owned font cache that blocks non-root pipeline users).
 HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=3 \
-    CMD python3 -c "import nhp_mri_prep; print('OK')" || exit 1
+    CMD python3 -c "print('OK')" || exit 1
 
 # Labels for image metadata
 LABEL org.opencontainers.image.title="brainana" \
