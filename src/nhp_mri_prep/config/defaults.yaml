@@ -1,11 +1,9 @@
 # Default configuration for brainana preprocessing pipeline
+# _version is set at load time from the brainana package version (pyproject.toml).
 _description: "Default configuration for brainana preprocessing pipeline"
-_version: "1.1"
 
 general:
   verbose: 2  # int or bool: verbosity level (0=quiet/ERROR, 1=normal/INFO, 2=verbose/DEBUG).
-  overwrite: false  # bool: overwrite existing outputs
-  generate_report_only: false  # bool: only generate QC reports from existing outputs
   anat_only: false  # bool: process only anatomical data
 
 bids_filtering:
@@ -15,10 +13,10 @@ bids_filtering:
   runs: null  # list of str (have to be quoted) or null: filter by run numbers (e.g., ["01", "02"])
 
 template:
-  output_space: "NMT2Sym:res-05"  # str: template space in format "TEMPLATE_NAME:[:DESCRIPTION]" (e.g., "NMT2Sym:res-1", "native")
+  output_space: "NMT2Sym:res-05"  # str: template space in format "TEMPLATE_NAME:[:DESCRIPTION]" (e.g., "NMT2Sym:res-1", "T1w")
   # description: "Template space specification in format TEMPLATE_NAME:[:DESCRIPTION]"
   # examples:
-  #   - "native"
+  #   - "T1w"
   #   - "NMT2Sym:res-1"
   #   - "NMT2Sym:res-025"
 
@@ -27,11 +25,11 @@ anat:
   # "subject" = cross-session synthesis (cross-sectional)
   # "session" = within-session synthesis (longitudinal)
   reorient:
-    enabled: false  # bool: reorient anatomical images to template orientation when given, otherwise to RAS
+    enabled: false  # bool: reorient anatomical images to template orientation when given, otherwise to RAS. When conform is enabled, reorient is not needed.
   conform:
-    enabled: true  # bool: conform input image to template space using FLIRT rigid registration (padding is hardcoded to 0.2)
+    enabled: true  # HIGILY RECOMMENDED: bool: conform input image to template space using FLIRT rigid registration
   skullstripping_segmentation:
-    enabled: true  # bool: perform brain extraction and segmentation
+    enabled: true  # HIGILY RECOMMENDED: bool: perform brain extraction and segmentation
     method: "fastSurferCNN" 
     fastSurferCNN:
       gpu_device: "auto"  # int (>= -1) or "auto": GPU device ID (-1 = CPU, "auto" = auto-select)
@@ -48,7 +46,7 @@ anat:
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
   surface_reconstruction:
     enabled: true  # bool: perform surface reconstruction
-    use_t1wt2wcombined: true  # bool: use t1wt2wcombined image for surface recon if possible
+    use_t1wt2wcombined: false  # bool: use t1wt2wcombined image for surface recon if possible
 
 func:
   coreg_runs_within_session: true
@@ -60,7 +58,7 @@ func:
     slice_time_ref: 0.5  # float: reference slice time (0.0-1.0), 0.5 = middle slice
     slice_encoding_direction: null  # str: "x", "-x", "y", "-y", "z", "-z", or null (auto-detect from BIDS)
   reorient:
-    enabled: false  # bool: reorient functional images to template orientation when given, otherwise to RAS
+    enabled: false  # bool: reorient functional images to template orientation when given, otherwise to RAS.  When conform is enabled, reorient is not needed.
   motion_correction:
     enabled: true  # bool: perform motion correction
     dof: 6  # int: degrees of freedom (6, 9, or 12)
@@ -70,7 +68,7 @@ func:
     cost_tolerance: 0.01  # float: cost function tolerance
     parameter_tolerance: 0.01  # float: parameter tolerance
   despike:
-    enabled: true  # bool: perform despiking (outlier removal)
+    enabled: false  # bool: perform despiking (outlier removal)
     c1: 5  # float: first cutoff parameter (> 0, must be < c2)
     c2: 10  # float: second cutoff parameter (> 0, must be > c1)
     localedit: true  # bool: use local editing for despiking
@@ -82,12 +80,11 @@ func:
     bspline_fitting: "[ 100 ]"  # str: B-spline fitting parameters in ANTs format
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
   conform:
-    enabled: true  # bool: conform functional tmean image to target space using FLIRT rigid registration
+    enabled: true  # HIGILY RECOMMENDED: bool: conform functional tmean image to target space using FLIRT rigid registration
   skullstripping:
-    enabled: true  # bool: perform brain extraction
+    enabled: true  # HIGILY RECOMMENDED: bool: perform brain extraction
 
 registration:
-  enabled: true  # bool: perform image registration
   anat2template_xfm_type: "syn"  # str: transform type for anat->template ("translation", "rigid", "affine", or "syn")
   func2anat_xfm_type: "rigid"  # str: transform type for func->anat ("translation", "rigid", "affine", or "syn")
   func2template_xfm_type: "syn"  # str: transform type for func->template ("translation", "rigid", "affine", or "syn")

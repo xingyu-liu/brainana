@@ -83,7 +83,7 @@ workflow FUNC_WF {
     def func_conform_enabled = paramResolver.getYamlBool("func.conform.enabled")
     def func_skullstripping_enabled = paramResolver.getYamlBool("func.skullstripping.enabled")
     def func_coreg_runs_within_session = paramResolver.getYamlBool("func.coreg_runs_within_session")
-    def registration_enabled = paramResolver.getYamlBool("registration.enabled")
+    def registration_enabled = paramResolver.getYamlBool("registration.enabled", true)
     
     // Helper functions
     def isT1wFile = channelHelpers.isT1wFile

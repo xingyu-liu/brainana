@@ -51,9 +51,8 @@ workflow {
     // RESOLVE PARAMETERS (for workflow logic)
     // ============================================
     // Get anat_only parameter with priority: CLI → YAML → defaults.yaml
-    // No hardcoded default - must come from defaults.yaml
     def anat_only = paramResolver.getParamBool(params, 'anat_only')
-
+    
     // ============================================
     // GLOBAL GPU TOKEN POOL
     // ============================================

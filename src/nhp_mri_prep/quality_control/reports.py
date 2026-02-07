@@ -714,11 +714,12 @@ def generate_qc_report(
         subject_id_match = re.search(r'sub-(\w+)', report_path.name)
         subject_id = subject_id_match.group(1) if subject_id_match else None
         
+        from nhp_mri_prep import __version__
         report_data = {
             "metadata": {
                 "generation_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "pipeline_name": "nhp_mri_prep",
-                "version": "1.0.0",
+                "version": __version__,
                 "working_directory": str(report_path.parent),
                 "subject_id": subject_id
             },

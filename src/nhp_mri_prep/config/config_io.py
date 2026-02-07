@@ -106,18 +106,21 @@ def get_default_config() -> Dict[str, Any]:
     """Get default configuration.
     
     Returns:
-        Default configuration dictionary
+        Default configuration dictionary. _version is set from the brainana package version (single source: pyproject.toml).
     """
+    from nhp_mri_prep import __version__
     # Load from YAML defaults file (preferred), fallback to JSON for backward compatibility
     defaults_path_yaml = Path(__file__).parent / "defaults.yaml"
     defaults_path_json = Path(__file__).parent / "defaults.json"
     
     if defaults_path_yaml.exists():
-        return load_yaml_config(defaults_path_yaml)
+        config = load_yaml_config(defaults_path_yaml)
     elif defaults_path_json.exists():
-        return load_json_config(defaults_path_json)
+        config = load_json_config(defaults_path_json)
     else:
         raise FileNotFoundError(f"Default configuration file not found. Expected defaults.yaml or defaults.json in {Path(__file__).parent}")
+    config["_version"] = __version__
+    return config
     
 
 def load_config(config_path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
@@ -156,6 +159,9 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> Dict[str, Any
         # Merge with defaults
         config = merge_configs(config, user_config)
     
+    # Ensure _version always reflects the running package (single source: pyproject.toml)
+    from nhp_mri_prep import __version__
+    config["_version"] = __version__
     return config
 
 

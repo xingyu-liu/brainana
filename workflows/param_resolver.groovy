@@ -20,7 +20,6 @@ def createParamResolver = {
     def PARAM_MAPPING = [
         'output_space': 'template.output_space',
         'anat_only': 'general.anat_only',
-        'overwrite': 'general.overwrite',
         'subjects': 'bids_filtering.subjects',
         'sessions': 'bids_filtering.sessions',
         'tasks': 'bids_filtering.tasks',
@@ -112,7 +111,7 @@ def getNestedValue = { config, keyPath, defaultValue = null ->
 
 /**
  * Validate output_space format
- * Valid formats: "native", "TEMPLATE_NAME", or "TEMPLATE_NAME:DESCRIPTION"
+ * Valid formats: "T1w", "TEMPLATE_NAME", or "TEMPLATE_NAME:DESCRIPTION"
  */
 def validateOutputSpace = { value ->
     if (value == null || value.toString().trim().isEmpty()) {
@@ -121,8 +120,8 @@ def validateOutputSpace = { value ->
     
     def str = value.toString().trim()
     
-    // Allow "native"
-    if (str == "native") {
+    // Allow "T1w"
+    if (str == "T1w") {
         return true
     }
     
@@ -501,7 +500,7 @@ def getParamOutputSpace = { params, paramName, defaultValue = null ->
     def value = resolveParam(params, paramName, defaultValue)
     
     if (!validateOutputSpace(value)) {
-        throw new IllegalArgumentException("Invalid output_space format: '${value}'. Expected 'native', 'TEMPLATE_NAME', or 'TEMPLATE_NAME:DESCRIPTION' (e.g., 'NMT2Sym:res-05')")
+        throw new IllegalArgumentException("Invalid output_space format: '${value}'. Expected 'T1w', 'TEMPLATE_NAME', or 'TEMPLATE_NAME:DESCRIPTION' (e.g., 'NMT2Sym:res-05')")
     }
     
     return value.toString()

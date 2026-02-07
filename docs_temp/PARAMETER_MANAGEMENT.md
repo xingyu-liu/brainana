@@ -47,7 +47,6 @@ These parameters are read only from YAML config files (not available via CLI):
 - `func.motion_correction.enabled`
 - `anat.conform.enabled`
 - `anat.bias_correction.enabled`
-- `registration.enabled`
 - ... and all other parameters in `defaults.yaml`
 
 **Example YAML config:**
@@ -121,7 +120,7 @@ def shrink_factor = paramResolver.getYamlInt("anat.bias_correction.shrink_factor
 
 The parameter resolver includes validation for all parameter types:
 
-- **output_space**: Validates format (e.g., "native", "NMT2Sym:res-05")
+- **output_space**: Validates format (e.g., "T1w", "NMT2Sym:res-05")
 - **Boolean**: Validates true/false, 1/0, yes/no, on/off
 - **Integer**: Validates numeric value and optional range
 - **Float**: Validates numeric value and optional range
@@ -189,10 +188,10 @@ func:
     enabled: true
 
 # Command line
-nextflow run main.nf --output_space "native" --config_file config.yaml
+nextflow run main.nf --output_space "T1w" --config_file config.yaml
 
 # Result:
-# - output_space = "native" (from CLI)
+# - output_space = "T1w" (from CLI)
 # - func.reorient.enabled = false (from YAML)
 # - func.motion_correction.enabled = true (from YAML)
 ```

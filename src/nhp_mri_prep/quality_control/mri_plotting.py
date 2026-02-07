@@ -684,7 +684,7 @@ def create_motion_plot(
 
     ax1.set_title(title)
     ax1.legend()
-    ax2.set_xlabel('Timepoint')
+    ax2.set_xlabel('Frame')
 
     # show 10 xticks if there are more than 10 timepoints
     if motion_data.shape[0] > 10:

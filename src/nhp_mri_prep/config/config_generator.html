@@ -3,663 +3,908 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>nhp_mri_prep Configuration Generator</title>
+    <title>Brainana Configuration Generator</title>
     <style>
+        * { box-sizing: border-box; }
         body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
+            font-family: "IBM Plex Mono", "Consolas", "Monaco", monospace;
+            margin: 0;
             line-height: 1.5;
+            color: #000000;
+            background: #fffeee;
         }
-        
+        .app-layout {
+            display: flex;
+            min-height: 100vh;
+        }
+        .nav-sidebar {
+            width: 240px;
+            flex-shrink: 0;
+            padding: 20px 16px;
+            background: #fffddd;
+            border-right: 1px solid #b8b8b8;
+            position: sticky;
+            top: 0;
+            max-height: 100vh;
+            overflow-y: auto;
+        }
+        .nav-brand {
+            font-weight: 600;
+            font-size: 1rem;
+            color: #000000;
+            margin-bottom: 16px;
+        }
+        .nav-search {
+            width: 100%;
+            padding: 8px 10px;
+            margin-bottom: 20px;
+            border: 1px solid #8a8a8a;
+            font-family: inherit;
+            font-size: 12px;
+            background: #fff;
+        }
+        .nav-section {
+            margin-bottom: 16px;
+        }
+        .nav-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #666666;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 6px;
+        }
+        .nav-section a {
+            display: block;
+            font-size: 13px;
+            color: #666666;
+            text-decoration: none;
+            padding: 4px 0 4px 16px;
+            margin-left: 0;
+        }
+        .nav-section a:hover { color: #000000; text-decoration: underline; }
+        html { scroll-behavior: smooth; }
+        .main-content {
+            flex: 1;
+            padding: 28px 32px 40px;
+            max-width: 720px;
+        }
         h1 {
-            color: #333;
-            border-bottom: 2px solid #333;
-            padding-bottom: 10px;
+            color: #000000;
+            border-bottom: 3px solid #000000;
+            padding-bottom: 12px;
+            font-weight: 600;
+            font-size: 1.35rem;
+            margin-top: 0;
         }
-        
         h2 {
-            color: #555;
-            margin-top: 30px;
-            border-bottom: 1px solid #ccc;
-            padding-bottom: 5px;
+            color: #000000;
+            margin-top: 32px;
+            margin-bottom: 16px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #b8b8b8;
+            font-weight: 600;
+            font-size: 1rem;
+            text-transform: lowercase;
         }
-        
-        h3 {
-            color: #000;
-            margin-top: 20px;
-            font-size: 1.1em;
-            font-weight: bold;
-        }
-        
+        h2:first-of-type { margin-top: 0; }
+        h3, h4 { color: #000000; margin-top: 20px; font-size: 0.95rem; font-weight: 600; }
         .section {
-            margin: 20px 0;
-            padding: 15px;
-            border: 1px solid #ddd;
+            margin: 0 0 24px 0;
+            padding: 0;
+            padding-left: 24px;
         }
-        
-        .form-group {
-            margin: 10px 0;
+        .step {
+            padding-left: 24px;
         }
-        
-        label {
-            display: inline-block;
-            margin-right: 10px;
-            font-weight: bold;
+        .param-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 2px;
         }
-        
-        .sub-section label {
-            font-weight: normal;
-            color: #000;
-        }
-        
-        .checkbox-group {
+        .param-check {
+            flex: 0 0 22px;
+            min-width: 22px;
             display: flex;
             align-items: center;
         }
-        
-        .checkbox-group label {
-            font-weight: normal;
-            margin-left: 5px;
+        .param-check input[type="checkbox"] { margin: 0; }
+        .param-row label {
+            flex: 0 0 auto;
+            font-weight: 600;
+            font-size: 13px;
+            color: #000000;
         }
-        
-        input[type="text"],
-        input[type="number"],
-        select,
-        textarea {
-            padding: 5px;
-            border: 1px solid #ccc;
-            box-sizing: border-box;
+        .param-control {
+            flex: 1 1 200px;
+            min-width: 180px;
+            max-width: 100%;
         }
-        
-        input[type="text"],
-        textarea {
+        .param-control select,
+        .param-control input[type="text"],
+        .param-control input[type="number"] {
             width: 100%;
+            max-width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #b8b8b8;
+            font-family: inherit;
+            font-size: 13px;
+            background: #fff;
         }
-        
-        select {
-            display: inline-block;
-            width: auto;
-            min-width: 200px;
-            margin-left: 5px;
+        .param-block { margin-bottom: 14px; }
+        .param-block:last-child { margin-bottom: 0; }
+        .help-text {
+            font-size: 12px;
+            color: #666666;
+            margin-top: 2px;
+            margin-bottom: 6px;
+            margin-left: 30px;
+            line-height: 1.4;
+            display: block;
         }
-        
-        input[type="number"].short {
-            width: 100px;
+        .param-block .help-text { margin-bottom: 0; }
+        input[type="text"], textarea {
+            padding: 6px 8px;
+            border: 1px solid #b8b8b8;
+            font-family: inherit;
+            font-size: 13px;
+            background: #fff;
         }
-        
-        input[type="checkbox"] {
-            margin-right: 5px;
+        textarea { width: 100%; }
+        select { min-width: 180px; }
+        input[type="number"].short { width: 100px; }
+        .step {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #d0d0d0;
         }
-        
-        .sub-section {
-            margin-left: 20px;
-            margin-top: 10px;
-            padding: 10px;
-            background: #f9f9f9;
+        .step:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+        .step .param-row { margin-bottom: 0; }
+        .step .help-text { margin-top: 2px; margin-bottom: 0; }
+        .generator-section {
+            border-top: 3px solid #000000;
+            margin-top: 32px;
+            padding-top: 24px;
         }
-        
+        .advanced-toggle {
+            font-size: 13px;
+            color: #666666;
+            cursor: pointer;
+            margin: 12px 0 6px 0;
+            user-select: none;
+            display: block;
+        }
+        .advanced-toggle:hover { color: #000000; text-decoration: underline; }
+        .advanced-toggle::before { content: "> "; }
+        .advanced-toggle.open::before { content: "v "; }
+        .advanced-settings {
+            margin-top: 8px;
+            margin-left: 24px;
+            padding: 16px 0 0 0;
+            border-top: 1px solid #d0d0d0;
+            display: none;
+        }
+        .advanced-settings.visible { display: block; }
+        .advanced-settings .param-block { margin-bottom: 14px; }
+        .advanced-settings .param-block:last-child { margin-bottom: 0; }
+        .advanced-settings .advanced-settings,
+        #anat_fastSurferCNN_options {
+            margin-left: 24px;
+        }
         button {
             padding: 10px 20px;
-            background: #007bff;
-            color: white;
-            border: none;
+            background: #000000;
+            color: #fff;
+            border: 1px solid #000000;
             cursor: pointer;
+            font-size: 13px;
+            font-family: inherit;
+            margin-top: 24px;
+        }
+        button#generate {
             font-size: 16px;
-            margin-top: 20px;
+            font-weight: 700;
+            width: 100%;
+            text-align: center;
         }
-        
-        button:hover {
-            background: #0056b3;
-        }
-        
-        .error {
-            color: red;
-            font-size: 12px;
-            margin-top: 5px;
-        }
-        
-        .help-text {
-            font-size: 11px;
-            color: #666;
-            font-style: italic;
-            margin-top: 3px;
-        }
-        
-        .form-group select + .help-text {
-            display: inline;
-            margin-left: 10px;
-            margin-top: 0;
-        }
-        
-        .save-location {
-            background: #fff3cd;
-            border: 1px solid #ffc107;
-            padding: 15px;
-            margin: 20px 0;
-        }
-        
+        button:hover { background: #333; border-color: #333; }
+        .error { color: #666666; font-size: 12px; margin-top: 8px; display: block; margin-left: 30px; }
+        .save-location { background: #f0f0f0; border: 1px solid #b8b8b8; padding: 12px; margin: 16px 0; }
         .yaml-output {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f5f5f5;
-            border: 1px solid #ddd;
+            margin-top: 24px;
+            padding: 16px;
+            background: #f8f8f8;
+            border: 1px solid #b8b8b8;
         }
-        
         .yaml-output textarea {
             width: 100%;
             min-height: 400px;
-            font-family: 'Courier New', monospace;
+            font-family: inherit;
             font-size: 12px;
             padding: 10px;
+            border: 1px solid #b8b8b8;
+            background: #fff;
+            margin-top: 8px;
         }
-        
-        .copy-button {
-            margin-top: 10px;
-            background: #28a745;
-        }
-        
-        .copy-button:hover {
-            background: #218838;
-        }
-        
+        .copy-button { margin-top: 10px; margin-right: 8px; background: #666666; color: #fff; border: none; }
+        .copy-button:hover { background: #000000; }
         .success {
-            color: green;
+            color: #155724;
             padding: 10px;
-            background: #d4edda;
+            background: #ddf3e2;
             border: 1px solid #c3e6cb;
-            border-radius: 4px;
-            margin-top: 20px;
+            margin-top: 16px;
         }
-        
-        .hidden {
-            display: none;
-        }
+        .hidden { display: none; }
+        label.option-bold { font-weight: 600; }
     </style>
 </head>
 <body>
-    <h1>nhp_mri_prep Configuration Generator</h1>
+    <div class="app-layout">
+        <nav class="nav-sidebar">
+            <div class="nav-brand">Brainana</div>
+            <input type="text" class="nav-search" placeholder="Search options..." aria-label="Search">
+            <div class="nav-section">
+                <div class="nav-section-title">Configuration</div>
+                <a href="#general">General</a>
+                <a href="#bids_filtering">BIDS filtering</a>
+                <a href="#template">Template</a>
+                <a href="#anat">Anatomical</a>
+                <a href="#func">Functional</a>
+                <a href="#registration">Registration</a>
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-title">Generation</div>
+                <a href="#generate">Generate config</a>
+            </div>
+        </nav>
+        <main class="main-content">
+    <h1>Brainana Configuration Generator</h1>
     
     <form id="configForm">
         <!-- General Settings -->
-        <h2>general</h2>
+        <h2 id="general">general</h2>
         <div class="section">
-            <div class="form-group">
-                <label for="general_verbose">verbose</label>
-                <select id="general_verbose" name="general_verbose">
-                    <option value="0">0</option>
-                    <option value="1">1</option>
-                    <option value="2" selected>2</option>
-                </select>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="general_verbose">verbose</label>
+                    <span class="param-control">
+                        <select id="general_verbose" name="general_verbose">
+                            <option value="0">0</option>
+                            <option value="1">1</option>
+                            <option value="2" selected>2</option>
+                        </select>
+                    </span>
+                </div>
                 <span class="help-text">(verbosity level: 0=quiet/ERROR, 1=normal/INFO, 2=verbose/DEBUG)</span>
             </div>
-            <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" id="general_overwrite" name="general_overwrite">
-                    <label for="general_overwrite">overwrite</label>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="general_anat_only" name="general_anat_only"></span>
+                    <label for="general_anat_only" class="option-bold">anat_only</label>
+                    <span class="param-control"></span>
                 </div>
-                <div class="help-text">(overwrite existing outputs)</div>
-            </div>
-            <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" id="general_generate_report_only" name="general_generate_report_only">
-                    <label for="general_generate_report_only">generate_report_only</label>
-                </div>
-                <div class="help-text">(only generate QC reports from existing outputs)</div>
-            </div>
-            <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" id="general_anat_only" name="general_anat_only">
-                    <label for="general_anat_only">anat_only</label>
-                </div>
-                <div class="help-text">(process only anatomical data)</div>
+                <span class="help-text">(process only anatomical data)</span>
             </div>
         </div>
 
         <!-- BIDS Filtering -->
-        <h2>bids_filtering</h2>
+        <h2 id="bids_filtering">bids_filtering</h2>
         <div class="section">
-            <div class="form-group">
-                <label for="bids_subjects">subjects</label>
-                <input type="text" id="bids_subjects" name="bids_subjects" placeholder='e.g., "01", "02"'>
-                <div class="help-text">(comma-separated, leave empty for processing all)</div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="bids_subjects">subjects</label>
+                    <span class="param-control">
+                        <input type="text" id="bids_subjects" name="bids_subjects" placeholder='e.g., "01", "02"'>
+                    </span>
+                </div>
+                <span class="help-text">(comma-separated, leave empty for processing all)</span>
             </div>
-            <div class="form-group">
-                <label for="bids_sessions">sessions</label>
-                <input type="text" id="bids_sessions" name="bids_sessions" placeholder='e.g., "01", "02"'>
-                <div class="help-text">(comma-separated, leave empty for null)</div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="bids_sessions">sessions</label>
+                    <span class="param-control">
+                        <input type="text" id="bids_sessions" name="bids_sessions" placeholder='e.g., "01", "02"'>
+                    </span>
+                </div>
+                <span class="help-text">(comma-separated, leave empty for null)</span>
             </div>
-            <div class="form-group">
-                <label for="bids_tasks">tasks</label>
-                <input type="text" id="bids_tasks" name="bids_tasks" placeholder='e.g., "rest", "task"'>
-                <div class="help-text">(comma-separated, leave empty for null)</div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="bids_tasks">tasks</label>
+                    <span class="param-control">
+                        <input type="text" id="bids_tasks" name="bids_tasks" placeholder='e.g., "rest", "task"'>
+                    </span>
+                </div>
+                <span class="help-text">(comma-separated, leave empty for null)</span>
             </div>
-            <div class="form-group">
-                <label for="bids_runs">runs</label>
-                <input type="text" id="bids_runs" name="bids_runs" placeholder='e.g., "01", "02"'>
-                <div class="help-text">(comma-separated, leave empty for null)</div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="bids_runs">runs</label>
+                    <span class="param-control">
+                        <input type="text" id="bids_runs" name="bids_runs" placeholder='e.g., "01", "02"'>
+                    </span>
+                </div>
+                <span class="help-text">(comma-separated, leave empty for null)</span>
             </div>
         </div>
 
         <!-- Template -->
-        <h2>template</h2>
+        <h2 id="template">template</h2>
         <div class="section">
-            <div class="form-group">
-                <label for="template_output_space">output_space</label>
-                <input type="text" id="template_output_space" name="template_output_space" value="NMT2Sym:res-05">
-                <div class="help-text">(template space in format "TEMPLATE_NAME:[:DESCRIPTION]", e.g., "native", "NMT2Sym:res-1", "NMT2Sym:res-025")</div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="template_output_space">output_space</label>
+                    <span class="param-control">
+                        <select id="template_output_space" name="template_output_space">
+                            <option value="T1w">T1w</option>
+                            <option value="D99:res-025">D99:res-025</option>
+                            <option value="MEBRAIN:res-04">MEBRAIN:res-04</option>
+                            <option value="NMT2Asym:res-05">NMT2Asym:res-05</option>
+                            <option value="NMT2Sym:res-025">NMT2Sym:res-025</option>
+                            <option value="NMT2Sym:res-05" selected>NMT2Sym:res-05</option>
+                            <option value="NMT2Sym:res-1">NMT2Sym:res-1</option>
+                        </select>
+                    </span>
+                </div>
+                <span class="help-text">(template space; options from template_zoo *_T1w_brain.nii.gz)</span>
             </div>
         </div>
 
         <!-- Anatomical Processing -->
-        <h2>anat</h2>
+        <h2 id="anat">anat</h2>
         <div class="section">
-            <div class="sub-section">
-                <h3>reorient</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="anat_reorient_enabled" name="anat_reorient_enabled" checked>
-                        <label for="anat_reorient_enabled">enabled</label>
-                    </div>
-                    <div class="help-text">(reorient anatomical images to template orientation when given, otherwise to RAS)</div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="anat_reorient_enabled" name="anat_reorient_enabled"></span>
+                    <label for="anat_reorient_enabled">reorient</label>
+                    <span class="param-control"></span>
                 </div>
+                <span class="help-text">(reorient anatomical images to template orientation when given, otherwise to RAS. When conform is enabled, reorient is not needed.)</span>
             </div>
-            
-            <div class="sub-section">
-                <h3>conform</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="anat_conform_enabled" name="anat_conform_enabled" checked>
-                        <label for="anat_conform_enabled">enabled</label>
-                    </div>
-                    <div class="help-text">(conform input image to template space using FLIRT rigid registration, padding is hardcoded to 0.2)</div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="anat_conform_enabled" name="anat_conform_enabled" checked></span>
+                    <label for="anat_conform_enabled">conform</label>
+                    <span class="param-control"></span>
                 </div>
+                <span class="help-text">(HIGHLY RECOMMENDED. Conform input image to template space using FLIRT rigid registration, padding is hardcoded to 0.2.)</span>
             </div>
-            
-            <div class="sub-section">
-                <h3>bias_correction</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="anat_bias_correction_enabled" name="anat_bias_correction_enabled" checked>
-                        <label for="anat_bias_correction_enabled">enabled</label>
-                    </div>
-                    <div class="help-text">(perform bias field correction)</div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="anat_bias_correction_enabled" name="anat_bias_correction_enabled" checked></span>
+                    <label for="anat_bias_correction_enabled">bias_correction</label>
+                    <span class="param-control"></span>
                 </div>
-                <div class="form-group">
-                    <label for="anat_bias_correction_algorithm">algorithm</label>
-                    <select id="anat_bias_correction_algorithm" name="anat_bias_correction_algorithm">
-                        <option value="N4BiasFieldCorrection" selected>N4BiasFieldCorrection</option>
-                    </select>
-                    <span class="help-text">(bias correction algorithm)</span>
-                </div>
-                <div class="form-group">
-                    <label for="anat_bias_correction_shrink_factor">shrink_factor</label>
-                    <input type="number" id="anat_bias_correction_shrink_factor" name="anat_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
-                    <div class="help-text">(shrink factor for faster processing, > 0)</div>
-                </div>
-                <div class="form-group">
-                    <label for="anat_bias_correction_bspline_fitting">bspline_fitting</label>
-                    <input type="text" id="anat_bias_correction_bspline_fitting" name="anat_bias_correction_bspline_fitting" value="[ 200 ]">
-                    <div class="help-text">(B-spline fitting parameters in ANTs format)</div>
-                </div>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="anat_bias_correction_rescale_mean_to_100" name="anat_bias_correction_rescale_mean_to_100" checked>
-                        <label for="anat_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
-                    </div>
-                    <div class="help-text">(rescale image mean intensity to 100)</div>
-                </div>
-            </div>
-            
-            <div class="sub-section">
-                <h3>skullstripping_segmentation</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="anat_skullstripping_enabled" name="anat_skullstripping_enabled" checked>
-                        <label for="anat_skullstripping_enabled">enabled</label>
-                    </div>
-                    <div class="help-text">(perform brain extraction and segmentation)</div>
-                </div>
-                <div class="form-group">
-                    <label for="anat_skullstripping_method">method</label>
-                    <select id="anat_skullstripping_method" name="anat_skullstripping_method">
-                        <option value="fastSurferCNN" selected>fastSurferCNN</option>
-                    </select>
-                </div>
-                <div id="anat_fastSurferCNN_options" class="sub-section">
-                    <h4>fastSurferCNN</h4>
-                    <div class="form-group">
-                        <label for="anat_fastSurferCNN_gpu_device">gpu_device</label>
-                        <input type="text" id="anat_fastSurferCNN_gpu_device" name="anat_fastSurferCNN_gpu_device" value="auto">
-                        <div class="help-text">(GPU device ID: >= -1 where -1 = CPU, or "auto" for auto-select)</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="anat_fastSurferCNN_batch_size">batch_size</label>
-                        <input type="number" id="anat_fastSurferCNN_batch_size" name="anat_fastSurferCNN_batch_size" value="8" min="1">
-                        <div class="help-text">(batch size for inference, >= 1)</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="anat_fastSurferCNN_plane_weight_coronal">plane_weight_coronal</label>
-                        <input type="number" id="anat_fastSurferCNN_plane_weight_coronal" name="anat_fastSurferCNN_plane_weight_coronal" value="0.4" step="0.1" min="0" max="1">
-                        <div class="help-text">(weight for coronal plane, 0.0-1.0)</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="anat_fastSurferCNN_plane_weight_axial">plane_weight_axial</label>
-                        <input type="number" id="anat_fastSurferCNN_plane_weight_axial" name="anat_fastSurferCNN_plane_weight_axial" value="0.4" step="0.1" min="0" max="1">
-                        <div class="help-text">(weight for axial plane, 0.0-1.0)</div>
-                    </div>
-                    <div class="form-group">
-                        <label for="anat_fastSurferCNN_plane_weight_sagittal">plane_weight_sagittal</label>
-                        <input type="number" id="anat_fastSurferCNN_plane_weight_sagittal" name="anat_fastSurferCNN_plane_weight_sagittal" value="0.2" step="0.1" min="0" max="1">
-                        <div class="help-text">(weight for sagittal plane, 0.0-1.0)</div>
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="anat_fastSurferCNN_fix_V1_WM" name="anat_fastSurferCNN_fix_V1_WM" checked>
-                            <label for="anat_fastSurferCNN_fix_V1_WM">fix_V1_WM</label>
+                <span class="help-text">(perform bias field correction.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-settings" id="anat_bias_correction_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="anat_bias_correction_algorithm">algorithm</label>
+                            <span class="param-control">
+                                <select id="anat_bias_correction_algorithm" name="anat_bias_correction_algorithm">
+                                    <option value="N4BiasFieldCorrection" selected>N4BiasFieldCorrection</option>
+                                </select>
+                            </span>
                         </div>
-                        <div class="help-text">(fix missing thin WM in V1 by registering template V1 WM to individual space)</div>
+                        <span class="help-text">(bias correction algorithm)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="anat_bias_correction_shrink_factor">shrink_factor</label>
+                            <span class="param-control">
+                                <input type="number" id="anat_bias_correction_shrink_factor" name="anat_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
+                            </span>
+                        </div>
+                        <span class="help-text">(shrink factor for faster processing, > 0)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="anat_bias_correction_bspline_fitting">bspline_fitting</label>
+                            <span class="param-control">
+                                <input type="text" id="anat_bias_correction_bspline_fitting" name="anat_bias_correction_bspline_fitting" value="[ 150 ]">
+                            </span>
+                        </div>
+                        <span class="help-text">(b-spline fitting parameters in ANTs format)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"><input type="checkbox" id="anat_bias_correction_rescale_mean_to_100" name="anat_bias_correction_rescale_mean_to_100" checked></span>
+                            <label for="anat_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
+                            <span class="param-control"></span>
+                        </div>
+                        <span class="help-text">(rescale image mean intensity to 100)</span>
                     </div>
                 </div>
             </div>
-            
-            <div class="sub-section">
-                <h3>surface_reconstruction</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="anat_surface_reconstruction_enabled" name="anat_surface_reconstruction_enabled" checked>
-                        <label for="anat_surface_reconstruction_enabled">enabled</label>
-                    </div>
-                    <div class="help-text">(perform surface reconstruction)</div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="anat_skullstripping_enabled" name="anat_skullstripping_enabled" checked></span>
+                    <label for="anat_skullstripping_enabled">skullstripping_segmentation</label>
+                    <span class="param-control"></span>
                 </div>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="anat_surface_reconstruction_use_t1wt2wcombined" name="anat_surface_reconstruction_use_t1wt2wcombined" checked>
-                        <label for="anat_surface_reconstruction_use_t1wt2wcombined">use_t1wt2wcombined</label>
+                <span class="help-text">(highly recommended. Perform brain extraction and segmentation.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-settings" id="anat_skullstripping_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="anat_skullstripping_method">method</label>
+                            <span class="param-control">
+                                <select id="anat_skullstripping_method" name="anat_skullstripping_method">
+                                    <option value="fastSurferCNN" selected>fastSurferCNN</option>
+                                </select>
+                            </span>
+                        </div>
                     </div>
-                    <div class="help-text">(use t1wt2wcombined image for surface recon if possible)</div>
+                    <div id="anat_fastSurferCNN_options">
+                        <h4>fastSurferCNN</h4>
+                        <div class="param-block">
+                            <div class="param-row">
+                                <span class="param-check"></span>
+                                <label for="anat_fastSurferCNN_gpu_device">gpu_device</label>
+                                <span class="param-control">
+                                    <input type="text" id="anat_fastSurferCNN_gpu_device" name="anat_fastSurferCNN_gpu_device" value="auto">
+                                </span>
+                            </div>
+                            <span class="help-text">(gpu device id: >= -1 where -1 = CPU, or "auto" for auto-select)</span>
+                        </div>
+                        <div class="param-block">
+                            <div class="param-row">
+                                <span class="param-check"></span>
+                                <label for="anat_fastSurferCNN_batch_size">batch_size</label>
+                                <span class="param-control">
+                                    <input type="number" id="anat_fastSurferCNN_batch_size" name="anat_fastSurferCNN_batch_size" value="8" min="1">
+                                </span>
+                            </div>
+                            <span class="help-text">(batch size for inference, >= 1)</span>
+                        </div>
+                        <div class="param-block">
+                            <div class="param-row">
+                                <span class="param-check"></span>
+                                <label for="anat_fastSurferCNN_plane_weight_coronal">plane_weight_coronal</label>
+                                <span class="param-control">
+                                    <input type="number" id="anat_fastSurferCNN_plane_weight_coronal" name="anat_fastSurferCNN_plane_weight_coronal" value="0.4" step="0.1" min="0" max="1">
+                                </span>
+                            </div>
+                            <span class="help-text">(weight for coronal plane, 0.0-1.0)</span>
+                        </div>
+                        <div class="param-block">
+                            <div class="param-row">
+                                <span class="param-check"></span>
+                                <label for="anat_fastSurferCNN_plane_weight_axial">plane_weight_axial</label>
+                                <span class="param-control">
+                                    <input type="number" id="anat_fastSurferCNN_plane_weight_axial" name="anat_fastSurferCNN_plane_weight_axial" value="0.4" step="0.1" min="0" max="1">
+                                </span>
+                            </div>
+                            <span class="help-text">(weight for axial plane, 0.0-1.0)</span>
+                        </div>
+                        <div class="param-block">
+                            <div class="param-row">
+                                <span class="param-check"></span>
+                                <label for="anat_fastSurferCNN_plane_weight_sagittal">plane_weight_sagittal</label>
+                                <span class="param-control">
+                                    <input type="number" id="anat_fastSurferCNN_plane_weight_sagittal" name="anat_fastSurferCNN_plane_weight_sagittal" value="0.2" step="0.1" min="0" max="1">
+                                </span>
+                            </div>
+                            <span class="help-text">(weight for sagittal plane, 0.0-1.0)</span>
+                        </div>
+                        <div class="param-block">
+                            <div class="param-row">
+                                <span class="param-check"><input type="checkbox" id="anat_fastSurferCNN_fix_V1_WM" name="anat_fastSurferCNN_fix_V1_WM" checked></span>
+                                <label for="anat_fastSurferCNN_fix_V1_WM">fix_V1_WM</label>
+                                <span class="param-control"></span>
+                            </div>
+                            <span class="help-text">(fix missing thin WM in V1 by registering template V1 WM to individual space)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="anat_surface_reconstruction_enabled" name="anat_surface_reconstruction_enabled" checked></span>
+                    <label for="anat_surface_reconstruction_enabled">surface_reconstruction</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(perform surface reconstruction.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-settings" id="anat_surface_reconstruction_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"><input type="checkbox" id="anat_surface_reconstruction_use_t1wt2wcombined" name="anat_surface_reconstruction_use_t1wt2wcombined"></span>
+                            <label for="anat_surface_reconstruction_use_t1wt2wcombined">use_t1wt2wcombined</label>
+                            <span class="param-control"></span>
+                        </div>
+                        <span class="help-text">(use t1wt2wcombined image for surface recon if possible)</span>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Functional Processing -->
-        <h2>func</h2>
+        <h2 id="func">func</h2>
         <div class="section">
-            <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" id="func_coreg_runs_within_session" name="func_coreg_runs_within_session" checked>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_coreg_runs_within_session" name="func_coreg_runs_within_session" checked></span>
                     <label for="func_coreg_runs_within_session">coreg_runs_within_session</label>
+                    <span class="param-control"></span>
                 </div>
-                <span class="help-text">(coregister runs within session before processing)</span>
+                <span class="help-text">(coregister runs within session before processing.)</span>
             </div>
-            
-            <div class="sub-section">
-                <h3>reorient</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="func_reorient_enabled" name="func_reorient_enabled" checked>
-                        <label for="func_reorient_enabled">enabled</label>
-                    </div>
-                    <div class="help-text">(reorient functional images to template orientation when given, otherwise to RAS)</div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_reorient_enabled" name="func_reorient_enabled"></span>
+                    <label for="func_reorient_enabled">reorient</label>
+                    <span class="param-control"></span>
                 </div>
+                <span class="help-text">(reorient functional images to template orientation when given, otherwise to RAS. When conform is enabled, reorient is not needed.)</span>
             </div>
-            
-            <div class="sub-section">
-                <h3>slice_timing_correction</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="func_slice_timing_correction_enabled" name="func_slice_timing_correction_enabled" checked>
-                        <label for="func_slice_timing_correction_enabled">enabled</label>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_slice_timing_correction_enabled" name="func_slice_timing_correction_enabled" checked></span>
+                    <label for="func_slice_timing_correction_enabled">slice_timing_correction</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(perform slice timing correction.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-settings" id="func_slice_timing_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_slice_timing_correction_repetition_time">repetition_time</label>
+                            <span class="param-control">
+                                <input type="number" id="func_slice_timing_correction_repetition_time" name="func_slice_timing_correction_repetition_time" step="0.001" min="0">
+                            </span>
+                        </div>
+                        <span class="help-text">(repetition time in seconds, leave empty for null/auto-detect from BIDS)</span>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="func_slice_timing_correction_repetition_time">repetition_time</label>
-                    <input type="number" id="func_slice_timing_correction_repetition_time" name="func_slice_timing_correction_repetition_time" step="0.001" min="0">
-                    <div class="help-text">(repetition time in seconds, leave empty for null/auto-detect from BIDS)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_slice_timing_correction_slice_timing">slice_timing</label>
-                    <input type="text" id="func_slice_timing_correction_slice_timing" name="func_slice_timing_correction_slice_timing" placeholder="e.g., 0.0, 0.1, 0.2">
-                    <div class="help-text">(list of floats: slice times in seconds, leave empty for null/auto-detect from BIDS)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_slice_timing_correction_tzero">tzero</label>
-                    <input type="number" id="func_slice_timing_correction_tzero" name="func_slice_timing_correction_tzero" step="0.001">
-                    <div class="help-text">(reference time point in seconds, leave empty for null/auto-calculate)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_slice_timing_correction_slice_time_ref">slice_time_ref</label>
-                    <input type="number" id="func_slice_timing_correction_slice_time_ref" name="func_slice_timing_correction_slice_time_ref" value="0.5" step="0.1" min="0" max="1">
-                    <div class="help-text">(reference slice time, 0.0-1.0, 0.5 = middle slice)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_slice_timing_correction_slice_encoding_direction">slice_encoding_direction</label>
-                    <select id="func_slice_timing_correction_slice_encoding_direction" name="func_slice_timing_correction_slice_encoding_direction">
-                        <option value="">null (auto-detect)</option>
-                        <option value="x">x</option>
-                        <option value="-x">-x</option>
-                        <option value="y">y</option>
-                        <option value="-y">-y</option>
-                        <option value="z">z</option>
-                        <option value="-z">-z</option>
-                    </select>
-                    <span class="help-text">("x", "-x", "y", "-y", "z", "-z", or null/auto-detect from BIDS)</span>
-                </div>
-            </div>
-            
-            <div class="sub-section">
-                <h3>motion_correction</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="func_motion_correction_enabled" name="func_motion_correction_enabled" checked>
-                        <label for="func_motion_correction_enabled">enabled</label>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_slice_timing_correction_slice_timing">slice_timing</label>
+                            <span class="param-control">
+                                <input type="text" id="func_slice_timing_correction_slice_timing" name="func_slice_timing_correction_slice_timing" placeholder="e.g., 0.0, 0.1, 0.2">
+                            </span>
+                        </div>
+                        <span class="help-text">(list of floats: slice times in seconds, leave empty for null/auto-detect from BIDS)</span>
                     </div>
-                    <div class="help-text">(perform motion correction)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_motion_correction_dof">dof</label>
-                    <select id="func_motion_correction_dof" name="func_motion_correction_dof">
-                        <option value="6" selected>6</option>
-                        <option value="9">9</option>
-                        <option value="12">12</option>
-                    </select>
-                    <span class="help-text">(degrees of freedom: 6, 9, or 12)</span>
-                </div>
-                <div class="form-group">
-                    <label for="func_motion_correction_cost">cost</label>
-                    <select id="func_motion_correction_cost" name="func_motion_correction_cost">
-                        <option value="mutualinfo" selected>mutualinfo</option>
-                        <option value="woods">woods</option>
-                        <option value="corratio">corratio</option>
-                        <option value="normcorr">normcorr</option>
-                        <option value="normmi">normmi</option>
-                        <option value="leastsq">leastsq</option>
-                    </select>
-                    <span class="help-text">(cost function: "mutualinfo", "woods", "corratio", "normcorr", "normmi", "leastsq")</span>
-                </div>
-                <div class="form-group">
-                    <label for="func_motion_correction_smooth">smooth</label>
-                    <input type="number" id="func_motion_correction_smooth" name="func_motion_correction_smooth" value="1.0" step="0.1" min="0">
-                    <div class="help-text">(smoothing factor for motion correction)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_motion_correction_ref_vol">ref_vol</label>
-                    <input type="text" id="func_motion_correction_ref_vol" name="func_motion_correction_ref_vol" value="mid">
-                    <div class="help-text">(reference volume: integer index, "Tmean", or "mid")</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_motion_correction_cost_tolerance">cost_tolerance</label>
-                    <input type="number" id="func_motion_correction_cost_tolerance" name="func_motion_correction_cost_tolerance" value="0.01" step="0.001" min="0">
-                    <div class="help-text">(cost function tolerance)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_motion_correction_parameter_tolerance">parameter_tolerance</label>
-                    <input type="number" id="func_motion_correction_parameter_tolerance" name="func_motion_correction_parameter_tolerance" value="0.01" step="0.001" min="0">
-                    <div class="help-text">(parameter tolerance)</div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_slice_timing_correction_tzero">tzero</label>
+                            <span class="param-control">
+                                <input type="number" id="func_slice_timing_correction_tzero" name="func_slice_timing_correction_tzero" step="0.001">
+                            </span>
+                        </div>
+                        <span class="help-text">(reference time point in seconds, leave empty for null/auto-calculate)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_slice_timing_correction_slice_time_ref">slice_time_ref</label>
+                            <span class="param-control">
+                                <input type="number" id="func_slice_timing_correction_slice_time_ref" name="func_slice_timing_correction_slice_time_ref" value="0.5" step="0.1" min="0" max="1">
+                            </span>
+                        </div>
+                        <span class="help-text">(reference slice time, 0.0-1.0, 0.5 = middle slice)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_slice_timing_correction_slice_encoding_direction">slice_encoding_direction</label>
+                            <span class="param-control">
+                                <select id="func_slice_timing_correction_slice_encoding_direction" name="func_slice_timing_correction_slice_encoding_direction">
+                                    <option value="">null (auto-detect)</option>
+                                    <option value="x">x</option>
+                                    <option value="-x">-x</option>
+                                    <option value="y">y</option>
+                                    <option value="-y">-y</option>
+                                    <option value="z">z</option>
+                                    <option value="-z">-z</option>
+                                </select>
+                            </span>
+                        </div>
+                        <span class="help-text">("x", "-x", "y", "-y", "z", "-z", or null/auto-detect from BIDS)</span>
+                    </div>
                 </div>
             </div>
-            
-            <div class="sub-section">
-                <h3>despike</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="func_despike_enabled" name="func_despike_enabled" checked>
-                        <label for="func_despike_enabled">enabled</label>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_motion_correction_enabled" name="func_motion_correction_enabled" checked></span>
+                    <label for="func_motion_correction_enabled">motion_correction</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(perform motion correction.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-settings" id="func_motion_correction_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_motion_correction_dof">dof</label>
+                            <span class="param-control">
+                                <select id="func_motion_correction_dof" name="func_motion_correction_dof">
+                                    <option value="6" selected>6</option>
+                                    <option value="9">9</option>
+                                    <option value="12">12</option>
+                                </select>
+                            </span>
+                        </div>
+                        <span class="help-text">(degrees of freedom: 6, 9, or 12)</span>
                     </div>
-                    <div class="help-text">(perform despiking/outlier removal)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_despike_c1">c1</label>
-                    <input type="number" id="func_despike_c1" name="func_despike_c1" value="5" step="0.1" min="0.1">
-                    <div class="help-text">(first cutoff parameter, > 0, must be < c2)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_despike_c2">c2</label>
-                    <input type="number" id="func_despike_c2" name="func_despike_c2" value="10" step="0.1" min="0.1">
-                    <div class="help-text">(second cutoff parameter, > 0, must be > c1)</div>
-                </div>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="func_despike_localedit" name="func_despike_localedit" checked>
-                        <label for="func_despike_localedit">localedit</label>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_motion_correction_cost">cost</label>
+                            <span class="param-control">
+                                <select id="func_motion_correction_cost" name="func_motion_correction_cost">
+                                    <option value="mutualinfo" selected>mutualinfo</option>
+                                    <option value="woods">woods</option>
+                                    <option value="corratio">corratio</option>
+                                    <option value="normcorr">normcorr</option>
+                                    <option value="normmi">normmi</option>
+                                    <option value="leastsq">leastsq</option>
+                                </select>
+                            </span>
+                        </div>
+                        <span class="help-text">(cost function)</span>
                     </div>
-                    <div class="help-text">(use local editing for despiking)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_despike_ignore_first_volumes">ignore_first_volumes</label>
-                    <input type="number" id="func_despike_ignore_first_volumes" name="func_despike_ignore_first_volumes" value="0" min="0">
-                    <div class="help-text">(number of initial volumes to ignore, >= 0)</div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_motion_correction_smooth">smooth</label>
+                            <span class="param-control">
+                                <input type="number" id="func_motion_correction_smooth" name="func_motion_correction_smooth" value="1.0" step="0.1" min="0">
+                            </span>
+                        </div>
+                        <span class="help-text">(smoothing factor for motion correction)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_motion_correction_ref_vol">ref_vol</label>
+                            <span class="param-control">
+                                <input type="text" id="func_motion_correction_ref_vol" name="func_motion_correction_ref_vol" value="mid">
+                            </span>
+                        </div>
+                        <span class="help-text">(reference volume: integer index, "Tmean", or "mid")</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_motion_correction_cost_tolerance">cost_tolerance</label>
+                            <span class="param-control">
+                                <input type="number" id="func_motion_correction_cost_tolerance" name="func_motion_correction_cost_tolerance" value="0.01" step="0.001" min="0">
+                            </span>
+                        </div>
+                        <span class="help-text">(cost function tolerance)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_motion_correction_parameter_tolerance">parameter_tolerance</label>
+                            <span class="param-control">
+                                <input type="number" id="func_motion_correction_parameter_tolerance" name="func_motion_correction_parameter_tolerance" value="0.01" step="0.001" min="0">
+                            </span>
+                        </div>
+                        <span class="help-text">(parameter tolerance)</span>
+                    </div>
                 </div>
             </div>
-            
-            <div class="sub-section">
-                <h3>bias_correction</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="func_bias_correction_enabled" name="func_bias_correction_enabled" checked>
-                        <label for="func_bias_correction_enabled">enabled</label>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_despike_enabled" name="func_despike_enabled"></span>
+                    <label for="func_despike_enabled">despike</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(perform despiking/outlier removal.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-settings" id="func_despike_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_despike_c1">c1</label>
+                            <span class="param-control">
+                                <input type="number" id="func_despike_c1" name="func_despike_c1" value="5" step="0.1" min="0.1">
+                            </span>
+                        </div>
+                        <span class="help-text">(first cutoff parameter, > 0, must be &lt; c2)</span>
                     </div>
-                    <div class="help-text">(perform bias field correction, only done on tmean image for better registration)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_bias_correction_algorithm">algorithm</label>
-                    <select id="func_bias_correction_algorithm" name="func_bias_correction_algorithm">
-                        <option value="N4BiasFieldCorrection" selected>N4BiasFieldCorrection</option>
-                    </select>
-                    <span class="help-text">(bias correction algorithm, currently only "N4BiasFieldCorrection")</span>
-                </div>
-                <div class="form-group">
-                    <label for="func_bias_correction_shrink_factor">shrink_factor</label>
-                    <input type="number" id="func_bias_correction_shrink_factor" name="func_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
-                    <div class="help-text">(shrink factor for faster processing, > 0)</div>
-                </div>
-                <div class="form-group">
-                    <label for="func_bias_correction_bspline_fitting">bspline_fitting</label>
-                    <input type="text" id="func_bias_correction_bspline_fitting" name="func_bias_correction_bspline_fitting" value="[ 200 ]">
-                    <div class="help-text">(B-spline fitting parameters in ANTs format)</div>
-                </div>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="func_bias_correction_rescale_mean_to_100" name="func_bias_correction_rescale_mean_to_100" checked>
-                        <label for="func_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_despike_c2">c2</label>
+                            <span class="param-control">
+                                <input type="number" id="func_despike_c2" name="func_despike_c2" value="10" step="0.1" min="0.1">
+                            </span>
+                        </div>
+                        <span class="help-text">(second cutoff parameter, > 0, must be > c1)</span>
                     </div>
-                    <div class="help-text">(rescale image mean intensity to 100)</div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"><input type="checkbox" id="func_despike_localedit" name="func_despike_localedit" checked></span>
+                            <label for="func_despike_localedit">localedit</label>
+                            <span class="param-control"></span>
+                        </div>
+                        <span class="help-text">(use local editing for despiking)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_despike_ignore_first_volumes">ignore_first_volumes</label>
+                            <span class="param-control">
+                                <input type="number" id="func_despike_ignore_first_volumes" name="func_despike_ignore_first_volumes" value="0" min="0">
+                            </span>
+                        </div>
+                        <span class="help-text">(number of initial volumes to ignore, >= 0)</span>
+                    </div>
                 </div>
             </div>
-            
-            <div class="sub-section">
-                <h3>conform</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="func_conform_enabled" name="func_conform_enabled" checked>
-                        <label for="func_conform_enabled">enabled</label>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_bias_correction_enabled" name="func_bias_correction_enabled" checked></span>
+                    <label for="func_bias_correction_enabled">bias_correction</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(perform bias field correction on tmean image for better registration.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-settings" id="func_bias_correction_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_bias_correction_algorithm">algorithm</label>
+                            <span class="param-control">
+                                <select id="func_bias_correction_algorithm" name="func_bias_correction_algorithm">
+                                    <option value="N4BiasFieldCorrection" selected>N4BiasFieldCorrection</option>
+                                </select>
+                            </span>
+                        </div>
+                        <span class="help-text">(bias correction algorithm)</span>
                     </div>
-                    <div class="help-text">(conform functional tmean image to target space using FLIRT rigid registration)</div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_bias_correction_shrink_factor">shrink_factor</label>
+                            <span class="param-control">
+                                <input type="number" id="func_bias_correction_shrink_factor" name="func_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
+                            </span>
+                        </div>
+                        <span class="help-text">(shrink factor for faster processing, > 0)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_bias_correction_bspline_fitting">bspline_fitting</label>
+                            <span class="param-control">
+                                <input type="text" id="func_bias_correction_bspline_fitting" name="func_bias_correction_bspline_fitting" value="[ 100 ]">
+                            </span>
+                        </div>
+                        <span class="help-text">(b-spline fitting parameters in ANTs format)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"><input type="checkbox" id="func_bias_correction_rescale_mean_to_100" name="func_bias_correction_rescale_mean_to_100" checked></span>
+                            <label for="func_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
+                            <span class="param-control"></span>
+                        </div>
+                        <span class="help-text">(rescale image mean intensity to 100)</span>
+                    </div>
                 </div>
             </div>
-            
-            <div class="sub-section">
-                <h3>skullstripping</h3>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="func_skullstripping_enabled" name="func_skullstripping_enabled" checked>
-                        <label for="func_skullstripping_enabled">enabled</label>
-                    </div>
-                    <div class="help-text">(perform brain extraction)</div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_conform_enabled" name="func_conform_enabled" checked></span>
+                    <label for="func_conform_enabled">conform</label>
+                    <span class="param-control"></span>
                 </div>
+                <span class="help-text">(highly recommended. Conform functional tmean image to target space using FLIRT rigid registration.)</span>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_skullstripping_enabled" name="func_skullstripping_enabled" checked></span>
+                    <label for="func_skullstripping_enabled">skullstripping</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(highly recommended. Perform brain extraction.)</span>
             </div>
         </div>
 
         <!-- Registration -->
-        <h2>registration</h2>
+        <h2 id="registration">registration</h2>
         <div class="section">
-            <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" id="registration_enabled" name="registration_enabled" checked>
-                    <label for="registration_enabled">enabled</label>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="registration_anat2template_xfm_type">anat2template_xfm_type</label>
+                    <span class="param-control">
+                        <select id="registration_anat2template_xfm_type" name="registration_anat2template_xfm_type">
+                            <option value="translation">translation</option>
+                            <option value="rigid">rigid</option>
+                            <option value="affine">affine</option>
+                            <option value="syn" selected>syn</option>
+                        </select>
+                    </span>
                 </div>
-                <div class="help-text">(perform image registration)</div>
-            </div>
-            <div class="form-group">
-                <label for="registration_anat2template_xfm_type">anat2template_xfm_type</label>
-                <select id="registration_anat2template_xfm_type" name="registration_anat2template_xfm_type">
-                    <option value="translation">translation</option>
-                    <option value="rigid">rigid</option>
-                    <option value="affine">affine</option>
-                    <option value="syn" selected>syn</option>
-                </select>
                 <span class="help-text">(transform type for anat->template: "translation", "rigid", "affine", or "syn")</span>
             </div>
-            <div class="form-group">
-                <label for="registration_func2anat_xfm_type">func2anat_xfm_type</label>
-                <select id="registration_func2anat_xfm_type" name="registration_func2anat_xfm_type">
-                    <option value="translation">translation</option>
-                    <option value="rigid">rigid</option>
-                    <option value="affine">affine</option>
-                    <option value="syn" selected>syn</option>
-                </select>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="registration_func2anat_xfm_type">func2anat_xfm_type</label>
+                    <span class="param-control">
+                        <select id="registration_func2anat_xfm_type" name="registration_func2anat_xfm_type">
+                            <option value="translation">translation</option>
+                            <option value="rigid" selected>rigid</option>
+                            <option value="affine">affine</option>
+                            <option value="syn">syn</option>
+                        </select>
+                    </span>
+                </div>
                 <span class="help-text">(transform type for func->anat: "translation", "rigid", "affine", or "syn")</span>
             </div>
-            <div class="form-group">
-                <label for="registration_func2template_xfm_type">func2template_xfm_type</label>
-                <select id="registration_func2template_xfm_type" name="registration_func2template_xfm_type">
-                    <option value="translation">translation</option>
-                    <option value="rigid">rigid</option>
-                    <option value="affine">affine</option>
-                    <option value="syn" selected>syn</option>
-                </select>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="registration_func2template_xfm_type">func2template_xfm_type</label>
+                    <span class="param-control">
+                        <select id="registration_func2template_xfm_type" name="registration_func2template_xfm_type">
+                            <option value="translation">translation</option>
+                            <option value="rigid">rigid</option>
+                            <option value="affine">affine</option>
+                            <option value="syn" selected>syn</option>
+                        </select>
+                    </span>
+                </div>
                 <span class="help-text">(transform type for func->template: "translation", "rigid", "affine", or "syn")</span>
             </div>
-            <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" id="registration_keep_func_resolution" name="registration_keep_func_resolution" checked>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="registration_keep_func_resolution" name="registration_keep_func_resolution" checked></span>
                     <label for="registration_keep_func_resolution">keep_func_resolution</label>
+                    <span class="param-control"></span>
                 </div>
-                <div class="help-text">(keep original functional image resolution after registration)</div>
+                <span class="help-text">(keep original functional image resolution after registration)</span>
             </div>
-            <div class="form-group">
-                <label for="registration_interpolation">interpolation</label>
-                <select id="registration_interpolation" name="registration_interpolation">
-                    <option value="Linear">Linear</option>
-                    <option value="NearestNeighbor">NearestNeighbor</option>
-                    <option value="MultiLabel">MultiLabel</option>
-                    <option value="Gaussian">Gaussian</option>
-                    <option value="BSpline">BSpline</option>
-                    <option value="CosineWindowedSinc">CosineWindowedSinc</option>
-                    <option value="WelchWindowedSinc">WelchWindowedSinc</option>
-                    <option value="HammingWindowedSinc">HammingWindowedSinc</option>
-                    <option value="LanczosWindowedSinc" selected>LanczosWindowedSinc</option>
-                    <option value="GenericLabel">GenericLabel</option>
-                </select>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="registration_interpolation">interpolation</label>
+                    <span class="param-control">
+                        <select id="registration_interpolation" name="registration_interpolation">
+                            <option value="BSpline">BSpline</option>
+                            <option value="CosineWindowedSinc">CosineWindowedSinc</option>
+                            <option value="GenericLabel">GenericLabel</option>
+                            <option value="Gaussian">Gaussian</option>
+                            <option value="HammingWindowedSinc">HammingWindowedSinc</option>
+                            <option value="LanczosWindowedSinc" selected>LanczosWindowedSinc</option>
+                            <option value="Linear">Linear</option>
+                            <option value="MultiLabel">MultiLabel</option>
+                            <option value="NearestNeighbor">NearestNeighbor</option>
+                            <option value="WelchWindowedSinc">WelchWindowedSinc</option>
+                        </select>
+                    </span>
+                </div>
                 <span class="help-text">(interpolation method)</span>
             </div>
         </div>
 
+        <div class="generator-section">
         <!-- Preview Section (injected by CLI if dataset_dir provided) -->
         <!-- PREVIEW_PLACEHOLDER -->
         
-        <button type="button" onclick="generateConfig()">Generate Preprocessing Configuration File</button>
+        <button type="button" id="generate" onclick="generateConfig()">Generate Preprocessing Configuration File</button>
         <div id="errorMessages"></div>
         <div id="yamlOutput" class="yaml-output hidden">
             <h3>Generated Configuration YAML</h3>
@@ -667,17 +912,17 @@
             <button type="button" class="copy-button" onclick="copyToClipboard()">Copy to Clipboard</button>
             <button type="button" class="copy-button" onclick="downloadConfig()" style="margin-left: 10px;">Download Config File</button>
         </div>
+        </div>
     </form>
+        </main>
+    </div>
 
     <script>
         // Default configuration embedded from defaults.yaml
         const defaults = {
-            _description: "Default configuration for nhp_mri_prep preprocessing pipeline",
-            _version: "1.1",
+            _description: "Default configuration for brainana preprocessing pipeline",
             general: {
                 verbose: 2,
-                overwrite: false,
-                generate_report_only: false,
                 anat_only: false
             },
             bids_filtering: {
@@ -690,13 +935,14 @@
                 output_space: "NMT2Sym:res-05"
             },
             anat: {
-                reorient: { enabled: true },
+                synthesis_level: "subject",
+                reorient: { enabled: false },
                 conform: { enabled: true },
                 bias_correction: {
                     enabled: true,
                     algorithm: "N4BiasFieldCorrection",
                     shrink_factor: 2,
-                    bspline_fitting: "[ 200 ]",
+                    bspline_fitting: "[ 150 ]",
                     rescale_mean_to_100: true
                 },
                 skullstripping_segmentation: {
@@ -713,12 +959,12 @@
                 },
                 surface_reconstruction: {
                     enabled: true,
-                    use_t1wt2wcombined: true
+                    use_t1wt2wcombined: false
                 }
             },
             func: {
                 coreg_runs_within_session: true,
-                reorient: { enabled: true },
+                reorient: { enabled: false },
                 slice_timing_correction: {
                     enabled: true,
                     repetition_time: null,
@@ -737,7 +983,7 @@
                     parameter_tolerance: 0.01
                 },
                 despike: {
-                    enabled: true,
+                    enabled: false,
                     c1: 5,
                     c2: 10,
                     localedit: true,
@@ -747,7 +993,7 @@
                     enabled: true,
                     algorithm: "N4BiasFieldCorrection",
                     shrink_factor: 2,
-                    bspline_fitting: "[ 200 ]",
+                    bspline_fitting: "[ 100 ]",
                     rescale_mean_to_100: true
                 },
                 conform: { enabled: true },
@@ -756,9 +1002,8 @@
                 }
             },
             registration: {
-                enabled: true,
                 anat2template_xfm_type: "syn",
-                func2anat_xfm_type: "syn",
+                func2anat_xfm_type: "rigid",
                 func2template_xfm_type: "syn",
                 keep_func_resolution: true,
                 interpolation: "LanczosWindowedSinc"
@@ -766,6 +1011,15 @@
         };
 
         // Show/hide conditional sections
+        function toggleAdvanced(el) {
+            const toggle = el;
+            const next = toggle.nextElementSibling;
+            if (next && next.classList.contains('advanced-settings')) {
+                next.classList.toggle('visible');
+                toggle.classList.toggle('open', next.classList.contains('visible'));
+            }
+        }
+
         function updateConditionalVisibility() {
             const anatMethod = document.getElementById('anat_skullstripping_method').value;
             
@@ -882,15 +1136,13 @@
             validateBiasCorrection(config.func.bias_correction, 'func');
             
             // Validate registration
-            if (config.registration.enabled) {
-                const validInterpolations = [
-                    "Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline",
-                    "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc",
-                    "LanczosWindowedSinc", "GenericLabel"
-                ];
-                if (!validInterpolations.includes(config.registration.interpolation)) {
-                    errors.push(`registration.interpolation must be one of ${validInterpolations.join(', ')}`);
-                }
+            const validInterpolations = [
+                "Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline",
+                "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc",
+                "LanczosWindowedSinc", "GenericLabel"
+            ];
+            if (config.registration && !validInterpolations.includes(config.registration.interpolation)) {
+                errors.push(`registration.interpolation must be one of ${validInterpolations.join(', ')}`);
             }
             
             return errors;
@@ -1051,10 +1303,8 @@
             
             // General
             config.general.verbose = parseInt(document.getElementById('general_verbose').value);
-            config.general.overwrite = document.getElementById('general_overwrite').checked;
-            config.general.generate_report_only = document.getElementById('general_generate_report_only').checked;
             config.general.anat_only = document.getElementById('general_anat_only').checked;
-            
+
             // BIDS filtering
             config.bids_filtering.subjects = parseListInput(document.getElementById('bids_subjects').value);
             config.bids_filtering.sessions = parseListInput(document.getElementById('bids_sessions').value);
@@ -1129,7 +1379,6 @@
             config.func.bias_correction.rescale_mean_to_100 = document.getElementById('func_bias_correction_rescale_mean_to_100').checked;
             
             // Registration
-            config.registration.enabled = document.getElementById('registration_enabled').checked;
             config.registration.anat2template_xfm_type = document.getElementById('registration_anat2template_xfm_type').value;
             config.registration.func2anat_xfm_type = document.getElementById('registration_func2anat_xfm_type').value;
             config.registration.func2template_xfm_type = document.getElementById('registration_func2template_xfm_type').value;
@@ -1145,7 +1394,7 @@
             }
             
             // Generate YAML
-            let yaml = '# Default configuration for nhp_mri_prep preprocessing pipeline\n';
+            let yaml = '# Configuration for brainana preprocessing pipeline\n';
             yaml += '# Generated by Configuration Generator\n\n';
             yaml += objectToYAML(config);
             
@@ -1154,7 +1403,7 @@
             yamlOutput.classList.remove('hidden');
             
             // Show success message
-            errorDiv.innerHTML = '<div class="success">✓ Configuration file generated successfully! Use "Copy to Clipboard" or "Download Config File" to save it.</div>';
+            errorDiv.innerHTML = '<div class="success">✓ Configuration file generated successfully!<br>Use "Copy to Clipboard" or "Download Config File" to save it.</div>';
         }
     </script>
 </body>

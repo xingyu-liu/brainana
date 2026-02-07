@@ -104,7 +104,7 @@ workflow ANAT_WF {
     def anat_conform_enabled = paramResolver.getYamlBool("anat.conform.enabled")
     def anat_bias_correction_enabled = paramResolver.getYamlBool("anat.bias_correction.enabled")
     def anat_skullstripping_enabled = paramResolver.getYamlBool("anat.skullstripping_segmentation.enabled")
-    def registration_enabled = paramResolver.getYamlBool("registration.enabled")
+    def registration_enabled = paramResolver.getYamlBool("registration.enabled", true)
     
     // Resolve BIDS filtering parameters (CLI parameters)
     // Defaults come from defaults.yaml (bids_filtering.*)
