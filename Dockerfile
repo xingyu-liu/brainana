@@ -103,6 +103,8 @@ RUN apt-get update && \
       tcsh \
       wget \
       openjdk-17-jre-headless \
+      # graphviz provides 'dot', required by Nextflow to render DAG as SVG \
+      graphviz \
       # procps provides 'ps', required by Nextflow to collect task metrics \
       procps \
       # CHOLMOD runtime for scikit-sparse (no build-essential in final image) \
@@ -150,6 +152,12 @@ RUN apt-get update && \
       xvfb && \
     sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
     locale-gen && \
+    # Set OpenBLAS as the default BLAS/LAPACK so CHOLMOD (libcholmod3) and
+    # scikit-sparse find the threaded symbols (e.g. sgemv_thread_n) at runtime.
+    update-alternatives --set libblas.so.3-x86_64-linux-gnu \
+        /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3 && \
+    update-alternatives --set liblapack.so.3-x86_64-linux-gnu \
+        /usr/lib/x86_64-linux-gnu/openblas-pthread/liblapack.so.3 && \
     rm -rf /var/lib/apt/lists/*
 
 ######################
@@ -174,6 +182,12 @@ RUN curl -fsSL "https://fsl.fmrib.ox.ac.uk/fsldownloads/fsl-${FSL_VERSION}-cento
 ENV FSLOUTPUTTYPE=NIFTI_GZ \
     FSLMULTIFILEQUIT=TRUE
 
+# Remove FSL's bundled OpenBLAS and old gfortran — they shadow the system
+# openblas-pthread and gfortran-12 via LD_LIBRARY_PATH, causing
+# "undefined symbol: sgemv_thread_n" when CHOLMOD / scikit-sparse loads.
+RUN rm -f /usr/local/fsl/lib/libopenblas.so.0 \
+         /usr/local/fsl/lib/libgfortran.so.3
+
 ############
 # Install AFNI
 ############
@@ -191,7 +205,7 @@ ENV FREESURFER_HOME=/usr/local/freesurfer
 RUN curl -fsSL "https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/${FREESURFER_VERSION}/${FREESURFER_TARBALL}" -o /tmp/freesurfer.tar.gz && \
     tar --no-same-owner -xzvf /tmp/freesurfer.tar.gz -C /usr/local && \
     rm /tmp/freesurfer.tar.gz && \
-    rm -rf "${FREESURFER_HOME}/docs" "${FREESURFER_HOME}/matlab" "${FREESURFER_HOME}/average" "${FREESURFER_HOME}/trctrain" 2>/dev/null || true
+    rm -rf "${FREESURFER_HOME}/subjects" "${FREESURFER_HOME}/docs" "${FREESURFER_HOME}/matlab" "${FREESURFER_HOME}/trctrain" 2>/dev/null || true
 
 ##############
 # Environment
@@ -307,13 +321,10 @@ COPY --from=python-builder /opt/venv /opt/venv
 COPY --from=python-builder /opt/brainana /opt/brainana
 
 # World-writable temp dirs so any UID (via -u or gosu) can use them
-# .nextflow/ in project dir must be writable (Nextflow writes session metadata there)
 RUN mkdir -p /tmp/matplotlib /tmp/pycache /tmp/.X11-unix /tmp/home && \
     chmod 1777 /tmp/matplotlib /tmp/pycache /tmp/.X11-unix /tmp/home && \
     chmod -R 755 /opt/brainana /opt/venv /home/neuro && \
-    chmod +x /opt/brainana/entrypoint.sh && \
-    mkdir -p /opt/brainana/.nextflow && \
-    chmod 1777 /opt/brainana/.nextflow
+    chmod +x /opt/brainana/entrypoint.sh
 
 # Pre-generate matplotlib font cache at build time so any UID can read it.
 # Without this, the HEALTHCHECK (root) or first runtime import creates it as

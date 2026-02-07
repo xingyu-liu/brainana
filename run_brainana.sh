@@ -1,7 +1,8 @@
 #!/bin/bash
 #
-# Wrapper script for Nextflow that keeps project directory clean
-# Runs Nextflow from a temporary directory to prevent .nextflow/ creation in project
+# Wrapper script for Nextflow
+# In Docker: launches from NXF_LAUNCH_DIR (work dir) so .nextflow/ persists for resume.
+# Locally:   launches from the project directory.
 #
 
 # Set Nextflow home directory (for global cache, history, etc.)
@@ -27,14 +28,23 @@ else
     exit 1
 fi
 
-# Note: Nextflow creates .nextflow/ in the directory containing the workflow file
-# Since we reference main.nf in the project, .nextflow/ will be created there
-# However, it's gitignored and we redirect logs and work directory elsewhere
-# To completely avoid .nextflow/ in project, you'd need to run from a different location
-# and copy all workflow files, which breaks relative paths. This is a reasonable compromise.
-
-# Change to project directory (required for relative paths in workflow)
-cd "$SCRIPT_DIR"
+# Launch directory — where Nextflow creates .nextflow/ (history + cache for resume).
+#   Docker: NXF_LAUNCH_DIR is set by entrypoint.sh (persistent work dir).
+#   Local:  Derived from --work_dir arg if present, else SCRIPT_DIR.
+if [ -z "$NXF_LAUNCH_DIR" ]; then
+    _prev=""
+    for _arg in "$@"; do
+        if [ "$_prev" = "--work_dir" ]; then
+            NXF_LAUNCH_DIR="$_arg"
+            break
+        fi
+        _prev="$_arg"
+    done
+fi
+if [ -n "$NXF_LAUNCH_DIR" ]; then
+    mkdir -p "$NXF_LAUNCH_DIR" 2>/dev/null || true
+fi
+cd "${NXF_LAUNCH_DIR:-$SCRIPT_DIR}"
 
 # Build the command
 # Always use -log to redirect log files and -C to specify config
@@ -139,17 +149,21 @@ elif [ "$1" = "run" ]; then
     workflow_file=""
     remaining_args=()
     
-    if [ $# -gt 1 ] && [ -f "$2" ]; then
-        # User provided a workflow file (might be relative or absolute)
+    if [ $# -gt 1 ] && [ -f "$SCRIPT_DIR/$2" ]; then
+        # Workflow file found relative to project dir
+        workflow_file="$SCRIPT_DIR/$2"
+        remaining_args=("${@:3}")
+    elif [ $# -gt 1 ] && [ -f "$2" ]; then
+        # Absolute path to workflow file
         workflow_file="$2"
         remaining_args=("${@:3}")
     elif [ $# -gt 1 ] && [[ "$2" == *.nf ]]; then
-        # User provided a workflow file name (relative to project)
-        workflow_file="$2"
+        # User specified a .nf file name — resolve relative to project
+        workflow_file="$SCRIPT_DIR/$2"
         remaining_args=("${@:3}")
     else
         # No workflow file specified, use project's main.nf
-        workflow_file="main.nf"
+        workflow_file="$SCRIPT_DIR/main.nf"
         remaining_args=("${@:2}")
     fi
     

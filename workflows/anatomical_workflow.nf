@@ -122,10 +122,6 @@ workflow ANAT_WF {
     // Get output_space for display (from effective config)
     def effective_output_space = paramResolver.getParamOutputSpace(params, 'output_space')
     
-    println "Processing mode: surface_reconstruction = ${surf_recon_enabled}"
-    println "Step enabled flags:"
-    println "  ANAT: reorient=${anat_reorient_enabled}, conform=${anat_conform_enabled}, bias_correction=${anat_bias_correction_enabled}, skullstripping=${anat_skullstripping_enabled}, registration=${registration_enabled}"
-    
     println "============================================"
     println "brainana Nextflow Pipeline - Anatomical"
     println "============================================"

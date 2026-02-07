@@ -89,7 +89,7 @@ func:
 registration:
   enabled: true  # bool: perform image registration
   anat2template_xfm_type: "syn"  # str: transform type for anat->template ("translation", "rigid", "affine", or "syn")
-  func2anat_xfm_type: "syn"  # str: transform type for func->anat ("translation", "rigid", "affine", or "syn")
+  func2anat_xfm_type: "rigid"  # str: transform type for func->anat ("translation", "rigid", "affine", or "syn")
   func2template_xfm_type: "syn"  # str: transform type for func->template ("translation", "rigid", "affine", or "syn")
   interpolation: "LanczosWindowedSinc"  # str: interpolation method ("Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline", "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc", "LanczosWindowedSinc", "GenericLabel")
   keep_func_resolution: true  # bool: keep original functional image resolution after registration

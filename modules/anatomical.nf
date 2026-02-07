@@ -26,29 +26,19 @@ process ANAT_SYNTHESIS {
 from nhp_mri_prep.steps.anatomical import anat_synthesis
 from nhp_mri_prep.utils.bids import parse_bids_entities, create_bids_filename
 from nhp_mri_prep.utils.nextflow import (
-    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+    load_config, detect_modality, normalize_session_id, save_metadata, create_output_link
 )
 from pathlib import Path
 import json
 import shutil
 import os
 
-# Initialize command log file
-# Handle empty string session_id (subject-level synthesis)
-from nhp_mri_prep.utils.nextflow import normalize_session_id
-
-session_id_raw = '${session_id}'
-session_id_py = normalize_session_id(session_id_raw)
-
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id=session_id_py,
-    step_name='ANAT_SYNTHESIS'
-)
-
 # Load config
 config = load_config('${config_file}')
+
+# Handle empty string session_id (subject-level synthesis)
+session_id_raw = '${session_id}'
+session_id = normalize_session_id(session_id_raw)
 
 # Get anatomical files
 anat_files = [Path(f) for f in [${anat_files_list}]]
@@ -70,7 +60,7 @@ result = anat_synthesis(
 synthesized = result.metadata.get("synthesized", False)
 
 # Determine if subject-level synthesis
-is_subject_level = (session_id_py is None)
+is_subject_level = (session_id is None)
 
 # Generate BIDS filename and path using utility function
 from nhp_mri_prep.utils.bids import create_synthesized_bids_filename
@@ -120,17 +110,9 @@ from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.utils.templates import resolve_template
 from nhp_mri_prep.utils.bids import create_bids_output_filename
 from nhp_mri_prep.utils.nextflow import (
-    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+    load_config, detect_modality, save_metadata, create_output_link
 )
 from pathlib import Path
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_REORIENT'
-)
 
 # Load config
 config = load_config('${config_file}')
@@ -216,19 +198,11 @@ from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.utils.templates import resolve_template
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from nhp_mri_prep.utils.nextflow import (
-    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+    load_config, detect_modality, save_metadata, create_output_link
 )
 from pathlib import Path
 import shutil
 import os
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_CONFORM'
-)
 
 # Load config
 config = load_config('${config_file}')
@@ -334,20 +308,12 @@ from nhp_mri_prep.steps.anatomical import anat_bias_correction
 from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.utils.bids import create_bids_output_filename
 from nhp_mri_prep.utils.nextflow import (
-    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+    load_config, detect_modality, save_metadata, create_output_link
 )
 from pathlib import Path
 import shutil
 import os
 import json
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_BIAS_CORRECTION'
-)
 
 # Load config
 config = load_config('${config_file}')
@@ -448,19 +414,11 @@ from nhp_mri_prep.steps.anatomical import anat_skullstripping
 from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.utils.bids import create_bids_output_filename
 from nhp_mri_prep.utils.nextflow import (
-    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+    load_config, detect_modality, save_metadata, create_output_link
 )
 from pathlib import Path
 import shutil
 import os
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_SKULLSTRIPPING'
-)
 
 # Load config
 config = load_config('${config_file}')
@@ -584,24 +542,17 @@ process ANAT_SURFACE_RECONSTRUCTION {
 from nhp_mri_prep.steps.anatomical import anat_surface_reconstruction
 from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.utils.nextflow import (
-    load_config, init_cmd_log_for_nextflow, save_metadata
+    load_config, normalize_session_id, save_metadata
 )
 from pathlib import Path
 import os
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_SURFACE_RECONSTRUCTION'
-)
 
 # Load config
 config = load_config('${config_file}')
 
 # Handle empty string session_id (subject-level synthesis)
-session_id_py = '${session_id}' if '${session_id}' and '${session_id}'.strip() else None
+session_id_raw = '${session_id}'
+session_id = normalize_session_id(session_id_raw)
 session_count = int('${session_count}') if '${session_count}' else 1
 
 # Create step input
@@ -612,7 +563,7 @@ input_obj = StepInput(
     output_name='surface_reconstruction',
     metadata={
         'subject_id': '${subject_id}',
-        'session_id': session_id_py,
+        'session_id': session_id,
         'session_count': session_count
     }
 )
@@ -642,12 +593,11 @@ actual_subject_id = output_subject_dir.name
 # Determine what Nextflow expects based on session_count
 # If session_count > 1 and session_id exists, Nextflow should expect sub-XXX_ses-XXX
 # Otherwise, it expects sub-XXX
-session_id_py = '${session_id}' if '${session_id}' and '${session_id}'.strip() else None
-session_count = int('${session_count}') if '${session_count}' else 1
+# session_id and session_count already defined above
 
-if session_id_py and session_count > 1:
+if session_id and session_count > 1:
     # Multiple sessions: Nextflow expects sub-XXX_ses-XXX
-    ses_id = session_id_py if not session_id_py.startswith("ses-") else session_id_py[4:]
+    ses_id = session_id if not session_id.startswith("ses-") else session_id[4:]
     base_subject_id = 'sub-${subject_id}' if '${subject_id}'.startswith('sub-') else f"sub-${subject_id}"
     expected_subject_id = f"{base_subject_id}_ses-{ses_id}"
 else:
@@ -737,19 +687,11 @@ from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.utils.templates import resolve_template
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from nhp_mri_prep.utils.nextflow import (
-    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+    load_config, detect_modality, save_metadata, create_output_link
 )
 from pathlib import Path
 import shutil
 import os
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_REGISTRATION'
-)
 
 # Load config
 config = load_config('${config_file}')
@@ -895,19 +837,11 @@ from nhp_mri_prep.steps.anatomical import anat_t2w_to_t1w_registration
 from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from nhp_mri_prep.utils.nextflow import (
-    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+    load_config, detect_modality, save_metadata, create_output_link
 )
 from pathlib import Path
 import shutil
 import os
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_T2W_TO_T1W_REGISTRATION'
-)
 
 # Load config
 config = load_config('${config_file}')
@@ -1298,16 +1232,8 @@ process ANAT_APPLY_CONFORM {
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.operations.registration import flirt_apply_transforms
 from nhp_mri_prep.utils.bids import create_bids_output_filename
-from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
+from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, load_config
 from pathlib import Path
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_APPLY_CONFORM'
-)
 
 # Load config
 config = load_config('${config_file}')
@@ -1411,18 +1337,10 @@ process ANAT_APPLY_TRANSFORMATION {
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.operations.registration import ants_apply_transforms
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
-from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
+from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, load_config
 from pathlib import Path
 import re
 import shutil
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_APPLY_TRANSFORMATION'
-)
 
 # Load config
 config = load_config('${config_file}')
@@ -1508,17 +1426,9 @@ process ANAT_APPLY_TRANSFORM_MASK {
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.operations.registration import ants_apply_transforms
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
-from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
+from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, load_config
 from pathlib import Path
 import re
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_APPLY_TRANSFORM_MASK'
-)
 
 # Load config
 config = load_config('${config_file}')
@@ -1701,16 +1611,8 @@ process ANAT_T1WT2W_COMBINED {
     \${PYTHON:-python3} <<EOF
 from pathlib import Path
 from nhp_mri_prep.steps.anatomical import anat_t1wt2wcombined
-from nhp_mri_prep.utils.nextflow import save_metadata, create_output_link, init_cmd_log_for_nextflow
+from nhp_mri_prep.utils.nextflow import save_metadata, create_output_link
 from nhp_mri_prep.utils.bids import get_filename_stem
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='ANAT_T1WT2W_COMBINED'
-)
 
 # Get input files
 t1w_file = Path('${t1w_file}')

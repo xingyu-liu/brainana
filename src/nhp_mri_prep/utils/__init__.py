@@ -4,7 +4,7 @@ Utility functions for nhp_mri_prep.
 This module provides system utilities (command execution and logging).
 """
 
-from .system import run_command, check_dependency, set_numerical_threads, set_cmd_log_file, get_cmd_log_file, init_cmd_log_file, set_cmd_log_context, get_cmd_log_context, set_cmd_log_rotation_config
+from .system import run_command, check_dependency, set_numerical_threads
 from .logger import (
     setup_logging, 
     get_logger,
@@ -48,12 +48,6 @@ __all__ = [
     'run_command',
     'check_dependency',
     'set_numerical_threads',
-    'set_cmd_log_file',
-    'get_cmd_log_file',
-    'init_cmd_log_file',
-    'set_cmd_log_context',
-    'get_cmd_log_context',
-    'set_cmd_log_rotation_config',
     'setup_logging', 'get_logger', 'setup_step_logging', 'setup_workflow_logging', 'log_workflow_start', 'log_workflow_end',
     'log_step_start', 'log_step_end', 'ensure_workflow_log_exists', 'normalize_verbose', 'verbose_to_log_level',
     'calculate_func_tmean', 'reorient_image_to_target', 'reorient_image_to_orientation', 'get_image_orientation', 'get_image_shape', 'get_image_resolution',

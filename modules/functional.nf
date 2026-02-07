@@ -25,29 +25,13 @@ process FUNC_REORIENT {
     from nhp_mri_prep.steps.types import StepInput
     from nhp_mri_prep.utils.templates import resolve_template
     from nhp_mri_prep.utils.bids import create_bids_output_filename
-    from nhp_mri_prep.utils.nextflow import load_config, save_metadata, create_output_link, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.nextflow import load_config, save_metadata, create_output_link
     from pathlib import Path
     import shutil
     import os
     
-    # Initialize command log file
-    # Extract task and run from run_identifier if needed (for backward compatibility with logging)
+    # Initialize run_identifier
     run_identifier = '${run_identifier}'
-    # Parse run_identifier to extract task and run for logging
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_REORIENT',
-        task_name=task_name,
-        run=run
-    )
     
     # Load config
     config = load_config('${config_file}')
@@ -124,25 +108,10 @@ process FUNC_SLICE_TIMING {
     from pathlib import Path
     import shutil
     import os
-    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata
     
-    # Initialize command log file
-    # Extract task and run from run_identifier if needed
+    # Initialize run_identifier
     run_identifier = '${run_identifier}'
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_SLICE_TIMING',
-        task_name=task_name,
-        run=run
-    )
     
     # Load config
     from nhp_mri_prep.utils.nextflow import load_config
@@ -243,25 +212,10 @@ process FUNC_MOTION_CORRECTION {
     from pathlib import Path
     import shutil
     import os
-    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata
     
-    # Initialize command log file
-    # Extract task and run from run_identifier if needed
+    # Initialize run_identifier
     run_identifier = '${run_identifier}'
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_MOTION_CORRECTION',
-        task_name=task_name,
-        run=run
-    )
     
     # Load config
     from nhp_mri_prep.utils.nextflow import load_config
@@ -347,7 +301,7 @@ process FUNC_GENERATE_TMEAN {
     \${PYTHON:-python3} <<EOF
     from nhp_mri_prep.utils.mri import calculate_func_tmean
     from nhp_mri_prep.utils.bids import create_bids_output_filename
-    from nhp_mri_prep.utils.nextflow import load_config, save_metadata, create_output_link, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.nextflow import load_config, save_metadata, create_output_link
     from pathlib import Path
     import shutil
     import os
@@ -357,22 +311,8 @@ process FUNC_GENERATE_TMEAN {
     logger = logging.getLogger(__name__)
     logging.basicConfig(level=logging.INFO)
     
-    # Initialize command log file
+    # Initialize run_identifier
     run_identifier = '${run_identifier}'
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_GENERATE_TMEAN',
-        task_name=task_name,
-        run=run
-    )
     
     # Load config
     config = load_config('${config_file}')
@@ -446,25 +386,10 @@ process FUNC_DESPIKE {
     from pathlib import Path
     import shutil
     import os
-    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata
     
-    # Initialize command log file
-    # Extract task and run from run_identifier if needed
+    # Initialize run_identifier
     run_identifier = '${run_identifier}'
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_DESPIKE',
-        task_name=task_name,
-        run=run
-    )
     
     # Load config
     from nhp_mri_prep.utils.nextflow import load_config
@@ -552,25 +477,7 @@ from nhp_mri_prep.utils.bids import create_bids_output_filename, parse_bids_enti
 from pathlib import Path
 import shutil
 import os
-from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
-
-# Initialize command log file
-# Extract task and run from run_identifier if needed
-run_identifier = '${run_identifier}'
-import re
-task_match = re.search(r'task-([^_]+)', run_identifier)
-run_match = re.search(r'run-([^_]+)', run_identifier)
-task_name = task_match.group(1) if task_match else None
-run = run_match.group(1) if run_match else None
-
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='FUNC_BIAS_CORRECTION',
-    task_name=task_name,
-    run=run
-)
+from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata
 
 # Load config
 from nhp_mri_prep.utils.nextflow import load_config
@@ -578,6 +485,7 @@ config = load_config('${config_file}')
 
 # Get original file path (for BIDS filename generation)
 bids_name = Path('${bids_name}')
+run_identifier = '${run_identifier}'
 
 # Create step input (process tmean only)
 input_obj = StepInput(
@@ -644,24 +552,7 @@ process FUNC_COMPUTE_CONFORM {
     import shutil
     import os
     import sys
-    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
-    
-    # Initialize command log file
-    run_identifier = '${run_identifier}'
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_COMPUTE_CONFORM',
-        task_name=task_name,
-        run=run
-    )
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata
     
     # Load config
     from nhp_mri_prep.utils.nextflow import load_config
@@ -669,6 +560,7 @@ process FUNC_COMPUTE_CONFORM {
     
     # Get original file path (for BIDS filename generation)
     bids_name = Path('${bids_name}')
+    run_identifier = '${run_identifier}'
     
     # Check if anatomical brain file is available
     anat_brain_path_str = '${anat_brain_file}'
@@ -779,28 +671,11 @@ process FUNC_APPLY_CONFORM {
     \${PYTHON:-python3} <<EOF
     from nhp_mri_prep.operations.registration import flirt_apply_transforms
     from nhp_mri_prep.utils.bids import create_bids_output_filename
-    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata
     from pathlib import Path
     import sys
     import os
     import shutil
-    
-    # Initialize command log file
-    run_identifier = '${run_identifier}'
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_APPLY_CONFORM',
-        task_name=task_name,
-        run=run
-    )
     
     # Load config
     from nhp_mri_prep.utils.nextflow import load_config
@@ -990,24 +865,7 @@ process FUNC_COMPUTE_BRAIN_MASK {
     from pathlib import Path
     import shutil
     import os
-    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
-    
-    # Initialize command log file
-    run_identifier = '${run_identifier}'
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_COMPUTE_BRAIN_MASK',
-        task_name=task_name,
-        run=run
-    )
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata
     
     # Load config
     from nhp_mri_prep.utils.nextflow import load_config
@@ -1015,6 +873,7 @@ process FUNC_COMPUTE_BRAIN_MASK {
     
     # Get original file path (for BIDS filename generation)
     bids_name = Path('${bids_name}')
+    run_identifier = '${run_identifier}'
     
     # Create step input (process conformed tmean → brain)
     input_obj = StepInput(
@@ -1083,7 +942,7 @@ process FUNC_COMPUTE_REGISTRATION {
     from nhp_mri_prep.steps.types import StepInput
     from nhp_mri_prep.utils.templates import resolve_template
     from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem, parse_bids_entities, create_bids_filename, get_bids_prefix
-    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow
+    from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata
     from nhp_mri_prep.utils import get_image_resolution, run_command
     from pathlib import Path
     import shutil
@@ -1091,29 +950,13 @@ process FUNC_COMPUTE_REGISTRATION {
     import sys
     import numpy as np
     
-    # Initialize command log file
-    run_identifier = '${run_identifier}'
-    import re
-    task_match = re.search(r'task-([^_]+)', run_identifier)
-    run_match = re.search(r'run-([^_]+)', run_identifier)
-    task_name = task_match.group(1) if task_match else None
-    run = run_match.group(1) if run_match else None
-    
-    init_cmd_log_for_nextflow(
-        output_dir='${params.output_dir}',
-        subject_id='${subject_id}',
-        session_id='${session_id}' if '${session_id}' else None,
-        step_name='FUNC_COMPUTE_REGISTRATION',
-        task_name=task_name,
-        run=run
-    )
-    
     # Load config
     from nhp_mri_prep.utils.nextflow import load_config
     config = load_config('${config_file}')
     
     # Get original file path (for BIDS filename generation)
     bids_name = Path('${bids_name}')
+    run_identifier = '${run_identifier}'
     
     # Check if anatomical brain file is available
     anat_brain_path_str = '${anat_brain}'
@@ -1260,7 +1103,7 @@ process FUNC_APPLY_TRANSFORMS {
 from nhp_mri_prep.steps.functional import func_apply_transforms
 from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem, get_bids_prefix
-from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, init_cmd_log_for_nextflow, load_config
+from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, load_config
 from pathlib import Path
 import glob
 import shutil
@@ -1282,26 +1125,10 @@ if not logger.handlers:
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
-# Initialize command log file
-# Extract task and run from run_identifier if needed
-run_identifier = '${run_identifier}'
-task_match = re.search(r'task-([^_]+)', run_identifier)
-run_match = re.search(r'run-([^_]+)', run_identifier)
-task_name = task_match.group(1) if task_match else None
-run = run_match.group(1) if run_match else None
-
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='FUNC_APPLY_TRANSFORMS',
-    task_name=task_name,
-    run=run
-)
-
 # Config already loaded above
 # Get original file path (for BIDS filename generation)
 bids_name = Path('${bids_name}')
+run_identifier = '${run_identifier}'
 
 # Get input parameters
 input_file = Path('${input_file}')
@@ -1780,29 +1607,14 @@ from nhp_mri_prep.steps.functional import func_within_ses_coreg
 from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from nhp_mri_prep.utils.nextflow import (
-    load_config, detect_modality, init_cmd_log_for_nextflow, save_metadata, create_output_link
+    load_config, detect_modality, save_metadata, create_output_link
 )
 from pathlib import Path
 import shutil
 import os
 
-# Initialize command log file
-# Extract task and run from run_identifier if needed
+# Initialize run_identifier
 run_identifier = '${run_identifier}'
-import re
-task_match = re.search(r'task-([^_]+)', run_identifier)
-run_match = re.search(r'run-([^_]+)', run_identifier)
-task_name = task_match.group(1) if task_match else None
-run = run_match.group(1) if run_match else None
-
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='FUNC_WITHIN_SES_COREG',
-    task_name=task_name,
-    run=run
-)
 
 # Load config
 config = load_config('${config_file}')
@@ -1813,7 +1625,6 @@ bids_name = Path('${bids_name}')
 # Get reference tmean and run_identifier
 reference_tmean = Path('${reference_tmean}')
 reference_run_identifier = '${reference_run_identifier}'
-current_run_identifier = '${run_identifier}'
 
 # Get BOLD file
 bold_file = Path('${bold_file}')
@@ -1836,7 +1647,7 @@ result = func_within_ses_coreg(
     input_obj,
     reference_tmean=reference_tmean,
     reference_run=reference_run_identifier,
-    current_run=current_run_identifier,
+    current_run=run_identifier,
     bold_file=bold_file
 )
 
@@ -1909,7 +1720,7 @@ process FUNC_AVERAGE_TMEAN {
 from nhp_mri_prep.steps.functional import func_average_tmean
 from nhp_mri_prep.utils.bids import create_bids_output_filename, parse_bids_entities, create_bids_filename
 from nhp_mri_prep.utils.nextflow import (
-    load_config, init_cmd_log_for_nextflow, save_metadata, create_output_link
+    load_config, save_metadata, create_output_link
 )
 from pathlib import Path
 import shutil
@@ -1917,14 +1728,6 @@ import os
 import json
 import sys
 import ast
-
-# Initialize command log file
-init_cmd_log_for_nextflow(
-    output_dir='${params.output_dir}',
-    subject_id='${subject_id}',
-    session_id='${session_id}' if '${session_id}' else None,
-    step_name='FUNC_AVERAGE_TMEAN'
-)
 
 # Load config
 config = load_config('${config_file}')

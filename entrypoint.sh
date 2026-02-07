@@ -173,6 +173,8 @@ if [ -z "$WORK_DIR" ]; then
 fi
 export NXF_HOME="$WORK_DIR"
 export NXF_WORK="${WORK_DIR}/work"
+# run_brainana.sh CDs here so Nextflow's .nextflow/ (history + cache) persists for resume
+export NXF_LAUNCH_DIR="$WORK_DIR"
 mkdir -p "$NXF_HOME" "$NXF_WORK" 2>/dev/null || true
 # Symlink pre-cached framework JAR so Nextflow doesn't re-download at runtime
 if [ -d /opt/nextflow/framework ] && [ ! -e "$NXF_HOME/framework" ]; then
