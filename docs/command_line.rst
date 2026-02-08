@@ -77,4 +77,4 @@ Summary table
 | -profile                 | (default)        | minimal | recommended for resources        |
 +--------------------------+------------------+------------------------------------------+
 
-For full config options (templates, registration, etc.), see the YAML config schema and ``src/nhp_mri_prep/config/defaults.yaml`` in the repository.
+For full config options (templates, registration, etc.), see the YAML config schema and ``src/nhp_mri_prep/config/defaults.yaml`` in the repository. To build a config interactively, see :doc:`configuration`.

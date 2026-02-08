@@ -66,6 +66,14 @@ RUN mkdir -p /opt/brainana/tmp && \
     TMPDIR=/opt/brainana/tmp uv pip install --no-cache -e . && \
     rm -rf /opt/brainana/tmp
 
+# Clean venv: remove caches and test dirs (~1-2 GB savings)
+RUN find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null; \
+    find /opt/venv -type d -name "tests" -exec rm -rf {} + 2>/dev/null; \
+    find /opt/venv -type d -name "test" -exec rm -rf {} + 2>/dev/null; \
+    find /opt/venv -name "*.pyc" -delete 2>/dev/null; \
+    find /opt/venv -name "*.pyo" -delete 2>/dev/null; \
+    true
+
 #########################
 # Runtime with all libs #
 #########################
@@ -178,7 +186,14 @@ RUN groupadd -g ${GROUP_ID} neuro && \
 ###########
 ENV FSLDIR=/usr/local/fsl
 RUN curl -fsSL "https://fsl.fmrib.ox.ac.uk/fsldownloads/fsl-${FSL_VERSION}-centos7_64.tar.gz" \
-    | tar xz -C /usr/local
+    | tar xz -C /usr/local && \
+    # Prune FSL (~2.75 GB) -- pipeline only uses flirt, mcflirt, fslmaths,
+    # fslstats, fslroi, convert_xfm; none reference $FSLDIR/data/
+    rm -rf ${FSLDIR}/data \
+           ${FSLDIR}/src \
+           ${FSLDIR}/doc \
+           ${FSLDIR}/refdoc \
+           ${FSLDIR}/tcl
 ENV FSLOUTPUTTYPE=NIFTI_GZ \
     FSLMULTIFILEQUIT=TRUE
 
@@ -203,9 +218,33 @@ RUN mkdir -p "${AFNI_HOME}" && \
 ################
 ENV FREESURFER_HOME=/usr/local/freesurfer
 RUN curl -fsSL "https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/${FREESURFER_VERSION}/${FREESURFER_TARBALL}" -o /tmp/freesurfer.tar.gz && \
-    tar --no-same-owner -xzvf /tmp/freesurfer.tar.gz -C /usr/local && \
-    rm /tmp/freesurfer.tar.gz && \
-    rm -rf "${FREESURFER_HOME}/subjects" "${FREESURFER_HOME}/docs" "${FREESURFER_HOME}/matlab" "${FREESURFER_HOME}/trctrain" 2>/dev/null || true
+    tar --no-same-owner -xzf /tmp/freesurfer.tar.gz -C /usr/local && \
+    rm -f /tmp/freesurfer.tar.gz && \
+    # ---- Prune FreeSurfer (keep python: recon-all uses python/scripts e.g. rca-config) ----
+    # Remove ML models (1.9 GB) -- pipeline uses own fastsurfer_nn models
+    rm -rf "${FREESURFER_HOME}/models" && \
+    # Remove dirs not used by pipeline
+    rm -rf "${FREESURFER_HOME}/subjects" \
+           "${FREESURFER_HOME}/docs" \
+           "${FREESURFER_HOME}/matlab" \
+           "${FREESURFER_HOME}/trctrain" \
+           "${FREESURFER_HOME}/fsfast" \
+           "${FREESURFER_HOME}/tktools" \
+           "${FREESURFER_HOME}/diffusion" && \
+    # Prune average/ (4.0 GB -> ~1.45 GB) -- remove only standalone feature dirs;
+    # keep all .gca/.gcs/.tif/.4dfp atlas files needed by recon-all & talairach_avi
+    rm -rf "${FREESURFER_HOME}/average/mult-comp-cor" \
+           "${FREESURFER_HOME}/average/samseg" \
+           "${FREESURFER_HOME}/average/mideface-atlas" \
+           "${FREESURFER_HOME}/average/Yeo_Brainmap_MNI152" \
+           "${FREESURFER_HOME}/average/Buckner_JNeurophysiol11_MNI152" \
+           "${FREESURFER_HOME}/average/Yeo_JNeurophysiol11_MNI152" \
+           "${FREESURFER_HOME}/average/Choi_JNeurophysiol12_MNI152" \
+           "${FREESURFER_HOME}/average/HippoSF" \
+           "${FREESURFER_HOME}/average/ThalamicNuclei" \
+           "${FREESURFER_HOME}/average/BrainstemSS" && \
+    rm -f "${FREESURFER_HOME}"/average/SVIP_*.4dfp.* \
+          "${FREESURFER_HOME}"/average/RLB700_atlas_as_orig.4dfp.*
 
 ##############
 # Environment
@@ -277,7 +316,7 @@ if [ "$PS1" ]; then\n\
     echo "--------------------------------------------------------------------------------"\n\
     echo "Usage Examples:"\n\
     echo "  ./run_brainana.sh run main.nf --bids_dir /data --output_dir /output"\n\
-    echo "  python3 -m nhp_mri_prep.config.config_generator_cli"\n\
+    echo "  (Config generator: open docs/_static/config_generator.html in a browser)"\n\
     echo "================================================================================"\n\
 fi\n' \
     "${FSLDIR}" "${AFNI_HOME}" "${AFNIPATH}" "${ANTSPATH}" "${FREESURFER_HOME}" "${FS_LICENSE}" \
@@ -317,13 +356,13 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 ENV MPLCONFIGDIR=/tmp/matplotlib \
     PYTHONPYCACHEPREFIX=/tmp/pycache
 
-COPY --from=python-builder /opt/venv /opt/venv
-COPY --from=python-builder /opt/brainana /opt/brainana
+COPY --chmod=755 --from=python-builder /opt/venv /opt/venv
+COPY --chmod=755 --from=python-builder /opt/brainana /opt/brainana
 
 # World-writable temp dirs so any UID (via -u or gosu) can use them
 RUN mkdir -p /tmp/matplotlib /tmp/pycache /tmp/.X11-unix /tmp/home && \
     chmod 1777 /tmp/matplotlib /tmp/pycache /tmp/.X11-unix /tmp/home && \
-    chmod -R 755 /opt/brainana /opt/venv /home/neuro && \
+    chmod -R 755 /home/neuro && \
     chmod +x /opt/brainana/entrypoint.sh
 
 # Pre-generate matplotlib font cache at build time so any UID can read it.

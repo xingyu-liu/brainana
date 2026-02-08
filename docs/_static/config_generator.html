@@ -71,7 +71,7 @@
         }
         h1 {
             color: #000000;
-            border-bottom: 3px solid #000000;
+            border-bottom: 3px solid #fff999;
             padding-bottom: 12px;
             font-weight: 600;
             font-size: 1.35rem;
@@ -164,7 +164,7 @@
         .step .param-row { margin-bottom: 0; }
         .step .help-text { margin-top: 2px; margin-bottom: 0; }
         .generator-section {
-            border-top: 3px solid #000000;
+            border-top: 3px solid #fff999;
             margin-top: 32px;
             padding-top: 24px;
         }
@@ -173,6 +173,7 @@
             color: #666666;
             cursor: pointer;
             margin: 12px 0 6px 0;
+            margin-left: 24px;
             user-select: none;
             display: block;
         }
@@ -183,14 +184,24 @@
             margin-top: 8px;
             margin-left: 24px;
             padding: 16px 0 0 0;
-            border-top: 1px solid #d0d0d0;
             display: none;
         }
         .advanced-settings.visible { display: block; }
         .advanced-settings .param-block { margin-bottom: 14px; }
         .advanced-settings .param-block:last-child { margin-bottom: 0; }
-        .advanced-settings .advanced-settings,
+        .advanced-settings .advanced-settings {
+            margin-left: 24px;
+        }
         #anat_fastSurferCNN_options {
+            margin-left: 0;
+        }
+        #anat_fastSurferCNN_options h4 {
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+            margin-left: 30px;  /* 22px param-check + 8px gap = align with param-row label */
+        }
+        #anat_fastSurferCNN_options > .param-block {
             margin-left: 24px;
         }
         button {
@@ -206,6 +217,7 @@
         button#generate {
             font-size: 16px;
             font-weight: 700;
+            color: #fff999;
             width: 100%;
             text-align: center;
         }
@@ -312,7 +324,7 @@
                         <input type="text" id="bids_sessions" name="bids_sessions" placeholder='e.g., "01", "02"'>
                     </span>
                 </div>
-                <span class="help-text">(comma-separated, leave empty for null)</span>
+                <span class="help-text">(comma-separated, leave empty for processing all)</span>
             </div>
             <div class="param-block">
                 <div class="param-row">
@@ -322,7 +334,7 @@
                         <input type="text" id="bids_tasks" name="bids_tasks" placeholder='e.g., "rest", "task"'>
                     </span>
                 </div>
-                <span class="help-text">(comma-separated, leave empty for null)</span>
+                <span class="help-text">(comma-separated, leave empty for processing all)</span>
             </div>
             <div class="param-block">
                 <div class="param-row">
@@ -332,7 +344,7 @@
                         <input type="text" id="bids_runs" name="bids_runs" placeholder='e.g., "01", "02"'>
                     </span>
                 </div>
-                <span class="help-text">(comma-separated, leave empty for null)</span>
+                <span class="help-text">(comma-separated, leave empty for processing all)</span>
             </div>
         </div>
 
@@ -345,17 +357,17 @@
                     <label for="template_output_space">output_space</label>
                     <span class="param-control">
                         <select id="template_output_space" name="template_output_space">
-                            <option value="T1w">T1w</option>
-                            <option value="D99:res-025">D99:res-025</option>
-                            <option value="MEBRAIN:res-04">MEBRAIN:res-04</option>
-                            <option value="NMT2Asym:res-05">NMT2Asym:res-05</option>
-                            <option value="NMT2Sym:res-025">NMT2Sym:res-025</option>
                             <option value="NMT2Sym:res-05" selected>NMT2Sym:res-05</option>
+                            <option value="NMT2Sym:res-025">NMT2Sym:res-025</option>
                             <option value="NMT2Sym:res-1">NMT2Sym:res-1</option>
+                            <option value="NMT2Asym:res-05">NMT2Asym:res-05</option>
+                            <option value="MEBRAIN:res-04">MEBRAIN:res-04</option>
+                            <option value="D99:res-025">D99:res-025</option>
+                            <option value="T1w">T1w</option>
                         </select>
                     </span>
                 </div>
-                <span class="help-text">(template space; options from template_zoo *_T1w_brain.nii.gz)</span>
+                <span class="help-text">(T1w space or template space in format "TEMPLATE_NAME:[:DESCRIPTION]")</span>
             </div>
         </div>
 
@@ -385,7 +397,7 @@
                     <span class="param-control"></span>
                 </div>
                 <span class="help-text">(perform bias field correction.)</span>
-                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="anat_bias_correction_advanced">
                     <div class="param-block">
                         <div class="param-row">
@@ -436,7 +448,7 @@
                     <span class="param-control"></span>
                 </div>
                 <span class="help-text">(highly recommended. Perform brain extraction and segmentation.)</span>
-                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="anat_skullstripping_advanced">
                     <div class="param-block">
                         <div class="param-row">
@@ -519,7 +531,7 @@
                     <span class="param-control"></span>
                 </div>
                 <span class="help-text">(perform surface reconstruction.)</span>
-                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="anat_surface_reconstruction_advanced">
                     <div class="param-block">
                         <div class="param-row">
@@ -559,37 +571,37 @@
                     <span class="param-control"></span>
                 </div>
                 <span class="help-text">(perform slice timing correction.)</span>
-                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="func_slice_timing_advanced">
                     <div class="param-block">
                         <div class="param-row">
                             <span class="param-check"></span>
                             <label for="func_slice_timing_correction_repetition_time">repetition_time</label>
                             <span class="param-control">
-                                <input type="number" id="func_slice_timing_correction_repetition_time" name="func_slice_timing_correction_repetition_time" step="0.001" min="0">
+                                <input type="number" id="func_slice_timing_correction_repetition_time" name="func_slice_timing_correction_repetition_time" step="0.001" min="0" placeholder="auto-detect from metadata">
                             </span>
                         </div>
-                        <span class="help-text">(repetition time in seconds, leave empty for null/auto-detect from BIDS)</span>
+                        <span class="help-text">(repetition time in seconds, leave empty for auto-detect from metadata)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
                             <span class="param-check"></span>
                             <label for="func_slice_timing_correction_slice_timing">slice_timing</label>
                             <span class="param-control">
-                                <input type="text" id="func_slice_timing_correction_slice_timing" name="func_slice_timing_correction_slice_timing" placeholder="e.g., 0.0, 0.1, 0.2">
+                                <input type="text" id="func_slice_timing_correction_slice_timing" name="func_slice_timing_correction_slice_timing" placeholder="auto-detect from metadata">
                             </span>
                         </div>
-                        <span class="help-text">(list of floats: slice times in seconds, leave empty for null/auto-detect from BIDS)</span>
+                        <span class="help-text">(list of floats: slice times in seconds, leave empty for auto-detect from metadata)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
                             <span class="param-check"></span>
                             <label for="func_slice_timing_correction_tzero">tzero</label>
                             <span class="param-control">
-                                <input type="number" id="func_slice_timing_correction_tzero" name="func_slice_timing_correction_tzero" step="0.001">
+                                <input type="number" id="func_slice_timing_correction_tzero" name="func_slice_timing_correction_tzero" step="0.001" placeholder="auto-calculate from metadata">
                             </span>
                         </div>
-                        <span class="help-text">(reference time point in seconds, leave empty for null/auto-calculate)</span>
+                        <span class="help-text">(reference time point in seconds, leave empty for auto-calculate from metadata)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -607,7 +619,7 @@
                             <label for="func_slice_timing_correction_slice_encoding_direction">slice_encoding_direction</label>
                             <span class="param-control">
                                 <select id="func_slice_timing_correction_slice_encoding_direction" name="func_slice_timing_correction_slice_encoding_direction">
-                                    <option value="">null (auto-detect)</option>
+                                    <option value="">auto-detect from metadata</option>
                                     <option value="x">x</option>
                                     <option value="-x">-x</option>
                                     <option value="y">y</option>
@@ -617,7 +629,7 @@
                                 </select>
                             </span>
                         </div>
-                        <span class="help-text">("x", "-x", "y", "-y", "z", "-z", or null/auto-detect from BIDS)</span>
+                        <span class="help-text">("x", "-x", "y", "-y", "z", "-z", or auto-detect from metadata)</span>
                     </div>
                 </div>
             </div>
@@ -628,7 +640,7 @@
                     <span class="param-control"></span>
                 </div>
                 <span class="help-text">(perform motion correction.)</span>
-                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="func_motion_correction_advanced">
                     <div class="param-block">
                         <div class="param-row">
@@ -710,7 +722,7 @@
                     <span class="param-control"></span>
                 </div>
                 <span class="help-text">(perform despiking/outlier removal.)</span>
-                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="func_despike_advanced">
                     <div class="param-block">
                         <div class="param-row">
@@ -759,7 +771,7 @@
                     <span class="param-control"></span>
                 </div>
                 <span class="help-text">(perform bias field correction on tmean image for better registration.)</span>
-                <div class="advanced-toggle" onclick="toggleAdvanced(this)">Advanced settings</div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="func_bias_correction_advanced">
                     <div class="param-block">
                         <div class="param-row">
@@ -809,7 +821,7 @@
                     <label for="func_conform_enabled">conform</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(highly recommended. Conform functional tmean image to target space using FLIRT rigid registration.)</span>
+                <span class="help-text">(HIGHLY RECOMMENDED. Conform functional tmean image to target space using FLIRT rigid registration.)</span>
             </div>
             <div class="step">
                 <div class="param-row">
@@ -817,7 +829,7 @@
                     <label for="func_skullstripping_enabled">skullstripping</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(highly recommended. Perform brain extraction.)</span>
+                <span class="help-text">(HIGHLY RECOMMENDED. Perform brain extraction.)</span>
             </div>
         </div>
 
@@ -918,9 +930,9 @@
     </div>
 
     <script>
-        // Default configuration embedded from defaults.yaml
+        // Configuration embedded from defaults.yaml
         const defaults = {
-            _description: "Default configuration for brainana preprocessing pipeline",
+            _description: "Configuration for brainana preprocessing pipeline",
             general: {
                 verbose: 2,
                 anat_only: false

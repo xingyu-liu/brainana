@@ -138,7 +138,7 @@ docker run -it --rm \
 ```
 
 **Inside the container:**
-- **Launch Config Generator (GUI):** `python3 -m nhp_mri_prep.config.config_generator_cli --dataset-dir /data`
+- **Config generator:** Open `docs/_static/config_generator.html` in a browser (from the mounted repo or from the docs).
 - **Run pipeline manually:** `./run_brainana.sh run main.nf --bids_dir /data --output_dir /output --config_file /opt/brainana/src/nhp_mri_prep/config/defaults.yaml`
 - **Neuroimaging tools:** `fsl`, `afni`, `antsRegistration`, `freeview`, `wb_view` are available.
 

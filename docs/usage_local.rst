@@ -143,7 +143,7 @@ For debugging or running the config generator GUI:
 
    Inside the container you can:
 
-   - Launch the config generator: ``python3 -m nhp_mri_prep.config.config_generator_cli --dataset-dir /data``
+   - Open the config generator: see :doc:`configuration` (Generate your own config) or open ``docs/_static/config_generator.html`` in the repo in a browser.
    - Run the pipeline manually: ``./run_brainana.sh run main.nf --bids_dir /data --output_dir /output --config_file /opt/brainana/src/nhp_mri_prep/config/defaults.yaml``
 
 For common issues (X server, GPU, config file, license), see :doc:`faq`.

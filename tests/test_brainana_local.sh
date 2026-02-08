@@ -45,7 +45,8 @@ OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_dow
 # BIDS_DIR=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/site-newcastle
 # OUTPUT_DIR=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-newcastle
 
-CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_easy.yaml"
+CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_easy_generated.yaml"
+# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_easy.yaml"
 # CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_UNC.yaml"
 # CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_MEBRAIN.yaml"
 # CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_common.yaml"

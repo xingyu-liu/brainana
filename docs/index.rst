@@ -24,6 +24,7 @@ Contents
    installation
    usage_local
    command_line
+   configuration
    outputs
    processing
    faq

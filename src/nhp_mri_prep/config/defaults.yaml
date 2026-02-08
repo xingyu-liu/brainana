@@ -52,11 +52,11 @@ func:
   coreg_runs_within_session: true
   slice_timing_correction:
     enabled: true  # bool: perform slice timing correction
-    repetition_time: null  # float: repetition time in seconds, or null (auto-detect from BIDS)
-    slice_timing: null  # list of floats: slice times in seconds, or null (auto-detect from BIDS)
+    repetition_time: null  # float: repetition time in seconds, or null (auto-detect from metadata)
+    slice_timing: null  # list of floats: slice times in seconds, or null (auto-detect from metadata)
     tzero: null  # float: reference time point in seconds, or null (auto-calculate)
     slice_time_ref: 0.5  # float: reference slice time (0.0-1.0), 0.5 = middle slice
-    slice_encoding_direction: null  # str: "x", "-x", "y", "-y", "z", "-z", or null (auto-detect from BIDS)
+    slice_encoding_direction: null  # str: "x", "-x", "y", "-y", "z", "-z", or null (auto-detect from metadata)
   reorient:
     enabled: false  # bool: reorient functional images to template orientation when given, otherwise to RAS.  When conform is enabled, reorient is not needed.
   motion_correction:
