@@ -74,19 +74,6 @@ RUN find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null; \
     find /opt/venv -name "*.pyo" -delete 2>/dev/null; \
     true
 
-###########################
-# FreeSurfer (exclude-list extract)
-###########################
-FROM debian:bookworm-slim AS freesurfer-download
-ARG DEBIAN_FRONTEND=noninteractive
-ARG FREESURFER_VERSION=7.4.1
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-COPY docker/files/freesurfer7.4.1-exclude.txt /tmp/freesurfer-exclude.txt
-RUN curl -fsSL "https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/${FREESURFER_VERSION}/freesurfer-linux-ubuntu22_amd64-${FREESURFER_VERSION}.tar.gz" \
-    | tar --no-same-owner -xzf - -C /usr/local --exclude-from=/tmp/freesurfer-exclude.txt
-
 #########################
 # Runtime with all libs #
 #########################
@@ -94,6 +81,8 @@ FROM debian:bookworm-slim
 
 ARG DEBIAN_FRONTEND
 ARG FSL_VERSION=6.0.5.1
+ARG FREESURFER_VERSION=7.4.1
+ARG FREESURFER_TARBALL=freesurfer-linux-ubuntu22_amd64-${FREESURFER_VERSION}.tar.gz
 ARG AFNI_TARBALL=linux_rocky_8.tgz
 
 # Install uv (pinned version for reproducibility)
@@ -223,10 +212,39 @@ RUN mkdir -p "${AFNI_HOME}" && \
       | tar xz -C "${AFNI_HOME}" --strip-components=1
 
 ################
-# FreeSurfer (slim install via exclude list; see docker/files/freesurfer7.4.1-exclude.txt)
+# Install FreeSurfer
+# Ubuntu 22 build is the best match for Debian bookworm (similar glibc 2.35/2.36).
+# See https://surfer.nmr.mgh.harvard.edu/fswiki/rel7downloads
 ################
-COPY --link --from=freesurfer-download /usr/local/freesurfer /usr/local/freesurfer
 ENV FREESURFER_HOME=/usr/local/freesurfer
+RUN curl -fsSL "https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/${FREESURFER_VERSION}/${FREESURFER_TARBALL}" -o /tmp/freesurfer.tar.gz && \
+    tar --no-same-owner -xzf /tmp/freesurfer.tar.gz -C /usr/local && \
+    rm -f /tmp/freesurfer.tar.gz && \
+    # ---- Prune FreeSurfer (keep python: recon-all uses python/scripts e.g. rca-config) ----
+    # Remove ML models (1.9 GB) -- pipeline uses own fastsurfer_nn models
+    rm -rf "${FREESURFER_HOME}/models" && \
+    # Remove dirs not used by pipeline
+    rm -rf "${FREESURFER_HOME}/subjects" \
+           "${FREESURFER_HOME}/docs" \
+           "${FREESURFER_HOME}/matlab" \
+           "${FREESURFER_HOME}/trctrain" \
+           "${FREESURFER_HOME}/fsfast" \
+           "${FREESURFER_HOME}/tktools" \
+           "${FREESURFER_HOME}/diffusion" && \
+    # Prune average/ (4.0 GB -> ~1.45 GB) -- remove only standalone feature dirs;
+    # keep all .gca/.gcs/.tif/.4dfp atlas files needed by recon-all & talairach_avi
+    rm -rf "${FREESURFER_HOME}/average/mult-comp-cor" \
+           "${FREESURFER_HOME}/average/samseg" \
+           "${FREESURFER_HOME}/average/mideface-atlas" \
+           "${FREESURFER_HOME}/average/Yeo_Brainmap_MNI152" \
+           "${FREESURFER_HOME}/average/Buckner_JNeurophysiol11_MNI152" \
+           "${FREESURFER_HOME}/average/Yeo_JNeurophysiol11_MNI152" \
+           "${FREESURFER_HOME}/average/Choi_JNeurophysiol12_MNI152" \
+           "${FREESURFER_HOME}/average/HippoSF" \
+           "${FREESURFER_HOME}/average/ThalamicNuclei" \
+           "${FREESURFER_HOME}/average/BrainstemSS" && \
+    rm -f "${FREESURFER_HOME}"/average/SVIP_*.4dfp.* \
+          "${FREESURFER_HOME}"/average/RLB700_atlas_as_orig.4dfp.*
 
 ##############
 # Environment
@@ -241,8 +259,6 @@ ENV ANTSPATH=/opt/ants/bin/ \
 
 ENV PATH=${FSLDIR}/bin:${AFNI_HOME}:${ANTSPATH}:${FREESURFER_HOME}/bin:${JAVA_HOME}/bin:${PATH}
 ENV LD_LIBRARY_PATH=/opt/ants/lib:${FSLDIR}/lib
-# Note: FSFAST_HOME, FMRI_ANALYSIS_DIR, FUNCTIONALS_DIR intentionally omitted
-# because fsfast/ and sessions/ are excluded from the slim FreeSurfer install.
 ENV SUBJECTS_DIR=${FREESURFER_HOME}/subjects \
     LOCAL_DIR=${FREESURFER_HOME}/local \
     FS_OVERRIDE=0 \
@@ -250,6 +266,9 @@ ENV SUBJECTS_DIR=${FREESURFER_HOME}/subjects \
     FSF_OUTPUT_FORMAT=nii.gz \
     OS=Linux \
     FREESURFER=${FREESURFER_HOME} \
+    FSFAST_HOME=${FREESURFER_HOME}/fsfast \
+    FMRI_ANALYSIS_DIR=${FREESURFER_HOME}/fsfast \
+    FUNCTIONALS_DIR=${FREESURFER_HOME}/sessions \
     MINC_BIN_DIR=${FREESURFER_HOME}/mni/bin \
     MINC_LIB_DIR=${FREESURFER_HOME}/mni/lib \
     MNI_DIR=${FREESURFER_HOME}/mni \
