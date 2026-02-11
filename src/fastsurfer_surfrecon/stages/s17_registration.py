@@ -26,10 +26,12 @@ def _template_paths(config, hemi: str):
         annot = template_dir / "label" / f"{hemi}.aparc.{config.atlas.name}atlas.mapped.annot"
         folding_atlas = template_dir / "atlas" / f"{hemi}.folding.atlas.tif"
         return sphere, annot, folding_atlas, True  # use_custom_template
+    
     fs_home = get_fs_home()
-    sphere = fs_home / "subjects" / "fsaverage" / "surf" / f"{hemi}.sphere"
-    annot = fs_home / "subjects" / "fsaverage" / "label" / f"{hemi}.aparc.annot"
-    folding_atlas = fs_home / "average" / f"{hemi}.folding.atlas.acfb40.noaparc.i12.2016-08-02.tif"
+    sphere = None # fs_home / "subjects" / "fsaverage" / "surf" / f"{hemi}.sphere"
+    annot = None # fs_home / "subjects" / "fsaverage" / "label" / f"{hemi}.aparc.annot"
+    folding_atlas = None # fs_home / "average" / f"{hemi}.folding.atlas.acfb40.noaparc.i12.2016-08-02.tif"
+    
     return sphere, annot, folding_atlas, False
 
 

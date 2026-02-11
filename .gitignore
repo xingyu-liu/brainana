@@ -61,3 +61,6 @@ work/
 null/
 *.nextflow.log
 *.nextflow.log.*
+
+# Sphinx build output
+doc/_build/

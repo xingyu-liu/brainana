@@ -223,9 +223,11 @@ RUN mkdir -p "${AFNI_HOME}" && \
       | tar xz -C "${AFNI_HOME}" --strip-components=1
 
 ################
-# FreeSurfer (slim install via exclude list; see docker/files/freesurfer7.4.1-exclude.txt)
+# FreeSurfer (slim install via exclude list; subjects/ excluded for NHP)
 ################
 COPY --link --from=freesurfer-download /usr/local/freesurfer /usr/local/freesurfer
+# Empty subjects dir so SUBJECTS_DIR exists (pipeline uses custom template only)
+RUN mkdir -p /usr/local/freesurfer/subjects
 ENV FREESURFER_HOME=/usr/local/freesurfer
 
 ##############

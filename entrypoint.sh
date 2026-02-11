@@ -87,8 +87,38 @@ fi
 # From here on we run as the target user (or root if output is root-owned)
 ##############################################################################
 
-# FreeSurfer license: user mounts to /fs_license.txt
-export FS_LICENSE="${FS_LICENSE:-/fs_license.txt}"
+# FreeSurfer license: only set when --freesurfer-license is passed (see arg parsing below).
+
+# FreeSurfer license validity probe (runs when surface recon enabled and --freesurfer-license given).
+# This runs a lightweight mri_convert on a small built-in average file to trigger
+# FreeSurfer's own license checks without touching user data.
+freesurfer_license_probe() {
+    # Only run if the core FreeSurfer average file exists (defensive against
+    # unexpected install layouts or future image changes).
+    local probe_input="${FREESURFER_HOME:-/usr/local/freesurfer}/average/pons.mni152.2mm.mgz"
+    local probe_output="/tmp/brainana_fs_license_test.nii.gz"
+    local probe_log="/tmp/brainana_fs_license_probe.log"
+
+    if [ ! -f "$probe_input" ]; then
+        # If the reference file is missing, don't block the pipeline here;
+        # FreeSurfer will fail later in a more obvious way.
+        return 0
+    fi
+
+    # Run a small conversion to trigger license validation. Capture all output
+    # so we can surface FreeSurfer's own error message if the license is bad.
+    if ! mri_convert "$probe_input" "$probe_output" >"$probe_log" 2>&1; then
+        echo "ERROR: FreeSurfer license check failed for FS_LICENSE=$FS_LICENSE" >&2
+        if [ -s "$probe_log" ]; then
+            # Echo the underlying FreeSurfer error (e.g. license missing/invalid)
+            cat "$probe_log" >&2
+        fi
+        rm -f "$probe_output" "$probe_log"
+        exit 1
+    fi
+
+    rm -f "$probe_output" "$probe_log"
+}
 
 # We are inside the container - do NOT spawn nested Docker for Nextflow processes
 export NXF_NO_DOCKER=1
@@ -115,6 +145,7 @@ CONFIG="$DEFAULT_CONFIG"
 WORK_DIR=""   # empty = use default after OUTPUT_DIR is validated
 RESUME_BY_DEFAULT=1
 EXTRA_ARGS=()
+FS_LICENSE_PATH=""
 i=3
 while [ $i -le $# ]; do
     arg="${!i}"
@@ -128,11 +159,25 @@ while [ $i -le $# ]; do
         [ $i -le $# ] && WORK_DIR="${!i}"
     elif [[ "$arg" == --no-resume ]]; then
         RESUME_BY_DEFAULT=0
+    elif [[ "$arg" == --freesurfer-license=* ]]; then
+        FS_LICENSE_PATH="${arg#*=}"
+        EXTRA_ARGS+=("$arg")
+    elif [[ "$arg" == --freesurfer-license ]]; then
+        EXTRA_ARGS+=("$arg")
+        ((i++))
+        [ $i -le $# ] && FS_LICENSE_PATH="${!i}" && EXTRA_ARGS+=("${!i}")
     else
         EXTRA_ARGS+=("$arg")
     fi
     ((i++))
 done
+
+# FS_LICENSE is only set when --freesurfer-license is passed; otherwise unset (no default).
+if [ -n "$FS_LICENSE_PATH" ]; then
+    export FS_LICENSE="$FS_LICENSE_PATH"
+else
+    unset FS_LICENSE
+fi
 
 # Allow interactive shell override
 if [ $# -gt 0 ]; then
@@ -184,10 +229,64 @@ if [ "$RESUME_BY_DEFAULT" -eq 1 ]; then
     EXTRA_ARGS+=("-resume")
 fi
 
-if [ ! -f "$FS_LICENSE" ]; then
-    echo "WARNING: FreeSurfer license not found at $FS_LICENSE" >&2
-    echo "         Mount with: -v /path/to/license.txt:/fs_license.txt" >&2
-    echo "         Surface reconstruction may fail without a valid license." >&2
+# Determine whether surface reconstruction is enabled in the config.
+# We prefer the user config file, falling back to defaults.yaml if needed.
+SURF_RECON_ENABLED="$(
+python3 - "$CONFIG" "$DEFAULT_CONFIG" << 'PY'
+import sys
+from pathlib import Path
+
+try:
+    import yaml  # type: ignore
+except Exception:
+    # If PyYAML is somehow unavailable, be conservative: assume enabled.
+    print("true")
+    sys.exit(0)
+
+user_cfg_path = Path(sys.argv[1])
+default_cfg_path = Path(sys.argv[2])
+
+def load_yaml(p: Path):
+    if not p.is_file():
+        return {}
+    try:
+        with p.open("r") as f:
+            return yaml.safe_load(f) or {}
+    except Exception:
+        return {}
+
+cfg = load_yaml(default_cfg_path)
+user_cfg = load_yaml(user_cfg_path)
+
+# Shallow-merge anat.surface_reconstruction.enabled if present in user config.
+anat = cfg.get("anat") or {}
+user_anat = user_cfg.get("anat") or {}
+surf = anat.get("surface_reconstruction") or {}
+user_surf = user_anat.get("surface_reconstruction") or {}
+
+enabled = surf.get("enabled", True)
+if "enabled" in user_surf:
+    enabled = bool(user_surf["enabled"])
+
+print("true" if enabled else "false")
+PY
+)"
+
+# FreeSurfer license policy:
+# - Surface reconstruction DISABLED -> no license handling.
+# - Surface reconstruction ENABLED -> must pass --freesurfer-license; then check file exists and run probe.
+if [ "$SURF_RECON_ENABLED" = "true" ]; then
+    if [ -z "$FS_LICENSE_PATH" ]; then
+        echo "ERROR: Surface reconstruction is enabled but --freesurfer-license was not provided." >&2
+        echo "       Pass --freesurfer-license /path/to/license.txt (mount with -v /host/license.txt:/path/to/license.txt)" >&2
+        exit 1
+    fi
+    if [ ! -f "$FS_LICENSE" ]; then
+        echo "ERROR: Surface reconstruction is enabled but FreeSurfer license file was not found at $FS_LICENSE." >&2
+        echo "       Ensure the license file is mounted and the path matches --freesurfer-license." >&2
+        exit 1
+    fi
+    freesurfer_license_probe
 fi
 
 cd "$PROJECT_ROOT"

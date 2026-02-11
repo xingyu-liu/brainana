@@ -31,8 +31,7 @@
 #   surf/ directory, mni305.*, mni152.*, colortable_*, label_scales.dat,
 #   tissue_parms.txt, pons.mni152.2mm.mgz, rigidly_aligned_brain_template.tif
 #
-# subjects/:
-#   fsaverage (needed for surface registration)
+# subjects/: excluded (NHP pipeline uses custom template only; no built-in fsaverage)
 #
 # Other kept:
 #   FreeSurferColorLUT.txt, SubCorticalMassLUT.txt, ASegStatsLUT.txt,
@@ -851,18 +850,7 @@ freesurfer/SetUpFreeSurfer.csh
 freesurfer/SetUpFreeSurfer.sh
 freesurfer/Simple_surface_labels2009.txt
 freesurfer/sources.sh
-freesurfer/subjects/bert
-freesurfer/subjects/cvs_avg35
-freesurfer/subjects/cvs_avg35_inMNI152
-freesurfer/subjects/fsaverage3
-freesurfer/subjects/fsaverage4
-freesurfer/subjects/fsaverage_sym
-freesurfer/subjects/lh.EC_average
-freesurfer/subjects/README
-freesurfer/subjects/rh.EC_average
-freesurfer/subjects/sample-001.mgz
-freesurfer/subjects/sample-002.mgz
-freesurfer/subjects/V1_average
+freesurfer/subjects
 freesurfer/tkmeditParcColorsCMA
 freesurfer/tktools
 freesurfer/trctrain
