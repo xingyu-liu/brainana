@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""FireANTs registration using the Python API (quickstart-style).
+
+Pipeline: load images -> affine registration -> deformable (greedy) registration
+-> save moved image and ANTs-format warp.
+
+See: https://fireants.readthedocs.io/en/latest/quickstart/
+"""
+# %%
+import os
+import time
+
+import torch
+
+from fireants.io import BatchedImages, FakeBatchedImages, Image
+from fireants.registration.affine import AffineRegistration
+from fireants.registration.greedy import GreedyRegistration
+
+# %%
+def main() -> None:
+    work_dir = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/fireants"
+    fixed_path = os.path.join(work_dir, "fixed.nii.gz")
+    moving_path = os.path.join(work_dir, "moving.nii.gz")
+    output_dir = os.path.join(work_dir, "results/registration")
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    if device == "cpu":
+        print("Warning: CUDA not available, using CPU.")
+
+    # Load images and batchify (quickstart: Image.load_file + BatchedImages)
+    fixed_image = Image.load_file(fixed_path)
+    moving_image = Image.load_file(moving_path)
+    batch_fixed = BatchedImages([fixed_image])
+    batch_moving = BatchedImages([moving_image])
+
+    # Registration parameters (aligned with quickstart)
+    scales = [4, 2, 1]
+    iterations_affine = [200, 100, 50]
+    iterations_deformable = [200, 100, 25]
+    optim = "Adam"
+    lr_affine = 3e-3
+    lr_deformable = 0.5
+    cc_kernel_size = 5
+
+    # Affine registration (good initial alignment for deformable)
+    affine = AffineRegistration(
+        scales,
+        iterations_affine,
+        batch_fixed,
+        batch_moving,
+        optimizer=optim,
+        optimizer_lr=lr_affine,
+        cc_kernel_size=cc_kernel_size,
+    )
+    start = time.perf_counter()
+    affine.optimize()
+    if device.startswith("cuda"):
+        torch.cuda.synchronize()
+    print(f"Affine registration: {time.perf_counter() - start:.1f}s")
+
+    # Deformable registration (initialized with affine result)
+    reg = GreedyRegistration(
+        scales=scales,
+        iterations=iterations_deformable,
+        fixed_images=batch_fixed,
+        moving_images=batch_moving,
+        cc_kernel_size=cc_kernel_size,
+        deformation_type="compositive",
+        smooth_grad_sigma=1,
+        optimizer="adam",
+        optimizer_lr=lr_deformable,
+        init_affine=affine.get_affine_matrix().detach(),
+    )
+    start = time.perf_counter()
+    reg.optimize()
+    if device.startswith("cuda"):
+        torch.cuda.synchronize()
+    print(f"Deformable registration: {time.perf_counter() - start:.1f}s")
+
+    # Moved image
+    moved = reg.evaluate(batch_fixed, batch_moving)
+
+    # Save moved image (FakeBatchedImages uses fixed metadata + moved content)
+    moved_batch = FakeBatchedImages(moved, batch_fixed)
+    out_moved = os.path.join(output_dir, "moved.nii.gz")
+    moved_batch.write_image(out_moved)
+    print(f"Wrote {out_moved}")
+
+    # Save warp in ANTs format (for antsApplyTransforms)
+    out_warp = os.path.join(output_dir, "warp.nii.gz")
+    reg.save_as_ants_transforms(out_warp)
+    print(f"Wrote {out_warp}")
+
+
+if __name__ == "__main__":
+    main()
+
+# %%

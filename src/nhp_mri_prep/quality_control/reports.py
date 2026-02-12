@@ -404,9 +404,6 @@ class HtmlGenerator:
             t2w_count = anat_counts["t2w"]
             func_count = HtmlGenerator._count_unique_images(organized["functional"])
 
-        # Field mapping count from snapshots (not tracked in job counts)
-        fmap_count = HtmlGenerator._count_unique_images(organized["field_mapping"])
-
         # Build structural images description
         structural_desc = []
         if t1w_count and t1w_count != "N/A" and t1w_count > 0:
@@ -429,7 +426,7 @@ class HtmlGenerator:
         )
         output_space_display = str(output_space_raw).split(":")[0] if output_space_raw else "NMT2Sym"
 
-        # FreeSurfer: show "Applicable" if this report includes surface reconstruction QC
+        # Surface reconstruction: show "Applicable" if this report includes surface reconstruction QC
         has_surf = HtmlGenerator._has_surface_recon_snapshots(organized["anatomical"])
         freesurfer_text = "Applicable" if has_surf else "Not applicable"
 
@@ -441,10 +438,8 @@ please refer to the nhp_mri_prep configuration files in your preprocessing direc
 <li>Subject ID: {subject_id}</li>
 <li>Structural images: {structural_text}</li>
 <li>Functional images: {func_count}</li>
-<li>Field mapping images: {fmap_count}</li>
-<li>Standard output spaces: {output_space_display}</li>
-<li>Non-standard output spaces: </li>
-<li>FreeSurfer reconstruction: {freesurfer_text}</li>
+<li>Output spaces: {output_space_display}</li>
+<li>Surface reconstruction: {freesurfer_text}</li>
 </ul>'''
 
         return HtmlGenerator.create_section("Summary", "Summary", content)

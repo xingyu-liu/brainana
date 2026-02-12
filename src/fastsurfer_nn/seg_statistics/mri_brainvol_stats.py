@@ -20,8 +20,8 @@ import argparse
 from os import environ as env
 from pathlib import Path
 
-from fastsurfer_nn.mri_segstats import print_and_exit
-from fastsurfer_nn.segstats import VERSION, HelpFormatter, main
+from brainana.src.fastsurfer_nn.seg_statistics.mri_segstats import print_and_exit
+from brainana.src.fastsurfer_nn.seg_statistics.segstats import VERSION, HelpFormatter, main
 
 DEFAULT_MEASURES_STRINGS = [
    (False, "BrainSeg"),

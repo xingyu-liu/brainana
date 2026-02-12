@@ -374,6 +374,19 @@
         <!-- Anatomical Processing -->
         <h2 id="anat">anat</h2>
         <div class="section">
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="anat_synthesis_level">synthesis_level</label>
+                    <span class="param-control">
+                        <select id="anat_synthesis_level" name="anat_synthesis_level">
+                            <option value="subject" selected>subject</option>
+                            <option value="session">session</option>
+                        </select>
+                    </span>
+                </div>
+                <span class="help-text">(T1w/T2w synthesis level: "subject" = cross-session/cross-sectional, "session" = within-session/longitudinal)</span>
+            </div>
             <div class="step">
                 <div class="param-row">
                     <span class="param-check"><input type="checkbox" id="anat_reorient_enabled" name="anat_reorient_enabled"></span>
@@ -858,9 +871,9 @@
                     <span class="param-control">
                         <select id="registration_func2anat_xfm_type" name="registration_func2anat_xfm_type">
                             <option value="translation">translation</option>
-                            <option value="rigid" selected>rigid</option>
+                            <option value="rigid">rigid</option>
                             <option value="affine">affine</option>
-                            <option value="syn">syn</option>
+                            <option value="syn" selected>syn</option>
                         </select>
                     </span>
                 </div>
@@ -1327,6 +1340,7 @@
             config.template.output_space = document.getElementById('template_output_space').value || defaults.template.output_space;
             
             // Anatomical
+            config.anat.synthesis_level = document.getElementById('anat_synthesis_level').value;
             config.anat.reorient.enabled = document.getElementById('anat_reorient_enabled').checked;
             config.anat.conform.enabled = document.getElementById('anat_conform_enabled').checked;
             config.anat.bias_correction.enabled = document.getElementById('anat_bias_correction_enabled').checked;

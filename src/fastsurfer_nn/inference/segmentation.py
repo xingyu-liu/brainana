@@ -411,7 +411,10 @@ def run_segmentation(
                 
                 # Import fix_roi_wm
                 try:
-                    from fastsurfer_nn.postprocessing.fix_roi_wm import fix_roi_wm
+                    from fastsurfer_nn.postprocessing.fix_roi_wm import (
+                        fix_roi_wm,
+                        _get_stem_without_extension,
+                    )
                 except ImportError as e:
                     logger.error(f"Failed to import fix_roi_wm: {e}")
                     raise ImportError(
@@ -444,8 +447,19 @@ def run_segmentation(
                     )
                     logger.info(f"{roi_name} white matter fixing completed successfully")
                 except Exception as e:
-                    logger.error(f"{roi_name} WM fixing failed: {str(e)}")
-                    raise RuntimeError(f"{roi_name} WM fixing failed: {str(e)}") from e
+                    logger.warning(
+                        f"{roi_name} WM fixing failed: {e}. "
+                        f"Falling back to unfixed segmentation."
+                    )
+                    logger.debug(f"{roi_name} WM fixing exception details:", exc_info=True)
+                    backup_f = seg_file.with_name(
+                        _get_stem_without_extension(seg_file) + "_orig.nii.gz"
+                    )
+                    if backup_f.exists():
+                        shutil.copy(str(backup_f), str(seg_file))
+                        logger.info(
+                            f"Restored segmentation from pre-fix backup: {backup_f}"
+                        )
         
         # Return all output file paths
         result = {

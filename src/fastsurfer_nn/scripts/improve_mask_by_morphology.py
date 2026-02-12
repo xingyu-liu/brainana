@@ -15,10 +15,15 @@ adjust thresholds depending on voxel size and acquisition.
 # %%
 import logging
 from pathlib import Path
-
+import sys
 import nibabel as nib
 import numpy as np
 from scipy import ndimage as ndi
+
+# Add src/ to path for fastsurfer_nn imports (scripts/ -> fastsurfer_nn -> src)
+_src_dir = Path(__file__).resolve().parent.parent.parent
+if str(_src_dir) not in sys.path:
+    sys.path.insert(0, str(_src_dir))
 
 from fastsurfer_nn.postprocessing.postseg_utils import create_mask
 from fastsurfer_nn.utils.constants import (
@@ -32,14 +37,14 @@ from fastsurfer_nn.utils.constants import (
 
 # Directory containing input mask volumes
 root_dir = Path(
-    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/histology_test/surf"
+    "/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-oxford/preprocessed/sub-032172/ses-001/func"
 )
 
 # If set to a relative path (starting with '/'), only that file will be processed,
 # using the *same* morphological parameters as the fastsurfer_nn `create_mask` pipeline.
 # Example (relative to root_dir): "/site-arcaro_sub-baby1_ses-120916_task-vision_run-09_EPI_brainmask_manual.nii.gz"
 # If set to None, all *.nii.gz files under root_dir will be processed.
-input_f = 'mask_improved_fullbrain.nii.gz' 
+input_f = 'sub-032172_ses-001_task-resting_run-1_desc-brain_mask.nii.gz' 
 output_suffix = "_improved"
 
 # If False, existing improved masks are not overwritten
