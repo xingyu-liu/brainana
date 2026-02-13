@@ -18,6 +18,7 @@ from skimage.measure import label
 import shutil
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
+from nhp_mri_prep.utils.system import run_command
 
 
 # Constants
@@ -460,7 +461,8 @@ def fix_roi_wm(
         working_dir=str(reg_working_dir),
         output_prefix='template_to_individual',
         config=config,
-        xfm_type='syn'
+        xfm_type='syn',
+        compute_inverse=False
     )
     
     if verbose:
@@ -468,7 +470,7 @@ def fix_roi_wm(
     
     # Apply transforms to template WM probability map
     # Construct output path relative to reg_working_dir
-    wm_roi_transformed_filename = seg_roi_f.stem + '_reversed_from_template_WM.nii.gz'
+    wm_roi_transformed_filename = _get_stem_without_extension(seg_roi_f) + '_reversed_from_template_WM.nii.gz'
     wm_roi_transformed_f = reg_working_dir / wm_roi_transformed_filename
     
     if verbose:

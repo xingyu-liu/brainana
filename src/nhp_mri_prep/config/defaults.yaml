@@ -5,6 +5,7 @@ _description: "Default configuration for brainana preprocessing pipeline"
 general:
   verbose: 2  # int or bool: verbosity level (0=quiet/ERROR, 1=normal/INFO, 2=verbose/DEBUG).
   anat_only: false  # bool: process only anatomical data
+  gpu_device: "auto"  # str | int: "auto", -1 (CPU), or GPU index (0..N). Used by skull stripping, segmentation, and registration.
 
 bids_filtering:
   subjects: null  # list of str (have to be quoted) or null: filter by subject IDs (e.g., ["01", "02"])
@@ -28,6 +29,7 @@ anat:
     enabled: false  # bool: reorient anatomical images to template orientation when given, otherwise to RAS. When conform is enabled, reorient is not needed.
   conform:
     enabled: true  # HIGILY RECOMMENDED: bool: conform input image to template space using FLIRT rigid registration
+    padding_percentage: 0.1  # float: fraction of template dimension to pad on each side for registration (e.g. 0.1 = 10%)
   skullstripping_segmentation:
     enabled: true  # HIGILY RECOMMENDED: bool: perform brain extraction and segmentation
     method: "fastSurferCNN" 
@@ -81,6 +83,7 @@ func:
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
   conform:
     enabled: true  # HIGILY RECOMMENDED: bool: conform functional tmean image to target space using FLIRT rigid registration
+    padding_percentage: 0.1  # float: fraction of template dimension to pad on each side for registration (e.g. 0.1 = 10%)
   skullstripping:
     enabled: true  # HIGILY RECOMMENDED: bool: perform brain extraction
 

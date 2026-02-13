@@ -521,14 +521,20 @@ workflow ANAT_WF {
     anat_reg_reference = Channel.empty()
     if (registration_enabled) {
         // Join brain version (for computing transform) with bias-corrected full head (for applying transform)
-        // ANAT_REGISTRATION expects: [sub, ses, skull_file, bids_name, unskull_file]
-        def registration_input = anat_after_bias_brain  // [sub, ses, brain_file, brain_bids_name]
+        def registration_input = anat_after_bias_brain
             .join(anat_after_bias, by: [0, 1])
             .map { sub, ses, brain_file, brain_bids_name, anat_file, anat_bids_name ->
                 [sub, ses, brain_file, brain_bids_name, anat_file]
             }
         
-        ANAT_REGISTRATION(registration_input, config_file)
+        // Use GPU token when GPUs available (FireANTs used when available, ANTs otherwise)
+        def use_registration_gpu = (params.gpu_count ?: 0) > 0
+        def gpu_input = use_registration_gpu ? gpu_queue : Channel.value('none')
+        
+        ANAT_REGISTRATION(registration_input, config_file, gpu_input)
+        if (use_registration_gpu) {
+            ANAT_REGISTRATION.out.gpu_token.subscribe { gpu_queue << it }
+        }
         anat_after_reg = ANAT_REGISTRATION.out.output
         anat_reg_transforms = ANAT_REGISTRATION.out.transforms
         anat_reg_reference = ANAT_REGISTRATION.out.reference

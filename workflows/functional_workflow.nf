@@ -401,8 +401,16 @@ workflow FUNC_WF {
             }
             .set { func_compute_reg_multi }
 
-        FUNC_COMPUTE_REGISTRATION(func_compute_reg_multi.combined, func_compute_reg_multi.reference, config_file)
+        def use_registration_gpu = (params.gpu_count ?: 0) > 0
+        def gpu_input = use_registration_gpu ? gpu_queue : Channel.value('none')
+
+        FUNC_COMPUTE_REGISTRATION(func_compute_reg_multi.combined, func_compute_reg_multi.reference, config_file, gpu_input)
+        if (use_registration_gpu) {
+            FUNC_COMPUTE_REGISTRATION.out.gpu_token.subscribe { gpu_queue << it }
+        }
         func_compute_reg_output = FUNC_COMPUTE_REGISTRATION.out.output
+        func_reg_transforms = FUNC_COMPUTE_REGISTRATION.out.transforms
+        func_reg_reference = FUNC_COMPUTE_REGISTRATION.out.reference
     } else {
         func_compute_reg_output = func_compute_mask_output
             .map { sub, ses, run_id, masked_tmean, bids_name, mask ->
@@ -548,9 +556,9 @@ workflow FUNC_WF {
         // PREPARE FUNCTIONAL REGISTRATION DATA FOR APPLICATION
         // Two paths: session-level (run_id == "") vs per-run processing
         // Step 1: Extract forward transform from functional registration
-        // Input: FUNC_COMPUTE_REGISTRATION.out.transforms: [sub, ses, run_id, func2target_xfm, inverse_transform]
+        // Input: func_reg_transforms: [sub, ses, run_id, func2target_xfm, inverse_transform]
         // Output: [sub, ses, run_id, func2target_xfm] (or [sub, ses, "", func2target_xfm] for session-level)
-        def func_reg_transforms_forward = FUNC_COMPUTE_REGISTRATION.out.transforms
+        def func_reg_transforms_forward = func_reg_transforms
             .map { sub, ses, run_id, func2target_xfm, inverse_transform ->
                 [sub, ses, run_id, func2target_xfm]
             }
@@ -558,7 +566,7 @@ workflow FUNC_WF {
         // Step 2: Join/combine functional registration outputs (registered tmean + transform + reference)
         // Input: func_compute_reg_output: [sub, ses, run_id, registered_tmean, bids_name, anat_ses]
         //        func_reg_transforms_forward: [sub, ses, run_id, func2target_xfm]
-        //        FUNC_COMPUTE_REGISTRATION.out.reference: [sub, ses, run_id, ref_from_func_reg]
+        //        func_reg_reference: [sub, ses, run_id, ref_from_func_reg]
         // Output: [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg]
         // Note: Drop anat_ses - not needed after join with anat_reg_all
         def func_reg_with_transform = isSessionLevel ?
@@ -569,7 +577,7 @@ workflow FUNC_WF {
         // FUNC_COMPUTE_REGISTRATION always emits a real file (anatomical brain or template), never a dummy
         // If a dummy file appears here, it indicates a channel join/mapping bug
         def func_reg_with_ref = isSessionLevel ?
-            func_reg_with_transform.combine(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1])
+            func_reg_with_transform.combine(func_reg_reference, by: [0, 1])
                 .map { sub, ses, run_id, registered_tmean, bids_name, anat_ses, run_id2, func2target_xfm, run_id3, ref_from_func_reg ->
                     // Validate ref_from_func_reg is not a dummy file
                     // This should never happen - FUNC_COMPUTE_REGISTRATION always emits real files
@@ -581,7 +589,7 @@ workflow FUNC_WF {
                     }
                     [sub, ses, run_id, registered_tmean, func2target_xfm, ref_from_func_reg]
                 } :
-            func_reg_with_transform.join(FUNC_COMPUTE_REGISTRATION.out.reference, by: [0, 1, 2])
+            func_reg_with_transform.join(func_reg_reference, by: [0, 1, 2])
                 .map { sub, ses, run_id, registered_tmean, bids_name, anat_ses, func2target_xfm, ref_from_func_reg ->
                     // Validate ref_from_func_reg is not a dummy file
                     // This should never happen - FUNC_COMPUTE_REGISTRATION always emits real files

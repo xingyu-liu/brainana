@@ -1,100 +1,572 @@
 #!/usr/bin/env python3
-"""FireANTs registration using the Python API (quickstart-style).
+"""FireANTs registration using the Python API (same output format as ANTs).
 
-Pipeline: load images -> affine registration -> deformable (greedy) registration
--> save moved image and ANTs-format warp.
+Pipeline: load images -> (optional rigid/affine) -> (optional affine then syn)
+-> save registered image and transforms.
+
+Note: For 'syn' type registration:
+- Forward: GreedyRegistration is initialized with init_affine, so the saved warp
+  transform already includes the affine component intrinsically.
+- Inverse: A separate forward registration is run with swapped images (moving → fixed)
+  without initialization, which produces a better inverse warp than computing the
+  inverse of the forward warp.
+Both warp files can be used directly as complete transforms without needing to
+create composite transforms with separate affine and warp components.
 
 See: https://fireants.readthedocs.io/en/latest/quickstart/
 """
 # %%
 import os
+import re
 import time
-
+from dataclasses import dataclass, field
+from typing import Union, Optional, Dict, Any, List, Tuple
+import numpy as np
 import torch
+import logging
+from pathlib import Path
 
 from fireants.io import BatchedImages, FakeBatchedImages, Image
 from fireants.registration.affine import AffineRegistration
+from fireants.registration.rigid import RigidRegistration
 from fireants.registration.greedy import GreedyRegistration
 
+# Optional: scipy for inverse affine .mat read/write
+try:
+    from scipy.io import loadmat, savemat
+except ImportError:
+    loadmat = savemat = None
+
 # %%
-def main() -> None:
-    work_dir = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/fireants"
-    fixed_path = os.path.join(work_dir, "fixed.nii.gz")
-    moving_path = os.path.join(work_dir, "moving.nii.gz")
-    output_dir = os.path.join(work_dir, "results/registration")
+VALID_XFM_TYPES = ("rigid", "affine", "syn")
 
-    os.makedirs(output_dir, exist_ok=True)
 
+@dataclass
+class FireANTsRegistrationParams:
+    """FireANTs registration parameters (hardcoded defaults)."""
+    scales: List[int] = field(default_factory=lambda: [4, 2, 1])
+    iterations_affine: List[int] = field(default_factory=lambda: [200, 100, 50])
+    iterations_deformable: List[int] = field(default_factory=lambda: [200, 100, 25])
+    optimizer_affine: str = "Adam"
+    optimizer_deformable: str = "adam"
+    lr_affine: float = 3e-3
+    lr_deformable: float = 0.5
+    cc_kernel_size: int = 5
+    smooth_grad_sigma: float = 1.0
+    deformation_type: str = "compositive"
+
+
+# Default FireANTs registration parameters
+DEFAULT_FIREANTS_PARAMS = FireANTsRegistrationParams()
+
+
+def _validate_input_file(path: Union[str, Path], logger: logging.Logger) -> Path:
+    """Validate that input file exists."""
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Input file not found: {p}")
+    return p
+
+
+def _ensure_working_directory(working_dir: Union[str, Path], logger: logging.Logger) -> Path:
+    """Ensure working directory exists."""
+    work_dir = Path(working_dir)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    return work_dir
+
+
+def _run_affine_registration(
+    registration: Union[AffineRegistration, RigidRegistration],
+    device: str,
+    logger: logging.Logger,
+    reg_type: str = "affine",
+) -> float:
+    """Run affine/rigid registration with timing and CUDA sync.
+    
+    Args:
+        registration: AffineRegistration or RigidRegistration instance
+        device: Device string ("cuda:0" or "cpu")
+        logger: Logger instance
+        reg_type: Type string for logging ("affine" or "rigid")
+        
+    Returns:
+        Elapsed time in seconds
+    """
+    start = time.perf_counter()
+    registration.optimize()
+    if device.startswith("cuda"):
+        torch.cuda.synchronize()
+    elapsed = time.perf_counter() - start
+    logger.info(f"{reg_type.capitalize()} registration: {elapsed:.1f}s")
+    return elapsed
+
+
+def _run_greedy_registration(
+    registration: GreedyRegistration,
+    device: str,
+    logger: logging.Logger,
+    direction: str = "forward",
+) -> float:
+    """Run greedy registration with timing and CUDA sync.
+    
+    Args:
+        registration: GreedyRegistration instance
+        device: Device string ("cuda:0" or "cpu")
+        logger: Logger instance
+        direction: Direction string for logging ("forward" or "inverse")
+        
+    Returns:
+        Elapsed time in seconds
+    """
+    start = time.perf_counter()
+    registration.optimize()
+    if device.startswith("cuda"):
+        torch.cuda.synchronize()
+    elapsed = time.perf_counter() - start
+    logger.info(f"{direction.capitalize()} deformable registration: {elapsed:.1f}s")
+    return elapsed
+
+
+def _save_registered_image(
+    registration: Union[AffineRegistration, RigidRegistration, GreedyRegistration],
+    batch_fixed: BatchedImages,
+    batch_moving: BatchedImages,
+    output_path: Union[str, Path],
+    logger: logging.Logger,
+) -> None:
+    """Save registered image.
+    
+    Args:
+        registration: Registration instance
+        batch_fixed: Fixed images batch
+        batch_moving: Moving images batch
+        output_path: Path to save registered image
+        logger: Logger instance
+    """
+    moved = registration.evaluate(batch_fixed, batch_moving)
+    moved_batch = FakeBatchedImages(moved, batch_fixed)
+    moved_batch.write_image(str(output_path))
+    logger.info(f"Wrote registered image: {output_path}")
+
+
+def _get_output_paths(
+    output_path_prefix: str,
+    xfm_type: str,
+) -> Dict[str, str]:
+    """Get output file paths for registration.
+    
+    Args:
+        output_path_prefix: Base output path prefix
+        xfm_type: Transformation type ("rigid", "affine", or "syn")
+        
+    Returns:
+        Dictionary with output file paths
+    """
+    output_dir = Path(output_path_prefix).parent
+    base_name = Path(output_path_prefix).name
+    
+    paths = {
+        "registered": str(output_dir / f"{base_name}_registered.nii.gz"),
+    }
+    
+    if xfm_type == "syn":
+        paths.update({
+            "forward_transform": str(output_dir / f"{base_name}_warp.nii.gz"),
+            "inverse_transform": str(output_dir / f"{base_name}_inverse_warp.nii.gz"),
+        })
+    else:
+        # rigid or affine
+        suffix = "rigid" if xfm_type == "rigid" else "affine"
+        paths.update({
+            "forward_transform": str(output_dir / f"{base_name}_{suffix}.mat"),
+            "inverse_transform": str(output_dir / f"{base_name}_inverse_{suffix}.mat"),
+        })
+    
+    return paths
+
+
+def _invert_affine_mat(
+    affine_mat_path: Union[str, Path],
+    inverse_mat_path: Union[str, Path],
+    logger: logging.Logger,
+) -> None:
+    """Compute inverse of an ITK-style affine .mat and write to inverse_mat_path.
+    
+    ITK/ANTs affine transforms are stored as a vector containing:
+    - First (dims*dims) elements: transformation matrix A in row-major order
+    - Last dims elements: translation vector t
+    - The transform is: y = A(x - c) + c + t where c is the center (stored in 'fixed')
+    - When c = 0, this simplifies to: y = Ax + t
+    
+    The inverse transform is: x = A^(-1)(y - t) = A^(-1)y - A^(-1)*t
+    
+    Reference: https://github.com/ANTsX/ANTsPy/wiki/ANTs-transform-concepts-and-file-formats
+    """
+    if loadmat is None or savemat is None:
+        raise RuntimeError("scipy is required to invert affine .mat (pip install scipy)")
+    data = loadmat(str(affine_mat_path))
+    # FireANTs/ITK: key like AffineTransform_float_3_3, value 3x4 matrix
+    key = [k for k in data if k.startswith("AffineTransform_") and not k.startswith("__")]
+    if not key:
+        raise ValueError(f"No AffineTransform_* key found in {affine_mat_path}")
+    key = key[0]
+    
+    # Log available fields for debugging
+    logger.debug(f"Original affine .mat file fields: {[k for k in data.keys() if not k.startswith('__')]}")
+    logger.debug(f"Transform key: {key}, shape: {data[key].shape}, dtype: {data[key].dtype}")
+    
+    # Extract the parameter vector
+    params = data[key].flatten().astype(np.float64)
+    original_shape = data[key].shape
+    original_dtype = data[key].dtype
+    
+    # Determine dimensions from the number of parameters
+    # For 3D: 12 parameters (9 matrix + 3 translation)
+    # For 2D: 6 parameters (4 matrix + 2 translation)
+    total_params = params.size
+    if total_params == 12:
+        dims = 3
+    elif total_params == 6:
+        dims = 2
+    else:
+        # Try to infer from the key name
+        match = re.search(r'_(\d+)_\d+', key)
+        if match:
+            dims = int(match.group(1))
+            expected_params = dims * dims + dims
+            if total_params != expected_params:
+                raise ValueError(
+                    f"Parameter count mismatch: got {total_params}, expected {expected_params} "
+                    f"for {dims}D transform"
+                )
+        else:
+            raise ValueError(
+                f"Cannot infer dimensions from parameter count {total_params}. "
+                f"Expected 6 (2D) or 12 (3D)."
+            )
+    
+    # Extract matrix A (first dims*dims elements) and translation t (last dims elements)
+    # Matrix is stored in row-major order: A[0,0], A[0,1], ..., A[dims-1, dims-1]
+    matrix_size = dims * dims
+    A_flat = params[:matrix_size]
+    t = params[matrix_size:]
+    
+    # Reshape matrix from row-major order to (dims x dims)
+    A = A_flat.reshape(dims, dims)
+    
+    # Get center of rotation (if present)
+    center = data.get("fixed", np.zeros((dims, 1))).flatten()
+    
+    # Compute inverse transform: x = A^(-1)(y - t) = A^(-1)y - A^(-1)*t
+    # Note: The center doesn't affect the inverse calculation when we're just inverting A and t
+    A_inv = np.linalg.inv(A)
+    t_inv = -A_inv @ t
+    
+    # Construct inverse parameter vector: matrix in row-major order, then translation
+    A_inv_flat = A_inv.flatten()  # Already in row-major order
+    params_inv = np.concatenate([A_inv_flat, t_inv])
+    
+    # Convert to same dtype and shape as original
+    params_inv = params_inv.astype(original_dtype)
+    if original_shape[1] == 1:
+        # Reshape to column vector if original was column vector
+        mat_inv = params_inv.reshape(-1, 1)
+    else:
+        mat_inv = params_inv
+    
+    # Preserve all fields from original file (except the transform matrix itself)
+    # This ensures ITK can read the file correctly
+    output_data = {}
+    for k, v in data.items():
+        if k.startswith("__"):
+            # Skip MATLAB metadata
+            continue
+        elif k == key:
+            # Replace the transform matrix with its inverse (preserving format)
+            output_data[k] = mat_inv
+        else:
+            # Preserve all other fields (e.g., "fixed", "center", "parameters", etc.)
+            output_data[k] = v
+    
+    # Ensure "fixed" field exists (ITK may require it)
+    if "fixed" not in output_data:
+        output_data["fixed"] = np.zeros((dims, 1), dtype=np.float32)
+    
+    # Use format='4' (MATLAB 4) for maximum compatibility with ITK
+    # ITK's MatlabTransformIO expects the older .mat format, not HDF5-based v7.3
+    # Try different formats in order of compatibility
+    saved = False
+    for fmt in ['4', '5']:
+        try:
+            savemat(
+                str(inverse_mat_path),
+                output_data,
+                format=fmt,
+                oned_as='column',  # Ensure column vectors are saved as columns
+            )
+            saved = True
+            logger.debug(f"Successfully saved inverse affine using MATLAB format {fmt}")
+            break
+        except (ValueError, NotImplementedError) as e:
+            logger.debug(f"Failed to save with format {fmt}: {e}")
+            continue
+    
+    if not saved:
+        # Last resort: try default format
+        logger.warning("Failed to save with MATLAB 4/5 formats, trying default format")
+        savemat(
+            str(inverse_mat_path),
+            output_data,
+            oned_as='column',
+        )
+    
+    logger.info(f"Wrote inverse affine: {inverse_mat_path}")
+
+
+def fireants_registration(
+    fixedf: Union[str, Path],
+    movingf: Union[str, Path],
+    working_dir: Union[str, Path],
+    output_prefix: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+    logger: Optional[logging.Logger] = None,
+    xfm_type: Optional[str] = 'syn',
+) -> Dict[str, Optional[str]]:
+    """Run FireANTs registration with same output format as ants_register.
+    
+    Args:
+        fixedf: Fixed (template) image path
+        movingf: Moving image path
+        working_dir: Working directory
+        output_prefix: Prefix for output files (default: basename of moving without .nii.gz)
+        config: Configuration dictionary (optional; only used to get xfm_type if not provided)
+        logger: Logger instance (optional)
+        xfm_type: One of 'rigid', 'affine', 'syn'. If None and config provided, will try to get from config.
+            - rigid: RigidRegistration only
+            - affine: AffineRegistration only
+            - syn: Forward: AffineRegistration then GreedyRegistration with init_affine. 
+                   Inverse: Separate AffineRegistration then GreedyRegistration with swapped images.
+    
+    Returns:
+        Dictionary with keys: output_path_prefix, imagef_registered, forward_transform, inverse_transform
+        (same as ants_register). Values are paths or None if file missing.
+    
+    Raises:
+        FileNotFoundError: If input files don't exist
+        RuntimeError: If registration fails
+        ValueError: If xfm_type is invalid
+    """
+    # Use provided config/logger or get defaults
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    if output_prefix is None:
+        output_prefix = os.path.basename(movingf).replace('.nii.gz', '').replace('.nii', '')
+    
+    # Get xfm_type from config if not provided directly
+    if xfm_type is None and config is not None:
+        reg_config = config.get("registration", {})
+        xfm_type = reg_config.get("xfm_type", "syn")
+    if xfm_type is None:
+        xfm_type = "syn"
+    
+    if xfm_type not in VALID_XFM_TYPES:
+        raise ValueError(f"Invalid xfm_type: {xfm_type}. Must be one of {VALID_XFM_TYPES}")
+    
+    # Validate inputs and setup
+    work_dir = _ensure_working_directory(working_dir, logger)
+    output_path_prefix = os.path.join(str(work_dir), output_prefix)
+    logger.info(f"Data: output prefix - {output_prefix}")
+    
+    # Validate input files
+    fixed_path = _validate_input_file(fixedf, logger)
+    moving_path = _validate_input_file(movingf, logger)
+    
+    # Initialize outputs dictionary
+    outputs: Dict[str, Optional[str]] = {
+        "output_path_prefix": output_path_prefix,
+        "imagef_registered": None,
+        "forward_transform": None,
+        "inverse_transform": None,
+    }
+    
+    # Get output paths
+    output_paths = _get_output_paths(output_path_prefix, xfm_type)
+    
+    # Setup device
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     if device == "cpu":
-        print("Warning: CUDA not available, using CPU.")
-
-    # Load images and batchify (quickstart: Image.load_file + BatchedImages)
-    fixed_image = Image.load_file(fixed_path)
-    moving_image = Image.load_file(moving_path)
+        logger.warning("CUDA not available, using CPU.")
+    
+    # Load images
+    fixed_image = Image.load_file(str(fixed_path))
+    moving_image = Image.load_file(str(moving_path))
     batch_fixed = BatchedImages([fixed_image])
     batch_moving = BatchedImages([moving_image])
+    
+    # Get registration parameters (hardcoded defaults)
+    params = DEFAULT_FIREANTS_PARAMS
+    
+    # Run registration based on xfm_type
+    if xfm_type in ("rigid", "affine"):
+        # Rigid and affine follow the same pattern
+        if xfm_type == "rigid":
+            reg = RigidRegistration(
+                params.scales,
+                params.iterations_affine,
+                batch_fixed,
+                batch_moving,
+                optimizer=params.optimizer_affine,
+                optimizer_lr=params.lr_affine,
+                cc_kernel_size=params.cc_kernel_size,
+            )
+        else:  # affine
+            reg = AffineRegistration(
+                params.scales,
+                params.iterations_affine,
+                batch_fixed,
+                batch_moving,
+                optimizer=params.optimizer_affine,
+                optimizer_lr=params.lr_affine,
+                cc_kernel_size=params.cc_kernel_size,
+            )
+        
+        # Run registration
+        _run_affine_registration(reg, device, logger, reg_type=xfm_type)
+        
+        # Save transforms
+        forward_mat = output_paths["forward_transform"]
+        reg.save_as_ants_transforms(forward_mat)
+        logger.info(f"Saved forward {xfm_type} transform: {forward_mat}")
+        
+        inverse_mat = output_paths["inverse_transform"]
+        _invert_affine_mat(forward_mat, inverse_mat, logger)
+        
+        # Save registered image
+        _save_registered_image(reg, batch_fixed, batch_moving, output_paths["registered"], logger)
+        
+    else:  # syn: affine then greedy
+        # Forward registration: fixed → moving
+        logger.info("Running forward registration (fixed → moving)...")
+        affine = AffineRegistration(
+            params.scales,
+            params.iterations_affine,
+            batch_fixed,
+            batch_moving,
+            optimizer=params.optimizer_affine,
+            optimizer_lr=params.lr_affine,
+            cc_kernel_size=params.cc_kernel_size,
+        )
+        _run_affine_registration(affine, device, logger, reg_type="affine")
+        
+        reg = GreedyRegistration(
+            scales=params.scales,
+            iterations=params.iterations_deformable,
+            fixed_images=batch_fixed,
+            moving_images=batch_moving,
+            cc_kernel_size=params.cc_kernel_size,
+            deformation_type=params.deformation_type,
+            smooth_grad_sigma=params.smooth_grad_sigma,
+            optimizer=params.optimizer_deformable,
+            optimizer_lr=params.lr_deformable,
+            init_affine=affine.get_affine_matrix().detach(),
+        )
+        _run_greedy_registration(reg, device, logger, direction="forward")
+        
+        # Save forward warp
+        forward_warp = output_paths["forward_transform"]
+        reg.save_as_ants_transforms(forward_warp)
+        logger.info(f"Saved forward warp: {forward_warp}")
+        
+        # Inverse registration: moving → fixed (swapped, full pipeline: affine + warp)
+        logger.info("Running inverse registration (moving → fixed) with full pipeline (affine + warp)...")
+        affine_inv = AffineRegistration(
+            params.scales,
+            params.iterations_affine,
+            batch_moving,  # Swapped: moving becomes fixed
+            batch_fixed,   # Swapped: fixed becomes moving
+            optimizer=params.optimizer_affine,
+            optimizer_lr=params.lr_affine,
+            cc_kernel_size=params.cc_kernel_size,
+        )
+        _run_affine_registration(affine_inv, device, logger, reg_type="affine")
+        
+        reg_inv = GreedyRegistration(
+            scales=params.scales,
+            iterations=params.iterations_deformable,
+            fixed_images=batch_moving,  # Swapped: moving becomes fixed
+            moving_images=batch_fixed,  # Swapped: fixed becomes moving
+            cc_kernel_size=params.cc_kernel_size,
+            deformation_type=params.deformation_type,
+            smooth_grad_sigma=params.smooth_grad_sigma,
+            optimizer=params.optimizer_deformable,
+            optimizer_lr=params.lr_deformable,
+            init_affine=affine_inv.get_affine_matrix().detach(),
+        )
+        _run_greedy_registration(reg_inv, device, logger, direction="inverse")
+        
+        # Save inverse warp
+        inverse_warp = output_paths["inverse_transform"]
+        reg_inv.save_as_ants_transforms(inverse_warp)
+        logger.info(f"Saved inverse warp: {inverse_warp}")
+        
+        # Note: When GreedyRegistration is initialized with init_affine, the saved warp transform
+        # already includes the affine component intrinsically. Both forward and inverse warps are
+        # generated using the full pipeline (affine + warp with init_affine), so both warp files
+        # include their respective affine components and can be used directly as complete transforms.
+        logger.info("Using warp files directly as transforms (both forward and inverse include affine)")
+        
+        # Save registered image (use forward registration result)
+        _save_registered_image(reg, batch_fixed, batch_moving, output_paths["registered"], logger)
+    
+    # Collect and validate output files
+    registered_image = output_paths["registered"]
+    if os.path.exists(registered_image):
+        outputs["imagef_registered"] = registered_image
+        logger.info(f"Output: registered image created - {registered_image}")
+    else:
+        logger.warning(f"Data: expected registered image not found - {registered_image}")
+    
+    forward_transform = output_paths["forward_transform"]
+    if os.path.exists(forward_transform):
+        outputs["forward_transform"] = forward_transform
+        logger.info(f"Output: forward transform created - {forward_transform}")
+    else:
+        logger.warning(f"Data: expected forward transform not found - {forward_transform}")
+    
+    inverse_transform = output_paths["inverse_transform"]
+    if os.path.exists(inverse_transform):
+        outputs["inverse_transform"] = inverse_transform
+        logger.info(f"Output: inverse transform created - {inverse_transform}")
+    else:
+        logger.warning(f"Data: expected inverse transform not found - {inverse_transform}")
+    
+    logger.info(f"Step: registration completed with {len([k for k, v in outputs.items() if v is not None])} output files - {list(outputs.keys())}")
+    return outputs
 
-    # Registration parameters (aligned with quickstart)
-    scales = [4, 2, 1]
-    iterations_affine = [200, 100, 50]
-    iterations_deformable = [200, 100, 25]
-    optim = "Adam"
-    lr_affine = 3e-3
-    lr_deformable = 0.5
-    cc_kernel_size = 5
 
-    # Affine registration (good initial alignment for deformable)
-    affine = AffineRegistration(
-        scales,
-        iterations_affine,
-        batch_fixed,
-        batch_moving,
-        optimizer=optim,
-        optimizer_lr=lr_affine,
-        cc_kernel_size=cc_kernel_size,
+# %%
+# Example / test invocation (same paths as original script)
+data_dir = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/fireants/"
+fixedf = os.path.join(data_dir, "fixed.nii.gz")
+movingf = os.path.join(data_dir, "moving.nii.gz")
+working_dir = os.path.join(data_dir, "results")
+
+xfm_type = "syn"
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    out = fireants_registration(
+        fixedf=fixedf,
+        movingf=movingf,
+        working_dir=working_dir,
+        output_prefix=None,
+        config=None,
+        logger=logger,
+        xfm_type=xfm_type,
     )
-    start = time.perf_counter()
-    affine.optimize()
-    if device.startswith("cuda"):
-        torch.cuda.synchronize()
-    print(f"Affine registration: {time.perf_counter() - start:.1f}s")
-
-    # Deformable registration (initialized with affine result)
-    reg = GreedyRegistration(
-        scales=scales,
-        iterations=iterations_deformable,
-        fixed_images=batch_fixed,
-        moving_images=batch_moving,
-        cc_kernel_size=cc_kernel_size,
-        deformation_type="compositive",
-        smooth_grad_sigma=1,
-        optimizer="adam",
-        optimizer_lr=lr_deformable,
-        init_affine=affine.get_affine_matrix().detach(),
-    )
-    start = time.perf_counter()
-    reg.optimize()
-    if device.startswith("cuda"):
-        torch.cuda.synchronize()
-    print(f"Deformable registration: {time.perf_counter() - start:.1f}s")
-
-    # Moved image
-    moved = reg.evaluate(batch_fixed, batch_moving)
-
-    # Save moved image (FakeBatchedImages uses fixed metadata + moved content)
-    moved_batch = FakeBatchedImages(moved, batch_fixed)
-    out_moved = os.path.join(output_dir, "moved.nii.gz")
-    moved_batch.write_image(out_moved)
-    print(f"Wrote {out_moved}")
-
-    # Save warp in ANTs format (for antsApplyTransforms)
-    out_warp = os.path.join(output_dir, "warp.nii.gz")
-    reg.save_as_ants_transforms(out_warp)
-    print(f"Wrote {out_warp}")
+    print("Outputs:", out)
 
 
 if __name__ == "__main__":
     main()
-
-# %%

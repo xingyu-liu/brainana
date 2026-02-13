@@ -917,7 +917,7 @@ process FUNC_COMPUTE_REGISTRATION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.{h5}',
+        pattern: '*.{nii.gz,h5,mat}',
         saveAs: { filename -> filename.contains('ref_from_func_reg.nii.gz') ? null : filename }
     
     input:
@@ -925,6 +925,7 @@ process FUNC_COMPUTE_REGISTRATION {
     tuple val(subject_id), val(session_id), val(run_identifier), path(masked_tmean), val(bids_name), val(anat_session_id)
     path(anat_brain)
     path config_file  // Effective config file with all resolved parameters
+    val gpu_id  // GPU ID for scheduling ('none' for CPU mode, integer for GPU mode)
     
     output:
     // Output: [sub, ses, run_identifier, registered_tmean, bids_template, anat_session_id]
@@ -934,9 +935,16 @@ process FUNC_COMPUTE_REGISTRATION {
     // Reference: [sub, ses, run_identifier, reference_file]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*ref_from_func_reg.nii.gz"), emit: reference
     path "*.json", emit: metadata
+    val gpu_id, emit: gpu_token
     
     script:
     """
+    # Conditional GPU assignment
+    if [ "${gpu_id}" != "none" ]; then
+        export CUDA_VISIBLE_DEVICES=${gpu_id}
+        echo "[GPU Assignment] Task ${task.index} -> GPU ${gpu_id} (of ${params.gpu_count} available)"
+    fi
+    
     \${PYTHON:-python3} <<EOF
     from nhp_mri_prep.steps.functional import func_registration
     from nhp_mri_prep.steps.types import StepInput
@@ -1018,14 +1026,17 @@ process FUNC_COMPUTE_REGISTRATION {
     # Use get_bids_prefix helper to determine session-level vs run-level naming
     bids_prefix = get_bids_prefix(bids_name, run_identifier)
     
+    def _xfm_ext(p):
+        r = Path(p).resolve()
+        return ''.join(r.suffixes) if r.suffixes else r.suffix
     for key, f in result.additional_files.items():
         if key == 'forward_transform':
-            # Forward transform: from-bold_to-{space_name}
-            bids_transform_name = f"{bids_prefix}_from-bold_to-{space_name}_mode-image_xfm.h5"
+            ext = _xfm_ext(f)
+            bids_transform_name = f"{bids_prefix}_from-bold_to-{space_name}_mode-image_xfm{ext}"
             create_output_link(f, bids_transform_name)
         elif key == 'inverse_transform':
-            # Inverse transform: from-{space_name}_to-bold
-            bids_transform_name = f"{bids_prefix}_from-{space_name}_to-bold_mode-image_xfm.h5"
+            ext = _xfm_ext(f)
+            bids_transform_name = f"{bids_prefix}_from-{space_name}_to-bold_mode-image_xfm{ext}"
             create_output_link(f, bids_transform_name)
         else:
             create_output_link(f, f.name)
@@ -1151,18 +1162,18 @@ else:
 
 func_4d_input = input_file  # Keep variable name for compatibility with existing code
 
-# Get func2target transform from glob (from-bold_to-*)
-func2target_transform_files = [Path(f) for f in glob.glob('*from-bold_to-*_mode-image_xfm.h5')]
+# Get func2target transform from glob (from-bold_to-*); extension may be .h5 or .nii.gz
+func2target_transform_files = [Path(f) for f in glob.glob('*from-bold_to-*_mode-image_xfm*')]
 if not func2target_transform_files:
     raise FileNotFoundError("No func2target transform file found")
 func2target_transform = func2target_transform_files[0]
 
 # Parse target space from transform filename
-# Pattern: from-bold_to-{space}_mode-image_xfm.h5
+# Pattern: from-bold_to-{space}_mode-image_xfm.{h5|nii.gz}
 def extract_target_space_from_transform(transform_path: Path) -> str:
     # Extract target space from transform filename
     transform_name = transform_path.name
-    # Match pattern: from-bold_to-{space}_mode-image_xfm.h5
+    # Match pattern: from-bold_to-{space}_mode-image_xfm
     match = re.search(r'from-bold_to-([^_]+)_mode-image_xfm', transform_name)
     if match:
         return match.group(1)
@@ -1594,7 +1605,7 @@ process FUNC_WITHIN_SES_COREG {
     
     output:
     tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-coreg_bold.nii.gz"), path("*desc-coreg_boldref.nii.gz"), val(bids_name), emit: output
-    tuple val(subject_id), val(session_id), val(run_identifier), path("from-${run_identifier}_to-${reference_run_identifier}_mode-image_xfm.h5"), emit: transforms
+    tuple val(subject_id), val(session_id), val(run_identifier), path("from-${run_identifier}_to-${reference_run_identifier}_mode-image_xfm*"), emit: transforms
     path "*.json", emit: metadata
     
     script:
@@ -1676,11 +1687,13 @@ else:
 original_stem = get_filename_stem(bids_name)
 bids_prefix_wo_modality = original_stem.replace("_bold", "").replace("_boldref", "")
 
-# Create symlinks for transform files for Nextflow pattern matching (but don't publish them - they're intermediate files)
-# .h5 files can be large, so use symlinks until published - saves storage
+# Create symlinks for transform files (keep nature suffix: .nii.gz or .h5) for Nextflow pattern matching
+def _xfm_ext(p):
+    r = Path(p).resolve()
+    return ''.join(r.suffixes) if r.suffixes else r.suffix
 if "forward_transform" in result.additional_files:
-    # Create the expected output file name for Nextflow pattern matching
-    create_output_link(result.additional_files["forward_transform"], f"from-${run_identifier}_to-${reference_run_identifier}_mode-image_xfm.h5")
+    ext = _xfm_ext(result.additional_files["forward_transform"])
+    create_output_link(result.additional_files["forward_transform"], f"from-${run_identifier}_to-${reference_run_identifier}_mode-image_xfm{ext}")
 
 if "inverse_transform" in result.additional_files:
     # Create the expected output file name for Nextflow pattern matching (if needed)

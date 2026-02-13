@@ -59,8 +59,43 @@ def getEffectiveConfigPath = { params, projectDir ->
     return effective_config_path
 }
 
+/**
+ * Get boolean value from YAML config file
+ *
+ * @param configPath Path to YAML config file (e.g. effective config)
+ * @param keyPath Dot-separated key path (e.g. "registration.use_gpu")
+ * @param defaultValue Default value when key not found
+ * @return Boolean value
+ */
+def getConfigBool = { configPath, keyPath, defaultValue = false ->
+    if (configPath == null || configPath.toString().trim().isEmpty()) {
+        return defaultValue
+    }
+    def configFile = new File(configPath.toString())
+    if (!configFile.exists()) {
+        return defaultValue
+    }
+    try {
+        def slurper = new groovy.yaml.YamlSlurper()
+        def config = slurper.parse(configFile)
+        def keys = keyPath.split('\\.')
+        def value = config
+        for (def key in keys) {
+            if (value != null && value instanceof Map) {
+                value = value.get(key)
+            } else {
+                return defaultValue
+            }
+        }
+        return (value != null) ? (value == true) : defaultValue
+    } catch (Exception e) {
+        return defaultValue
+    }
+}
+
 // Return helpers as a map
 return [
     ensureParamResolverInitialized: ensureParamResolverInitialized,
-    getEffectiveConfigPath: getEffectiveConfigPath
+    getEffectiveConfigPath: getEffectiveConfigPath,
+    getConfigBool: getConfigBool
 ]

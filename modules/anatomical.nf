@@ -655,6 +655,7 @@ process ANAT_REGISTRATION {
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_name), path(unskullstripped_file)
     path config_file  // Effective config file with all resolved parameters
+    val gpu_id  // GPU ID for scheduling ('none' for CPU mode, integer for GPU mode)
     
     output:
     // Output: [sub, ses, registered_file, bids_template]
@@ -665,9 +666,16 @@ process ANAT_REGISTRATION {
     // Reference: [sub, ses, reference_file]
     tuple val(subject_id), val(session_id), path("*ref_from_anat_reg.nii.gz"), emit: reference
     path "*.json", emit: metadata
+    val gpu_id, emit: gpu_token
     
     script:
     """
+    # Conditional GPU assignment
+    if [ "${gpu_id}" != "none" ]; then
+        export CUDA_VISIBLE_DEVICES=${gpu_id}
+        echo "[GPU Assignment] Task ${task.index} -> GPU ${gpu_id} (of ${params.gpu_count} available)"
+    fi
+    
     # Get effective_output_space from effective config file
     EFFECTIVE_OUTPUT_SPACE=\$(\${PYTHON:-python3} <<'PYTHON_OUTPUT_SPACE'
 from nhp_mri_prep.utils.nextflow import load_config
@@ -774,16 +782,17 @@ original_stem = get_filename_stem(bids_name)
 # Generate BIDS prefix (filename stem without modality)
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 
-# Create symlinks for transform files with BIDS-compliant names
-# .h5 files can be large, so use symlinks until published - saves storage
+# Create symlinks for transform files with BIDS-compliant names (keep nature suffix: .nii.gz or .h5)
+def _xfm_ext(p):
+    r = Path(p).resolve()
+    return ''.join(r.suffixes) if r.suffixes else r.suffix
 if "forward_transform" in result.additional_files:
-    # Forward transform: from-{modality}_to-{template_name}
-    bids_transform_name = f"{bids_prefix_wo_modality}_from-{modality}_to-{template_name}_mode-image_xfm.h5"
+    ext = _xfm_ext(result.additional_files["forward_transform"])
+    bids_transform_name = f"{bids_prefix_wo_modality}_from-{modality}_to-{template_name}_mode-image_xfm{ext}"
     create_output_link(result.additional_files["forward_transform"], bids_transform_name)
-
 if "inverse_transform" in result.additional_files:
-    # Inverse transform: from-{template_name}_to-{modality}
-    bids_transform_name = f"{bids_prefix_wo_modality}_from-{template_name}_to-{modality}_mode-image_xfm.h5"
+    ext = _xfm_ext(result.additional_files["inverse_transform"])
+    bids_transform_name = f"{bids_prefix_wo_modality}_from-{template_name}_to-{modality}_mode-image_xfm{ext}"
     create_output_link(result.additional_files["inverse_transform"], bids_transform_name)
 
 # Create ref_from_anat_reg.nii.gz for QC reference
@@ -813,7 +822,7 @@ process ANAT_T2W_TO_T1W_REGISTRATION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.{h5}'
+        pattern: '*.{nii.gz,h5,mat}'
     
     input:
     tuple val(subject_id), val(session_id), path(t2w_file), val(bids_name)
@@ -889,17 +898,18 @@ create_output_link(result.output_file, bids_output_filename)
 # Generate BIDS prefix (filename stem without modality)
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 
-# Create symlinks for transform files with BIDS-compliant names
-# .h5 files can be large, so use symlinks until published - saves storage
+# Create symlinks for transform files with BIDS-compliant names (keep nature suffix: .nii.gz or .h5)
 # Note: T1w is in native space at this point (after reorient, before conform and bias correction)
+def _xfm_ext(p):
+    r = Path(p).resolve()
+    return ''.join(r.suffixes) if r.suffixes else r.suffix
 if "forward_transform" in result.additional_files:
-    # Forward transform: from-T2w_to-T1wNative
-    bids_transform_name = f"{bids_prefix_wo_modality}_from-T2w_to-T1wNative_mode-image_xfm.h5"
+    ext = _xfm_ext(result.additional_files["forward_transform"])
+    bids_transform_name = f"{bids_prefix_wo_modality}_from-T2w_to-T1wNative_mode-image_xfm{ext}"
     create_output_link(result.additional_files["forward_transform"], bids_transform_name)
-
 if "inverse_transform" in result.additional_files:
-    # Inverse transform: from-T1wNative_to-T2w
-    bids_transform_name = f"{bids_prefix_wo_modality}_from-T1wNative_to-T2w_mode-image_xfm.h5"
+    ext = _xfm_ext(result.additional_files["inverse_transform"])
+    bids_transform_name = f"{bids_prefix_wo_modality}_from-T1wNative_to-T2w_mode-image_xfm{ext}"
     create_output_link(result.additional_files["inverse_transform"], bids_transform_name)
 
 # Save metadata

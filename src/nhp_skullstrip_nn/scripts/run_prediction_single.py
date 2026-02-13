@@ -21,8 +21,8 @@ from nhp_skullstrip_nn.model import ModelLoader
 
 # %%
 # anat
+input_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/fireants/sub-032309_ses-001_run-1_T1w.nii.gz'
 model_f = '/home/star/github/brainana/src/nhp_skullstrip_nn/pretrained_model/T1w_brainmask.pth'
-input_f = '/home/star/github/atlas/macaque/Yerkes19/tpl-Yerkes19_res-05_T1w.nii.gz'
 
 # # func
 # model_f = '/home/star/github/brainana/src/nhp_skullstrip_nn/pretrained_model/EPI_brainmask.pth'

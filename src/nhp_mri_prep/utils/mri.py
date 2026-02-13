@@ -8,6 +8,7 @@ import os
 import logging
 import nibabel as nib
 import numpy as np
+from pathlib import Path
 from typing import Dict, Optional, Union
 from nibabel.orientations import aff2axcodes
 from .system import run_command
@@ -621,5 +622,159 @@ def correct_affine_for_mismatch_orientation(
         f"Could not find n×90° rotation to transform orientation "
         f"{current_orientation} to {target_orientation}. "
         f"This may indicate the mismatch parameters are incorrect."
+    )
+
+
+# ---------------------------------------------------------------------------
+# NIfTI image padding / cropping utilities
+# ---------------------------------------------------------------------------
+# NOTE: preprocessing.py has similar inline padding logic (percentage-based)
+# that could be refactored to use pad_image() below.
+
+def pad_image(
+    imagef: Union[str, Path],
+    outputf: Union[str, Path],
+    pad_left: Union[np.ndarray, list],
+    pad_right: Optional[Union[np.ndarray, list]] = None,
+    logger: Optional[logging.Logger] = None,
+) -> None:
+    """Zero-pad a NIfTI image and update the affine to keep physical coords consistent.
+
+    Handles 3-D scalar images as well as higher-dimensional data (e.g. 4-D
+    time-series or multi-component vector fields).  Only the first three
+    (spatial) dimensions are padded.
+
+    Args:
+        imagef: Input NIfTI image path.
+        outputf: Output path for the padded image.
+        pad_left: Per-dimension left-side padding, shape ``(3,)``.
+        pad_right: Per-dimension right-side padding, shape ``(3,)``.
+            If *None*, symmetric padding is used (same as *pad_left*).
+        logger: Optional logger instance.
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    pad_left = np.asarray(pad_left, dtype=int)
+    pad_right = np.asarray(pad_right, dtype=int) if pad_right is not None else pad_left.copy()
+
+    img = nib.load(str(imagef))
+    data = img.get_fdata()
+    affine = img.affine.copy()
+    header = img.header.copy()
+
+    # Build pad_width — spatial dims get padding, extra dims (channels etc.) do not
+    pad_width = [(int(l), int(r)) for l, r in zip(pad_left, pad_right)]
+    for _ in range(len(data.shape) - 3):
+        pad_width.append((0, 0))
+
+    padded_data = np.pad(data, pad_width, mode='constant', constant_values=0)
+
+    # Shift the affine origin so that the original voxels keep the same world coords
+    pad_shift_world = affine[:3, :3] @ (-pad_left.astype(float))
+    new_affine = affine.copy()
+    new_affine[:3, 3] = affine[:3, 3] + pad_shift_world
+
+    new_img = nib.Nifti1Image(padded_data.astype(data.dtype), new_affine, header)
+    nib.save(new_img, str(outputf))
+
+    logger.info(
+        f"Padded image from {list(data.shape[:3])} to {list(padded_data.shape[:3])} "
+        f"(left={list(pad_left)}, right={list(pad_right)})"
+    )
+
+
+def pad_image_to_min_size(
+    imagef: Union[str, Path],
+    min_size: int,
+    outputf: Union[str, Path],
+    logger: Optional[logging.Logger] = None,
+) -> Optional[np.ndarray]:
+    """Zero-pad a NIfTI image so every spatial dimension is >= *min_size*.
+
+    Symmetric zero-padding is applied to each dimension that is smaller than
+    *min_size*.  When the deficit is odd, the extra voxel goes to the right
+    side.
+
+    Args:
+        imagef: Input NIfTI image path.
+        min_size: Minimum required size for each spatial dimension.
+        outputf: Output path for the padded image.  Only written when padding
+            is actually needed.
+        logger: Optional logger instance.
+
+    Returns:
+        Per-side **left** padding as ``np.ndarray`` of shape ``(3,)``, or
+        *None* if all dimensions were already >= *min_size* (no file written).
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    img = nib.load(str(imagef))
+    spatial_shape = np.array(img.shape[:3])
+
+    if np.all(spatial_shape >= min_size):
+        logger.debug(f"No padding needed: all dims {list(spatial_shape)} >= {min_size}")
+        return None
+
+    pad_total = np.maximum(min_size - spatial_shape, 0)
+    pad_left = pad_total // 2
+    pad_right = pad_total - pad_left
+
+    pad_image(imagef, outputf, pad_left, pad_right, logger)
+
+    return pad_left
+
+
+def crop_image_to_original(
+    imagef: Union[str, Path],
+    ref_imagef: Union[str, Path],
+    pad_left: np.ndarray,
+    outputf: Union[str, Path],
+    logger: Optional[logging.Logger] = None,
+) -> None:
+    """Crop a padded NIfTI image back to match a reference image's grid.
+
+    Reverses the effect of :func:`pad_image_to_min_size` by slicing out the
+    padded voxels and restoring the reference image's affine.  Works for both
+    scalar images and multi-component vector fields (e.g. ANTs warp fields).
+
+    In-place operation is supported (``imagef == outputf``).
+
+    Args:
+        imagef: Padded image to crop.
+        ref_imagef: Original (unpadded) reference image — its shape and affine
+            define the target grid.
+        pad_left: Per-dimension left padding that was applied (returned by
+            :func:`pad_image_to_min_size`).
+        outputf: Output path for the cropped image.
+        logger: Optional logger instance.
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    img = nib.load(str(imagef))
+    ref = nib.load(str(ref_imagef))
+
+    # Force eager load so in-place overwrite is safe
+    data = np.asarray(img.dataobj)
+    ref_shape = ref.shape[:3]
+    pad_left = np.asarray(pad_left, dtype=int)
+
+    # Crop spatial dims; preserve any extra dims (vector components, time, …)
+    slices = [slice(int(p), int(p) + int(s)) for p, s in zip(pad_left, ref_shape)]
+    for _ in range(len(data.shape) - 3):
+        slices.append(slice(None))
+
+    cropped_data = data[tuple(slices)]
+
+    # Preserve intent codes / data-type metadata from the padded image header,
+    # but use the reference affine so the output matches the original grid.
+    new_header = img.header.copy()
+    cropped_img = nib.Nifti1Image(cropped_data, ref.affine, new_header)
+    nib.save(cropped_img, str(outputf))
+
+    logger.info(
+        f"Cropped image from {list(data.shape[:3])} back to {list(cropped_data.shape[:3])}"
     )
 

@@ -19,10 +19,13 @@ from .validation import validate_input_file, ensure_working_directory, validate_
 from .registration import flirt_register, flirt_apply_transforms
 from ..utils import run_command, calculate_func_tmean, reorient_image_to_target, reorient_image_to_orientation, get_image_shape
 from ..config import validate_slice_timing_config
-from ..utils.mri import correct_affine_for_mismatch_orientation, get_opposite_orientation
+from ..utils.mri import correct_affine_for_mismatch_orientation, get_opposite_orientation, pad_image
 
 from fastsurfer_nn.inference.segmentation import run_segmentation
 from nhp_skullstrip_nn.inference.prediction import skullstripping
+
+# Default for template padding during conform (fraction of dimension, e.g. 0.1 = 10% per side)
+DEFAULT_CONFORM_PADDING_PERCENTAGE = 0.1
 
 # %%
 def correct_orientation_mismatch(
@@ -245,6 +248,7 @@ def conform_to_template(
     logger: Optional[logging.Logger] = None,
     modal: str = 'anat',
     skip_skullstripping: bool = False,
+    padding_percentage: Optional[float] = None,
 ) -> Dict[str, str]:
     """Conform input image to template space using FLIRT rigid registration.
     
@@ -263,6 +267,8 @@ def conform_to_template(
         logger: Logger instance (optional, will create one if not provided)
         modal: Modality type ('anat' or 'func'), default is 'anat'
         skip_skullstripping: If True, skip skullstripping and assume input is already skullstripped (default: False)
+        padding_percentage: Fraction of template dimension to pad on each side for registration (e.g. 0.1 = 10%).
+            If None, uses DEFAULT_CONFORM_PADDING_PERCENTAGE. Overridable via config (anat.conform.padding_percentage / func.conform.padding_percentage).
         
     Returns:
         Dictionary with output file paths:
@@ -284,8 +290,8 @@ def conform_to_template(
     template_path = validate_input_file(template_file, logger)
     work_dir = ensure_working_directory(working_dir, logger)
     
-    # Hardcoded padding percentage
-    padding_percentage = 0.2
+    if padding_percentage is None:
+        padding_percentage = DEFAULT_CONFORM_PADDING_PERCENTAGE
     
     logger.info(f"Workflow: starting conform to template")
     logger.info(f"Data: input image - {os.path.basename(image_path)}")
@@ -341,56 +347,34 @@ def conform_to_template(
         logger.info(f"Step: padding template (padding_percentage={padding_percentage})")
         img = nib.load(template_path)
         data = img.get_fdata()
-        affine = img.affine.copy()
-        header = img.header.copy()
-        
+
         # Handle 4D images: if image has 4 dimensions, average the last dimension
+        source_for_padding = template_path
         if data.ndim == 4:
             logger.warning(f"4D image detected (shape: {data.shape}). Averaging the last dimension.")
             data = np.mean(data, axis=-1)
             logger.info(f"Converted to 3D shape: {data.shape}")
-        
-        original_shape = data.shape[:3]
-        logger.info(f"Template original shape: {original_shape}")
-        
-        # Calculate padding amounts for each dimension
-        pad_amounts = (np.array(original_shape) * padding_percentage).astype(int)
-        logger.info(f"Padding amounts (per side): {pad_amounts}")
-        
-        # Calculate new shape
-        new_shape = original_shape + 2 * pad_amounts
-        logger.info(f"Template new shape: {new_shape}")
-        
-        # Pad the data with zeros
-        pad_width = tuple((pad, pad) for pad in pad_amounts)
-        if len(data.shape) > 3:
-            pad_width = pad_width + ((0, 0),) * (len(data.shape) - 3)
-        
-        padded_data = np.pad(data, pad_width, mode='constant', constant_values=0)
-        logger.info(f"Padded data shape: {padded_data.shape}")
-        
-        # Update the affine matrix to account for padding
-        pad_shift_voxel = -pad_amounts.astype(float)
-        pad_shift_world = affine[:3, :3] @ pad_shift_voxel
-        
-        logger.debug(f"Padding shift in voxel space: {pad_shift_voxel}")
-        logger.debug(f"Padding shift in world space: {pad_shift_world}")
-        
-        # Update the affine translation
-        new_affine = affine.copy()
-        new_affine[:3, 3] = affine[:3, 3] + pad_shift_world
-        
-        logger.debug(f"Original affine translation: {affine[:3, 3]}")
-        logger.debug(f"New affine translation: {new_affine[:3, 3]}")
-        
-        # Create new image with padded data and updated affine
-        new_img = nib.Nifti1Image(padded_data.astype(data.dtype), new_affine, header)
-        new_img.header.set_xyzt_units('mm', 'sec')
-        
-        # Save the padded template
+            source_for_padding = work_dir / '_template_3d.nii.gz'
+            nib.save(
+                nib.Nifti1Image(data.astype(img.get_data_dtype()), img.affine, img.header),
+                str(source_for_padding),
+            )
+
+        original_shape = np.array(data.shape[:3])
+        logger.info(f"Template original shape: {list(original_shape)}")
+
+        # Calculate symmetric padding amounts (percentage-based)
+        pad_amounts = (original_shape * padding_percentage).astype(int)
+        logger.info(f"Padding amounts (per side): {list(pad_amounts)}")
+        logger.info(f"Template new shape: {list(original_shape + 2 * pad_amounts)}")
+
         template_f_padded = work_dir / 'template_padded.nii.gz'
-        logger.info(f"Saving zero-padded template: {template_f_padded}")
-        nib.save(new_img, template_f_padded)
+        pad_image(str(source_for_padding), str(template_f_padded), pad_amounts, logger=logger)
+
+        # Ensure spatial/temporal units are set correctly
+        padded_img = nib.load(str(template_f_padded))
+        padded_img.header.set_xyzt_units('mm', 'sec')
+        nib.save(padded_img, str(template_f_padded))
         
         # Validate the saved file exists
         validate_output_file(template_f_padded, logger)
@@ -1160,11 +1144,13 @@ def apply_segmentation(
         # Call fastsurfer_nn segmentation function
         # Note: This is the fastsurfer_nn.inference.run_segmentation function imported at the top
         # Build kwargs, only include roi_name and wm_thr if fix_roi_wm is True
+        # Use general.gpu_device with fallback to legacy fastSurferCNN.gpu_device
+        gpu_device = config.get('general', {}).get('gpu_device') or fscnn_cfg.get('gpu_device', 'auto')
         segmentation_kwargs = {
             "input_image": image_path,
             "modal": modal,
             "output_dir": temp_output_dir,
-            "device_id": fscnn_cfg.get('gpu_device', 'auto'),
+            "device_id": gpu_device,
             "logger": logger,
             "output_data_format": 'nifti',
             "enable_crop_2round": False,
@@ -1320,10 +1306,11 @@ def apply_skullstripping(
     if modal not in ['func', 'anat']:
         raise ValueError(f"Invalid modality: {modal}. Must be 'func' or 'anat'")
     
-    # Get configuration - use defaults if not provided
+    # Get configuration - use general.gpu_device with fallback to legacy skullstripping.gpu_device
     if config is not None:
+        general_gpu = config.get('general', {}).get('gpu_device')
         skull_cfg = config.get(modal, {}).get('skullstripping', {})
-        device_id = skull_cfg.get('gpu_device', 'auto')
+        device_id = general_gpu if general_gpu is not None else skull_cfg.get('gpu_device', 'auto')
     else:
         device_id = 'auto'
     

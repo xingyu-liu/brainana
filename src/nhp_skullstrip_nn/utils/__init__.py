@@ -6,7 +6,7 @@ and general plotting functions.
 """
 
 from .io import load_nifti, save_nifti, load_pickle, save_pickle
-from .gpu import get_device, setup_device
+from .gpu import get_device, setup_device, resolve_device
 from .plot import plot_slice, plot_volume
 from .log import setup_logging, get_logger, MacacaLogger
 from .morphology import (
@@ -24,6 +24,7 @@ __all__ = [
     'save_pickle',
     'get_device',
     'setup_device',
+    'resolve_device',
     'plot_slice',
     'plot_volume',
     # Logging utilities

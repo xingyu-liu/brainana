@@ -29,6 +29,7 @@ from .preprocessing import (
 # Import registration functions
 from .registration import (
     ants_register,
+    ants_cpu_register,
     ants_apply_transforms,
     compose_ants_registration_cmd,
     compose_transform_cmd
@@ -59,6 +60,7 @@ __all__ = [
     
     # Registration
     'ants_register',
+    'ants_cpu_register',
     'ants_apply_transforms',
     'ants_apply_transform_func2template',
     'compose_ants_registration_cmd',

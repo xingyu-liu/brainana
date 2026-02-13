@@ -301,6 +301,16 @@
                 </div>
                 <span class="help-text">(process only anatomical data)</span>
             </div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="general_gpu_device">gpu_device</label>
+                    <span class="param-control">
+                        <input type="text" id="general_gpu_device" name="general_gpu_device" value="auto">
+                    </span>
+                </div>
+                <span class="help-text">(GPU for skull stripping, segmentation, registration: "auto", -1 for CPU, or GPU index 0..N)</span>
+            </div>
         </div>
 
         <!-- BIDS Filtering -->
@@ -401,7 +411,7 @@
                     <label for="anat_conform_enabled">conform</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(HIGHLY RECOMMENDED. Conform input image to template space using FLIRT rigid registration, padding is hardcoded to 0.2.)</span>
+                <span class="help-text">(HIGHLY RECOMMENDED. Conform input image to template space using FLIRT rigid registration.)</span>
             </div>
             <div class="step">
                 <div class="param-row">
@@ -476,16 +486,6 @@
                     </div>
                     <div id="anat_fastSurferCNN_options">
                         <h4>fastSurferCNN</h4>
-                        <div class="param-block">
-                            <div class="param-row">
-                                <span class="param-check"></span>
-                                <label for="anat_fastSurferCNN_gpu_device">gpu_device</label>
-                                <span class="param-control">
-                                    <input type="text" id="anat_fastSurferCNN_gpu_device" name="anat_fastSurferCNN_gpu_device" value="auto">
-                                </span>
-                            </div>
-                            <span class="help-text">(gpu device id: >= -1 where -1 = CPU, or "auto" for auto-select)</span>
-                        </div>
                         <div class="param-block">
                             <div class="param-row">
                                 <span class="param-check"></span>
@@ -948,7 +948,8 @@
             _description: "Configuration for brainana preprocessing pipeline",
             general: {
                 verbose: 2,
-                anat_only: false
+                anat_only: false,
+                gpu_device: "auto"
             },
             bids_filtering: {
                 subjects: null,
@@ -1059,6 +1060,18 @@
         function validateConfig(config) {
             const errors = [];
             
+            // Validate general.gpu_device
+            const gpuDevice = config.general && config.general.gpu_device;
+            if (gpuDevice !== undefined && gpuDevice !== null && gpuDevice !== 'auto') {
+                if (typeof gpuDevice === 'number') {
+                    if (gpuDevice < -1) errors.push("general.gpu_device must be >= -1 (where -1 = CPU) or 'auto'");
+                } else if (typeof gpuDevice === 'string' && !gpuDevice.startsWith('cuda:')) {
+                    if (gpuDevice !== 'cpu' && isNaN(parseInt(gpuDevice))) {
+                        errors.push("general.gpu_device must be 'auto', -1, CPU index (0..N), or 'cuda:N'");
+                    }
+                }
+            }
+            
             // Validate motion correction
             if (config.func.motion_correction.enabled) {
                 const dof = config.func.motion_correction.dof;
@@ -1126,11 +1139,10 @@
                 
                 if (config.fastSurferCNN) {
                     const fscnn = config.fastSurferCNN;
-                    
-                    if (fscnn.gpu_device !== 'auto' && (typeof fscnn.gpu_device !== 'number' || fscnn.gpu_device < -1)) {
+                    const gpuDevice = fscnn.gpu_device;
+                    if (gpuDevice !== 'auto' && (typeof gpuDevice !== 'number' || gpuDevice < -1)) {
                         errors.push(`${prefix}.${keyName}.fastSurferCNN.gpu_device must be integer >= -1 or 'auto'`);
                     }
-                    
                     if (!Number.isInteger(fscnn.batch_size) || fscnn.batch_size < 1) {
                         errors.push(`${prefix}.${keyName}.fastSurferCNN.batch_size must be a positive integer`);
                     }
@@ -1329,6 +1341,17 @@
             // General
             config.general.verbose = parseInt(document.getElementById('general_verbose').value);
             config.general.anat_only = document.getElementById('general_anat_only').checked;
+            const gpuDeviceVal = document.getElementById('general_gpu_device').value.trim();
+            if (gpuDeviceVal === '' || gpuDeviceVal === 'auto') {
+                config.general.gpu_device = 'auto';
+            } else if (gpuDeviceVal === '-1' || gpuDeviceVal.toLowerCase() === 'cpu') {
+                config.general.gpu_device = -1;
+            } else if (gpuDeviceVal.startsWith('cuda:')) {
+                config.general.gpu_device = gpuDeviceVal;
+            } else {
+                const n = parseInt(gpuDeviceVal);
+                config.general.gpu_device = isNaN(n) ? 'auto' : n;
+            }
 
             // BIDS filtering
             config.bids_filtering.subjects = parseListInput(document.getElementById('bids_subjects').value);
@@ -1352,8 +1375,7 @@
             config.anat.skullstripping_segmentation.enabled = document.getElementById('anat_skullstripping_enabled').checked;
             config.anat.skullstripping_segmentation.method = document.getElementById('anat_skullstripping_method').value;
             if (config.anat.skullstripping_segmentation.method === 'fastSurferCNN') {
-                const gpuDevice = document.getElementById('anat_fastSurferCNN_gpu_device').value;
-                config.anat.skullstripping_segmentation.fastSurferCNN.gpu_device = (gpuDevice === 'auto' || gpuDevice === '') ? 'auto' : parseInt(gpuDevice);
+                config.anat.skullstripping_segmentation.fastSurferCNN.gpu_device = config.general.gpu_device;
                 config.anat.skullstripping_segmentation.fastSurferCNN.batch_size = parseInt(document.getElementById('anat_fastSurferCNN_batch_size').value);
                 config.anat.skullstripping_segmentation.fastSurferCNN.plane_weight_coronal = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_coronal').value);
                 config.anat.skullstripping_segmentation.fastSurferCNN.plane_weight_axial = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_axial').value);

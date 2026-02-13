@@ -104,7 +104,8 @@ def anat_conform(input: StepInput, template_file: Path) -> StepOutput:
         output_name=input.output_name or "anat_conformed.nii.gz",
         logger=logger,
         modal="anat",
-        skip_skullstripping=skip_skullstripping
+        skip_skullstripping=skip_skullstripping,
+        padding_percentage=input.config.get("anat.conform.padding_percentage"),
     )
     
     output_file = Path(result["imagef_conformed"]) if result.get("imagef_conformed") else input.input_file

@@ -43,6 +43,7 @@ from .bids import (
     BIDS_ENTITY_ORDER
 )
 from .nextflow import create_output_link
+from .gpu_device import resolve_device, get_device, setup_device
 
 __all__ = [
     'run_command',
@@ -54,5 +55,6 @@ __all__ = [
     'resolve_template', 'resolve_template_file', 'list_available_templates', 'validate_template_spec',
     'print_available_templates', 'get_template_manager',
     'parse_bids_entities', 'create_bids_filename', 'create_bids_output_filename', 'get_filename_stem', 'find_bids_metadata', 'BIDS_ENTITY_ORDER',
-    'create_output_link'
+    'create_output_link',
+    'resolve_device', 'get_device', 'setup_device',
 ] 
