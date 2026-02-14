@@ -188,7 +188,14 @@ workflow FUNC_WF {
             }
             .set { func_coreg_multi }
         
-        FUNC_WITHIN_SES_COREG(func_coreg_multi.combined, func_coreg_multi.reference, func_coreg_multi.ref_run_identifier_val, config_file)
+        // Use GPU token when GPUs available (ants_register uses FireANTs when available)
+        def use_coreg_gpu = (params.gpu_count ?: 0) > 0
+        def coreg_gpu_input = use_coreg_gpu ? gpu_queue : Channel.value('none')
+
+        FUNC_WITHIN_SES_COREG(func_coreg_multi.combined, func_coreg_multi.reference, func_coreg_multi.ref_run_identifier_val, config_file, coreg_gpu_input)
+        if (use_coreg_gpu) {
+            FUNC_WITHIN_SES_COREG.out.gpu_token.subscribe { gpu_queue << it }
+        }
         func_coreg_transforms_ch = FUNC_WITHIN_SES_COREG.out.transforms
         
         // Separate multi-run sessions (need averaging) from single-run sessions (skip averaging)

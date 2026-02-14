@@ -545,7 +545,7 @@ def func_apply_transforms(
     # Call operation
     result = ants_apply_transforms(
         movingf=str(input.input_file),
-        moving_type=3,  # 3D image (time series)
+        moving_type=3,  # 4D image (BOLD)
         interpolation=interpolation,
         outputf_name=input.output_name or "func_registered.nii.gz",
         fixedf=str(reference_file),
@@ -579,99 +579,151 @@ def func_within_ses_coreg(
     reference_tmean: Path,
     reference_run: str,
     current_run: str,
-    bold_file: Path
+    bold_file: Path,
+    method: Optional[str] = "ants",
 ) -> StepOutput:
     """
     Coregister a functional run to a reference run within the same session.
-    
+
     This is used when multiple runs exist in a session. Later runs are
     coregistered to the first run using tmean images, then the transform
     is applied to the BOLD file.
-    
+
     Args:
         input: StepInput with input_file (tmean to be coregistered), working_dir, config, metadata
         reference_tmean: Path to reference tmean (from first run)
         reference_run: Run identifier for reference (e.g., "01")
         current_run: Run identifier for current run (e.g., "02")
         bold_file: Path to BOLD file to be coregistered
-        
+        method: Registration method: "ants" (default) or "flirt". ANTs uses rigid (FireANTs/ANTs);
+            FLIRT uses FSL FLIRT with rigid (dof=6).
+
     Returns:
         StepOutput with coregistered tmean, coregistered BOLD, and transform files
     """
-    # Set FLIRT parameters for functional coregistration (rigid registration)
-    flirt_config = {
-        "registration": {
-            "flirt": {
-                "cost": "mutualinfo",
-                "searchcost": "mutualinfo",
-                "coarsesearch": 40,
-                "finesearch": 15,
-                "searchrx": [-60, 60],
-                "searchry": [-60, 60],
-                "searchrz": [-60, 60]
+    if method not in ("ants", "flirt"):
+        raise ValueError(f"method must be 'ants' or 'flirt', got: {method!r}")
+
+    prefix = f"run{current_run}_to_run{reference_run}_coreg"
+    tmean_out = f"run{current_run}_to_run{reference_run}_tmean_coreg.nii.gz"
+    bold_out = f"run{current_run}_to_run{reference_run}_bold_coreg.nii.gz"
+
+    if method == "ants":
+        # Step 1: ANTs rigid registration (FireANTs when GPU available, else ANTs CPU)
+        try:
+            registration_result = ants_register(
+                fixedf=str(reference_tmean),
+                movingf=str(input.input_file),
+                working_dir=str(input.working_dir),
+                output_prefix=prefix,
+                config=input.config,
+                logger=logger,
+                xfm_type="rigid",
+            )
+        except Exception as e:
+            logger.error(f"Error during ANTs registration for run {current_run} to run {reference_run}: {e}")
+            raise RuntimeError(
+                f"Within-session coregistration failed during ANTs registration: {e}"
+            ) from e
+
+        # ants_register already produces the registered tmean (imagef_registered)
+        tmean_coregistered = Path(registration_result["imagef_registered"])
+        xfm_forward_f = Path(registration_result["forward_transform"])
+        xfm_inverse_f = Path(registration_result["inverse_transform"]) if registration_result.get("inverse_transform") else None
+
+        # Step 2: Apply same transform to BOLD (4D time series)
+        bold_coregistered = None
+        if bold_file and bold_file.exists():
+            try:
+                apply_result_bold = ants_apply_transforms(
+                    movingf=str(bold_file),
+                    moving_type=3, # 4D image (BOLD)
+                    interpolation=input.config.get("registration", {}).get("interpolation", "LanczosWindowedSinc"),
+                    outputf_name=bold_out,
+                    fixedf=str(reference_tmean),
+                    working_dir=str(input.working_dir),
+                    transformf=[str(xfm_forward_f)],
+                    reff=str(reference_tmean),
+                    logger=logger,
+                    generate_tmean=False,
+                )
+                bold_coregistered = Path(apply_result_bold["imagef_registered"])
+            except Exception as e:
+                logger.error(f"Error during BOLD transformation application: {e}")
+                raise RuntimeError(
+                    f"Within-session coregistration failed when applying transformation to BOLD: {e}"
+                ) from e
+    else:
+        # method == "flirt"
+        flirt_config = {
+            "registration": {
+                "flirt": {
+                    "cost": "mutualinfo",
+                    "searchcost": "mutualinfo",
+                    "coarsesearch": 40,
+                    "finesearch": 15,
+                    "searchrx": [-60, 60],
+                    "searchry": [-60, 60],
+                    "searchrz": [-60, 60],
+                }
             }
         }
-    }
-    
-    # Step 1: FLIRT rigid registration from current run tmean to reference run tmean
-    try:
-        registration_result = flirt_register(
-            fixedf=str(reference_tmean),
-            movingf=str(input.input_file),  # Current run tmean
-            working_dir=str(input.working_dir),
-            output_prefix=f"run{current_run}_to_run{reference_run}_coreg",
-            config=flirt_config,
-            logger=logger,
-            dof=6  # Use rigid registration for within-session coregistration
-        )
-        xfm_forward_f = Path(registration_result['forward_transform'])
-        xfm_inverse_f = Path(registration_result.get('inverse_transform')) if 'inverse_transform' in registration_result else None
-    except Exception as e:
-        logger.error(f"Error during FLIRT registration for run {current_run} to run {reference_run}: {e}")
-        raise RuntimeError(
-            f"Within-session coregistration failed during FLIRT registration: {e}"
-        )
-    
-    # Step 2: Apply the affine transformation to the tmean image
-    try:
-        apply_result = flirt_apply_transforms(
-            movingf=str(input.input_file),
-            outputf_name=f"run{current_run}_to_run{reference_run}_tmean_coreg.nii.gz",
-            reff=str(reference_tmean),
-            working_dir=str(input.working_dir),
-            transformf=str(xfm_forward_f),
-            logger=logger,
-            interpolation='trilinear',
-            generate_tmean=False
-        )
-        tmean_coregistered = Path(apply_result['imagef_registered'])
-    except Exception as e:
-        logger.error(f"Error during tmean transformation application: {e}")
-        raise RuntimeError(
-            f"Within-session coregistration failed when applying transformation to tmean: {e}"
-        )
-    
-    # Step 3: Apply the same transform to the BOLD file
-    bold_coregistered = None
-    if bold_file and bold_file.exists():
         try:
-            apply_result_bold = flirt_apply_transforms(
-                movingf=str(bold_file),
-                outputf_name=f"run{current_run}_to_run{reference_run}_bold_coreg.nii.gz",
-                reff=str(reference_tmean),  # Use tmean as reference for BOLD too
+            registration_result = flirt_register(
+                fixedf=str(reference_tmean),
+                movingf=str(input.input_file),
+                working_dir=str(input.working_dir),
+                output_prefix=prefix,
+                config=flirt_config,
+                logger=logger,
+                dof=6,
+            )
+            xfm_forward_f = Path(registration_result["forward_transform"])
+            xfm_inverse_f = Path(registration_result["inverse_transform"]) if registration_result.get("inverse_transform") else None
+        except Exception as e:
+            logger.error(f"Error during FLIRT registration for run {current_run} to run {reference_run}: {e}")
+            raise RuntimeError(
+                f"Within-session coregistration failed during FLIRT registration: {e}"
+            ) from e
+
+        try:
+            apply_result = flirt_apply_transforms(
+                movingf=str(input.input_file),
+                outputf_name=tmean_out,
+                reff=str(reference_tmean),
                 working_dir=str(input.working_dir),
                 transformf=str(xfm_forward_f),
                 logger=logger,
-                interpolation='trilinear',
-                generate_tmean=False
+                interpolation="trilinear",
+                generate_tmean=False,
             )
-            bold_coregistered = Path(apply_result_bold['imagef_registered'])
+            tmean_coregistered = Path(apply_result["imagef_registered"])
         except Exception as e:
-            logger.error(f"Error during BOLD transformation application: {e}")
+            logger.error(f"Error during tmean transformation application: {e}")
             raise RuntimeError(
-                f"Within-session coregistration failed when applying transformation to BOLD: {e}"
-            )
-    
+                f"Within-session coregistration failed when applying transformation to tmean: {e}"
+            ) from e
+
+        bold_coregistered = None
+        if bold_file and bold_file.exists():
+            try:
+                apply_result_bold = flirt_apply_transforms(
+                    movingf=str(bold_file),
+                    outputf_name=bold_out,
+                    reff=str(reference_tmean),
+                    working_dir=str(input.working_dir),
+                    transformf=str(xfm_forward_f),
+                    logger=logger,
+                    interpolation="trilinear",
+                    generate_tmean=False,
+                )
+                bold_coregistered = Path(apply_result_bold["imagef_registered"])
+            except Exception as e:
+                logger.error(f"Error during BOLD transformation application: {e}")
+                raise RuntimeError(
+                    f"Within-session coregistration failed when applying transformation to BOLD: {e}"
+                ) from e
+
     additional_files = {}
     if xfm_forward_f.exists():
         additional_files["forward_transform"] = xfm_forward_f
@@ -679,7 +731,7 @@ def func_within_ses_coreg(
         additional_files["inverse_transform"] = xfm_inverse_f
     if bold_coregistered and bold_coregistered.exists():
         additional_files["bold_coregistered"] = bold_coregistered
-    
+
     return StepOutput(
         output_file=tmean_coregistered,
         metadata={
@@ -687,9 +739,10 @@ def func_within_ses_coreg(
             "modality": "func",
             "reference_run": reference_run,
             "current_run": current_run,
-            "xfm_type": "rigid"
+            "xfm_type": "rigid",
+            "method": method,
         },
-        additional_files=additional_files
+        additional_files=additional_files,
     )
 
 

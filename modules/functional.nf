@@ -1602,16 +1602,21 @@ process FUNC_WITHIN_SES_COREG {
     path(reference_tmean)
     val(reference_run_identifier)
     path config_file
+    val gpu_id  // GPU ID for scheduling ('none' for CPU mode, integer for GPU mode)
     
     output:
     tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-coreg_bold.nii.gz"), path("*desc-coreg_boldref.nii.gz"), val(bids_name), emit: output
     tuple val(subject_id), val(session_id), val(run_identifier), path("from-${run_identifier}_to-${reference_run_identifier}_mode-image_xfm*"), emit: transforms
     path "*.json", emit: metadata
+    val gpu_id, emit: gpu_token
     
     script:
     """
-    # Thread environment variables are set by Nextflow's beforeScript based on task.cpus
-    # Python code reads OMP_NUM_THREADS from environment
+    # Conditional GPU assignment (ants_register uses FireANTs when GPU available)
+    if [ "${gpu_id}" != "none" ]; then
+        export CUDA_VISIBLE_DEVICES=${gpu_id}
+        echo "[GPU Assignment] Task ${task.index} -> GPU ${gpu_id} (of ${params.gpu_count} available)"
+    fi
     
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.steps.functional import func_within_ses_coreg
