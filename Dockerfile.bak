@@ -75,47 +75,6 @@ RUN find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null; \
     true
 
 ###########################
-# FireANTs fused_ops (CUDA) — build into venv for GreedyRegistration/syn
-###########################
-FROM debian:bookworm-slim AS fireants-fused-ops-builder
-
-ARG DEBIAN_FRONTEND=noninteractive
-
-# NVIDIA CUDA repo for Debian 12 (repo serves 12.3; so venv Python from python-builder stays valid)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates \
-      curl \
-      wget && \
-    wget -q https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb && \
-    dpkg -i cuda-keyring_1.1-1_all.deb && rm -f cuda-keyring_1.1-1_all.deb && \
-    apt-get update && apt-get install -y --no-install-recommends \
-      build-essential \
-      cuda-toolkit-12-3 \
-      git \
-      ninja-build \
-      python3 \
-      python3-dev \
-      python3-venv && \
-    rm -rf /var/lib/apt/lists/*
-
-# System compiler first (avoid toolchain conflicts when loading .so at runtime)
-ENV PATH=/usr/bin:/usr/local/cuda/bin:${PATH}
-
-# No GPU at build time: set arch list so PyTorch cpp_extension does not get an empty list (IndexError).
-# 7.0–9.0 cover Volta/Turing/Ampere/Ada/Hopper; 9.0+PTX allows JIT for newer/future GPUs.
-# If the user's GPU is not in this list, fused_ops may fail at runtime; ants_register() then
-# falls back to ANTs (CPU) automatically (rigid/affine still use FireANTs without fused_ops).
-ENV TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;8.9;9.0+PTX"
-
-COPY --from=python-builder /opt/venv /opt/venv
-
-RUN git clone --depth 1 https://github.com/rohitrango/FireANTs.git /tmp/FireANTs && \
-    cd /tmp/FireANTs/fused_ops && \
-    /opt/venv/bin/python setup.py build_ext && \
-    /opt/venv/bin/python setup.py install && \
-    cd / && rm -rf /tmp/FireANTs
-
-###########################
 # FreeSurfer (exclude-list extract)
 ###########################
 FROM debian:bookworm-slim AS freesurfer-download
@@ -330,7 +289,6 @@ if [ "$PS1" ]; then\n\
     echo "Installed Tools:"\n\
     echo "  - FSL:        \$(fslval 2>/dev/null | head -n 1 || echo \"Installed\")"\n\
     echo "  - ANTs:       \$(antsRegistration --version | grep Version | head -n 1 || echo \"Installed\")"\n\
-    echo "  - FireANTs:   \$(python3 -c \"import fireants; print(fireants.__version__)\" 2>/dev/null || echo \"Installed\")"\n\
     echo "  - AFNI:       \$(afni -version | head -n 1 || echo \"Installed\")"\n\
     echo "  - FreeSurfer: \$(cat \$FREESURFER_HOME/build-stamp.txt 2>/dev/null || echo \"Installed\")"\n\
     echo "  - Python:     \$(python3 --version)"\n\
@@ -381,18 +339,8 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 ENV MPLCONFIGDIR=/tmp/matplotlib \
     PYTHONPYCACHEPREFIX=/tmp/pycache
 
-COPY --chmod=755 --from=fireants-fused-ops-builder /opt/venv /opt/venv
+COPY --chmod=755 --from=python-builder /opt/venv /opt/venv
 COPY --chmod=755 --from=python-builder /opt/brainana /opt/brainana
-
-# FireANTs fused_ops: use venv CUDA/torch libs so fused_ops load with --gpus all
-RUN FER="$(find /opt/venv -path '*nvidia/cuda_runtime/lib' -type d 2>/dev/null | head -1)" && \
-    TORCH_LIB="$(find /opt/venv -path '*torch/lib' -type d 2>/dev/null | head -1)" && \
-    if [ -n "$FER" ]; then \
-      echo '' >> /etc/profile.d/neuroenv.sh && \
-      echo '# FireANTs fused_ops: venv CUDA runtime' >> /etc/profile.d/neuroenv.sh && \
-      { [ -n "$TORCH_LIB" ] && echo "export LD_LIBRARY_PATH=\"$FER:$TORCH_LIB:\${LD_LIBRARY_PATH}\"" || echo "export LD_LIBRARY_PATH=\"$FER:\${LD_LIBRARY_PATH}\""; } >> /etc/profile.d/neuroenv.sh && \
-      [ -f "$FER/libcudart.so.12" ] && echo "export LD_PRELOAD=\"$FER/libcudart.so.12\"" >> /etc/profile.d/neuroenv.sh; \
-    fi
 
 # World-writable temp dirs so any UID (via -u or gosu) can use them
 RUN mkdir -p /tmp/matplotlib /tmp/pycache /tmp/.X11-unix /tmp/home && \

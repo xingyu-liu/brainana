@@ -44,14 +44,16 @@ dependencies = [
     "matplotlib>=3.10.3",
     "pandas>=2.3.0",
     "packaging>=20.0",
-    # PyTorch for fastsurfer_nn models
-    "torch>=2.0.0",
+    # PyTorch for fastsurfer_nn models (>=2.3 for FireANTs compatibility)
+    "torch>=2.3.0",
     "torchvision>=0.15.0",
     "torchio>=0.18.0",
-    # Image processing
+    # Image processing (SimpleITK 2.2.1 for FireANTs compatibility)
     "Pillow>=8.0.0",
     "scikit-image>=0.20.0",
-    "SimpleITK>=2.1.0",
+    "SimpleITK==2.2.1",
+    # FireANTs for GPU-accelerated registration
+    "fireants",
     # fastsurfer_nn dependencies
     "yacs>=0.1.8",
     "h5py>=3.8.0",
