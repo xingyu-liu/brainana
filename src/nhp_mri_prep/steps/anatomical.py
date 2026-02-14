@@ -321,7 +321,8 @@ def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepO
             f"T2w to T1w registration failed during ANTs registration: {e}"
         )
     
-    # Step 2: Apply the transform with Lanczos interpolation
+    # Step 2: Apply the transform (interpolation from config)
+    interpolation = input.config.get("registration", {}).get("interpolation", "BSpline")
     try:
         apply_result = ants_apply_transforms(
             movingf=str(input.input_file),
@@ -331,7 +332,7 @@ def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepO
             transformf=[str(xfm_forward_f)],
             logger=logger,
             moving_type=0,
-            interpolation="LanczosWindowedSinc",
+            interpolation=interpolation,
             reff=str(t1w_reference),
             generate_tmean=False
         )

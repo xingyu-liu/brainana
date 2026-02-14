@@ -749,11 +749,11 @@ if use_unskullstripped:
         raise FileNotFoundError(f"Forward transform file not found: {forward_transform}")
     
     # Apply the transform to the unskullstripped version
-    # Use LanczosWindowedSinc for continuous-value anatomical images (high-quality interpolation)
+    interpolation = config.get("registration", {}).get("interpolation", "BSpline")
     apply_result = ants_apply_transforms(
         movingf=str(unskullstripped_path),
         moving_type=0,  # 0: scalar (anatomical image)
-        interpolation='LanczosWindowedSinc',
+        interpolation=interpolation,
         outputf_name='anat_registered.nii.gz',
         fixedf=str(template_file),
         working_dir=str(Path('work')),
@@ -1371,11 +1371,11 @@ else:
     template_name = config.get('template', {}).get('output_space', 'NMT2Sym:res-05').split(':')[0]
 
 # Apply registration transform to T2w
-# Use LanczosWindowedSinc for continuous-value anatomical images (high-quality interpolation)
+interpolation = config.get("registration", {}).get("interpolation", "BSpline")
 t2w_result = ants_apply_transforms(
     movingf=str(Path('${masked_t2w}')),
     moving_type=0,  # 0: scalar (anatomical image)
-    interpolation='LanczosWindowedSinc',
+    interpolation=interpolation,
     outputf_name='t2w_registered.nii.gz',
     fixedf=str(Path('${registration_reference}')),
     working_dir='work',

@@ -534,7 +534,7 @@ def func_apply_transforms(
         StepOutput with registered 4D BOLD file and tmean
     """
     if interpolation is None:
-        interpolation = input.config.get("registration", {}).get("interpolation", "LanczosWindowedSinc")
+        interpolation = input.config.get("registration", {}).get("interpolation", "BSpline")
     
     # Convert transform files to strings
     transform_strs = [str(tf) for tf in transform_files]
@@ -638,7 +638,7 @@ def func_within_ses_coreg(
                 apply_result_bold = ants_apply_transforms(
                     movingf=str(bold_file),
                     moving_type=3, # 4D image (BOLD)
-                    interpolation=input.config.get("registration", {}).get("interpolation", "LanczosWindowedSinc"),
+                    interpolation=input.config.get("registration", {}).get("interpolation", "BSpline"),
                     outputf_name=bold_out,
                     fixedf=str(reference_tmean),
                     working_dir=str(input.working_dir),

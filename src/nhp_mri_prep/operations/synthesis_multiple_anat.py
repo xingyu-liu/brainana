@@ -117,11 +117,12 @@ def synthesize_multiple_anatomical(
                 if registered_path.exists():
                     registered_path.unlink()
 
-                # Apply transform with explicit interpolation
+                # Apply transform (interpolation from config)
+                interpolation = config.get("registration", {}).get("interpolation", "BSpline")
                 apply_result = ants_apply_transforms(
                     movingf=str(moving_path),
                     moving_type=0,
-                    interpolation="LanczosWindowedSinc",
+                    interpolation=interpolation,
                     outputf_name=f"{output_prefix}_registered.nii.gz",
                     fixedf=str(reference_path),
                     working_dir=str(synthesis_work_dir),

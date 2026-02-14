@@ -908,12 +908,12 @@
                     <label for="registration_interpolation">interpolation</label>
                     <span class="param-control">
                         <select id="registration_interpolation" name="registration_interpolation">
-                            <option value="BSpline">BSpline</option>
+                            <option value="BSpline" selected>BSpline</option>
                             <option value="CosineWindowedSinc">CosineWindowedSinc</option>
                             <option value="GenericLabel">GenericLabel</option>
                             <option value="Gaussian">Gaussian</option>
                             <option value="HammingWindowedSinc">HammingWindowedSinc</option>
-                            <option value="LanczosWindowedSinc" selected>LanczosWindowedSinc</option>
+                            <option value="LanczosWindowedSinc">LanczosWindowedSinc</option>
                             <option value="Linear">Linear</option>
                             <option value="MultiLabel">MultiLabel</option>
                             <option value="NearestNeighbor">NearestNeighbor</option>
@@ -1032,7 +1032,7 @@
                 func2anat_xfm_type: "syn",
                 func2template_xfm_type: "syn",
                 keep_func_resolution: true,
-                interpolation: "LanczosWindowedSinc"
+                interpolation: "BSpline"
             }
         };
 

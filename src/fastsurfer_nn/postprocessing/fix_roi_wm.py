@@ -444,7 +444,7 @@ def fix_roi_wm(
         config = {
             'registration': {
                 'threads': num_threads,
-                'interpolation': 'LanczosWindowedSinc',
+                'interpolation': 'BSpline',
             },
             'general': {
                 'verbose': 2 if verbose else 1,
@@ -476,10 +476,11 @@ def fix_roi_wm(
     if verbose:
         print(f"\nApplying transforms to template WM probability map...")
     
+    interpolation = config.get('registration', {}).get('interpolation', 'BSpline')
     ants_apply_transforms(
         movingf=str(tpl_roi_wm_f),
         moving_type=0,
-        interpolation='LanczosWindowedSinc',
+        interpolation=interpolation,
         outputf_name=wm_roi_transformed_filename,  # Pass only filename, not full path
         fixedf=str(t1w_roi_f),
         working_dir=str(reg_working_dir),

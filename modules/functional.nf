@@ -1154,7 +1154,7 @@ if data_type == "mask":
     print(f"INFO: Processing mask with interpolation={interpolation}, moving_type={moving_type}", file=sys.stderr)
 elif data_type == "bold":
     moving_type = 3  # 3D time series (4D BOLD)
-    interpolation = config.get("registration", {}).get("interpolation", "LanczosWindowedSinc")  # Use config/default
+    interpolation = config.get("registration", {}).get("interpolation", "BSpline")  # Use config/default
     generate_tmean = True  # Generate temporal mean for BOLD
     modality = "bold"
 else:
