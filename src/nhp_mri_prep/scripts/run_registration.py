@@ -13,8 +13,8 @@ from nhp_mri_prep.operations.registration import ants_register
 import logging
 
 # %%
-moving_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/T1wT2w/T2w.nii.gz'
-fixed_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/T1wT2w/T1w.nii.gz'
+moving_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/T1wT2w/T2w_tilted.nii.gz'
+fixed_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/T1wT2w/T1w_tilted.nii.gz'
 
 method = 'ants'
 xfm_type = 'rigid'

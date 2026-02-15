@@ -549,9 +549,10 @@ def ants_register(
     """
     if logger is None:
         logger = logging.getLogger(__name__)
-    use_fireants = _use_fireants(logger)
+    # FireANTs is only used for syn; rigid/affine are done with ANTs (FireANTs is poor at linear transforms)
+    use_fireants = xfm_type == "syn" and _use_fireants(logger)
     if use_fireants:
-        logger.info("REGISTRATION: using FireANTs (GPU)")
+        logger.info("REGISTRATION: using FireANTs (GPU) for syn")
         from .fireants_registration import fireants_registration
         try:
             result = fireants_registration(

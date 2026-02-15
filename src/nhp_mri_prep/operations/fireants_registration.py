@@ -1,9 +1,11 @@
 """
 FireANTs (GPU) registration for nhp_mri_prep.
 
-Same interface and output contract as ants_cpu_register: returns paths to
-registered image and transform files (.mat for rigid/affine, .nii.gz warp for syn).
-Optional dependency: fireants, torch, scipy. When unavailable, use ants_cpu_register.
+FireANTs is used only for syn (deformable); rigid and affine are delegated to
+ANTS, since FireANTs performs poorly on linear transforms.
+
+Same interface and output contract as ants_cpu_register. Optional dependency:
+fireants, torch, scipy. When unavailable, use ants_cpu_register.
 """
 
 import os
@@ -19,7 +21,6 @@ from pathlib import Path
 
 from fireants.io import BatchedImages, FakeBatchedImages, Image
 from fireants.registration.affine import AffineRegistration
-from fireants.registration.rigid import RigidRegistration
 from fireants.registration.greedy import GreedyRegistration
 
 from fireants.utils.globals import MIN_IMG_SIZE
@@ -33,94 +34,22 @@ try:
 except ImportError:
     loadmat = savemat = None
 
-VALID_XFM_TYPES = ("translation", "rigid", "affine", "syn")
-
-# Order of linear stages for the staged pipeline.
-_LINEAR_STAGE_ORDER = ("translation", "rigid", "affine")
-
-
 @dataclass
 class FireANTsRegistrationParams:
-    """FireANTs registration parameters (hardcoded defaults).
-
-    The staged pipeline mirrors ANTs: translation → rigid → affine → SyN.
-    Each linear stage initialises from the previous stage's result.
-
-    Loss functions are chosen to match ANTs defaults:
-    - Translation/Rigid/Affine stages use MI (Mutual Information) for
-      cross-modality robustness.
-    - SyN deformable stage uses CC (Cross-Correlation) for local structure
-      capture, after the affine chain (which uses MI) has handled gross
-      alignment.
-    """
+    """FireANTs registration parameters (hardcoded defaults)."""
     scales: List[int] = field(default_factory=lambda: [4, 2, 1])
-    iterations_translation: List[int] = field(default_factory=lambda: [500, 250, 100])
-    iterations_affine: List[int] = field(default_factory=lambda: [500, 250, 100])
+    iterations_affine: List[int] = field(default_factory=lambda: [200, 100, 50])
     iterations_deformable: List[int] = field(default_factory=lambda: [200, 100, 50])
     optimizer_affine: str = "Adam"
     optimizer_deformable: str = "Adam"
-    lr_translation: float = 1e-1
-    lr_rigid: float = 1e-2
     lr_affine: float = 3e-3
     lr_deformable: float = 0.5
-    # Loss: MI for translation/rigid/affine (matches ANTs MI[fixed,moving,1,32,regular,0.25])
-    loss_type_affine: str = "mi"
-    mi_kernel_type: str = "gaussian"
-    mi_num_bins: int = 32
-    # Loss: CC for deformable (matches ANTs cc[fixed,moving,0.5,4,...])
-    loss_type_deformable: str = "cc"
     cc_kernel_size: int = 5
     smooth_grad_sigma: float = 1.0
     deformation_type: str = "compositive"
 
 
 DEFAULT_FIREANTS_PARAMS = FireANTsRegistrationParams()
-
-
-class TranslationRegistration(RigidRegistration):
-    """Translation-only registration (3 DOF in 3-D).
-
-    Subclasses :class:`RigidRegistration` with rotation parameters frozen
-    at identity, so only the translation vector is optimised.  Inherits
-    ``save_as_ants_transforms()``, ``evaluate()``, and the full multi-scale
-    optimisation loop from the parent.
-
-    Overrides ``get_rigid_matrix()`` to build the homogeneous matrix
-    directly from ``self.transl`` (identity rotation + translation).  This
-    guarantees a clean autograd path: the gradient of the loss flows
-    directly to ``self.transl`` without passing through the rotation
-    computation.  ``self.rotation`` is excluded from the graph entirely,
-    so the optimizer (which sees ``grad=None``) skips it automatically.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Ensure rotation is at identity (zeros in the Lie-algebra
-        # parameterisation).  It won't be updated because our overridden
-        # get_rigid_matrix() never references it.
-        self.rotation.data.zero_()
-        if hasattr(self, 'logscale') and isinstance(self.logscale, torch.nn.Parameter):
-            self.logscale.data.zero_()
-
-    # ------------------------------------------------------------------
-    def get_rigid_matrix(self, homogenous=True):
-        """Return identity-rotation + translation matrix.
-
-        Builds the matrix from ``self.transl`` alone, bypassing the
-        parent's rotation computation.  For identity rotation the
-        ``around_center`` correction vanishes (``center − I·center = 0``),
-        so the output translation equals ``self.transl``.
-        """
-        dims = self.transl.shape[-1]
-        batch = self.transl.shape[0]
-        # Identity rotation block — no connection to self.rotation.
-        eye = torch.eye(
-            dims + 1, device=self.transl.device, dtype=self.transl.dtype,
-        ).unsqueeze(0).expand(batch, -1, -1).clone()
-        eye[:, :dims, -1] = self.transl
-        if homogenous:
-            return eye.contiguous()
-        return eye[:, :dims, :].contiguous()
 
 
 def _compute_safe_scales(
@@ -133,25 +62,22 @@ def _compute_safe_scales(
     """Adapt multi-scale pyramid to image dimensions.
 
     FireANTs' ``downsample_fft`` assumes the target size is *smaller* than
-    the source.  The actual downsampled size for dimension ``d`` at a given
-    ``scale`` is ``max(d // scale, MIN_IMG_SIZE)``.  When this value is
-    **≥ d** the operation becomes an upsample and the FFT crop + padding-
-    removal produces a zero-length tensor (``ifftn`` raises
-    ``RuntimeError: Invalid number of data points (0) specified``).
+    the source.  When an image dimension ``d`` is small (common for low-res /
+    small-FOV functional data), ``max(d // scale, MIN_IMG_SIZE)`` can exceed
+    ``d``, turning a downsample into an upsample.  The FFT crop + padding-
+    removal then produces a zero-length tensor and ``ifftn`` raises
+    ``RuntimeError: Invalid number of data points (0) specified``.
 
-    A scale is safe as long as every spatial dimension of both images
-    satisfies ``max(d // scale, MIN_IMG_SIZE) < d``.  In practice this
-    means the dimension must be **> MIN_IMG_SIZE**; once that is true the
-    clamped downsample is always strictly smaller than the original.
-
-    Scale 1 is kept unconditionally (no downsampling).  Images with any
-    dimension ≤ MIN_IMG_SIZE must be zero-padded beforehand — see the
-    padding logic in ``fireants_registration()``.
+    This function filters the requested scale list so that only scales where
+    *every* spatial dimension of *both* images satisfies
+    ``d // scale >= MIN_IMG_SIZE`` are kept.  Scale 1 is kept unconditionally
+    (no downsampling), but images with dims < MIN_IMG_SIZE must be
+    zero-padded beforehand — see the padding logic in fireants_registration().
 
     Returns:
         (safe_scales, safe_iters) with matching lengths.
     """
-    all_dims = list(fixed_shape) + list(moving_shape)
+    min_dim = min(min(fixed_shape), min(moving_shape))
 
     safe_scales: List[int] = []
     safe_iters: List[int] = []
@@ -160,32 +86,22 @@ def _compute_safe_scales(
             # Scale 1: no downsampling performed, always safe
             safe_scales.append(scale)
             safe_iters.append(iters)
+        elif min_dim // scale >= MIN_IMG_SIZE:
+            safe_scales.append(scale)
+            safe_iters.append(iters)
         else:
-            # Check that every dimension, after clamped downsampling, is
-            # strictly smaller than the original (i.e. a true downsample).
-            safe = all(
-                max(d // scale, MIN_IMG_SIZE) < d for d in all_dims
+            logger.info(
+                f"FireANTs: skipping scale {scale} "
+                f"(min spatial dim {min_dim}, "
+                f"min_dim/scale={min_dim / scale:.1f} < MIN_IMG_SIZE={MIN_IMG_SIZE})"
             )
-            if safe:
-                safe_scales.append(scale)
-                safe_iters.append(iters)
-            else:
-                # Find the problematic dimension for a helpful log message.
-                bad = [(d, max(d // scale, MIN_IMG_SIZE))
-                       for d in all_dims
-                       if max(d // scale, MIN_IMG_SIZE) >= d]
-                logger.info(
-                    f"FireANTs: skipping scale {scale} "
-                    f"(clamped downsample would not shrink: {bad})"
-                )
 
     if not safe_scales:
         # All coarse levels were dropped — register at full resolution only
         safe_scales = [1]
         safe_iters = [default_iters[-1]]
         logger.warning(
-            f"FireANTs: no multi-scale levels feasible for dims "
-            f"fixed={list(fixed_shape)}, moving={list(moving_shape)}; "
+            f"FireANTs: no multi-scale levels feasible for min spatial dim {min_dim}; "
             "using single-scale (scale=1) registration"
         )
 
@@ -200,7 +116,7 @@ def _compute_safe_scales(
 
 
 def _run_affine_registration(
-    registration: Union[AffineRegistration, RigidRegistration],
+    registration: AffineRegistration,
     device: str,
     logger: logging.Logger,
     reg_type: str = "affine",
@@ -230,7 +146,7 @@ def _run_greedy_registration(
 
 
 def _save_registered_image(
-    registration: Union[AffineRegistration, RigidRegistration, GreedyRegistration],
+    registration: Union[AffineRegistration, GreedyRegistration],
     batch_fixed: BatchedImages,
     batch_moving: BatchedImages,
     output_path: Union[str, Path],
@@ -250,7 +166,7 @@ def _get_output_paths(output_path_prefix: str, xfm_type: str) -> Dict[str, str]:
         paths["forward_transform"] = str(output_dir / f"{base_name}_warp.nii.gz")
         paths["inverse_transform"] = str(output_dir / f"{base_name}_inverse_warp.nii.gz")
     else:
-        suffix = xfm_type  # "translation", "rigid", or "affine"
+        suffix = "rigid" if xfm_type == "rigid" else "affine"
         paths["forward_transform"] = str(output_dir / f"{base_name}_{suffix}.mat")
         paths["inverse_transform"] = str(output_dir / f"{base_name}_inverse_{suffix}.mat")
     return paths
@@ -323,179 +239,6 @@ def _invert_affine_mat(
     logger.info(f"Wrote inverse affine: {inverse_mat_path}")
 
 
-def _compute_com_init_translation(
-    batch_fixed: BatchedImages,
-    batch_moving: BatchedImages,
-    logger: logging.Logger,
-) -> torch.Tensor:
-    """Compute centre-of-mass offset between fixed and moving images.
-
-    Mimics ANTs' ``--initial-moving-transform [fixed,moving,1]`` (centre-of-
-    mass alignment).  The offset is returned in **physical (world)
-    coordinates**, ready for use as ``init_translation`` in
-    :class:`RigidRegistration` or :class:`TranslationRegistration`.
-
-    Returns:
-        Tensor of shape ``[N, D]`` (physical-space translation).
-    """
-
-    def _com_physical(batch_images: BatchedImages) -> torch.Tensor:
-        """Centre of mass in physical coordinates for a single-image batch."""
-        img = batch_images()  # [N, C, *spatial_dims]
-        data = img[0, 0]      # first batch, first channel
-        dims = data.ndim
-
-        # Build coordinate grids in normalised [-1, 1] space (matches the
-        # torch coordinate system that FireANTs uses internally).
-        grids = []
-        for i, s in enumerate(data.shape):
-            coords = torch.linspace(-1, 1, s, device=data.device, dtype=data.dtype)
-            view_shape = [1] * dims
-            view_shape[i] = s
-            grids.append(coords.view(*view_shape))
-
-        weights = data.clamp(min=0)
-        total_weight = weights.sum()
-        if total_weight < 1e-8:
-            # Degenerate: fall back to geometric centre (origin of normalised
-            # space → physical centre via torch2phy).
-            com_norm = torch.zeros(dims, device=data.device, dtype=data.dtype)
-        else:
-            com_norm = torch.stack(
-                [(weights * g).sum() / total_weight for g in grids]
-            )
-
-        # Normalised → physical via the image's torch2phy matrix.
-        torch2phy = batch_images.get_torch2phy()[0]  # [dim+1, dim+1]
-        com_homo = torch.cat([com_norm, torch.ones(1, device=data.device, dtype=data.dtype)])
-        com_phy = (torch2phy @ com_homo)[:dims]
-        return com_phy
-
-    fixed_com = _com_physical(batch_fixed)
-    moving_com = _com_physical(batch_moving)
-    # Pull convention (fixed→moving): the translation maps a point in
-    # fixed space to the corresponding point in moving space, so the
-    # offset is  moving_COM − fixed_COM.
-    offset = (moving_com - fixed_com).unsqueeze(0)  # [1, D]
-    logger.info(
-        f"Centre-of-mass alignment: "
-        f"fixed COM={fixed_com.tolist()}, "
-        f"moving COM={moving_com.tolist()}, "
-        f"offset={offset.squeeze().tolist()}"
-    )
-    return offset
-
-
-def _run_linear_stages(
-    batch_fixed: BatchedImages,
-    batch_moving: BatchedImages,
-    target_type: str,
-    params: FireANTsRegistrationParams,
-    fixed_shape: tuple,
-    moving_shape: tuple,
-    device: str,
-    logger: logging.Logger,
-    work_dir: Optional[Union[str, Path]] = None,
-) -> tuple:
-    """Run the staged linear registration chain: translation → rigid → affine.
-
-    Each stage is initialised from the previous stage's result.  The chain
-    stops at *target_type* (inclusive).  For example ``target_type='affine'``
-    runs translation → rigid → affine.
-
-    Args:
-        batch_fixed: Fixed images.
-        batch_moving: Moving images.
-        target_type: Stop after this stage (``'translation'``, ``'rigid'``,
-            or ``'affine'``).
-        params: Registration parameters.
-        fixed_shape: Spatial dims of fixed image (for safe-scale computation).
-        moving_shape: Spatial dims of moving image.
-        device: Torch device string.
-        logger: Logger.
-        work_dir: Working directory for debug outputs (optional).
-
-    Returns:
-        ``(final_reg, final_mat)`` — the last-stage registration object and
-        its 4×4 homogeneous matrix (detached tensor).
-    """
-    target_idx = _LINEAR_STAGE_ORDER.index(target_type)
-    stages = _LINEAR_STAGE_ORDER[:target_idx + 1]
-
-    # Safe scales — translation may use different iterations from rigid/affine.
-    scales_trans, iters_trans = _compute_safe_scales(
-        fixed_shape, moving_shape,
-        params.scales, params.iterations_translation, logger,
-    )
-    scales_lin, iters_lin = _compute_safe_scales(
-        fixed_shape, moving_shape,
-        params.scales, params.iterations_affine, logger,
-    )
-
-    mi_kwargs_base = dict(
-        loss_type=params.loss_type_affine,
-        mi_kernel_type=params.mi_kernel_type,
-        loss_params={"num_bins": params.mi_num_bins},
-        optimizer=params.optimizer_affine,
-    )
-
-    # Centre-of-mass pre-alignment (analogous to ANTs' initial moving
-    # transform).  Provides a good starting point for the translation
-    # stage so the optimiser does not get stuck in a local minimum.
-    com_offset = _compute_com_init_translation(batch_fixed, batch_moving, logger)
-
-    final_reg = None
-    prev_mat = None  # [N, dim+1, dim+1] homogeneous matrix
-
-    for stage in stages:
-        logger.info(f"Running {stage} stage...")
-
-        if stage == "translation":
-            reg = TranslationRegistration(
-                scales_trans, iters_trans,
-                batch_fixed, batch_moving,
-                init_translation=com_offset,
-                optimizer_lr=params.lr_translation,
-                # Relax convergence: MI loss changes slowly for translation,
-                # default tolerance (1e-6) causes early stopping too soon.
-                tolerance=1e-10,
-                max_tolerance_iters=50,
-                **mi_kwargs_base,
-            )
-
-            _run_affine_registration(reg, device, logger, reg_type="translation")
-            prev_mat = reg.get_rigid_matrix(homogenous=True).detach()
-
-        elif stage == "rigid":
-            # Initialise from translation result.
-            init_t = prev_mat[:, :-1, -1]  # [N, D] world-space translation
-            reg = RigidRegistration(
-                scales_lin, iters_lin,
-                batch_fixed, batch_moving,
-                init_translation=init_t,
-                optimizer_lr=params.lr_rigid,
-                **mi_kwargs_base,
-            )
-            _run_affine_registration(reg, device, logger, reg_type="rigid")
-            prev_mat = reg.get_rigid_matrix(homogenous=True).detach()
-
-        elif stage == "affine":
-            # Initialise from rigid (or translation) result.
-            reg = AffineRegistration(
-                scales_lin, iters_lin,
-                batch_fixed, batch_moving,
-                init_rigid=prev_mat,
-                optimizer_lr=params.lr_affine,
-                **mi_kwargs_base,
-            )
-            _run_affine_registration(reg, device, logger, reg_type="affine")
-            prev_mat = reg.get_affine_matrix(homogenous=True).detach()
-
-        final_reg = reg
-
-    return final_reg, prev_mat
-
-
 def fireants_registration(
     fixedf: Union[str, Path],
     movingf: Union[str, Path],
@@ -508,27 +251,17 @@ def fireants_registration(
 ) -> Dict[str, Optional[str]]:
     """Run FireANTs (GPU) registration with same output format as ants_cpu_register.
 
-    The pipeline mirrors ANTs by running staged linear registration
-    (translation → rigid → affine) before the optional deformable (SyN)
-    stage.  Each linear stage initialises from the previous stage's result.
-
     Args:
-        fixedf: Fixed (template) image path.
-        movingf: Moving image path.
-        working_dir: Working directory.
-        output_prefix: Prefix for output files (default: basename of moving
-            without .nii.gz).
-        config: Configuration dictionary (optional; only used to get
-            xfm_type if not provided).
-        logger: Logger instance (optional).
-        xfm_type: One of ``'translation'``, ``'rigid'``, ``'affine'``,
-            ``'syn'``.
-        compute_inverse: If *True* (default), compute the inverse transform.
+        fixedf: Fixed (template) image path
+        movingf: Moving image path
+        working_dir: Working directory
+        output_prefix: Prefix for output files (default: basename of moving without .nii.gz)
+        config: Configuration dictionary (optional; only used to get xfm_type if not provided)
+        logger: Logger instance (optional)
+        xfm_type: One of 'rigid', 'affine', 'syn'.
 
     Returns:
-        Dictionary with keys: ``output_path_prefix``,
-        ``imagef_registered``, ``forward_transform``,
-        ``inverse_transform``.
+        Dictionary with keys: output_path_prefix, imagef_registered, forward_transform, inverse_transform.
     """
     if logger is None:
         logger = logging.getLogger(__name__)
@@ -539,8 +272,11 @@ def fireants_registration(
         xfm_type = reg_config.get("xfm_type", "syn")
     if xfm_type is None:
         xfm_type = "syn"
-    if xfm_type not in VALID_XFM_TYPES:
-        raise ValueError(f"Invalid xfm_type: {xfm_type}. Must be one of {VALID_XFM_TYPES}")
+    if xfm_type != "syn":
+        raise ValueError(
+            f"FireANTs only supports xfm_type='syn'. For rigid/affine use ants_register (dispatcher). "
+            f"Got: {xfm_type}"
+        )
 
     work_dir = ensure_working_directory(working_dir, logger)
     output_path_prefix = os.path.join(str(work_dir), output_prefix)
@@ -595,85 +331,80 @@ def fireants_registration(
     batch_moving = BatchedImages([moving_image])
     params = DEFAULT_FIREANTS_PARAMS
 
+    # Adapt multi-scale pyramid to actual image dimensions.
+    # Low-res / small-FOV functional images can be smaller than
+    # MIN_IMG_SIZE * scale, causing downsample_fft to fail.
     fixed_shape = tuple(batch_fixed().shape[2:])
     moving_shape = tuple(batch_moving().shape[2:])
     logger.info(f"FireANTs: fixed shape={list(fixed_shape)}, moving shape={list(moving_shape)}")
 
-    # ------------------------------------------------------------------
-    # Staged linear registration: translation → rigid → affine
-    # For SyN the full linear chain runs up to affine; for other types
-    # the chain stops at the requested xfm_type.
-    # ------------------------------------------------------------------
-    linear_target = xfm_type if xfm_type != "syn" else "affine"
-    final_reg, final_mat = _run_linear_stages(
-        batch_fixed, batch_moving, linear_target, params,
-        fixed_shape, moving_shape, device, logger,
-        work_dir=work_dir,
+    scales_affine, iters_affine = _compute_safe_scales(
+        fixed_shape, moving_shape,
+        params.scales, params.iterations_affine, logger,
+    )
+    scales_deformable, iters_deformable = _compute_safe_scales(
+        fixed_shape, moving_shape,
+        params.scales, params.iterations_deformable, logger,
     )
 
-    if xfm_type in ("translation", "rigid", "affine"):
-        # --- Linear-only: save the final .mat and its analytical inverse ---
-        forward_mat_path = output_paths["forward_transform"]
-        final_reg.save_as_ants_transforms(forward_mat_path)
-        logger.info(f"Saved forward {xfm_type} transform: {forward_mat_path}")
-        if compute_inverse:
-            _invert_affine_mat(forward_mat_path, output_paths["inverse_transform"], logger)
-        _save_registered_image(
-            final_reg, batch_fixed, batch_moving,
-            output_paths["registered"], logger,
+    # Only syn is done with FireANTs; rigid/affine are delegated to ANTs earlier
+    logger.info("Running forward registration (fixed → moving)...")
+    affine = AffineRegistration(
+        scales_affine,
+        iters_affine,
+        batch_fixed,
+        batch_moving,
+        optimizer=params.optimizer_affine,
+        optimizer_lr=params.lr_affine,
+        cc_kernel_size=params.cc_kernel_size,
+    )
+    _run_affine_registration(affine, device, logger, reg_type="affine")
+    reg = GreedyRegistration(
+        scales=scales_deformable,
+        iterations=iters_deformable,
+        fixed_images=batch_fixed,
+        moving_images=batch_moving,
+        cc_kernel_size=params.cc_kernel_size,
+        deformation_type=params.deformation_type,
+        smooth_grad_sigma=params.smooth_grad_sigma,
+        optimizer=params.optimizer_deformable,
+        optimizer_lr=params.lr_deformable,
+        init_affine=affine.get_affine_matrix().detach(),
+    )
+    _run_greedy_registration(reg, device, logger, direction="forward")
+    forward_warp = output_paths["forward_transform"]
+    reg.save_as_ants_transforms(forward_warp)
+    logger.info(f"Saved forward warp: {forward_warp}")
+
+    if compute_inverse:
+        logger.info("Running inverse registration (moving → fixed) with full pipeline (affine + warp)...")
+        affine_inv = AffineRegistration(
+            scales_affine,
+            iters_affine,
+            batch_moving,
+            batch_fixed,
+            optimizer=params.optimizer_affine,
+            optimizer_lr=params.lr_affine,
+            cc_kernel_size=params.cc_kernel_size,
         )
-    else:
-        # --- SyN: deformable registration on top of the affine chain ---
-        scales_deformable, iters_deformable = _compute_safe_scales(
-            fixed_shape, moving_shape,
-            params.scales, params.iterations_deformable, logger,
-        )
-        greedy_kwargs = dict(
-            loss_type=params.loss_type_deformable,
+        _run_affine_registration(affine_inv, device, logger, reg_type="affine")
+        reg_inv = GreedyRegistration(
+            scales=scales_deformable,
+            iterations=iters_deformable,
+            fixed_images=batch_moving,
+            moving_images=batch_fixed,
             cc_kernel_size=params.cc_kernel_size,
             deformation_type=params.deformation_type,
             smooth_grad_sigma=params.smooth_grad_sigma,
             optimizer=params.optimizer_deformable,
             optimizer_lr=params.lr_deformable,
+            init_affine=affine_inv.get_affine_matrix().detach(),
         )
-
-        # Forward deformable
-        logger.info("Running forward deformable registration...")
-        fwd_greedy = GreedyRegistration(
-            scales=scales_deformable,
-            iterations=iters_deformable,
-            fixed_images=batch_fixed,
-            moving_images=batch_moving,
-            init_affine=final_mat,
-            **greedy_kwargs,
-        )
-        _run_greedy_registration(fwd_greedy, device, logger, direction="forward")
-        fwd_greedy.save_as_ants_transforms(output_paths["forward_transform"])
-        logger.info(f"Saved forward warp: {output_paths['forward_transform']}")
-
-        # Inverse deformable (analytical affine inverse + swapped images)
-        if compute_inverse:
-            inv_affine_mat = torch.inverse(final_mat)
-            logger.info(
-                "Running inverse deformable registration "
-                "(analytical affine inverse + swapped deformable)..."
-            )
-            inv_greedy = GreedyRegistration(
-                scales=scales_deformable,
-                iterations=iters_deformable,
-                fixed_images=batch_moving,
-                moving_images=batch_fixed,
-                init_affine=inv_affine_mat,
-                **greedy_kwargs,
-            )
-            _run_greedy_registration(inv_greedy, device, logger, direction="inverse")
-            inv_greedy.save_as_ants_transforms(output_paths["inverse_transform"])
-            logger.info(f"Saved inverse warp: {output_paths['inverse_transform']}")
-
-        _save_registered_image(
-            fwd_greedy, batch_fixed, batch_moving,
-            output_paths["registered"], logger,
-        )
+        _run_greedy_registration(reg_inv, device, logger, direction="inverse")
+        inverse_warp = output_paths["inverse_transform"]
+        reg_inv.save_as_ants_transforms(inverse_warp)
+        logger.info(f"Saved inverse warp: {inverse_warp}")
+    _save_registered_image(reg, batch_fixed, batch_moving, output_paths["registered"], logger)
 
     # ------------------------------------------------------------------
     # Crop outputs back to original input grids if padding was applied.
