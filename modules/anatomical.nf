@@ -1601,6 +1601,7 @@ EOF
 }
 
 process ANAT_T1WT2W_COMBINED {
+    errorStrategy 'ignore'
     label 'cpu'
     tag "${subject_id}_${session_id}"
     

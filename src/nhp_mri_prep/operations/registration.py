@@ -10,6 +10,15 @@ import logging
 from typing import Dict, Any, Optional, Union, List
 from pathlib import Path
 
+import numpy as np
+import nibabel as nib
+from scipy.io import loadmat as _loadmat, savemat as _savemat
+
+try:
+    import SimpleITK as sitk
+except ImportError:
+    sitk = None
+
 from .validation import validate_input_file, ensure_working_directory, validate_output_file
 from ..utils import run_command, calculate_func_tmean
 from ..config import get_config
@@ -280,197 +289,6 @@ def _use_fireants(logger: logging.Logger) -> bool:
         logger.debug(f"REGISTRATION: FireANTs skipped — not installed or dependency missing: {e}")
         return False
 
-
-def ants_register(
-    fixedf: Union[str, Path],
-    movingf: Union[str, Path],
-    working_dir: Union[str, Path],
-    output_prefix: Optional[str] = None,
-    config: Optional[Dict[str, Any]] = None,
-    logger: Optional[logging.Logger] = None,
-    xfm_type: Optional[str] = 'syn',
-    compute_inverse: Optional[bool] = True
-) -> Dict[str, Any]:
-    """Run ANTs-style registration: FireANTs (GPU) when available, otherwise ANTs CPU.
-    
-    Dispatcher: when GPU is available and FireANTs is installed, runs fireants_registration;
-    otherwise runs ants_cpu_register (subprocess antsRegistration). For xfm_type 'translation',
-    always uses ants_cpu_register (FireANTs does not support translation).
-    
-    Args:
-        fixedf: Fixed (template) image path
-        movingf: Moving image path
-        working_dir: Working directory
-        output_prefix: Prefix for output files
-        config: Configuration dictionary (optional)
-        logger: Logger instance (optional)
-        xfm_type: Type of transformation. Options: 'translation', 'rigid', 'affine', 'syn'
-        compute_inverse: If True (default), compute and include inverse transform in outputs.
-        
-    Returns:
-        Dictionary with output_path_prefix, imagef_registered, forward_transform, inverse_transform
-    """
-    if logger is None:
-        logger = logging.getLogger(__name__)
-    use_fireants = (
-        xfm_type not in ("translation",)  # FireANTs does not support translation
-        and _use_fireants(logger)
-    )
-    if use_fireants:
-        logger.info("REGISTRATION: using FireANTs (GPU)")
-        from .fireants_registration import fireants_registration
-        try:
-            result = fireants_registration(
-                fixedf=fixedf,
-                movingf=movingf,
-                working_dir=working_dir,
-                output_prefix=output_prefix,
-                config=config,
-                logger=logger,
-                xfm_type=xfm_type,
-                compute_inverse=compute_inverse,
-            )
-            logger.info("REGISTRATION: completed with FireANTs (GPU)")
-            return result
-        except Exception as e:
-            logger.warning(
-                f"FireANTs (GPU) registration failed: {e}. "
-                "Falling back to ANTs (CPU) registration."
-            )
-    if not use_fireants:
-        reason = (
-            "translation not supported by FireANTs"
-            if xfm_type == "translation"
-            else "FireANTs not available (no CUDA or not installed)"
-        )
-        logger.info(f"REGISTRATION: using ANTs (CPU) — {reason}")
-    else:
-        logger.info("REGISTRATION: using ANTs (CPU) — fallback after FireANTs error")
-    result = ants_cpu_register(
-        fixedf=fixedf,
-        movingf=movingf,
-        working_dir=working_dir,
-        output_prefix=output_prefix,
-        config=config,
-        logger=logger,
-        xfm_type=xfm_type,
-        compute_inverse=compute_inverse,
-    )
-    logger.info("REGISTRATION: completed with ANTs (CPU)")
-    return result
-
-
-def ants_apply_transforms(
-    movingf: Union[str, Path],
-    moving_type: int,
-    interpolation: str,
-    outputf_name: Union[str, Path],
-    fixedf: Union[str, Path],
-    working_dir: Union[str, Path],
-    transformf: Union[list[Union[str, Path]], Union[str, Path]],
-    logger: Optional[logging.Logger] = None,
-    reff: Optional[Union[str, Path]] = None,
-    generate_tmean: Optional[bool] = True
-) -> Dict[str, str]:
-    
-    """Apply ANTs transformations to functional data.
-    
-    Args:
-        movingf: Moving (source) functional image
-        moving_type: Type of moving image (0:scalar, 1:vector, 2:tensor, 3:time series)
-        interpolation: Interpolation type
-        outputf_name: Name for output file
-        fixedf: Fixed (target) image
-        working_dir: Working directory for outputs
-        transformf: List of transformation files to apply. May be .nii.gz (displacement field,
-            e.g. FireANTs), .h5 (ANTs composite), or .mat (affine). Paths are resolved so ITK
-            picks the correct reader by extension.
-        logger: Logger instance
-        reff: Reference image for output space (optional)
-        generate_tmean: Whether to generate temporal mean
-        
-    Returns:
-        Dictionary with output file paths
-        
-    Raises:
-        FileNotFoundError: If input files don't exist
-        RuntimeError: If transformation application fails
-    """
-    # Validate inputs
-    if logger is None:
-        logger = logging.getLogger(__name__)
-        
-    movingf = validate_input_file(movingf, logger)
-    fixedf = validate_input_file(fixedf, logger)
-    if reff is not None:
-        reff = validate_input_file(reff, logger)
-    work_dir = ensure_working_directory(working_dir, logger)
-
-    outputf_name = work_dir / outputf_name
-
-    # Ensure transformf is a list
-    if not isinstance(transformf, list):
-        transformf = [transformf]
-
-    # Apply ANTs transformations
-    cmd = [
-        "antsApplyTransforms",
-        "-d", "3", "-e", str(moving_type),
-        "--input", str(movingf),
-        "--output", str(outputf_name),
-        "--interpolation", interpolation
-    ]
-
-    if reff is not None:
-        cmd.extend(["--reference-image", str(reff)])
-    else:
-        cmd.extend(["--reference-image", str(fixedf)])
-        
-    # Add transformation files in reverse order because ANTs applies transforms from right to left
-    # i.e. the last transform in the command is applied first to the moving image
-    # Use resolved path so ITK picks the correct reader by extension (.nii.gz vs .h5)
-    for transform_file in reversed(transformf):
-        resolved = Path(transform_file).resolve()
-        cmd.extend(["--transform", str(resolved)])
-    
-    logger.debug(f"System: apply transforms command - {' '.join(cmd)}")
-    
-    # Get thread count from environment variable (set by Nextflow)
-    num_threads = int(os.environ.get('OMP_NUM_THREADS', 8))
-    
-    # Set up ITK thread environment variables for subprocess
-    from ..utils.system import set_numerical_threads
-    env = set_numerical_threads(num_threads, include_itk=True, return_dict=True)
-    # Merge with current environment to preserve other variables
-    env = {**os.environ, **env}
-    
-    logger.debug(f"System: using {num_threads} threads for ITK operations (capped at 32)")
-    
-    try:
-        run_command(cmd, env=env, step_logger=logger)
-        
-        # Validate output
-        validate_output_file(outputf_name, logger)
-        
-        outputs = {"imagef_registered": str(outputf_name)}
-        logger.info(f"Step: transform application completed successfully - {outputf_name}")
-        
-        # Generate temporal mean if requested
-        if generate_tmean:
-            # Extract just the filename from outputf_name (which already includes work_dir)
-            tmean_filename = Path(outputf_name).name.split('.nii')[0] + '_tmean.nii.gz'
-            tmean_file = work_dir / tmean_filename
-            calculate_func_tmean(str(outputf_name), str(tmean_file), logger)
-            outputs["imagef_registered_tmean"] = str(tmean_file)
-            logger.info(f"Output: tmean generated - {tmean_file}")
-        
-        return outputs
-        
-    except Exception as e:
-        logger.error(f"Step: transform application failed - {e}")
-        raise RuntimeError(f"Transform application failed: {e}")
-
-
 def flirt_register(
     fixedf: Union[str, Path],
     movingf: Union[str, Path],
@@ -699,6 +517,185 @@ def flirt_apply_transforms(
     except Exception as e:
         logger.error(f"Error during affine transformation application: {e}")
         raise RuntimeError(f"Transform application failed: {e}")
-        
 
-# %%
+
+def ants_register(
+    fixedf: Union[str, Path],
+    movingf: Union[str, Path],
+    working_dir: Union[str, Path],
+    output_prefix: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+    logger: Optional[logging.Logger] = None,
+    xfm_type: Optional[str] = 'syn',
+    compute_inverse: Optional[bool] = True
+) -> Dict[str, Any]:
+    """Run ANTs-style registration: FireANTs (GPU) when available, otherwise ANTs CPU.
+    
+    Dispatcher: when GPU is available and FireANTs is installed, runs fireants_registration;
+    otherwise runs ants_cpu_register (subprocess antsRegistration).
+    
+    Args:
+        fixedf: Fixed (template) image path
+        movingf: Moving image path
+        working_dir: Working directory
+        output_prefix: Prefix for output files
+        config: Configuration dictionary (optional)
+        logger: Logger instance (optional)
+        xfm_type: Type of transformation. Options: 'translation', 'rigid', 'affine', 'syn'
+        compute_inverse: If True (default), compute and include inverse transform in outputs.
+        
+    Returns:
+        Dictionary with output_path_prefix, imagef_registered, forward_transform, inverse_transform
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    use_fireants = _use_fireants(logger)
+    if use_fireants:
+        logger.info("REGISTRATION: using FireANTs (GPU)")
+        from .fireants_registration import fireants_registration
+        try:
+            result = fireants_registration(
+                fixedf=fixedf,
+                movingf=movingf,
+                working_dir=working_dir,
+                output_prefix=output_prefix,
+                config=config,
+                logger=logger,
+                xfm_type=xfm_type,
+                compute_inverse=compute_inverse,
+            )
+            logger.info("REGISTRATION: completed with FireANTs (GPU)")
+            return result
+        except Exception as e:
+            logger.warning(
+                f"FireANTs (GPU) registration failed: {e}. "
+                "Falling back to ANTs (CPU) registration."
+            )
+    if not use_fireants:
+        logger.info("REGISTRATION: using ANTs (CPU) — FireANTs not available (no CUDA or not installed)")
+    else:
+        logger.info("REGISTRATION: using ANTs (CPU) — fallback after FireANTs error")
+    result = ants_cpu_register(
+        fixedf=fixedf,
+        movingf=movingf,
+        working_dir=working_dir,
+        output_prefix=output_prefix,
+        config=config,
+        logger=logger,
+        xfm_type=xfm_type,
+        compute_inverse=compute_inverse,
+    )
+    logger.info("REGISTRATION: completed with ANTs (CPU)")
+    return result
+
+
+def ants_apply_transforms(
+    movingf: Union[str, Path],
+    moving_type: int,
+    interpolation: str,
+    outputf_name: Union[str, Path],
+    fixedf: Union[str, Path],
+    working_dir: Union[str, Path],
+    transformf: Union[list[Union[str, Path]], Union[str, Path]],
+    logger: Optional[logging.Logger] = None,
+    reff: Optional[Union[str, Path]] = None,
+    generate_tmean: Optional[bool] = True
+) -> Dict[str, str]:
+    
+    """Apply ANTs transformations to functional data.
+    
+    Args:
+        movingf: Moving (source) functional image
+        moving_type: Type of moving image (0:scalar, 1:vector, 2:tensor, 3:time series)
+        interpolation: Interpolation type
+        outputf_name: Name for output file
+        fixedf: Fixed (target) image
+        working_dir: Working directory for outputs
+        transformf: List of transformation files to apply. May be .nii.gz (displacement field,
+            e.g. FireANTs), .h5 (ANTs composite), or .mat (affine). Paths are resolved so ITK
+            picks the correct reader by extension.
+        logger: Logger instance
+        reff: Reference image for output space (optional)
+        generate_tmean: Whether to generate temporal mean
+        
+    Returns:
+        Dictionary with output file paths
+        
+    Raises:
+        FileNotFoundError: If input files don't exist
+        RuntimeError: If transformation application fails
+    """
+    # Validate inputs
+    if logger is None:
+        logger = logging.getLogger(__name__)
+        
+    movingf = validate_input_file(movingf, logger)
+    fixedf = validate_input_file(fixedf, logger)
+    if reff is not None:
+        reff = validate_input_file(reff, logger)
+    work_dir = ensure_working_directory(working_dir, logger)
+
+    outputf_name = work_dir / outputf_name
+
+    # Ensure transformf is a list
+    if not isinstance(transformf, list):
+        transformf = [transformf]
+
+    # Apply ANTs transformations
+    cmd = [
+        "antsApplyTransforms",
+        "-d", "3", "-e", str(moving_type),
+        "--input", str(movingf),
+        "--output", str(outputf_name),
+        "--interpolation", interpolation
+    ]
+
+    if reff is not None:
+        cmd.extend(["--reference-image", str(reff)])
+    else:
+        cmd.extend(["--reference-image", str(fixedf)])
+        
+    # Add transformation files in reverse order because ANTs applies transforms from right to left
+    # i.e. the last transform in the command is applied first to the moving image
+    # Use resolved path so ITK picks the correct reader by extension (.nii.gz vs .h5)
+    for transform_file in reversed(transformf):
+        resolved = Path(transform_file).resolve()
+        cmd.extend(["--transform", str(resolved)])
+    
+    logger.debug(f"System: apply transforms command - {' '.join(cmd)}")
+    
+    # Get thread count from environment variable (set by Nextflow)
+    num_threads = int(os.environ.get('OMP_NUM_THREADS', 8))
+    
+    # Set up ITK thread environment variables for subprocess
+    from ..utils.system import set_numerical_threads
+    env = set_numerical_threads(num_threads, include_itk=True, return_dict=True)
+    # Merge with current environment to preserve other variables
+    env = {**os.environ, **env}
+    
+    logger.debug(f"System: using {num_threads} threads for ITK operations (capped at 32)")
+    
+    try:
+        run_command(cmd, env=env, step_logger=logger)
+        
+        # Validate output
+        validate_output_file(outputf_name, logger)
+        
+        outputs = {"imagef_registered": str(outputf_name)}
+        logger.info(f"Step: transform application completed successfully - {outputf_name}")
+        
+        # Generate temporal mean if requested
+        if generate_tmean:
+            # Extract just the filename from outputf_name (which already includes work_dir)
+            tmean_filename = Path(outputf_name).name.split('.nii')[0] + '_tmean.nii.gz'
+            tmean_file = work_dir / tmean_filename
+            calculate_func_tmean(str(outputf_name), str(tmean_file), logger)
+            outputs["imagef_registered_tmean"] = str(tmean_file)
+            logger.info(f"Output: tmean generated - {tmean_file}")
+        
+        return outputs
+        
+    except Exception as e:
+        logger.error(f"Step: transform application failed - {e}")
+        raise RuntimeError(f"Transform application failed: {e}")
+

@@ -287,7 +287,7 @@ def anat_registration(input: StepInput, template_file: Path, template_name: str)
         },
         additional_files=additional_files
     )
-
+    
 
 def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepOutput:
     """

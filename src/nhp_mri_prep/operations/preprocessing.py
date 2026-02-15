@@ -24,8 +24,12 @@ from ..utils.mri import correct_affine_for_mismatch_orientation, get_opposite_or
 from fastsurfer_nn.inference.segmentation import run_segmentation
 from nhp_skullstrip_nn.inference.prediction import skullstripping
 
+# %%
 # Default for template padding during conform (fraction of dimension, e.g. 0.1 = 10% per side)
 DEFAULT_CONFORM_PADDING_PERCENTAGE = 0.1
+# Minimum voxel size threshold (mm) for template downsampling during conform
+DEFAULT_DOWNSAMPLE_VOXEL_SIZE_THRESHOLD = 0.5
+
 
 # %%
 def correct_orientation_mismatch(
@@ -388,7 +392,7 @@ def conform_to_template(
         # a) if any template voxel size < brain target voxel size, downsample template to match brain resolution
         # b) if brain resolution < downsample_voxel_size threshold, cap at downsample_voxel_size
         orig_template_voxel_sizes = np.sqrt(np.sum(nib.load(template_f_for_reg).affine[:3, :3] ** 2, axis=0))
-        downsample_voxel_size_threshold = 0.5  # Minimum voxel size threshold (mm)
+        downsample_voxel_size_threshold = DEFAULT_DOWNSAMPLE_VOXEL_SIZE_THRESHOLD
         
         # Load the input image to determine target voxel sizes
         brain_affine = nib.load(brain_f).affine

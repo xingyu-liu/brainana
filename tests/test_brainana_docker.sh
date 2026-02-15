@@ -14,11 +14,11 @@ site=site-uwo
 
 # site-ds003989, site-oxford
 
-# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/${site}
-# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/${site}
+bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/${site}
+output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/${site}
 
-bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_docker_v1
+# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy
+# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_docker_v1
 
 fs_license=/mnt/DataDrive3/xliu/prep_test/freesurfer_license.txt
 
