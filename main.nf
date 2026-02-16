@@ -52,7 +52,7 @@ workflow {
     // ============================================
     // Get anat_only parameter with priority: CLI → YAML → defaults.yaml
     def anat_only = paramResolver.getParamBool(params, 'anat_only')
-    
+
     // ============================================
     // GLOBAL GPU TOKEN POOL
     // ============================================
@@ -71,7 +71,7 @@ workflow {
     // RUN ANATOMICAL WORKFLOW
     // ============================================
     ANAT_WF(gpu_queue)
-    
+
     // ============================================
     // RUN FUNCTIONAL WORKFLOW (conditionally)
     // ============================================
@@ -104,11 +104,11 @@ workflow {
         // Use default if config read fails
     }
 
-    // Wait for anatomical QC to complete
+    // Wait for anatomical QC to complete (includes surface recon QC when enabled)
     def anat_qc_completion = ANAT_WF.out.anat_qc_channels
         .last()
     
-    // Create completion signal
+    // Create completion signal: anat (+ surf recon), then optionally func
     def qc_completion_signal = anat_qc_completion
     if (!anat_only) {
         def func_qc_completion = FUNC_WF.out.func_qc_channels

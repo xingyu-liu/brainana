@@ -25,10 +25,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
-# BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
-# OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v1
-BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy
-OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_v1
+BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
+OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v1
+# BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy
+# OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_v2
 # BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_T1wT2w
 # OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_T1wT2w_v1
 # BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled"

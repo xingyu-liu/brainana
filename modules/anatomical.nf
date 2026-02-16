@@ -816,6 +816,9 @@ EOF
     """
 }
 
+
+// process ANAT_BACKPROJECT_ATLASES {}
+
 process ANAT_T2W_TO_T1W_REGISTRATION {
     label 'cpu'
     tag "${subject_id}_${session_id}"

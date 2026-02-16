@@ -24,6 +24,79 @@ from fastsurfer_surfrecon.pipeline import ReconSurfPipeline
 logger = logging.getLogger(__name__)
 
 
+
+def anat_synthesis(anat_files: List[Path], working_dir: Path, config: Dict[str, Any]) -> StepOutput:
+    """
+    Synthesize multiple anatomical runs (T1w, T2w, etc.) into a single image.
+    
+    This function coregisters and averages multiple anatomical runs from the same
+    subject/session to create a single synthesized image for processing.
+    
+    Args:
+        anat_files: List of anatomical file paths to synthesize (all same modality)
+        working_dir: Working directory for intermediate files
+        config: Configuration dictionary
+        
+    Returns:
+        StepOutput with synthesized anatomical file
+    """
+    if len(anat_files) <= 1:
+        # No synthesis needed
+        return StepOutput(
+            output_file=anat_files[0] if anat_files else None,
+            metadata={"step": "anat_synthesis", "synthesized": False, "num_runs": len(anat_files)}
+        )
+    
+    # Determine modality from first file
+    from ..utils.bids import parse_bids_entities, get_filename_stem
+    first_stem = get_filename_stem(anat_files[0])
+    modality = "T1w"  # default
+    if "_T2w" in first_stem or first_stem.endswith("_T2w"):
+        modality = "T2w"
+    elif "_T1w" in first_stem or first_stem.endswith("_T1w"):
+        modality = "T1w"
+    
+    logger.info(f"Step: synthesizing {len(anat_files)} {modality} runs")
+    
+    # Import synthesis function and BIDSFile
+    from ..operations.synthesis_multiple_anat import synthesize_multiple_anatomical
+    from ..utils.bids import BIDSFile
+    
+    bids_files = []
+    for anat_file in anat_files:
+        entities = parse_bids_entities(anat_file.name)
+        bids_files.append(BIDSFile(
+            path=str(anat_file),
+            sub=entities.get("sub", "unknown"),
+            ses=entities.get("ses"),
+            modality="anat",
+            suffix=modality,
+            entities=entities,
+            run=entities.get("run")
+        ))
+    
+    # Call synthesis function
+    # The synthesis function now handles all file management internally using working_dir
+    synthesized_file = synthesize_multiple_anatomical(
+        anat_files=bids_files,
+        working_dir=working_dir,
+        logger=logger,
+        config=config
+    )
+    
+    if not synthesized_file:
+        raise RuntimeError(f"Anatomical synthesis failed for {len(anat_files)} files")
+    
+    return StepOutput(
+        output_file=Path(synthesized_file),
+        metadata={
+            "step": "anat_synthesis",
+            "synthesized": True,
+            "num_runs": len(anat_files)
+        }
+    )
+
+
 def anat_reorient(input: StepInput, template_file: Optional[Path] = None) -> StepOutput:
     """
     Reorient anatomical image to template orientation or RAS.
@@ -289,6 +362,13 @@ def anat_registration(input: StepInput, template_file: Path, template_name: str)
     )
     
 
+def anat_backproject_atlases():
+    """
+    TODO: Backproject atlases to T1w space using registration transform
+    """
+    pass
+
+
 def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepOutput:
     """
     Register T2w image to T1w space.
@@ -358,78 +438,6 @@ def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepO
             "xfm_type": "rigid"
         },
         additional_files=additional_files
-    )
-
-
-def anat_synthesis(anat_files: List[Path], working_dir: Path, config: Dict[str, Any]) -> StepOutput:
-    """
-    Synthesize multiple anatomical runs (T1w, T2w, etc.) into a single image.
-    
-    This function coregisters and averages multiple anatomical runs from the same
-    subject/session to create a single synthesized image for processing.
-    
-    Args:
-        anat_files: List of anatomical file paths to synthesize (all same modality)
-        working_dir: Working directory for intermediate files
-        config: Configuration dictionary
-        
-    Returns:
-        StepOutput with synthesized anatomical file
-    """
-    if len(anat_files) <= 1:
-        # No synthesis needed
-        return StepOutput(
-            output_file=anat_files[0] if anat_files else None,
-            metadata={"step": "anat_synthesis", "synthesized": False, "num_runs": len(anat_files)}
-        )
-    
-    # Determine modality from first file
-    from ..utils.bids import parse_bids_entities, get_filename_stem
-    first_stem = get_filename_stem(anat_files[0])
-    modality = "T1w"  # default
-    if "_T2w" in first_stem or first_stem.endswith("_T2w"):
-        modality = "T2w"
-    elif "_T1w" in first_stem or first_stem.endswith("_T1w"):
-        modality = "T1w"
-    
-    logger.info(f"Step: synthesizing {len(anat_files)} {modality} runs")
-    
-    # Import synthesis function and BIDSFile
-    from ..operations.synthesis_multiple_anat import synthesize_multiple_anatomical
-    from ..utils.bids import BIDSFile
-    
-    bids_files = []
-    for anat_file in anat_files:
-        entities = parse_bids_entities(anat_file.name)
-        bids_files.append(BIDSFile(
-            path=str(anat_file),
-            sub=entities.get("sub", "unknown"),
-            ses=entities.get("ses"),
-            modality="anat",
-            suffix=modality,
-            entities=entities,
-            run=entities.get("run")
-        ))
-    
-    # Call synthesis function
-    # The synthesis function now handles all file management internally using working_dir
-    synthesized_file = synthesize_multiple_anatomical(
-        anat_files=bids_files,
-        working_dir=working_dir,
-        logger=logger,
-        config=config
-    )
-    
-    if not synthesized_file:
-        raise RuntimeError(f"Anatomical synthesis failed for {len(anat_files)} files")
-    
-    return StepOutput(
-        output_file=Path(synthesized_file),
-        metadata={
-            "step": "anat_synthesis",
-            "synthesized": True,
-            "num_runs": len(anat_files)
-        }
     )
 
 

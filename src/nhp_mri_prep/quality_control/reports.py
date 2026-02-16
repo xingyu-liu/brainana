@@ -343,20 +343,17 @@ class HtmlGenerator:
         nav_items = ['<li class="nav-item"><a class="nav-link" href="#Summary">Summary</a></li>']
         
         # Add modality sections with dropdowns if they have content
-        for modality, title in [("anatomical", "Structural"), ("functional", "Functional"), 
+        for modality, title in [("anatomical", "Structural"), ("functional", "Functional"),
                                ("field_mapping", "B₀ field mapping")]:
             if organized_snapshots[modality]:
-                entities_list = BidsEntityProcessor.extract_entities_from_snapshots(organized_snapshots[modality])
-                
-                if len(entities_list) > 1:  # Create dropdown for multiple items
+                # Use same grouping as content so nav IDs match header IDs (incl. T1w/T2w for anatomical)
+                section_prefix = modality
+                groups = HtmlGenerator._group_snapshots_by_entities(organized_snapshots[modality])
+                if len(groups) > 1:  # Create dropdown for multiple items
                     dropdown_items = []
-                    for entities in entities_list:
-                        display_text = BidsEntityProcessor.create_display_text(entities)
-                        # Use the same ID format as the headers (section_prefix + clean_header_id)
-                        section_prefix = "anatomical" if modality == "anatomical" else "functional"
-                        nav_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(display_text)}"
-                        dropdown_items.append(f'<a class="dropdown-item" href="#{nav_id}">{display_text}</a>')
-                    
+                    for group_key in groups:
+                        nav_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(group_key)}"
+                        dropdown_items.append(f'<a class="dropdown-item" href="#{nav_id}">{group_key}</a>')
                     dropdown_content = '\n'.join(dropdown_items)
                     nav_items.append(f'''<li class="nav-item dropdown">
 <a class="nav-link dropdown-toggle" id="navbar{modality.title()}" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" href="#">{title}</a>
