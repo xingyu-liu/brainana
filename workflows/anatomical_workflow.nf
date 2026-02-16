@@ -511,7 +511,7 @@ workflow ANAT_WF {
     // Input: anat_after_bias_brain: [sub, ses, brain_file, bids_name] (for computing transform, always available - real or dummy)
     //        anat_after_bias: [sub, ses, anat_file, bids_name] (for applying transform - bias-corrected full head _T1w)
     // Output: anat_after_reg: [sub, ses, registered_file, bids_name] (full head registered _T1w, not brain)
-    //         anat_reg_transforms: [sub, ses, forward_xfm, inverse_xfm]
+    //         anat_reg_transforms: [sub, ses, bids_name, forward_xfm, inverse_xfm]
     //         anat_reg_reference: [sub, ses, reference_file]
     // Principle: anat_after_xxxstep = full head (_T1w), anat_after_xxxstep_brain = brain (_T1w_brain)
     // ============================================
@@ -549,7 +549,7 @@ workflow ANAT_WF {
     // ============================================
     // Transform brain mask to template space using registration transform
     // Input: anat_skull_mask: [sub, ses, brain_mask] (in conformed space)
-    //        anat_reg_transforms: [sub, ses, forward_xfm, inverse_xfm]
+    //        anat_reg_transforms: [sub, ses, bids_name, forward_xfm, inverse_xfm]
     //        anat_reg_reference: [sub, ses, reference_file]
     // Output: anat_skull_mask_registered: [sub, ses, transformed_mask] (in template space)
     // ============================================
@@ -940,7 +940,7 @@ workflow ANAT_WF {
     // Apply T1w's registration transform to T2w
     // ============================================
     // Input: t2w_after_bias: [sub, ses, t2w_file, t2w_bids_name, anat_ses]
-    //        anat_reg_transforms: [sub, ses, forward_xfm, inverse_xfm] (keyed by T1w session)
+    //        anat_reg_transforms: [sub, ses, bids_name, forward_xfm, inverse_xfm] (keyed by T1w session)
     //        anat_reg_reference: [sub, ses, reference] (keyed by T1w session)
     // Output: t2w_after_apply_reg: [sub, ses, t2w_file, t2w_bids_name]
     // ============================================

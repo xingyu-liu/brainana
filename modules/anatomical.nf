@@ -831,7 +831,8 @@ process ANAT_BACKPROJECT_ATLASES {
     path config_file
 
     output:
-    tuple val(subject_id), val(session_id), path("atlas/*.nii.gz"), val(bids_name), emit: output
+    // optional: true allows zero matches when no atlases exist for the template space
+    tuple val(subject_id), val(session_id), path("atlas/*.nii.gz", optional: true), val(bids_name), emit: output
 
     script:
     """
@@ -849,7 +850,7 @@ result = anat_backproject_atlases(
     config=config,
     template_dir=None,
 )
-# Outputs are written to work/atlas/ by the step; Nextflow publishes from there
+# Outputs written to ./atlas/ (task work dir)
 EOF
     """
 }
