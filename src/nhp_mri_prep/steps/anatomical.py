@@ -18,6 +18,8 @@ from ..operations.preprocessing import (
     generate_t1wt2wcombined
 )
 from ..operations.registration import ants_register, ants_apply_transforms, flirt_register, flirt_apply_transforms
+from ..utils.templates import discover_atlases_in_space
+from ..utils.mri import get_image_shape, shape_to_ants_input_type
 from fastsurfer_surfrecon.config import AtlasConfig, ReconSurfConfig
 from fastsurfer_surfrecon.pipeline import ReconSurfPipeline
 
@@ -362,11 +364,101 @@ def anat_registration(input: StepInput, template_file: Path, template_name: str)
     )
     
 
-def anat_backproject_atlases():
+def anat_backproject_atlases(
+    inverse_xfm: Path,
+    t1w_reference: Path,
+    bids_name: Path,
+    working_dir: Path,
+    config: Dict[str, Any],
+    template_dir: Optional[Path] = None,
+) -> StepOutput:
     """
-    TODO: Backproject atlases to T1w space using registration transform
+    Backproject atlases from template space to T1w space using inverse transform.
+
+    Discovers atlases in the template space (from config output_space), applies
+    the inverse T1w->template transform to each, and writes outputs to
+    working_dir/atlas/ with naming: atlas-{atlas_name}_{t1w_stem}.nii.gz.
+    The t1w_stem is derived from bids_name by stripping _desc-preproc_T1w.
+
+    Args:
+        inverse_xfm: Inverse transform (template -> T1w)
+        t1w_reference: T1w image defining output grid (anat_after_bias)
+        bids_name: BIDS filename of T1w output (e.g. sub-X_ses-Y_run-Z_desc-preproc_T1w.nii.gz)
+        working_dir: Working directory; atlas outputs go to working_dir/atlas/
+        config: Configuration dict (uses template.output_space)
+        template_dir: Optional custom template zoo path
+
+    Returns:
+        StepOutput with output_file=atlas_dir, additional_files={atlas_name: path}
     """
-    pass
+    effective_output_space = config.get("template", {}).get(
+        "output_space", "NMT2Sym:res-05"
+    )
+    parts = effective_output_space.split(":")
+    space_name = parts[0] if parts else "NMT2Sym"
+    template_res = parts[1] if len(parts) > 1 else None
+
+    atlases = discover_atlases_in_space(
+        space_name=space_name,
+        template_res=template_res,
+        template_dir=str(template_dir) if template_dir else None,
+    )
+    if not atlases:
+        logger.info(f"Step: no atlases found in space {space_name}, skipping backproject")
+        atlas_dir = working_dir / "atlas"
+        atlas_dir.mkdir(parents=True, exist_ok=True)
+        return StepOutput(
+            output_file=atlas_dir,
+            metadata={
+                "step": "backproject_atlases",
+                "atlases_found": 0,
+                "space": space_name,
+            },
+            additional_files={},
+        )
+
+    # Build output stem from bids_name: strip _desc-preproc_T1w
+    bids_stem = Path(bids_name).stem
+    if bids_stem.endswith(".nii"):
+        bids_stem = bids_stem[:-4]
+    if bids_stem.endswith("_desc-preproc_T1w"):
+        output_stem = bids_stem[: -len("_desc-preproc_T1w")]
+    else:
+        output_stem = bids_stem
+
+    atlas_dir = working_dir / "atlas"
+    atlas_dir.mkdir(parents=True, exist_ok=True)
+
+    additional_files: Dict[str, Path] = {}
+    for atlas_name, atlas_path in atlases:
+        output_name = f"atlas-{atlas_name}_{output_stem}.nii.gz"
+        shape = get_image_shape(str(atlas_path), logger=logger)
+        moving_type = shape_to_ants_input_type(shape)
+
+        result = ants_apply_transforms(
+            movingf=str(atlas_path),
+            moving_type=moving_type,
+            interpolation="NearestNeighbor",
+            outputf_name=output_name,
+            fixedf=str(t1w_reference),
+            working_dir=str(atlas_dir),
+            transformf=[str(inverse_xfm)],
+            logger=logger,
+            reff=str(t1w_reference),
+            generate_tmean=False,
+        )
+        out_path = Path(result["imagef_registered"])
+        additional_files[atlas_name] = out_path
+
+    return StepOutput(
+        output_file=atlas_dir,
+        metadata={
+            "step": "backproject_atlases",
+            "atlases_found": len(additional_files),
+            "space": space_name,
+        },
+        additional_files=additional_files,
+    )
 
 
 def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepOutput:

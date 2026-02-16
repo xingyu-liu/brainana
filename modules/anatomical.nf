@@ -660,9 +660,9 @@ process ANAT_REGISTRATION {
     output:
     // Output: [sub, ses, registered_file, bids_template]
     tuple val(subject_id), val(session_id), path("*space-*.nii.gz"), val(bids_name), emit: output
-    // Transforms: [sub, ses, forward_transform, inverse_transform]
+    // Transforms: [sub, ses, bids_name, forward_transform, inverse_transform]
     // Use patterns that match the actual naming: forward starts with from-T1w_to- or from-T2w_to-, inverse ends with _to-T1w or _to-T2w
-    tuple val(subject_id), val(session_id), path("*from-T1w_to-*_mode-image_xfm*"), path("*from-*_to-T1w_mode-image_xfm*"), emit: transforms
+    tuple val(subject_id), val(session_id), val(bids_name), path("*from-T1w_to-*_mode-image_xfm*"), path("*from-*_to-T1w_mode-image_xfm*"), emit: transforms
     // Reference: [sub, ses, reference_file]
     tuple val(subject_id), val(session_id), path("*ref_from_anat_reg.nii.gz"), emit: reference
     path "*.json", emit: metadata
@@ -817,7 +817,42 @@ EOF
 }
 
 
-// process ANAT_BACKPROJECT_ATLASES {}
+process ANAT_BACKPROJECT_ATLASES {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat/atlas",
+        mode: 'copy',
+        pattern: 'atlas/*.nii.gz',
+        saveAs: { f -> new File(f.toString()).name }
+
+    input:
+    tuple val(subject_id), val(session_id), val(bids_name), path(inverse_xfm), path(t1w_reference)
+    path config_file
+
+    output:
+    tuple val(subject_id), val(session_id), path("atlas/*.nii.gz"), val(bids_name), emit: output
+
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from nhp_mri_prep.steps.anatomical import anat_backproject_atlases
+from nhp_mri_prep.utils.nextflow import load_config
+from pathlib import Path
+
+config = load_config('${config_file}')
+result = anat_backproject_atlases(
+    inverse_xfm=Path('${inverse_xfm}'),
+    t1w_reference=Path('${t1w_reference}'),
+    bids_name=Path('${bids_name}'),
+    working_dir=Path('.'),
+    config=config,
+    template_dir=None,
+)
+# Outputs are written to work/atlas/ by the step; Nextflow publishes from there
+EOF
+    """
+}
 
 process ANAT_T2W_TO_T1W_REGISTRATION {
     label 'cpu'
@@ -1088,11 +1123,11 @@ process ANAT_REGISTRATION_PASSTHROUGH {
     output:
     // Output: [sub, ses, registered_file, bids_template]
     tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_name), emit: output
-    // Transforms: [sub, ses, forward_transform, inverse_transform]
+    // Transforms: [sub, ses, bids_name, forward_transform, inverse_transform]
     // Forward: from-{modality}_to-{template} (e.g., from-T1w_to-NMT2Sym)
     // Inverse: from-{template}_to-{modality} (e.g., from-NMT2Sym_to-T1w)
     // Use patterns that match the actual naming: forward starts with from-T1w_to- or from-T2w_to-, inverse ends with _to-T1w or _to-T2w
-    tuple val(subject_id), val(session_id), path("*from-T1w_to-*_mode-image_xfm*"), path("*from-*_to-T1w_mode-image_xfm*"), emit: transforms
+    tuple val(subject_id), val(session_id), val(bids_name), path("*from-T1w_to-*_mode-image_xfm*"), path("*from-*_to-T1w_mode-image_xfm*"), emit: transforms
     // Reference: [sub, ses, reference_file]
     tuple val(subject_id), val(session_id), path("*ref_from_anat_reg.nii.gz"), emit: reference
     path "*.json", emit: metadata

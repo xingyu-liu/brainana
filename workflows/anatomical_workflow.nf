@@ -35,6 +35,7 @@ include { ANAT_REGISTRATION_PASSTHROUGH as ANAT_REGISTRATION_PASSTHROUGH_T2W } f
 include { ANAT_APPLY_CONFORM } from '../modules/anatomical.nf'
 include { ANAT_APPLY_TRANSFORMATION } from '../modules/anatomical.nf'
 include { ANAT_APPLY_TRANSFORM_MASK } from '../modules/anatomical.nf'
+include { ANAT_BACKPROJECT_ATLASES } from '../modules/anatomical.nf'
 include { ANAT_PUBLISH_PHASE1 } from '../modules/anatomical.nf'
 include { ANAT_PUBLISH_PHASE1 as ANAT_PUBLISH_T2W } from '../modules/anatomical.nf'
 include { ANAT_T1WT2W_COMBINED } from '../modules/anatomical.nf'
@@ -556,7 +557,7 @@ workflow ANAT_WF {
     if (registration_enabled && anat_skullstripping_enabled) {
         // Join mask with registration transform and reference
         def mask_transform_input = anat_skull_mask
-            .join(anat_reg_transforms.map { sub, ses, forward_xfm, inverse_xfm -> [sub, ses, forward_xfm] }, by: [0, 1])
+            .join(anat_reg_transforms.map { sub, ses, bids_name, forward_xfm, inverse_xfm -> [sub, ses, forward_xfm] }, by: [0, 1])
             .join(anat_reg_reference, by: [0, 1])
             .map { sub, ses, mask_file, forward_xfm, reference ->
                 [sub, ses, mask_file, forward_xfm, reference]
@@ -569,8 +570,23 @@ workflow ANAT_WF {
     // ============================================
     // Backproject atlases to T1w space
     // ============================================
-    // TODO
-    // ============================================    
+    // Only when registration is enabled (no backproject on passthrough)
+    // Input: anat_reg_transforms [sub, ses, bids_name, forward, inverse]
+    //        anat_after_bias [sub, ses, anat_file, bids_name]
+    // Output: anat/atlas/*.nii.gz
+    // ============================================
+    anat_backproject_atlases_out = Channel.empty()
+    if (registration_enabled) {
+        def anat_after_bias_by_bids = anat_after_bias
+            .map { sub, ses, anat_file, bids_name -> [sub, ses, bids_name, anat_file] }
+        def backproject_input = anat_reg_transforms
+            .join(anat_after_bias_by_bids, by: [0, 1, 2])
+            .map { sub, ses, bids_name, forward_xfm, inverse_xfm, t1w_ref ->
+                [sub, ses, bids_name, inverse_xfm, t1w_ref]
+            }
+        ANAT_BACKPROJECT_ATLASES(backproject_input, config_file)
+        anat_backproject_atlases_out = ANAT_BACKPROJECT_ATLASES.out.output
+    }    
     
     // ============================================
     // QUALITY CONTROL
@@ -931,7 +947,7 @@ workflow ANAT_WF {
     def t2w_after_apply_reg = t2w_after_bias
     if (registration_enabled) {
         def anat_reg_data = anat_reg_transforms
-            .map { sub, ses, forward_xfm, inverse_xfm -> [sub, ses, forward_xfm] }
+            .map { sub, ses, bids_name, forward_xfm, inverse_xfm -> [sub, ses, forward_xfm] }
             .join(anat_reg_reference, by: [0, 1])
         
         def t2w_for_apply_reg = t2w_after_bias

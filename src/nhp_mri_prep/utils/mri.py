@@ -85,7 +85,30 @@ def get_image_shape(
         logger.error(f"Step: image shape retrieval failed - return code {returncode}")
         logger.error(f"System: stderr - {stderr}")
         raise RuntimeError(f"Image shape retrieval failed: {stderr}")
-    
+
+
+def shape_to_ants_input_type(shape: list) -> int:
+    """Map image shape to ANTs antsApplyTransforms -e (input-image-type) value.
+
+    ANTs -e options: 0=scalar, 1=vector, 2=tensor, 3=time-series, 4=multichannel,
+    5=five-dimensional. For 3D/4D images: 3D or 4D with last dim 1 -> 0 (scalar);
+    4D with last dim > 1 -> 3 (time-series).
+
+    Args:
+        shape: Image dimensions from get_image_shape [x, y, z, t] or [x, y, z]
+
+    Returns:
+        Integer 0-5 for antsApplyTransforms -e
+    """
+    if len(shape) < 3:
+        return 0
+    if len(shape) == 3:
+        return 0
+    # len >= 4: check 4th dimension
+    if shape[3] <= 1:
+        return 0  # scalar (3D or pseudo-3D)
+    return 3  # time-series (4D)
+
 
 def get_image_resolution(
     imagef: str,

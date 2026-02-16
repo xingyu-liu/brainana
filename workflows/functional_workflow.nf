@@ -494,7 +494,7 @@ workflow FUNC_WF {
         //        anat_reg_reference: [sub, ses, ref_from_anat_reg]
         // Output: [sub, ses, anat2template_xfm, ref_from_anat_reg]
         def anat_reg_all_real = anat_reg_transforms
-            .map { sub, ses, anat2template_xfm, inverse_transform -> [sub, ses, anat2template_xfm] }
+            .map { sub, ses, bids_name, anat2template_xfm, inverse_transform -> [sub, ses, anat2template_xfm] }
             .join(anat_reg_reference, by: [0, 1]) // join by [sub, ses]
         
         // JOIN ANATOMICAL REGISTRATION BY SESSION

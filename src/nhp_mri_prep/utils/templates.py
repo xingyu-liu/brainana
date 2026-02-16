@@ -8,11 +8,38 @@ from a predefined pool of templates.
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Tuple
 
 from .logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _parse_resolution(res_str: Optional[str]) -> float:
+    """Parse resolution string to numeric value for comparison.
+
+    Examples: res-05 -> 0.5, res-025 -> 0.25, res-1 -> 1.0, res-04 -> 0.4
+    """
+    if not res_str:
+        return float("inf")
+    res_str = str(res_str).strip().lower()
+    if res_str.startswith("res-"):
+        try:
+            return float(res_str[4:])
+        except ValueError:
+            pass
+    return float("inf")
+
+
+def _extract_res_from_atlas_path(path: Path) -> Optional[str]:
+    """Extract res-* component from atlas filename."""
+    name = path.stem
+    if name.endswith(".nii"):
+        name = name[:-4]
+    for part in name.split("_"):
+        if part.startswith("res-"):
+            return part
+    return None
 
 
 class TemplateManager:
@@ -287,6 +314,74 @@ class TemplateManager:
         
         return score
     
+    def discover_atlases(
+        self,
+        space_name: str,
+        template_res: Optional[str] = None,
+    ) -> List[Tuple[str, Path]]:
+        """Discover atlases in the given template space.
+
+        Searches under template_zoo/atlas/ for files matching
+        atlas-*_space-{space_name}_*.nii.gz. Matches by space only, ignoring
+        resolution. When multiple resolutions exist for the same atlas, picks
+        the one closest to template_res if provided.
+
+        Args:
+            space_name: Template space name (e.g. 'NMT2Sym', 'MEBRAINS')
+            template_res: Optional resolution spec (e.g. 'res-05', 'res-1')
+                         used to pick closest atlas when multiple exist.
+
+        Returns:
+            List of (atlas_name, atlas_file_path) tuples.
+        """
+        atlas_root = self.template_dir / "atlas"
+        if not atlas_root.is_dir():
+            logger.debug(f"System: atlas root not found - {atlas_root}")
+            return []
+
+        pattern = f"*_space-{space_name}_*.nii.gz"
+        candidates: Dict[str, List[Path]] = {}  # atlas_name -> [paths]
+
+        for path in atlas_root.glob(f"**/{pattern}"):
+            if not path.name.startswith("atlas-"):
+                continue
+            # Parse atlas name: atlas-ARM2_space-NMT2Sym_res-05.nii.gz -> ARM2
+            name_part = path.stem
+            if name_part.endswith(".nii"):
+                name_part = name_part[:-4]
+            parts = name_part.split("_")
+            if not parts or not parts[0].startswith("atlas-"):
+                continue
+            atlas_name = parts[0].replace("atlas-", "")
+            if atlas_name not in candidates:
+                candidates[atlas_name] = []
+            candidates[atlas_name].append(path)
+
+        result: List[Tuple[str, Path]] = []
+        target_res_val = _parse_resolution(template_res) if template_res else None
+
+        for atlas_name, paths in candidates.items():
+            if len(paths) == 1:
+                result.append((atlas_name, paths[0]))
+                continue
+            # Multiple resolutions: pick closest to template_res
+            if target_res_val is not None:
+                best = min(
+                    paths,
+                    key=lambda p: abs(
+                        _parse_resolution(_extract_res_from_atlas_path(p))
+                        - target_res_val
+                    ),
+                )
+            else:
+                best = sorted(
+                    paths,
+                    key=lambda p: _extract_res_from_atlas_path(p) or "res-0",
+                )[0]
+            result.append((atlas_name, best))
+
+        return sorted(result, key=lambda x: x[0])
+
     def validate_template_spec(self, template_spec: str) -> bool:
         """Check if template specification exists."""
         try:
@@ -385,4 +480,26 @@ def print_available_templates():
     
     Wrapper function that uses the global TemplateManager instance.
     """
-    return get_template_manager().print_available_templates() 
+    return get_template_manager().print_available_templates()
+
+
+def discover_atlases_in_space(
+    space_name: str,
+    template_res: Optional[str] = None,
+    template_dir: Optional[str] = None,
+) -> List[Tuple[str, Path]]:
+    """Discover atlases in the given template space.
+
+    Wrapper that uses the global TemplateManager instance.
+
+    Args:
+        space_name: Template space name (e.g. 'NMT2Sym')
+        template_res: Optional resolution spec (e.g. 'res-05')
+        template_dir: Optional custom template directory
+
+    Returns:
+        List of (atlas_name, atlas_file_path) tuples.
+    """
+    return get_template_manager(template_dir).discover_atlases(
+        space_name=space_name, template_res=template_res
+    ) 
