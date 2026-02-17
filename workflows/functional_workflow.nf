@@ -472,10 +472,10 @@ workflow FUNC_WF {
         FUNC_APPLY_CONFORM(func_apply_conform_input, config_file)
         func_apply_conform_output = FUNC_APPLY_CONFORM.out.output
     } else {
+        // Pass through real bold and tmean so downstream QC (e.g. QC_SKULLSTRIPPING_FUNC) has a valid underlay
         func_apply_conform_output = func_apply_bold_input
             .map { sub, ses, run_id, bold, tmean, bids_name ->
-                def dummy_tmean_ref = file("${workDir}/dummy_tmean_ref.dummy")
-                [sub, ses, run_id, bold, dummy_tmean_ref, bids_name]
+                [sub, ses, run_id, bold, tmean, bids_name]
             }
     }
     

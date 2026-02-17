@@ -25,69 +25,70 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
-BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
-OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v1
-# BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy
-# OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_v2
-# BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_T1wT2w
-# OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_T1wT2w_v1
-# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled"
-# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_v6"
-# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_2pass"
-# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_2pass_nextflow"
-# BIDS_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_multiple"
-# OUTPUT_DIR="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_multiple_v5"
-# BIDS_DIR="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_baby31"
-# OUTPUT_DIR="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_baby31_nextflow"
+bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/bids_wrong_orient
+output_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/preproc/bids_wrong_orient_brainana
+# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy
+# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_v2
+# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_T1wT2w
+# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_T1wT2w_v1
+# bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled"
+# output_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_v6"
+# bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_2pass"
+# output_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_2pass_nextflow"
+# bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_multiple"
+# output_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_multiple_v5"
+# bids_dir="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_baby31"
+# output_dir="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_baby31_nextflow"
 
-# BIDS_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_UNC_batch1
-# OUTPUT_DIR=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_UNC_batch1
-# BIDS_DIR=/mnt/DataDrive2/macaque/data_raw/macaque_mri/MEBRAIN/bids
-# OUTPUT_DIR=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/MEBRAIN/
-# BIDS_DIR=/mnt/DataDrive2/macaque/data_raw/macaque_mri/ElectrodeLocalization/bids
-# OUTPUT_DIR=/mnt/DataDrive2/macaque/data_raw/macaque_mri/ElectrodeLocalization/bids_preproc
-# BIDS_DIR=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/site-newcastle
-# OUTPUT_DIR=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-newcastle
+# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_UNC_batch1
+# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_UNC_batch1
+# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/MEBRAIN/bids
+# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/MEBRAIN/
+# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/ElectrodeLocalization/bids
+# output_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/ElectrodeLocalization/bids_preproc
+# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/site-newcastle
+# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-newcastle
 
-CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
-# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_easy.yaml"
-# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_UNC.yaml"
-# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_MEBRAIN.yaml"
-# CONFIG_FILE="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_common.yaml"
+config_f=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/preproc/config.yaml
+# config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
+# config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_easy.yaml"
+# config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_UNC.yaml"
+# config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_MEBRAIN.yaml"
+# config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_common.yaml"
 
-WORKING_DIR=${OUTPUT_DIR}_wd
+working_dir=${output_dir}_wd
 
 # Check if .ymal exists (user typo), use it if .yaml doesn't exist
-if [ ! -f "$CONFIG_FILE" ] && [ -f "${CONFIG_FILE%.yaml}.ymal" ]; then
-    CONFIG_FILE="${CONFIG_FILE%.yaml}.ymal"
-    echo "Note: Using ${CONFIG_FILE} (found .ymal instead of .yaml)"
+if [ ! -f "$config_f" ] && [ -f "${config_f%.yaml}.ymal" ]; then
+    config_f="${config_f%.yaml}.ymal"
+    echo "Note: Using ${config_f} (found .ymal instead of .yaml)"
 fi
 
 # Validate paths
 echo "============================================"
 echo "Nextflow Pipeline Test (No Docker)"
 echo "============================================"
-echo "BIDS directory: $BIDS_DIR"
-echo "Output directory: $OUTPUT_DIR"
-echo "Working directory: $WORKING_DIR"
-echo "Config file: $CONFIG_FILE"
+echo "BIDS directory: $bids_dir"
+echo "Output directory: $output_dir"
+echo "Working directory: $working_dir"
+echo "Config file: $config_f"
 echo "============================================"
 
 # Check if BIDS directory exists
-if [ ! -d "$BIDS_DIR" ]; then
-    echo "Error: BIDS directory not found: $BIDS_DIR" >&2
+if [ ! -d "$bids_dir" ]; then
+    echo "Error: BIDS directory not found: $bids_dir" >&2
     exit 1
 fi
 
 # Check if config file exists
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "Error: Config file not found: $CONFIG_FILE" >&2
+if [ ! -f "$config_f" ]; then
+    echo "Error: Config file not found: $config_f" >&2
     exit 1
 fi
 
 # Create output and working directories if they don't exist
-mkdir -p "$OUTPUT_DIR"
-mkdir -p "$WORKING_DIR"
+mkdir -p "$output_dir"
+mkdir -p "$working_dir"
 
 # Change to project root
 cd "$PROJECT_ROOT"
@@ -97,8 +98,8 @@ echo ""
 echo "Starting Nextflow pipeline..."
 if [ -n "$RESUME_FLAG" ]; then
     echo "Resume enabled: $RESUME_FLAG"
-    echo "Work directory: $WORKING_DIR"
-    if [ -d "$WORKING_DIR" ] && [ "$(ls -A $WORKING_DIR 2>/dev/null)" ]; then
+    echo "Work directory: $working_dir"
+    if [ -d "$working_dir" ] && [ "$(ls -A $working_dir 2>/dev/null)" ]; then
         echo "Work directory contains previous tasks (resume should work)"
     else
         echo "Work directory is empty (no previous run to resume)"
@@ -108,15 +109,15 @@ echo ""
 
 "$PROJECT_ROOT/run_brainana.sh" run main.nf \
     --no-docker \
-    --bids_dir "$BIDS_DIR" \
-    --output_dir "$OUTPUT_DIR" \
-    --work_dir "$WORKING_DIR" \
-    --config_file "$CONFIG_FILE" \
+    --bids_dir "$bids_dir" \
+    --output_dir "$output_dir" \
+    --work_dir "$working_dir" \
+    --config_file "$config_f" \
     $RESUME_FLAG
 
 echo ""
 echo "============================================"
 echo "Pipeline completed successfully!"
-echo "Output directory: $OUTPUT_DIR"
+echo "Output directory: $output_dir"
 echo "============================================"
 

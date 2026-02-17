@@ -417,12 +417,12 @@ def anat_backproject_atlases(
             additional_files={},
         )
 
-    # Build output stem from bids_name: strip _desc-preproc_T1w
+    # Build output stem from bids_name: strip .nii then _desc-preproc_T1w or _T1w
     bids_stem = Path(bids_name).stem
     if bids_stem.endswith(".nii"):
         bids_stem = bids_stem[:-4]
-    if bids_stem.endswith("_desc-preproc_T1w"):
-        output_stem = bids_stem[: -len("_desc-preproc_T1w")]
+    if bids_stem.endswith("_T1w"):
+        output_stem = bids_stem[: -len("_T1w")]
     else:
         output_stem = bids_stem
 

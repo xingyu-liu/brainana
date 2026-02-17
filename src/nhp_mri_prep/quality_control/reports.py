@@ -20,7 +20,6 @@ from ..utils.bids import parse_bids_entities, BIDS_ENTITY_ORDER
 SNAPSHOT_MAPPINGS = {
     'conform': {'key': 'conform_overlay', 'description': 'Conform to template space'},
     'biascorrect': {'key': 'bias_correction_comparison', 'description': 'Bias field correction'},
-    'skullstrip': {'key': 'skullstrip_overlay', 'description': 'Skullstripping'},
     'atlasSegmentation': {'key': 'atlas_segmentation_overlay', 'description': 'Atlas segmentation'},
     'anat2template': {'key': 'anat2template_registration_overlay', 'description': 'Structural to template registration'},
     'func2anat': {'key': 'func2anat_registration_overlay', 'description': 'Functional to anatomical registration'},
@@ -32,8 +31,24 @@ SNAPSHOT_MAPPINGS = {
     'motion': {'key': 'motion_parameters', 'description': 'Motion parameters'},
     'surfReconTissueSeg': {'key': 'surf_recon_tissue_seg_overlay', 'description': 'Surface reconstruction tissue segmentation'},
     'corticalSurfAndMeasures': {'key': 'cortical_surf_and_measures_overlay', 'description': 'Cortical surface and measures'},
+    'skullstrip': {'key': 'skullstrip_overlay', 'description': 'Skullstripping'},
 }
 
+# Figure descriptions shown above the figure (same font style as "Get figure file"); first letter auto-capitalized.
+# Key by desc; for 'conform' use (desc, modality) because anatomical vs functional differ.
+FIGURE_DESCRIPTIONS = {
+    'conform': {
+        'anatomical': 'rigid registered T1w (underlaid); template space (contour)',
+        'functional': 'rigid registered BOLD (underlaid); target space (contour)',
+    },
+    'anat2template': 'registered T1w (underlaid); template space (contour)',
+    'atlasSegmentation': 'ARM2: CHARM level 2 parcellation in cortex and SARM level 2 parcellation in subcortex',
+    'surfReconTissueSeg': 'White surface (blue contour); pial surface (red contour)',
+    'T2w2T1w': 'rigid registered T2w (underlaid); T1w space (contour)',
+    'T2w2template': 'registered T2w (underlaid); template space (contour)',
+    'func2anat': 'registered BOLD (underlaid); T1w space (contour)',
+    'func2target': 'registered BOLD (underlaid); target space (contour)',
+}
 
 SNAPSHOT_ORDER = [
     'conform_overlay', 
@@ -137,6 +152,13 @@ class SnapshotProcessor:
             if desc == 'conform' and modality == 'functional':
                 description = 'Conform to target space'
             
+            # Figure description (underlaid/contour text) for QC report
+            figure_desc_entry = FIGURE_DESCRIPTIONS.get(desc)
+            if isinstance(figure_desc_entry, dict):
+                figure_description = figure_desc_entry.get(modality, '')
+            else:
+                figure_description = figure_desc_entry if isinstance(figure_desc_entry, str) else ''
+            
             # Store the filename separately for reliable path construction
             snapshots[name] = {
                 'path': str(path),
@@ -144,7 +166,8 @@ class SnapshotProcessor:
                 'entities': entities,
                 'modality': modality,
                 'description': description,
-                'snapshot_type': snapshot_type
+                'snapshot_type': snapshot_type,
+                'figure_description': figure_description,
             }
         
         # Convert sets to sorted lists
@@ -270,7 +293,8 @@ class SnapshotProcessor:
                 "path": relative_path,
                 "entities": snapshot_info['entities'],
                 "description": snapshot_info['description'],
-                "snapshot_type": snapshot_info['snapshot_type']
+                "snapshot_type": snapshot_info['snapshot_type'],
+                "figure_description": snapshot_info.get('figure_description', ''),
             }
             
             modality = snapshot_info['modality']
@@ -469,9 +493,12 @@ please refer to the nhp_mri_prep configuration files in your preprocessing direc
             for snapshot_data in snapshots:
                 snapshot_id = f"{section_prefix}-{snapshot_data['filename'].replace('.', '-')}"
                 title = snapshot_data.get('description', snapshot_data['filename'])
-                
+                fig_desc = snapshot_data.get('figure_description', '')
+                if fig_desc:
+                    fig_desc = fig_desc[0].upper() + fig_desc[1:]
+                fig_desc_block = f'\n<div class="elem-filename">\n    {fig_desc}\n</div>' if fig_desc else ''
                 html_parts.append(f'''<div id="{snapshot_id}">
-<h3 class="run-title">{title}</h3>
+<h3 class="run-title">{title}</h3>{fig_desc_block}
 <img class="svg-reportlet" src="{snapshot_data["path"]}" style="width: 100%" />
 </div>
 <div class="elem-filename">
@@ -496,7 +523,8 @@ please refer to the nhp_mri_prep configuration files in your preprocessing direc
                             'path': value['path'],
                             'entities': entities,
                             'description': value.get('description', ''),
-                            'snapshot_type': value.get('snapshot_type', '')
+                            'snapshot_type': value.get('snapshot_type', ''),
+                            'figure_description': value.get('figure_description', ''),
                         })
                     else:
                         collect_snapshots(value)

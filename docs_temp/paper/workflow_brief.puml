@@ -1,0 +1,48 @@
+@startuml brainana_Workflow
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 10
+skinparam ArrowColor #666666
+skinparam ActivityBorderColor #666666
+
+title brainana Neuroimaging Preprocessing Pipeline\n(T1w Processing)
+
+|#E3F2FD| Anatomical Preprocessing |
+start
+
+:Input: T1w files;
+
+:Synthesis across multiple T1w;
+:Reorient to standard orientation;
+:Conform to standard space;
+:Skullstripping and atlas parcellation;
+:Bias correction;
+:Registration to template;
+:Backprojection of atlas;
+
+split
+|#E1BEE7| Surface Reconstruction |
+:Surface reconstruction;
+stop
+
+split again
+|#FFF8E1| Functional Preprocessing |
+:Input: BOLD time series;
+
+:Slice timing correction;
+:Reorient;
+:Motion correction;
+:Despike;
+:Within-session coregistration;
+:Bias correction;
+:Conform to T1w/template;
+:skullstripping;
+:Registration to T1w/template;
+
+|#E8F5E9| QC Report Generation |
+:Generate QC report;
+
+stop
+
+@enduml
