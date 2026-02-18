@@ -25,12 +25,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
-bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/bids_wrong_orient
-output_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/preproc/bids_wrong_orient_brainana
+# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/bids_wrong_orient
+# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-princetonWu
 # bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy
 # output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_v2
-# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_T1wT2w
-# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_T1wT2w_v1
+bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v1
 # bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled"
 # output_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_v6"
 # bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_2pass"
@@ -49,12 +49,13 @@ output_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/preproc/b
 # bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/site-newcastle
 # output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-newcastle
 
-config_f=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/preproc/config.yaml
+# config_f=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/preproc/config.yaml
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_easy.yaml"
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_UNC.yaml"
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_MEBRAIN.yaml"
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_common.yaml"
+config_f=/home/star/github/brainana/src/nhp_mri_prep/config/defaults.yaml
 
 working_dir=${output_dir}_wd
 

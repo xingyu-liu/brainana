@@ -12,11 +12,11 @@ from dataclasses import dataclass
 import json
 
 
-# Standard BIDS entity order according to BIDS specification
-# This ensures consistent ordering across all BIDS-related functions
+# Standard BIDS entity order. 'others' is a placeholder: any entity not in this
+# list is emitted at the 'others' position (move 'others' to control custom entity order).
 BIDS_ENTITY_ORDER = [
-    'sub', 'ses', 'task', 'acq', 'ce', 'dir', 'rec', 'run', 'echo', 
-    'flip', 'inv', 'mt', 'part', 'recording', 'space', 'split', 'desc'
+    'sub', 'ses', 'task', 'acq', 'ce', 'dir', 'rec', 'run', 'echo',
+    'flip', 'inv', 'mt', 'part', 'recording', 'others', 'space', 'split', 'desc'
 ]
 
 
@@ -109,20 +109,25 @@ def create_bids_filename(entities: Dict[str, str], suffix: str, extension: str =
         >>> create_bids_filename({'sub': '01', 'run': '1'}, 'desc-brain_T1w')
         'sub-01_run-1_desc-brain_T1w.nii.gz'
     """
-    # Use the standard BIDS entity order
-    
-    # Build filename components in proper order
+    # Use the standard BIDS entity order; 'others' is a placeholder for any
+    # entity not in the list (e.g. qcq, site-specific keys).
+    standard_entities = set(BIDS_ENTITY_ORDER) - {'others'}
     components = []
-    
-    # Add entities in standard order first
+
     for entity in BIDS_ENTITY_ORDER:
-        if entity in entities:
+        if entity == 'others':
+            # Emit all custom entities (not in standard list) in sorted order
+            custom = sorted(set(entities.keys()) - standard_entities)
+            for k in custom:
+                components.append(f"{k}-{entities[k]}")
+        elif entity in entities:
             components.append(f"{entity}-{entities[entity]}")
-    
-    # Add any remaining entities not in the standard order
-    remaining_entities = set(entities.keys()) - set(BIDS_ENTITY_ORDER)
-    for entity in sorted(remaining_entities):  # Sort for consistency
-        components.append(f"{entity}-{entities[entity]}")
+
+    # If 'others' is not in the order, append any leftover custom entities at the end
+    if 'others' not in BIDS_ENTITY_ORDER:
+        remaining = sorted(set(entities.keys()) - set(BIDS_ENTITY_ORDER))
+        for entity in remaining:
+            components.append(f"{entity}-{entities[entity]}")
     
     # Join components and add suffix and extension
     filename = "_".join(components)

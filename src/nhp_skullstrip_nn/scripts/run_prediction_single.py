@@ -14,14 +14,13 @@ if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
 from nhp_skullstrip_nn.inference.prediction import predict_volumes
-from nhp_skullstrip_nn.config import TrainingConfig
 from nhp_skullstrip_nn.utils.gpu import get_device
 from nhp_skullstrip_nn.utils.log import setup_logging
 from nhp_skullstrip_nn.model import ModelLoader
 
 # %%
 # anat
-input_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/fireants/sub-032309_ses-001_run-1_T1w.nii.gz'
+input_f = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/anat/sub-032116_ses-001_run-1_T1w.nii.gz'
 model_f = '/home/star/github/brainana/src/nhp_skullstrip_nn/pretrained_model/T1w_brainmask.pth'
 
 # # func

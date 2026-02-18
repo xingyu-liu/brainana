@@ -161,7 +161,12 @@ def create_motion_correction_qc(
             
         if motion_data.ndim == 1:
             motion_data = motion_data.reshape(1, -1)
-            
+
+        # Skip QC for pass-through (all-zero motion params, e.g. when MC skipped for <15 vols)
+        if np.allclose(motion_data, 0.0):
+            logger.info("QC: skipping motion plot - all-zero params (pass-through)")
+            return {}
+
         # Create motion plot
         fig = create_motion_plot(motion_data, title="")
         

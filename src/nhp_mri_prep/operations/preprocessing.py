@@ -22,7 +22,6 @@ from ..config import validate_slice_timing_config
 from ..utils.mri import correct_affine_for_mismatch_orientation, get_opposite_orientation, pad_image
 
 from fastsurfer_nn.inference.segmentation import run_segmentation
-from nhp_skullstrip_nn.inference.prediction import skullstripping
 
 # %%
 # Default for template padding during conform (fraction of dimension, e.g. 0.1 = 10% per side)
@@ -1325,6 +1324,9 @@ def apply_skullstripping(
     logger.info(f"Workflow: starting skullstripping using nhp_skullstrip_nn")
     logger.info(f"Data: input image - {os.path.basename(image_path)}")
     logger.info(f"System: output path - {brain_mask_path}")
+    
+    # Import here to avoid circular import
+    from nhp_skullstrip_nn.inference.prediction import skullstripping
     
     try:
         

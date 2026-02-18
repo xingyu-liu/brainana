@@ -20,12 +20,54 @@ from ..operations.preprocessing import (
     apply_skullstripping
 )
 from ..operations.registration import ants_register, ants_apply_transforms, flirt_apply_transforms, flirt_register, flirt_register
-from ..utils import get_image_resolution, calculate_func_tmean
+from ..utils import get_image_resolution, calculate_func_tmean, get_image_shape
 from ..utils import run_command
 import numpy as np
 import nibabel as nib
+import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+def _generate_pass_through_motion_params(input_file: Path, working_dir: Path, logger: logging.Logger) -> Dict[str, Path]:
+    """Generate pass-through outputs (tmean and zero-filled motion params) when motion correction is skipped.
+    
+    Args:
+        input_file: Input functional file
+        working_dir: Working directory for outputs
+        logger: Logger instance
+        
+    Returns:
+        Dictionary with 'tmean' and optionally 'motion_params' file paths
+    """
+    work_dir = Path(working_dir)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generate tmean from input file
+    tmean_path = work_dir / "func_motion_corrected_tmean.nii.gz"
+    calculate_func_tmean(str(input_file), str(tmean_path), logger)
+    
+    # Create zero-filled motion params TSV
+    additional_files = {"tmean": tmean_path}
+    shape = get_image_shape(str(input_file), logger)
+    if len(shape) >= 4:
+        nvols = shape[3]
+        motion_params_df = pd.DataFrame({
+            'rot_x': [0.0] * nvols,
+            'rot_y': [0.0] * nvols,
+            'rot_z': [0.0] * nvols,
+            'trans_x': [0.0] * nvols,
+            'trans_y': [0.0] * nvols,
+            'trans_z': [0.0] * nvols
+        })
+        motion_params_path = work_dir / "func_motion_corrected.tsv"
+        motion_params_df.to_csv(motion_params_path, sep='\t', index=False)
+        additional_files["motion_params"] = motion_params_path
+        logger.info(f"Step: created zero-filled motion params TSV with {nvols} volumes")
+    else:
+        logger.warning("Step: could not determine number of volumes for motion params TSV")
+    
+    return additional_files
 
 
 def func_reorient(input: StepInput, template_file: Optional[Path] = None) -> StepOutput:
@@ -145,9 +187,11 @@ def func_motion_correction(input: StepInput) -> StepOutput:
     """
     if not input.config.get("func.motion_correction.enabled", True):
         logger.info("Step: motion correction skipped (disabled in configuration)")
+        additional_files = _generate_pass_through_motion_params(input.input_file, input.working_dir, logger)
         return StepOutput(
             output_file=input.input_file,
-            metadata={"step": "motion_correction", "skipped": True}
+            metadata={"step": "motion_correction", "skipped": True},
+            additional_files=additional_files
         )
     
     # Call operation
@@ -161,21 +205,26 @@ def func_motion_correction(input: StepInput) -> StepOutput:
     )
     
     output_file = Path(result["imagef_motion_corrected"]) if result.get("imagef_motion_corrected") else input.input_file
-    tmean_file = Path(result["imagef_motion_corrected_tmean"]) if result.get("imagef_motion_corrected_tmean") else None
-    motion_params = Path(result["motion_parameters"]) if result.get("motion_parameters") else None
     
-    additional_files = {}
-    if tmean_file:
-        additional_files["tmean"] = tmean_file
-    if motion_params:
-        additional_files["motion_params"] = motion_params
+    # If motion correction was skipped (< 15 volumes), generate pass-through outputs
+    if not result.get("imagef_motion_corrected") and not result.get("imagef_motion_corrected_tmean"):
+        logger.info("Step: motion correction skipped - generating pass-through outputs")
+        additional_files = _generate_pass_through_motion_params(input.input_file, input.working_dir, logger)
+    else:
+        # Normal execution - use outputs from motion_correction
+        additional_files = {}
+        if result.get("imagef_motion_corrected_tmean"):
+            additional_files["tmean"] = Path(result["imagef_motion_corrected_tmean"])
+        if result.get("motion_parameters"):
+            additional_files["motion_params"] = Path(result["motion_parameters"])
     
     return StepOutput(
         output_file=output_file,
         metadata={
             "step": "motion_correction",
             "modality": "func",
-            "dof": input.config.get("func", {}).get("motion_correction", {}).get("dof", 6)
+            "dof": input.config.get("func", {}).get("motion_correction", {}).get("dof", 6),
+            "skipped": not bool(result.get("imagef_motion_corrected"))
         },
         additional_files=additional_files
     )

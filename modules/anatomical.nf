@@ -1474,7 +1474,7 @@ process ANAT_APPLY_TRANSFORM_MASK {
     """
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.operations.registration import ants_apply_transforms
-from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
+from nhp_mri_prep.utils.bids import get_filename_stem
 from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, load_config
 from pathlib import Path
 import re
@@ -1514,28 +1514,13 @@ mask_result = ants_apply_transforms(
 if not mask_result.get("imagef_registered"):
     raise FileNotFoundError("Failed to apply registration transform to mask")
 
-# Generate BIDS-compliant output filename with space entity
-# Extract original filename stem to preserve subject/session entities
+# Keep input mask filename and insert space entity (no rebuild = no entity reordering)
 mask_stem = get_filename_stem(mask_file)
-# Parse entities from original mask filename
-import json
-from nhp_mri_prep.utils.bids import parse_bids_entities, create_bids_filename
-
-try:
-    # Try to parse BIDS entities from original mask filename
-    entities = parse_bids_entities(str(mask_file))
-    # Add space entity
-    entities['space'] = template_name
-    entities['desc'] = 'brain'
-    # Create new filename
-    bids_output_filename = create_bids_filename(entities, 'mask', extension='.nii.gz')
-except:
-    # Fallback: use create_bids_output_filename with space entity
-    bids_output_filename = create_bids_output_filename(
-        original_file_path=mask_file,
-        suffix=f'space-{template_name}_desc-brain',
-        modality='mask'
-    )
+if '_desc-' in mask_stem:
+    stem_with_space = mask_stem.replace('_desc-', f'_space-{template_name}_desc-', 1)
+else:
+    stem_with_space = f"{mask_stem}_space-{template_name}"
+bids_output_filename = f"{stem_with_space}.nii.gz"
 
 # Create symlink
 create_output_link(Path(mask_result["imagef_registered"]), bids_output_filename)

@@ -660,7 +660,7 @@ process QC_MOTION_CORRECTION {
     path config_file
     
     output:
-    path "*.png", emit: qc_files
+    path "*.png", optional: true, emit: qc_files
     path "*.json", emit: metadata
     
     script:
@@ -933,37 +933,22 @@ desc_value = 'func2anat' if qc_modality == 'func2anat' else 'func2target'
 bids_name = Path('${bids_name}') if '${bids_name}' else None
 
 # Construct QC output filename
-# For intermediate files (func2anat), use bids_name directly since intermediate file names aren't BIDS-compliant
-# For final files (func2target), try to parse from registered_file first, fallback to bids_name
-from nhp_mri_prep.utils.bids import parse_bids_entities, create_bids_filename, create_bids_output_filename
+# Keep input name and insert desc (no parse+rebuild) so custom entities (e.g. qcq) stay in order.
+from nhp_mri_prep.utils.bids import get_filename_stem, create_bids_output_filename
 if qc_modality == 'func2anat' and bids_name:
-    # Use create_bids_output_filename for intermediate case
     qc_output_filename = create_bids_output_filename(
         original_file_path=bids_name,
         suffix=f'desc-{desc_value}',
         modality='bold'
     ).replace('.nii.gz', '.png')
 else:
-    # Try to parse from registered_file name, fallback to bids_name
-    try:
-        entities = parse_bids_entities(registered_file.name)
-        entities['desc'] = desc_value
-        qc_output_filename = create_bids_filename(
-            entities=entities,
-            suffix='bold',
-            extension='.png'
-        )
-    except (ValueError, KeyError):
-        # Fallback to bids_name if parsing fails
-        if bids_name:
-            qc_output_filename = create_bids_output_filename(
-                original_file_path=bids_name,
-                suffix=f'desc-{desc_value}',
-                modality='bold'
-            ).replace('.nii.gz', '.png')
-        else:
-            # Last resort: construct from registered_file stem
-            qc_output_filename = f"{registered_file.stem}_desc-{desc_value}_bold.png"
+    # Keep registered_file name, insert _desc-{desc_value} before _bold (no parse+rebuild)
+    stem = get_filename_stem(registered_file)
+    if '_bold' in stem:
+        stem_with_desc = stem.replace('_bold', f'_desc-{desc_value}_bold', 1)
+    else:
+        stem_with_desc = f"{stem}_desc-{desc_value}_bold"
+    qc_output_filename = stem_with_desc + '.png'
 
 # Generate QC
 result = qc_registration(

@@ -686,9 +686,12 @@ def create_motion_plot(
     ax1.legend()
     ax2.set_xlabel('Frame')
 
-    # show 10 xticks if there are more than 10 timepoints
-    if motion_data.shape[0] > 10:
-        xticks = np.linspace(0, motion_data.shape[0], 10).astype(int)
+    # show 10 xticks if there are more than 10 timepoints, else all
+    nframes = motion_data.shape[0]
+    if nframes > 10:
+        xticks = np.linspace(0, nframes - 1, 10).astype(int)
+    else:
+        xticks = np.arange(nframes)
     for ax in [ax1, ax2]:
         ax.set_xticks(xticks)
         ax.set_xticklabels([f'{i:d}' for i in xticks])
