@@ -56,7 +56,7 @@ STOP_STEP = "s22"
 
 # Test subject
 subject_root = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon")
-subject_dir = subject_root / "sub-032172"
+subject_dir = subject_root / "sub-test"
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 

@@ -1,17 +1,16 @@
-site=site-ion  
-# site-ecnu
-# site-ion 
-# site-princeton
-# site-ecnuChen  
-# site-iscmj            
-# site-mcgill       
+site=site-mcgill
 # site-mountsinaiS
+# site-mcgill
+# site-princeton
+# site-iscmj            
 
 # site-ds003989, site-oxford, site-uwo, site-mountsinaiP, site-nin, site-nki
 # site-ohsu, site-rochester, site-sbri, site-uminn, site-caltech, site-carmenlyon
-# site-amu, site-ucdavis
-# bad QC: site-rockefeller, site-neurospin
+# site-amu, site-ucdavis, site-ecnuChen, site-ion 
+# bad QC: site-rockefeller, site-neurospin, site-ecnu
 
+# site=site-uncwisconsin
+# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/UNC-Wisconsin
 bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/${site}
 output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/${site}
 
