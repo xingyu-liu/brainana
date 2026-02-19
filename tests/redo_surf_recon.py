@@ -62,7 +62,7 @@ print(site_list)
 
 # %%
 # 2. prepare the surface input files
-for site_dir in site_list:
+for site_dir in site_list[-4:]:
     site_dir = Path(site_dir)
     site_name = site_dir.name
     print(f'Processing {site_name}...')
@@ -135,7 +135,7 @@ for site_dir in site_list:
         try:
             qc_surf_recon_tissue_seg(
                 fs_subject_dir=fs_sub_dir,
-                output_path=sub_dir / 'figures' / f'{str(anat_file.name).replace("desc-preproc_T1w.nii.gz", "_desc-surfReconTissueSeg_T1w.png")}',
+                output_path=sub_dir / 'figures' / f'{str(anat_file.name).replace("_desc-preproc_T1w.nii.gz", "_desc-surfReconTissueSeg_T1w.png")}',
                 modality='anat',
                 config=config
             )
@@ -145,7 +145,7 @@ for site_dir in site_list:
         try:
             qc_cortical_surf_and_measures(
                 fs_subject_dir=fs_sub_dir,
-                output_path=sub_dir / 'figures' / f'{str(anat_file.name).replace("desc-preproc_T1w.nii.gz", "_desc-corticalSurfAndMeasures_T1w.png")}',
+                output_path=sub_dir / 'figures' / f'{str(anat_file.name).replace("_desc-preproc_T1w.nii.gz", "_desc-corticalSurfAndMeasures_T1w.png")}',
                 modality='anat',
                 config=config
             )

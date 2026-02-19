@@ -955,7 +955,7 @@ def create_cortical_surf_and_measures_qc(
         
         # Compute thickness percentiles for clipping
         all_thickness = np.concatenate([lh_thickness, rh_thickness])
-        thickness_vmin = np.percentile(all_thickness, 5)
+        thickness_vmin = 1e-6 # minimum thickness to avoid 0 not showing in the plot
         thickness_vmax = np.percentile(all_thickness, 95)
         print(f"Thickness range: {thickness_vmin} to {thickness_vmax}")
         
@@ -1000,7 +1000,7 @@ def create_cortical_surf_and_measures_qc(
                     elif data_type == 'segmentation':
                         p.add_layer({data_key: data_dict[data_key]}, cmap='tab20', cbar=False)
                     elif data_type == 'thickness':  # thickness
-                        data = np.clip(data_dict[data_key], 0.001, thickness_vmax)
+                        data = np.clip(data_dict[data_key], thickness_vmin, thickness_vmax)
                         p.add_layer({data_key: data}, cmap='viridis', cbar=False)
                     
                     fig = p.build()
