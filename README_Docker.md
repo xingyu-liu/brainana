@@ -92,22 +92,23 @@ docker run -it --rm --gpus all \
 
 ---
 
-## 4. Running as Host User (File Permissions)
+## 4. User and File Permissions
 
-To ensure output files are owned by your host user, use `--user` and set writable Nextflow directories:
+**Running without sudo:** Add your user to the `docker` group so you can run Docker (and thus brainana) without root on the host:
 
 ```bash
-docker run -it --rm --gpus all \
-    --user $(id -u):$(id -g) \
-    -e NXF_WORK=/tmp/nextflow-work \
-    -e NXF_HOME=/tmp/nextflow-home \
-    -v <bids_dir>:/input \
-    -v <output_dir>:/output \
-    -v <path/to/license.txt>:/fs_license.txt \
-    xxxlab/brainana:latest
+sudo usermod -aG docker $USER
+# Log out and back in (or run: newgrp docker)
 ```
 
-**Why:** When using `--user $(id -u):$(id -g)`, the container runs as your host user. Nextflow's default work directory (`~/.nextflow/work`) may not be writable. Setting `NXF_WORK` and `NXF_HOME` to `/tmp/...` ensures Nextflow can write its cache and work files.
+**Why the container runs as root:** The entrypoint and Nextflow process containers run as root (no `--user`, no drop to /output owner) so GPU access works on every machine. Output ownership no longer depends on who created the output dir. If you need your user to own the files, chown the output (and optionally work) dir after the run.
+
+**If output files are root-owned** after a run, reclaim them with:
+
+```bash
+sudo chown -R $(id -u):$(id -g) <output_dir>
+# Optionally also the work dir: sudo chown -R $(id -u):$(id -g) <work_dir>
+```
 
 ---
 
@@ -150,7 +151,7 @@ docker run -it --rm \
 A: Run `xhost +local:root` on your host machine. If using SSH, ensure X11 forwarding is enabled (`ssh -X` or `-Y`).
 
 **Q: How do I enable GPU acceleration?**
-A: Add `--gpus all` to your `docker run` command (requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)).
+A: Add `--gpus all` to your `docker run` command (requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)). The pipeline runs process containers as root so GPU access works on any host. If you see "Insufficient Permissions" or "no GPU detect", avoid passing `--user` to the launcher; let the container run as root and chown the output dir afterward if needed.
 
 **Q: Do I need to provide a config file?**
 A: No. Production mode uses built-in defaults. For custom settings, generate a config via the config generator (GUI), save it, and mount it with `-v /path/to/config.yaml:/config.yaml`, then pass `--config_file /config.yaml` as an extra argument.

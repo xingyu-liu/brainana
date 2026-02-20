@@ -6,6 +6,7 @@ job lists that can be used to create Nextflow channels.
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from bids import BIDSLayout
@@ -20,8 +21,9 @@ def _normalize_to_list(value):
     """
     Normalize a value to a list of strings.
     
-    Handles None, single values (int, str), and lists.
-    Converts all values to strings to preserve formatting.
+    Handles None, single values (int, str), lists, and comma/space-separated
+    strings. Splits strings on commas and/or whitespace so config can use
+    e.g. "sub-001, sub-006" or "sub-001 sub-006".
     
     Args:
         value: Value to normalize (can be None, int, str, or list)
@@ -34,8 +36,12 @@ def _normalize_to_list(value):
     if isinstance(value, list):
         # Convert all items in list to strings
         return [str(item) for item in value]
-    # Handle single value - convert to string
-    return [str(value)]
+    s = str(value).strip()
+    if not s:
+        return None
+    # Split on comma and/or whitespace; drop empty parts
+    parts = [p.strip() for p in re.split(r'[,\s]+', s) if p.strip()]
+    return parts if parts else None
 
 
 def _normalize_bids_id(value, prefix):

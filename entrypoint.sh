@@ -2,9 +2,8 @@
 #
 # brainana Docker entrypoint
 #
-# Starts as root, detects the UID/GID of /output, and drops privileges
-# to a matching user via gosu. This ensures output files are owned by
-# the same user who owns the output directory on the host.
+# Starts as root and runs as root so GPU access works on any host.
+# Output files may be root-owned; chown the output dir on the host if needed.
 #
 # Usage (production):
 #   docker run --rm --gpus all \
@@ -23,68 +22,31 @@
 set -e
 
 ##############################################################################
-# UID/GID detection and privilege drop
+# Runtime user setup
 #
-# Three scenarios:
-#   1. User passed -u UID:GID  -> we're already that user, just fix HOME
-#   2. Running as root (default) -> detect /output owner, drop via gosu
-#   3. Running as root, /output is root-owned -> run as root (no drop)
+# If the user passed -u UID:GID we run as that user and fix HOME.
+# Otherwise we run as root so GPU access works on any host (no gosu drop).
 ##############################################################################
 
 setup_runtime_user() {
     local target_uid="$1"
     local target_gid="$2"
 
-    # If target is root, nothing to set up
     if [ "$target_uid" = "0" ]; then
         return 0
     fi
-
-    # Ensure a writable HOME for the target user
     export HOME="/tmp/home"
     mkdir -p "$HOME" 2>/dev/null || true
-
-    # Redirect Nextflow temp files to /tmp (not the read-only project dir)
     export NXF_TEMP=/tmp
 }
 
-# Check if we were started as non-root (user passed -u UID:GID)
 if [ "$(id -u)" != "0" ]; then
-    # Already running as the target user -- just fix HOME and proceed
     setup_runtime_user "$(id -u)" "$(id -g)"
-else
-    # Running as root (default). Detect UID/GID from the /output mount point
-    # (always exists since Docker creates it), not from $2 which may be a subpath.
-    if [ -d "/output" ]; then
-        TARGET_UID=$(stat -c '%u' /output)
-        TARGET_GID=$(stat -c '%g' /output)
-    else
-        # No /output mount; fall back to built-in neuro user (1000)
-        TARGET_UID=1000
-        TARGET_GID=1000
-    fi
-
-    if [ "$TARGET_UID" != "0" ]; then
-        # Create a runtime group/user matching the target UID/GID if needed
-        if ! getent group "$TARGET_GID" >/dev/null 2>&1; then
-            groupadd -g "$TARGET_GID" runtimegrp 2>/dev/null || true
-        fi
-        if ! getent passwd "$TARGET_UID" >/dev/null 2>&1; then
-            useradd -l -u "$TARGET_UID" -g "$TARGET_GID" -M -d /tmp/home -s /bin/bash runtimeusr 2>/dev/null || true
-        fi
-
-        setup_runtime_user "$TARGET_UID" "$TARGET_GID"
-        # So the dropped user can write to NXF_HOME and work dirs
-        chown -R "$TARGET_UID:$TARGET_GID" "$HOME" 2>/dev/null || true
-
-        # Re-exec this script as the target user via gosu
-        exec gosu "$TARGET_UID:$TARGET_GID" "$0" "$@"
-    fi
-    # If TARGET_UID is 0 (root-owned output), continue as root
 fi
+# When started as root we do not drop to /output owner; stay root for GPU.
 
 ##############################################################################
-# From here on we run as the target user (or root if output is root-owned)
+# From here on we run as root (or as the user if -u was passed)
 ##############################################################################
 
 # FreeSurfer license: only set when --freesurfer-license is passed (see arg parsing below).
@@ -291,6 +253,12 @@ fi
 
 cd "$PROJECT_ROOT"
 
+# GPU count (0 if nvidia-smi missing or no GPUs)
+GPU_COUNT=0
+if command -v nvidia-smi &>/dev/null && nvidia-smi --list-gpus &>/dev/null; then
+    GPU_COUNT=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
+fi
+
 echo "============================================"
 echo "brainana pipeline"
 echo "  Input:   $INPUT_DIR"
@@ -298,6 +266,7 @@ echo "  Output:  $OUTPUT_DIR"
 echo "  Config:  $CONFIG"
 echo "  Work:    $NXF_HOME (resume: $([ "$RESUME_BY_DEFAULT" -eq 1 ] && echo on || echo off))"
 echo "  User:    $(id -u):$(id -g)"
+echo "  GPUs:    $GPU_COUNT"
 echo "============================================"
 
 # Virtual display for headless QC snaps (wb_command -show-scene)
