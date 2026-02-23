@@ -1,9 +1,7 @@
 fs_license=/mnt/DataDrive3/xliu/prep_test/freesurfer_license.txt
 
 # # 1. prime-de
-# site=site-princeton
-# # site-princeton
-# # site-iscmj            
+# site=site-amu      
 
 # bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/${site}
 # output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/${site}
@@ -22,9 +20,18 @@ fs_license=/mnt/DataDrive3/xliu/prep_test/freesurfer_license.txt
 
 # ------------------------------------------------------------
 # 2. with config file
-site=site-uncwisconsin
+# site=site-iscmj
+# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/${site}
+# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/${site}
+# config_f=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/config_iscmj.yaml
 
-bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/UNC-Wisconsin/bids
+# site=site-uncwisconsin
+# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/UNC-Wisconsin/bids
+# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/UNC-Wisconsin
+# config_f=${output_dir}/config.yaml
+
+site=site-uwmadison
+bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/${site}
 output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/${site}
 config_f=${output_dir}/config.yaml
 

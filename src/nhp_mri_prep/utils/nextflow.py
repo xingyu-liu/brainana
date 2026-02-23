@@ -8,10 +8,10 @@ from pathlib import Path
 import os
 import shutil
 import json
-import yaml
 from typing import Dict, Any, Optional, Union
 
 from .bids import get_filename_stem
+from ..config.config_io import load_yaml_config
 
 
 def create_output_link(source_file, target_file):
@@ -75,15 +75,13 @@ def load_config(config_file_path: Union[str, Path]) -> Dict[str, Any]:
     
     Raises:
         FileNotFoundError: If config file doesn't exist
-        yaml.YAMLError: If YAML parsing fails
+        ValueError: If YAML parsing fails
     """
     config_path = Path(config_file_path)
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
-    
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-    
+
+    config = load_yaml_config(config_path)
     return config or {}
 
 

@@ -195,6 +195,7 @@ fi
 # We prefer the user config file, falling back to defaults.yaml if needed.
 SURF_RECON_ENABLED="$(
 python3 - "$CONFIG" "$DEFAULT_CONFIG" << 'PY'
+import io
 import sys
 from pathlib import Path
 
@@ -212,8 +213,9 @@ def load_yaml(p: Path):
     if not p.is_file():
         return {}
     try:
-        with p.open("r") as f:
-            return yaml.safe_load(f) or {}
+        raw = p.read_text()
+        raw = raw.replace("\t", " " * 4)  # YAML disallows tabs
+        return yaml.safe_load(io.StringIO(raw)) or {}
     except Exception:
         return {}
 

@@ -348,7 +348,6 @@ def func_conform(input: StepInput, target_file: Path, bold_4d_file: Optional[Pat
         logger=logger,
         modal="func",
         skip_skullstripping=skip_skullstripping,
-        padding_percentage=input.config.get("func.conform.padding_percentage"),
     )
     
     output_file = Path(result["imagef_conformed"]) if result.get("imagef_conformed") else input.input_file

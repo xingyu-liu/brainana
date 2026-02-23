@@ -1,3 +1,4 @@
+import io
 import json
 import yaml
 from pathlib import Path
@@ -6,27 +7,33 @@ from copy import deepcopy
 
 
 """Handles loading and saving configuration files in multiple formats."""
+
+
 def load_yaml_config(config_path: Union[str, Path]) -> Dict[str, Any]:
     """Load configuration from YAML file.
-    
+
+    Tabs in the file are replaced with spaces before parsing (YAML disallows tabs).
+
     Args:
         config_path: Path to YAML configuration file
-        
+
     Returns:
         Configuration dictionary
-        
+
     Raises:
         FileNotFoundError: If config file doesn't exist
         ValueError: If YAML is invalid
     """
     config_file = Path(config_path)
-    
+
     if not config_file.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_file}")
-    
+
     try:
-        with open(config_file, 'r') as f:
-            config = yaml.safe_load(f)
+        with open(config_file, "r") as f:
+            raw = f.read()
+        raw = raw.replace("\t", " " * 4)  # YAML disallows tabs
+        config = yaml.safe_load(io.StringIO(raw))
         if config is None:
             return {}
         return config

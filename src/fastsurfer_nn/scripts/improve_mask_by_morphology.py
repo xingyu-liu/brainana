@@ -37,14 +37,14 @@ from fastsurfer_nn.utils.constants import (
 
 # Directory containing input mask volumes
 root_dir = Path(
-    "/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-oxford/preprocessed/sub-032172/ses-001/func"
+    "/home/star/github/atlas/template/MNI152NLin6Asym"
 )
 
 # If set to a relative path (starting with '/'), only that file will be processed,
 # using the *same* morphological parameters as the fastsurfer_nn `create_mask` pipeline.
 # Example (relative to root_dir): "/site-arcaro_sub-baby1_ses-120916_task-vision_run-09_EPI_brainmask_manual.nii.gz"
 # If set to None, all *.nii.gz files under root_dir will be processed.
-input_f = 'sub-032172_ses-001_task-resting_run-1_desc-brain_mask.nii.gz' 
+input_f = 'tpl-MNI152NLin6Asym_res-02_T1w_brainmask.nii.gz' 
 output_suffix = "_improved"
 
 # If False, existing improved masks are not overwritten
@@ -74,7 +74,7 @@ def _improve_mask(mask_data: np.ndarray, zooms: tuple[float, float, float]) -> n
     # Compute voxel-wise dilation/erosion parameters exactly like in the main API
     resolution = float(np.mean(zooms[:3]))
     dnum = int(MASK_DILATION_SIZE_MM / resolution)
-    enum = max(0, dnum)
+    enum = max(0, dnum) 
 
     if dnum <= 0 and enum <= 0:
         # Degenerate case: just binarize

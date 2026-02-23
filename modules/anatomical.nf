@@ -353,7 +353,7 @@ bids_output_filename = create_bids_output_filename(
 # Use symlink to avoid duplication - publishing step will handle final copy
 create_output_link(result.output_file, bids_output_filename)
 
-# Always output brain (real if available, dummy if not) for consistent structure
+# Always output brain (real if available, else same file as output) for consistent structure
 # Structure: [sub, ses, brain_file] - will be joined with bids_template in workflow
 # Use desc-biascorrect naming (not desc-preproc) - publishing step will handle preproc naming
 from nhp_mri_prep.utils.bids import get_filename_stem
@@ -365,10 +365,8 @@ if "brain" in result.additional_files:
     # Real brain was generated - use it
     create_output_link(result.additional_files["brain"], bids_brain_filename)
 else:
-    # No brain generated - create dummy brain file for consistent structure
-    dummy_brain = Path('dummy_brain.dummy')
-    dummy_brain.touch()
-    create_output_link(dummy_brain, bids_brain_filename)
+    # No brain from step (e.g. no mask) - use bias-corrected full head as brain for downstream (e.g. registration)
+    create_output_link(result.output_file, bids_brain_filename)
 
 # Save metadata
 with open('metadata.json', 'w') as f:
@@ -1057,7 +1055,7 @@ process ANAT_BIAS_CORRECTION_PASSTHROUGH {
     // Bias-corrected full head output (passthrough): [sub, ses, biascorrected_file, bids_template]
     // Use T?w pattern to match both T1w and T2w modalities
     tuple val(subject_id), val(session_id), path("*desc-biascorrect*_T?w.nii.gz"), val(bids_name), emit: output
-    // Always output dummy brain for consistent structure (matches ANAT_BIAS_CORRECTION.out.brain)
+    // Brain: same file as output when step skipped (for registration when anat is already skullstripped)
     // Brain output: [sub, ses, brain_file] - will be joined with bids_template in workflow
     // Use desc-biascorrect naming (not desc-preproc) - publishing step will handle preproc naming
     // Use T?w pattern to match both T1w and T2w modalities
@@ -1089,13 +1087,11 @@ bids_output_filename = create_bids_output_filename(
 )
 create_output_link(Path('${input_file}'), bids_output_filename)
 
-# Always output dummy brain for consistent structure (matches ANAT_BIAS_CORRECTION.out.brain)
-# Use desc-biascorrect naming (not desc-preproc) - publishing step will handle preproc naming
+# Use same file as output for brain (no separate brain when step is skipped).
+# Registration and downstream can use this as the moving/reference image.
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 bids_brain_filename = f"{bids_prefix_wo_modality}_desc-biascorrect_{modality}_brain.nii.gz"
-dummy_brain = Path('dummy_brain.dummy')
-dummy_brain.touch()
-create_output_link(dummy_brain, bids_brain_filename)
+create_output_link(Path('${input_file}'), bids_brain_filename)
 
 # Save metadata
 metadata = {

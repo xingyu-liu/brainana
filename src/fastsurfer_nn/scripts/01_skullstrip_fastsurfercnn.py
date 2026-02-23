@@ -18,7 +18,7 @@ from fastsurfer_nn.inference.segmentation import run_segmentation
 # # # anat 
 # input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/anat"
 # input_image = f"{input_dir}/anat_marge_upright.nii.gz"
-input_image = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/T2w/T2w_inv.nii.gz"
+input_image = "/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-uncwisconsin/preprocessed_wd/work/8c/d9c0a3f9bdf37f07fa265ef424be78/test/T1w.nii.gz"
 
 # surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/fastsurfer_nn_training/test_surfrecon'
 # input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'
@@ -38,7 +38,7 @@ if use_mixed_model:
     weight_axial, weight_coronal, weight_sagittal = 1/3, 1/3, 1/3
 enable_crop_2round = False
 
-fix_roi_wm = False
+fix_roi_wm = True
 roi_name = "V1"  # Use "V1" for ARM2 atlas (primary_visual_cortex). For other atlases, check ColorLUT for correct ROI name.
 wm_thr = 0.5
 

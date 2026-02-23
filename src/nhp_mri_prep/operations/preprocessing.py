@@ -251,7 +251,6 @@ def conform_to_template(
     logger: Optional[logging.Logger] = None,
     modal: str = 'anat',
     skip_skullstripping: bool = False,
-    padding_percentage: Optional[float] = None,
 ) -> Dict[str, str]:
     """Conform input image to template space using FLIRT rigid registration.
     
@@ -270,8 +269,6 @@ def conform_to_template(
         logger: Logger instance (optional, will create one if not provided)
         modal: Modality type ('anat' or 'func'), default is 'anat'
         skip_skullstripping: If True, skip skullstripping and assume input is already skullstripped (default: False)
-        padding_percentage: Fraction of template dimension to pad on each side for registration (e.g. 0.1 = 10%).
-            If None, uses DEFAULT_CONFORM_PADDING_PERCENTAGE. Overridable via config (anat.conform.padding_percentage / func.conform.padding_percentage).
         
     Returns:
         Dictionary with output file paths:
@@ -292,9 +289,6 @@ def conform_to_template(
     image_path = validate_input_file(imagef, logger)
     template_path = validate_input_file(template_file, logger)
     work_dir = ensure_working_directory(working_dir, logger)
-    
-    if padding_percentage is None:
-        padding_percentage = DEFAULT_CONFORM_PADDING_PERCENTAGE
     
     logger.info(f"Workflow: starting conform to template")
     logger.info(f"Data: input image - {os.path.basename(image_path)}")
@@ -347,7 +341,7 @@ def conform_to_template(
 
         # Step 2: prepare template for registration
         # Step 2.1: Pad the template to ensure input image is fully contained
-        logger.info(f"Step: padding template (padding_percentage={padding_percentage})")
+        logger.info(f"Step: padding template (padding_percentage={DEFAULT_CONFORM_PADDING_PERCENTAGE})")
         img = nib.load(template_path)
         data = img.get_fdata()
 
@@ -367,7 +361,7 @@ def conform_to_template(
         logger.info(f"Template original shape: {list(original_shape)}")
 
         # Calculate symmetric padding amounts (percentage-based)
-        pad_amounts = (original_shape * padding_percentage).astype(int)
+        pad_amounts = (original_shape * DEFAULT_CONFORM_PADDING_PERCENTAGE).astype(int)
         logger.info(f"Padding amounts (per side): {list(pad_amounts)}")
         logger.info(f"Template new shape: {list(original_shape + 2 * pad_amounts)}")
 

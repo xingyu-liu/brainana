@@ -24,6 +24,7 @@ _src_dir = Path(__file__).resolve().parent.parent.parent
 if str(_src_dir) not in sys.path:
     sys.path.insert(0, str(_src_dir))
 
+from nhp_mri_prep.config.config_io import load_yaml_config
 from nhp_mri_prep.steps.bids_discovery import discover_bids_dataset
 
 
@@ -211,11 +212,9 @@ def main():
         print(f"ERROR: Config file not found: {args.config_file}", file=sys.stderr)
         sys.exit(1)
     
-    # Load config
+    # Load config (accepts tabs in indentation via normalization)
     try:
-        import yaml
-        with open(args.config_file) as f:
-            config = yaml.safe_load(f)
+        config = load_yaml_config(args.config_file)
     except Exception as e:
         print(f"ERROR: Failed to load config file: {e}", file=sys.stderr)
         sys.exit(1)
