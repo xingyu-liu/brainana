@@ -97,7 +97,7 @@ class ComputeMorphometry(HemisphereStage):
         )
 
     def should_skip(self) -> bool:
-        """Skip if morphometry files exist."""
+        """Skip if """
         return (
             False
         )

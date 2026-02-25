@@ -48,12 +48,8 @@ class Registration(HemisphereStage):
             return
 
         sphere_reg = self.hemi_path("sphere.reg")
-        if sphere_reg.exists():
-            logger.info(f"{self.hemi}.sphere.reg already exists, skipping")
-            return
-
-        # Create sphere if needed
         sphere = self.hemi_path("sphere")
+        # Create sphere if needed
         if not sphere.exists():
             logger.info(f"Creating {self.hemi}.sphere...")
             flags = []

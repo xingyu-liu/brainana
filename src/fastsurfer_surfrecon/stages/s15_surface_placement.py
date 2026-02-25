@@ -33,10 +33,6 @@ class SurfacePlacement(HemisphereStage):
         pial = self.hemi_path("pial")
         pial_t1 = self.hemi_path("pial.T1")
         
-        if white.exists() and pial.exists():
-            logger.info(f"{self.hemi} white and pial already exist, skipping")
-            return
-        
         # Determine which parcellation annotation to use for surface placement
         # This helps guide surface placement by providing cortical region information
         if self.config.processing.fsaparc:

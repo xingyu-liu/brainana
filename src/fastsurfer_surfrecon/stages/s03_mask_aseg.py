@@ -26,10 +26,6 @@ class MaskAseg(PipelineStage):
         aseg_nocc = self.sd.mri("aseg.auto_noCCseg.mgz")
         aseg_presurf = self.sd.mri("aseg.presurf.mgz")
         
-        if aseg_presurf.exists():
-            logger.info("aseg.presurf.mgz already exists, skipping")
-            return
-        
         if not aseg_nocc.exists():
             raise FileNotFoundError(
                 f"aseg.auto_noCCseg.mgz not found at {aseg_nocc}. "

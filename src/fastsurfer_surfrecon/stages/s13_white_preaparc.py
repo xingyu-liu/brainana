@@ -51,13 +51,9 @@ class WhitePreaparc(HemisphereStage):
                 subjects_dir=self.config.subjects_dir,
             )
         
-        # Step 2: Create white.preaparc if it doesn't exist
+        # Step 2: Create white.preaparc
         # This is the pre-parcellation white surface used for parcellation mapping
         # in stage 14, and as input for final white surface placement in stage 15.
-        if white_preaparc.exists():
-            logger.info(f"{self.hemi}.white.preaparc already exists, skipping")
-            return
-        
         logger.info(f"Creating {self.hemi}.white.preaparc...")
         # Place white.preaparc surface using mris_place_surface
         # This creates a white matter surface from the fixed orig surface (after topology fix)

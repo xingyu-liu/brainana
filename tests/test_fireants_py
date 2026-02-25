@@ -30,6 +30,7 @@ from fireants.io import BatchedImages, FakeBatchedImages, Image
 from fireants.registration.affine import AffineRegistration
 from fireants.registration.rigid import RigidRegistration
 from fireants.registration.greedy import GreedyRegistration
+from fireants.registration.moments import MomentsRegistration
 
 # Optional: scipy for inverse affine .mat read/write
 try:
@@ -52,7 +53,9 @@ class FireANTsRegistrationParams:
     lr_affine: float = 3e-3
     lr_deformable: float = 0.5
     cc_kernel_size: int = 5
-    smooth_grad_sigma: float = 1.0
+    factor = 1
+    smooth_grad_sigma: float = 1.0 * factor
+    smooth_warp_sigma: float = 0.5 * factor
     deformation_type: str = "compositive"
 
 
@@ -410,6 +413,17 @@ def fireants_registration(
     if xfm_type in ("rigid", "affine"):
         # Rigid and affine follow the same pattern
         if xfm_type == "rigid":
+            # add moments init
+            moments = MomentsRegistration(
+                scale=2.0,
+                fixed_images=batch_fixed,
+                moving_images=batch_moving,
+                moments=1,
+                loss_type="cc",
+                cc_kernel_size=params.cc_kernel_size,
+            )
+            moments.optimize()
+
             reg = RigidRegistration(
                 params.scales,
                 params.iterations_affine,
@@ -418,6 +432,8 @@ def fireants_registration(
                 optimizer=params.optimizer_affine,
                 optimizer_lr=params.lr_affine,
                 cc_kernel_size=params.cc_kernel_size,
+                init_moment=moments.get_affine_init().detach()[:, :3, :3],
+                # init_translation='cof',
             )
         else:  # affine
             reg = AffineRegistration(
@@ -445,6 +461,19 @@ def fireants_registration(
         _save_registered_image(reg, batch_fixed, batch_moving, output_paths["registered"], logger)
         
     else:  # syn: affine then greedy
+        
+        # 1. Moments (CC) – coarse init; MI unsupported in FireANTs _get_best_orientation
+        logger.info("1. Moments (CC)...")
+        moments = MomentsRegistration(
+            scale=2.0,
+            fixed_images=batch_fixed,
+            moving_images=batch_moving,
+            moments=1,
+            loss_type="cc",
+            cc_kernel_size=params.cc_kernel_size,
+        )
+        moments.optimize()
+        
         # Forward registration: fixed → moving
         logger.info("Running forward registration (fixed → moving)...")
         affine = AffineRegistration(
@@ -455,7 +484,9 @@ def fireants_registration(
             optimizer=params.optimizer_affine,
             optimizer_lr=params.lr_affine,
             cc_kernel_size=params.cc_kernel_size,
+            init_rigid=moments.get_affine_init().detach(),
         )
+
         _run_affine_registration(affine, device, logger, reg_type="affine")
         
         reg = GreedyRegistration(
@@ -498,6 +529,7 @@ def fireants_registration(
             cc_kernel_size=params.cc_kernel_size,
             deformation_type=params.deformation_type,
             smooth_grad_sigma=params.smooth_grad_sigma,
+            smooth_warp_sigma=params.smooth_warp_sigma,
             optimizer=params.optimizer_deformable,
             optimizer_lr=params.lr_deformable,
             init_affine=affine_inv.get_affine_matrix().detach(),
@@ -546,12 +578,12 @@ def fireants_registration(
 
 # %%
 # Example / test invocation (same paths as original script)
-data_dir = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/fireants/"
-fixedf = os.path.join(data_dir, "fixed.nii.gz")
-movingf = os.path.join(data_dir, "moving.nii.gz")
+data_dir = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/T1wT2w/for_rohit"
+fixedf = os.path.join(data_dir, "case3_fixed.nii.gz")
+movingf = os.path.join(data_dir, "case3_moving.nii.gz")
 working_dir = os.path.join(data_dir, "results")
 
-xfm_type = "syn"
+xfm_type = "rigid"
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)

@@ -13,7 +13,7 @@ atlas:
 # Processing options
 processing:
   # Threading
-  threads: 1
+  threads: 8
   parallel_hemis: true
   
   # Volume options
@@ -49,7 +49,7 @@ processing:
   inflate2_iterations: 3    # Inflation iterations for inflate2 (Stage 14, after topology fix, for visualization)
 
 # Registration template (optional). Path relative to brainana repo root.
-registration_template: template_zoo/fastsurfer/sub-MEBRAIN
+registration_template: template_zoo/fastsurfer/sub-NMT2Sym
 
 # Output control
 verbose: 1  # Verbosity level (0=WARNING, 1=INFO, 2=DEBUG)

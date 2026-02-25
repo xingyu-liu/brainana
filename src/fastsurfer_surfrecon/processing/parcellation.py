@@ -243,7 +243,9 @@ def smooth_aparc(
     
     labels_smooth = labels.copy()
     
-    # Iteratively smooth unknown (0) labels within cortex
+    # Iteratively smooth unknown (0) labels within cortex only.
+    # mode_filter(fill_label=0) updates all vertices with label 0, so we must re-mask
+    # after each iteration so labels do not bleed outside cortex.
     for i in range(iterations):
         unknown_in_cortex = (labels_smooth == 0) & cortex_mask
         n_unknown = np.sum(unknown_in_cortex)
@@ -251,15 +253,22 @@ def smooth_aparc(
         if n_unknown == 0:
             break
         
-        # Apply mode filter to unknown vertices
+        # Apply mode filter to unknown vertices (may assign to non-cortex; we fix below)
         labels_smooth = mode_filter(
             adj, labels_smooth,
             fill_label=0,
             no_vote_labels=[0],  # Don't vote for unknown
         )
-        
+        # Restrict labels to cortex: non-cortex must stay 0
+        if cortex is not None:
+            labels_smooth[~cortex_mask] = 0
+
         logger.debug(f"Smoothing iteration {i+1}: {n_unknown} unknown vertices")
     
+    # Final clamp so output never has labels outside cortex
+    if cortex is not None:
+        labels_smooth[~cortex_mask] = 0
+
     return labels_smooth
 
 
@@ -494,6 +503,12 @@ def sample_parcellation(
     logger.info("Smoothing parcellation...")
     surf_labels = smooth_aparc(surface, surf_labels, cortex)
     
+    # Ensure no labels outside cortex (safeguard before save)
+    n_vertices = len(surf_labels)
+    cortex_mask = np.zeros(n_vertices, dtype=bool)
+    cortex_mask[cortex] = True
+    surf_labels[~cortex_mask] = 0
+
     # Save
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fs.write_annot(output_path, surf_labels, ctab=ctab, names=names)

@@ -236,10 +236,10 @@ def main():
     if args.runs:
         runs_list = [r.strip() for r in args.runs.split(',')]
     
-    # Validate BIDS dataset
-    if not validate_bids(args.bids_dir, args.skip_bids_validation):
-        print("ERROR: BIDS validation failed. Use --skip_bids_validation to skip.", file=sys.stderr)
-        sys.exit(1)
+    # # Validate BIDS dataset
+    # if not validate_bids(args.bids_dir, args.skip_bids_validation):
+    #     print("ERROR: BIDS validation failed. Use --skip_bids_validation to skip.", file=sys.stderr)
+    #     sys.exit(1)
     
     # Create output directory
     try:

@@ -20,27 +20,20 @@ class AsegRefinement(PipelineStage):
     
     def _run(self) -> None:
         """Create aseg.mgz."""
-        aseg = self.sd.mri("aseg.mgz")
-        aseg_presurf_hypos = self.sd.mri("aseg.presurf.hypos.mgz")
         
-        if aseg.exists():
-            logger.info("aseg.mgz already exists, skipping")
-            return
-        
-        # Create aseg.presurf.hypos.mgz if it doesn't exist
-        if not aseg_presurf_hypos.exists():
-            logger.info("Creating aseg.presurf.hypos.mgz...")
-            flags = []
-            if self.config.hires:
-                flags.append("-hires")
-            run_recon_all(
-                subject=self.config.subject_id,
-                steps=["-hyporelabel"],
-                flags=flags,
-                threads=self.threads,
-                log_file=self.config.log_file,
-                subjects_dir=self.config.subjects_dir,
-            )
+        # Create aseg.presurf.hypos.mgz (hyporelabel); always run so reruns overwrite
+        logger.info("Creating aseg.presurf.hypos.mgz...")
+        flags = []
+        if self.config.hires:
+            flags.append("-hires")
+        run_recon_all(
+            subject=self.config.subject_id,
+            steps=["-hyporelabel"],
+            flags=flags,
+            threads=self.threads,
+            log_file=self.config.log_file,
+            subjects_dir=self.config.subjects_dir,
+        )
         
         # Create aseg.mgz from aseg.presurf.hypos using surfaces and ribbon
         logger.info("Creating aseg.mgz from aseg.presurf.hypos with surfaces...")
@@ -56,7 +49,12 @@ class AsegRefinement(PipelineStage):
             subjects_dir=self.config.subjects_dir,
         )
     
-    def should_skip(self) -> bool:
-        """Skip if aseg.mgz exists."""
-        return self.sd.mri("aseg.mgz").exists()
+    # def should_skip(self) -> bool:
+    #     """Skip if aseg.mgz exists."""
+    #     return self.sd.mri("aseg.mgz").exists()
 
+    def should_skip(self) -> bool:
+        """Skip if """
+        return (
+            False
+        )

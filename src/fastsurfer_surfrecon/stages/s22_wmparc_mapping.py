@@ -34,10 +34,6 @@ class WMParcMapping(PipelineStage):
             )
         
         wmparc_mapped = self.sd.mri(f"wmparc.{self.config.atlas.name}atlas.mapped.mgz")
-        if wmparc_mapped.exists():
-            logger.info("wmparc.mapped.mgz already exists, skipping")
-            return
-        
         logger.info("Mapping surface parcellation to white matter volume...")
         mri_surf2volseg(
             output_vol=wmparc_mapped,
@@ -58,13 +54,19 @@ class WMParcMapping(PipelineStage):
             subject_dir=self.sd.subject_dir,
         )
         
-        # Create symlink for compatibility
+        # Create or refresh symlink for compatibility (redo: ensure it points to new .mapped.mgz)
         wmparc_generic = self.sd.mri("wmparc.mgz")
-        if not wmparc_generic.exists():
-            logger.info("Creating symlink: wmparc.mgz")
-            wmparc_generic.symlink_to(wmparc_mapped.name)
+        if wmparc_generic.exists():
+            wmparc_generic.unlink()
+        wmparc_generic.symlink_to(wmparc_mapped.name)
+        logger.info("Symlink wmparc.mgz -> %s", wmparc_mapped.name)
     
-    def should_skip(self) -> bool:
-        """Skip if wmparc.mapped.mgz exists."""
-        return self.sd.mri(f"wmparc.{self.config.atlas.name}atlas.mapped.mgz").exists()
+    # def should_skip(self) -> bool:
+    #     """Skip if wmparc.mapped.mgz exists."""
+    #     return self.sd.mri(f"wmparc.{self.config.atlas.name}atlas.mapped.mgz").exists()
 
+    def should_skip(self) -> bool:
+        """Skip if """
+        return (
+            False
+        )

@@ -20,14 +20,6 @@ class CorticalRibbon(PipelineStage):
     
     def _run(self) -> None:
         """Create cortical ribbon."""
-        ribbon = self.sd.mri("ribbon.mgz")
-        lh_ribbon = self.sd.mri("lh.ribbon.mgz")
-        rh_ribbon = self.sd.mri("rh.ribbon.mgz")
-        
-        if ribbon.exists() and lh_ribbon.exists() and rh_ribbon.exists():
-            logger.info("Cortical ribbon already exists, skipping")
-            return
-        
         logger.info("Creating cortical ribbon...")
         flags = []
         if self.config.hires:
@@ -41,11 +33,16 @@ class CorticalRibbon(PipelineStage):
             subjects_dir=self.config.subjects_dir,
         )
     
-    def should_skip(self) -> bool:
-        """Skip if ribbon files exist."""
-        return (
-            self.sd.mri("ribbon.mgz").exists() and
-            self.sd.mri("lh.ribbon.mgz").exists() and
-            self.sd.mri("rh.ribbon.mgz").exists()
-        )
+    # def should_skip(self) -> bool:
+    #     """Skip if ribbon files exist."""
+    #     return (
+    #         self.sd.mri("ribbon.mgz").exists()
+    #         and self.sd.mri("lh.ribbon.mgz").exists()
+    #         and self.sd.mri("rh.ribbon.mgz").exists()
+    #     )
 
+    def should_skip(self) -> bool:
+        """Skip if """
+        return (
+            False
+        )

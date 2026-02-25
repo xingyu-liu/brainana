@@ -61,10 +61,6 @@ class Parcellation(HemisphereStage):
         
         # Map parcellation
         aparc_mapped = self.hemi_label(f"aparc.{self.config.atlas.name}atlas.mapped.annot")
-        if aparc_mapped.exists():
-            logger.info(f"{self.hemi}.aparc.{self.config.atlas.name}atlas.mapped.annot already exists, skipping")
-            return
-        
         logger.info(f"Mapping parcellation to {self.hemi} surface...")
         
         # Get lookup tables

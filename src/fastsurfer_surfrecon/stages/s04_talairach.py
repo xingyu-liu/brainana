@@ -54,10 +54,6 @@ class Talairach(PipelineStage):
         talairach_lta = self.sd.transform("talairach.lta")
         talairach_xfm = self.sd.transform("talairach.auto.xfm")
         
-        if talairach_lta.exists() and talairach_xfm.exists():
-            logger.info("Talairach transforms already exist, skipping")
-            return
-        
         logger.info("Computing Talairach transform...")
         
         # Determine atlas (3T vs 1.5T)

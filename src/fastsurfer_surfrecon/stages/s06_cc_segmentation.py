@@ -44,10 +44,6 @@ class CCSegmentation(PipelineStage):
         aseg_auto = self.sd.mri("aseg.auto.mgz")
         cc_lta = self.sd.transform("cc_up.lta")
         
-        if aseg_auto.exists() and cc_lta.exists():
-            logger.info("CC segmentation already exists, skipping")
-            return
-        
         logger.info("Creating CC segmentation...")
         
         aseg_nocc = self.sd.mri("aseg.auto_noCCseg.mgz")

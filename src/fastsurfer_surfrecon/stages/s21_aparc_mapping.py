@@ -28,10 +28,6 @@ class AparcMapping(PipelineStage):
             )
         
         aparc_mapped = self.sd.mri(f"aparc.{self.config.atlas.name}atlas+aseg.mapped.mgz")
-        if aparc_mapped.exists():
-            logger.info("aparc+aseg.mapped.mgz already exists, skipping")
-            return
-        
         logger.info("Mapping surface parcellation to volume...")
         mri_surf2volseg(
             output_vol=aparc_mapped,
@@ -50,19 +46,21 @@ class AparcMapping(PipelineStage):
             subject_dir=self.sd.subject_dir,
         )
         
-        # Create symlinks for compatibility
+        # Create or refresh symlinks for compatibility (redo: ensure they point to new .mapped.mgz)
         aparc_atlas = self.sd.mri(f"aparc.{self.config.atlas.name}atlas+aseg.mgz")
         aparc_generic = self.sd.mri("aparc+aseg.mgz")
-        
-        if not aparc_atlas.exists():
-            logger.info(f"Creating symlink: aparc.{self.config.atlas.name}atlas+aseg.mgz")
-            aparc_atlas.symlink_to(aparc_mapped.name)
-        
-        if not aparc_generic.exists():
-            logger.info("Creating symlink: aparc+aseg.mgz")
-            aparc_generic.symlink_to(aparc_mapped.name)
+        for link_path in (aparc_atlas, aparc_generic):
+            if link_path.exists():
+                link_path.unlink()
+            link_path.symlink_to(aparc_mapped.name)
+        logger.info("Symlinks aparc.{}atlas+aseg.mgz, aparc+aseg.mgz -> {}".format(self.config.atlas.name, aparc_mapped.name))
     
-    def should_skip(self) -> bool:
-        """Skip if aparc+aseg.mapped.mgz exists."""
-        return self.sd.mri(f"aparc.{self.config.atlas.name}atlas+aseg.mapped.mgz").exists()
+    # def should_skip(self) -> bool:
+    #     """Skip if aparc+aseg.mapped.mgz exists."""
+    #     return self.sd.mri(f"aparc.{self.config.atlas.name}atlas+aseg.mapped.mgz").exists()
 
+    def should_skip(self) -> bool:
+        """Skip if """
+        return (
+            False
+        )

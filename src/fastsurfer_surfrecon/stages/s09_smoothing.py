@@ -28,10 +28,6 @@ class Smoothing(HemisphereStage):
         orig_nofix = self.hemi_path("orig.nofix")
         smoothwm_nofix = self.hemi_path("smoothwm.nofix")
         
-        if smoothwm_nofix.exists():
-            logger.info(f"{self.hemi}.smoothwm.nofix already exists, skipping")
-            return
-        
         logger.info(f"Smoothing {self.hemi} surface (smooth1, n={self.config.processing.smooth_iterations})...")
         mris_smooth(
             input_surf=orig_nofix,

@@ -141,19 +141,25 @@ class Statistics(HemisphereStage):
                         log_file=self.config.log_file,
                     )
     
-    def should_skip(self) -> bool:
-        """Skip if stats already computed."""
-        # Check for curvature stats
-        curvstats = self.sd.stats_dir / f"{self.hemi}.curv.stats"
-        if not curvstats.exists():
-            return False
+    # def should_skip(self) -> bool:
+    #     """Skip if stats already computed."""
+    #     # Check for curvature stats
+    #     curvstats = self.sd.stats_dir / f"{self.hemi}.curv.stats"
+    #     if not curvstats.exists():
+    #         return False
         
-        # Check for parcellation stats
-        aparc_mapped = self.hemi_label(f"aparc.{self.config.atlas.name}atlas.mapped.annot")
-        if aparc_mapped.exists():
-            stats = self.sd.stats_dir / f"{self.hemi}.aparc.{self.config.atlas.name}atlas.mapped.stats"
-            if not stats.exists():
-                return False
+    #     # Check for parcellation stats
+    #     aparc_mapped = self.hemi_label(f"aparc.{self.config.atlas.name}atlas.mapped.annot")
+    #     if aparc_mapped.exists():
+    #         stats = self.sd.stats_dir / f"{self.hemi}.aparc.{self.config.atlas.name}atlas.mapped.stats"
+    #         if not stats.exists():
+    #             return False
         
-        return True
+    #     return True
 
+
+    def should_skip(self) -> bool:
+        """Skip if """
+        return (
+            False
+        )

@@ -29,10 +29,6 @@ class Tessellation(HemisphereStage):
         brain = self.sd.mri("brainmask.mgz")
         orig_nofix = self.hemi_path("orig.nofix")
         
-        if orig_nofix.exists():
-            logger.info(f"{self.hemi}.orig.nofix already exists, skipping")
-            return
-        
         if self.config.processing.fstess:
             # Use FreeSurfer tessellation
             logger.info(f"Using FreeSurfer tessellation for {self.hemi}")

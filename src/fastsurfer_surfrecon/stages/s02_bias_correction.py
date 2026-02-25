@@ -21,11 +21,6 @@ class BiasCorrection(PipelineStage):
     
     def _run(self) -> None:
         """Run N4 bias correction."""
-        # Check if already exists
-        if self.sd.orig_nu.exists():
-            logger.info("orig_nu.mgz already exists, skipping bias correction")
-            return
-        
         logger.info("Running N4 bias field correction...")
         
         # Get mask if available

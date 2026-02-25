@@ -31,10 +31,6 @@ class SphericalProjection(HemisphereStage):
         sphere = self.hemi_path("sphere")
         smoothwm_nofix = self.hemi_path("smoothwm.nofix")
         qsphere_nofix = self.hemi_path("qsphere.nofix")
-        # Skip if either file exists (they should both exist after creation)
-        if sphere.exists() or qsphere_nofix.exists():
-            logger.info(f"{self.hemi} spherical projection already exists, skipping")
-            return
         
         # if self.config.processing.fsqsphere:
         #     # Use FreeSurfer qsphere
