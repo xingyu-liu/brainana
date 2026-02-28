@@ -1,0 +1,93 @@
+# Default configuration for brainana preprocessing pipeline
+# _version is set at load time from the brainana package version (pyproject.toml).
+_description: "Default configuration for brainana preprocessing pipeline"
+
+general:
+  verbose: 2  # int or bool: verbosity level (0=quiet/ERROR, 1=normal/INFO, 2=verbose/DEBUG).
+  anat_only: false  # bool: process only anatomical data
+  gpu_device: "auto"  # str | int: "auto", -1 (CPU), or GPU index (0..N). Used by skull stripping, segmentation, and registration.
+
+bids_filtering:
+  subjects: null  # list of str (have to be quoted) or null: filter by subject IDs (e.g., ["01", "02"])
+  sessions: null  # list of str (have to be quoted) or null: filter by session IDs (e.g., ["01", "02"])
+  tasks: null  # list of str (have to be quoted) or null: filter by task names (e.g., ["rest", "task"])
+  runs: null  # list of str (have to be quoted) or null: filter by run numbers (e.g., ["01", "02"])
+
+template:
+  output_space: "NMT2Sym:res-05"  # str: template space in format "TEMPLATE_NAME:[:DESCRIPTION]" (e.g., "NMT2Sym:res-1", "T1w")
+  # description: "Template space specification in format TEMPLATE_NAME:[:DESCRIPTION]"
+  # examples:
+  #   - "T1w"
+  #   - "NMT2Sym:res-1"
+  #   - "NMT2Sym:res-025"
+
+anat:
+  synthesis_level: "subject"  # str: T1w/T2w synthesis level ("subject", "session"). 
+  # "subject" = cross-session synthesis (cross-sectional)
+  # "session" = within-session synthesis (longitudinal)
+  reorient:
+    enabled: false  # bool: reorient anatomical images to template orientation when given, otherwise to RAS. When conform is enabled, reorient is not needed.
+  conform:
+    enabled: true  # HIGILY RECOMMENDED: bool: conform input image to template space using FLIRT rigid registration
+  skullstripping_segmentation:
+    enabled: true  # HIGILY RECOMMENDED: bool: perform brain extraction and segmentation
+    method: "fastSurferCNN" 
+    fastSurferCNN:
+      gpu_device: "auto"  # int (>= -1) or "auto": GPU device ID (-1 = CPU, "auto" = auto-select)
+      batch_size: 8  # int: batch size for inference (>= 1)
+      plane_weight_coronal: 0.4  # float: weight for coronal plane (0.0-1.0)
+      plane_weight_axial: 0.4  # float: weight for axial plane (0.0-1.0)
+      plane_weight_sagittal: 0.2  # float: weight for sagittal plane (0.0-1.0)
+      fix_V1_WM: true  # bool: fix missing thin WM in V1 by registering template V1 WM to individual space.
+  bias_correction:
+    enabled: true  # bool: perform bias field correction
+    algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
+    shrink_factor: 2  # float: shrink factor for faster processing (> 0)
+    bspline_fitting: "[ 150 ]"  # str: B-spline fitting parameters in ANTs format
+    rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
+  surface_reconstruction:
+    enabled: true  # bool: perform surface reconstruction
+    use_t1wt2wcombined: false  # bool: use t1wt2wcombined image for surface recon if possible
+
+func:
+  coreg_runs_within_session: true
+  slice_timing_correction:
+    enabled: true  # bool: perform slice timing correction
+    repetition_time: null  # float: repetition time in seconds, or null (auto-detect from metadata)
+    slice_timing: null  # list of floats: slice times in seconds, or null (auto-detect from metadata)
+    tzero: null  # float: reference time point in seconds, or null (auto-calculate)
+    slice_time_ref: 0.5  # float: reference slice time (0.0-1.0), 0.5 = middle slice
+    slice_encoding_direction: null  # str: "x", "-x", "y", "-y", "z", "-z", or null (auto-detect from metadata)
+  reorient:
+    enabled: false  # bool: reorient functional images to template orientation when given, otherwise to RAS.  When conform is enabled, reorient is not needed.
+  motion_correction:
+    enabled: true  # bool: perform motion correction
+    dof: 6  # int: degrees of freedom (6, 9, or 12)
+    cost: "mutualinfo"  # str: cost function ("mutualinfo", "woods", "corratio", "normcorr", "normmi", "leastsq")
+    smooth: 1.0  # float: smoothing factor for motion correction
+    ref_vol: "mid"  # int or str: reference volume (integer index, "Tmean", or "mid")
+    cost_tolerance: 0.01  # float: cost function tolerance
+    parameter_tolerance: 0.01  # float: parameter tolerance
+  despike:
+    enabled: false  # bool: perform despiking (outlier removal)
+    c1: 5  # float: first cutoff parameter (> 0, must be < c2)
+    c2: 10  # float: second cutoff parameter (> 0, must be > c1)
+    localedit: true  # bool: use local editing for despiking
+    ignore_first_volumes: 0  # int: number of initial volumes to ignore (>= 0)
+  bias_correction:  # only done on tmean image for better registration, not on the functional images directly
+    enabled: true  # bool: perform bias field correction
+    algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
+    shrink_factor: 2  # float: shrink factor for faster processing (> 0)
+    bspline_fitting: "[ 100 ]"  # str: B-spline fitting parameters in ANTs format
+    rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
+  conform:
+    enabled: true  # HIGILY RECOMMENDED: bool: conform functional tmean image to target space using FLIRT rigid registration
+  skullstripping:
+    enabled: true  # HIGILY RECOMMENDED: bool: perform brain extraction
+
+registration:
+  anat2template_xfm_type: "syn"  # str: transform type for anat->template ("translation", "rigid", "affine", or "syn")
+  func2anat_xfm_type: "syn"  # str: transform type for func->anat ("translation", "rigid", "affine", or "syn")
+  func2template_xfm_type: "syn"  # str: transform type for func->template ("translation", "rigid", "affine", or "syn")
+  interpolation: "BSpline"  # str: interpolation method ("Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline", "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc", "LanczosWindowedSinc", "GenericLabel")
+  keep_func_resolution: true  # bool: keep original functional image resolution after registration

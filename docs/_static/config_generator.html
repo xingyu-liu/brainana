@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brainana Configuration Generator</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: "IBM Plex Mono", "Consolas", "Monaco", monospace;
+            margin: 0;
+            line-height: 1.5;
+            color: #000000;
+            background: #fffeee;
+        }
+        .app-layout {
+            display: flex;
+            min-height: 100vh;
+        }
+        .nav-sidebar {
+            width: 240px;
+            flex-shrink: 0;
+            padding: 20px 16px;
+            background: #fffddd;
+            border-right: 1px solid #b8b8b8;
+            position: sticky;
+            top: 0;
+            max-height: 100vh;
+            overflow-y: auto;
+        }
+        .nav-brand {
+            font-weight: 600;
+            font-size: 1.2rem;
+            color: #000000;
+            margin-bottom: 16px;
+        }
+        .nav-search {
+            width: 100%;
+            padding: 8px 10px;
+            margin-bottom: 20px;
+            border: 1px solid #8a8a8a;
+            font-family: inherit;
+            font-size: 15px;
+            background: #fff;
+        }
+        .nav-section {
+            margin-bottom: 16px;
+        }
+        .nav-section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #666666;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 6px;
+        }
+        .nav-section a {
+            display: block;
+            font-size: 16px;
+            color: #000000;
+            text-decoration: none;
+            padding: 4px 0 4px 16px;
+            margin-left: 0;
+        }
+        .nav-section a:hover { color: #000000; text-decoration: underline; }
+        html { scroll-behavior: smooth; }
+        .main-content {
+            flex: 1;
+            padding: 28px 32px 40px;
+            max-width: 720px;
+        }
+        h1 {
+            color: #000000;
+            border-bottom: 3px solid #fff999;
+            padding-bottom: 12px;
+            font-weight: 600;
+            font-size: 1.6rem;
+            margin-top: 0;
+        }
+        h2 {
+            color: #000000;
+            margin-top: 32px;
+            margin-bottom: 16px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #b8b8b8;
+            font-weight: 600;
+            font-size: 1.2rem;
+            text-transform: lowercase;
+        }
+        h2:first-of-type { margin-top: 0; }
+        h3, h4 { color: #000000; margin-top: 20px; font-size: 1.15rem; font-weight: 600; }
+        .section {
+            margin: 0 0 24px 0;
+            padding: 0;
+            padding-left: 24px;
+        }
+        .step {
+            padding-left: 24px;
+        }
+        .param-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 2px;
+        }
+        .param-check {
+            flex: 0 0 22px;
+            min-width: 22px;
+            display: flex;
+            align-items: center;
+        }
+        .param-check input[type="checkbox"] { margin: 0; }
+        .param-row label {
+            flex: 0 0 auto;
+            font-weight: 600;
+            font-size: 16px;
+            color: #000000;
+        }
+        .param-control {
+            flex: 1 1 200px;
+            min-width: 180px;
+            max-width: 100%;
+        }
+        .param-control select,
+        .param-control input[type="text"],
+        .param-control input[type="number"] {
+            width: 100%;
+            max-width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #b8b8b8;
+            font-family: inherit;
+            font-size: 16px;
+            background: #fff;
+        }
+        .param-block { margin-bottom: 14px; }
+        .param-block:last-child { margin-bottom: 0; }
+        .help-text {
+            font-size: 15px;
+            color: #666666;
+            margin-top: 2px;
+            margin-bottom: 6px;
+            margin-left: 30px;
+            line-height: 1.4;
+            display: block;
+        }
+        .param-block .help-text { margin-bottom: 0; }
+        input[type="text"], textarea {
+            padding: 6px 8px;
+            border: 1px solid #b8b8b8;
+            font-family: inherit;
+            font-size: 16px;
+            background: #fff;
+        }
+        textarea { width: 100%; }
+        select { min-width: 180px; }
+        input[type="number"].short { width: 100px; }
+        .step {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #d0d0d0;
+        }
+        .step:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+        .step .param-row { margin-bottom: 0; }
+        .step .help-text { margin-top: 2px; margin-bottom: 0; }
+        .generator-section {
+            border-top: 3px solid #fff999;
+            margin-top: 32px;
+            padding-top: 24px;
+        }
+        .advanced-toggle {
+            font-size: 16px;
+            color: #666666;
+            cursor: pointer;
+            margin: 12px 0 6px 0;
+            margin-left: 24px;
+            user-select: none;
+            display: block;
+        }
+        .advanced-toggle:hover { color: #000000; text-decoration: underline; }
+        .advanced-toggle::before { content: "> "; }
+        .advanced-toggle.open::before { content: "v "; }
+        .advanced-settings {
+            margin-top: 8px;
+            margin-left: 24px;
+            padding: 16px 0 0 0;
+            display: none;
+        }
+        .advanced-settings.visible { display: block; }
+        .advanced-settings .param-block { margin-bottom: 14px; }
+        .advanced-settings .param-block:last-child { margin-bottom: 0; }
+        .advanced-settings .advanced-settings {
+            margin-left: 24px;
+        }
+        #anat_fastSurferCNN_options {
+            margin-left: 0;
+        }
+        #anat_fastSurferCNN_options h4 {
+            font-size: 16px;
+            font-weight: 600;
+            font-family: inherit;
+            margin-left: 30px;  /* 22px param-check + 8px gap = align with param-row label */
+        }
+        #anat_fastSurferCNN_options > .param-block {
+            margin-left: 24px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #000000;
+            color: #fff;
+            border: 1px solid #000000;
+            cursor: pointer;
+            font-size: 16px;
+            font-family: inherit;
+            margin-top: 24px;
+        }
+        button#generate {
+            font-size: 20px;
+            font-weight: 700;
+            color: #fff999;
+            width: 100%;
+            text-align: center;
+        }
+        button:hover { background: #333; border-color: #333; }
+        .error { color: #666666; font-size: 15px; margin-top: 8px; display: block; margin-left: 30px; }
+        .save-location { background: #f0f0f0; border: 1px solid #b8b8b8; padding: 12px; margin: 16px 0; }
+        .yaml-output {
+            margin-top: 24px;
+            padding: 16px;
+            background: #f8f8f8;
+            border: 1px solid #b8b8b8;
+        }
+        .yaml-output textarea {
+            width: 100%;
+            min-height: 400px;
+            font-family: inherit;
+            font-size: 15px;
+            padding: 10px;
+            border: 1px solid #b8b8b8;
+            background: #fff;
+            margin-top: 8px;
+        }
+        .copy-button { margin-top: 10px; margin-right: 8px; background: #666666; color: #fff; border: none; }
+        .copy-button:hover { background: #000000; }
+        .success {
+            color: #155724;
+            padding: 10px;
+            background: #ddf3e2;
+            border: 1px solid #c3e6cb;
+            margin-top: 16px;
+        }
+        .hidden { display: none; }
+        label.option-bold { font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+        <nav class="nav-sidebar">
+            <div class="nav-brand">Brainana</div>
+            <input type="text" class="nav-search" placeholder="Search options..." aria-label="Search">
+            <div class="nav-section">
+                <div class="nav-section-title">Configuration</div>
+                <a href="#general">General</a>
+                <a href="#bids_filtering">BIDS filtering</a>
+                <a href="#template">Template</a>
+                <a href="#anat">Anatomical</a>
+                <a href="#func">Functional</a>
+                <a href="#registration">Registration</a>
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-title">Generation</div>
+                <a href="#generate">Generate config</a>
+            </div>
+        </nav>
+        <main class="main-content">
+    <h1>Brainana Configuration Generator</h1>
+    
+    <form id="configForm">
+        <!-- General Settings -->
+        <h2 id="general">general</h2>
+        <div class="section">
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="general_verbose">verbose</label>
+                    <span class="param-control">
+                        <select id="general_verbose" name="general_verbose">
+                            <option value="0">0</option>
+                            <option value="1">1</option>
+                            <option value="2" selected>2</option>
+                        </select>
+                    </span>
+                </div>
+                <span class="help-text">(verbosity level: 0=quiet/ERROR, 1=normal/INFO, 2=verbose/DEBUG)</span>
+            </div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="general_anat_only" name="general_anat_only"></span>
+                    <label for="general_anat_only" class="option-bold">anat_only</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(process only anatomical data)</span>
+            </div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="general_gpu_device">gpu_device</label>
+                    <span class="param-control">
+                        <input type="text" id="general_gpu_device" name="general_gpu_device" value="auto">
+                    </span>
+                </div>
+                <span class="help-text">(GPU for skull stripping, segmentation, registration: "auto", -1 for CPU, or GPU index 0..N)</span>
+            </div>
+        </div>
+
+        <!-- BIDS Filtering -->
+        <h2 id="bids_filtering">bids_filtering</h2>
+        <div class="section">
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="bids_subjects">subjects</label>
+                    <span class="param-control">
+                        <input type="text" id="bids_subjects" name="bids_subjects" placeholder='e.g., "01", "02"'>
+                    </span>
+                </div>
+                <span class="help-text">(comma-separated, leave empty for processing all)</span>
+            </div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="bids_sessions">sessions</label>
+                    <span class="param-control">
+                        <input type="text" id="bids_sessions" name="bids_sessions" placeholder='e.g., "01", "02"'>
+                    </span>
+                </div>
+                <span class="help-text">(comma-separated, leave empty for processing all)</span>
+            </div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="bids_tasks">tasks</label>
+                    <span class="param-control">
+                        <input type="text" id="bids_tasks" name="bids_tasks" placeholder='e.g., "rest", "task"'>
+                    </span>
+                </div>
+                <span class="help-text">(comma-separated, leave empty for processing all)</span>
+            </div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="bids_runs">runs</label>
+                    <span class="param-control">
+                        <input type="text" id="bids_runs" name="bids_runs" placeholder='e.g., "01", "02"'>
+                    </span>
+                </div>
+                <span class="help-text">(comma-separated, leave empty for processing all)</span>
+            </div>
+        </div>
+
+        <!-- Template -->
+        <h2 id="template">template</h2>
+        <div class="section">
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="template_output_space">output_space</label>
+                    <span class="param-control">
+                        <select id="template_output_space" name="template_output_space">
+                            <option value="NMT2Sym:res-05" selected>NMT2Sym:res-05</option>
+                            <option value="NMT2Sym:res-025">NMT2Sym:res-025</option>
+                            <option value="NMT2Sym:res-1">NMT2Sym:res-1</option>
+                            <option value="NMT2Asym:res-05">NMT2Asym:res-05</option>
+                            <option value="MEBRAIN:res-04">MEBRAIN:res-04</option>
+                            <option value="D99:res-025">D99:res-025</option>
+                            <option value="T1w">T1w</option>
+                        </select>
+                    </span>
+                </div>
+                <span class="help-text">(T1w space or template space in format "TEMPLATE_NAME:[:DESCRIPTION]")</span>
+            </div>
+        </div>
+
+        <!-- Anatomical Processing -->
+        <h2 id="anat">anat</h2>
+        <div class="section">
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="anat_synthesis_level">synthesis_level</label>
+                    <span class="param-control">
+                        <select id="anat_synthesis_level" name="anat_synthesis_level">
+                            <option value="subject" selected>subject</option>
+                            <option value="session">session</option>
+                        </select>
+                    </span>
+                </div>
+                <span class="help-text">(T1w/T2w synthesis level: "subject" = cross-session/cross-sectional, "session" = within-session/longitudinal)</span>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="anat_reorient_enabled" name="anat_reorient_enabled"></span>
+                    <label for="anat_reorient_enabled">reorient</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(reorient anatomical images to template orientation when given, otherwise to RAS. When conform is enabled, reorient is not needed.)</span>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="anat_conform_enabled" name="anat_conform_enabled" checked></span>
+                    <label for="anat_conform_enabled">conform</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(HIGHLY RECOMMENDED. Conform input image to template space using FLIRT rigid registration.)</span>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="anat_bias_correction_enabled" name="anat_bias_correction_enabled" checked></span>
+                    <label for="anat_bias_correction_enabled">bias_correction</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(perform bias field correction.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
+                <div class="advanced-settings" id="anat_bias_correction_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="anat_bias_correction_algorithm">algorithm</label>
+                            <span class="param-control">
+                                <select id="anat_bias_correction_algorithm" name="anat_bias_correction_algorithm">
+                                    <option value="N4BiasFieldCorrection" selected>N4BiasFieldCorrection</option>
+                                </select>
+                            </span>
+                        </div>
+                        <span class="help-text">(bias correction algorithm)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="anat_bias_correction_shrink_factor">shrink_factor</label>
+                            <span class="param-control">
+                                <input type="number" id="anat_bias_correction_shrink_factor" name="anat_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
+                            </span>
+                        </div>
+                        <span class="help-text">(shrink factor for faster processing, > 0)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="anat_bias_correction_bspline_fitting">bspline_fitting</label>
+                            <span class="param-control">
+                                <input type="text" id="anat_bias_correction_bspline_fitting" name="anat_bias_correction_bspline_fitting" value="[ 150 ]">
+                            </span>
+                        </div>
+                        <span class="help-text">(b-spline fitting parameters in ANTs format)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"><input type="checkbox" id="anat_bias_correction_rescale_mean_to_100" name="anat_bias_correction_rescale_mean_to_100" checked></span>
+                            <label for="anat_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
+                            <span class="param-control"></span>
+                        </div>
+                        <span class="help-text">(rescale image mean intensity to 100)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="anat_skullstripping_enabled" name="anat_skullstripping_enabled" checked></span>
+                    <label for="anat_skullstripping_enabled">skullstripping_segmentation</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(highly recommended. Perform brain extraction and segmentation.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
+                <div class="advanced-settings" id="anat_skullstripping_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="anat_skullstripping_method">method</label>
+                            <span class="param-control">
+                                <select id="anat_skullstripping_method" name="anat_skullstripping_method">
+                                    <option value="fastSurferCNN" selected>fastSurferCNN</option>
+                                </select>
+                            </span>
+                        </div>
+                    </div>
+                    <div id="anat_fastSurferCNN_options">
+                        <h4>fastSurferCNN</h4>
+                        <div class="param-block">
+                            <div class="param-row">
+                                <span class="param-check"></span>
+                                <label for="anat_fastSurferCNN_batch_size">batch_size</label>
+                                <span class="param-control">
+                                    <input type="number" id="anat_fastSurferCNN_batch_size" name="anat_fastSurferCNN_batch_size" value="8" min="1">
+                                </span>
+                            </div>
+                            <span class="help-text">(batch size for inference, >= 1)</span>
+                        </div>
+                        <div class="param-block">
+                            <div class="param-row">
+                                <span class="param-check"></span>
+                                <label for="anat_fastSurferCNN_plane_weight_coronal">plane_weight_coronal</label>
+                                <span class="param-control">
+                                    <input type="number" id="anat_fastSurferCNN_plane_weight_coronal" name="anat_fastSurferCNN_plane_weight_coronal" value="0.4" step="0.1" min="0" max="1">
+                                </span>
+                            </div>
+                            <span class="help-text">(weight for coronal plane, 0.0-1.0)</span>
+                        </div>
+                        <div class="param-block">
+                            <div class="param-row">
+                                <span class="param-check"></span>
+                                <label for="anat_fastSurferCNN_plane_weight_axial">plane_weight_axial</label>
+                                <span class="param-control">
+                                    <input type="number" id="anat_fastSurferCNN_plane_weight_axial" name="anat_fastSurferCNN_plane_weight_axial" value="0.4" step="0.1" min="0" max="1">
+                                </span>
+                            </div>
+                            <span class="help-text">(weight for axial plane, 0.0-1.0)</span>
+                        </div>
+                        <div class="param-block">
+                            <div class="param-row">
+                                <span class="param-check"></span>
+                                <label for="anat_fastSurferCNN_plane_weight_sagittal">plane_weight_sagittal</label>
+                                <span class="param-control">
+                                    <input type="number" id="anat_fastSurferCNN_plane_weight_sagittal" name="anat_fastSurferCNN_plane_weight_sagittal" value="0.2" step="0.1" min="0" max="1">
+                                </span>
+                            </div>
+                            <span class="help-text">(weight for sagittal plane, 0.0-1.0)</span>
+                        </div>
+                        <div class="param-block">
+                            <div class="param-row">
+                                <span class="param-check"><input type="checkbox" id="anat_fastSurferCNN_fix_V1_WM" name="anat_fastSurferCNN_fix_V1_WM" checked></span>
+                                <label for="anat_fastSurferCNN_fix_V1_WM">fix_V1_WM</label>
+                                <span class="param-control"></span>
+                            </div>
+                            <span class="help-text">(fix missing thin WM in V1 by registering template V1 WM to individual space)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="anat_surface_reconstruction_enabled" name="anat_surface_reconstruction_enabled" checked></span>
+                    <label for="anat_surface_reconstruction_enabled">surface_reconstruction</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(perform surface reconstruction.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
+                <div class="advanced-settings" id="anat_surface_reconstruction_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"><input type="checkbox" id="anat_surface_reconstruction_use_t1wt2wcombined" name="anat_surface_reconstruction_use_t1wt2wcombined"></span>
+                            <label for="anat_surface_reconstruction_use_t1wt2wcombined">use_t1wt2wcombined</label>
+                            <span class="param-control"></span>
+                        </div>
+                        <span class="help-text">(use t1wt2wcombined image for surface recon if possible)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Functional Processing -->
+        <h2 id="func">func</h2>
+        <div class="section">
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_coreg_runs_within_session" name="func_coreg_runs_within_session" checked></span>
+                    <label for="func_coreg_runs_within_session">coreg_runs_within_session</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(coregister runs within session before processing.)</span>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_reorient_enabled" name="func_reorient_enabled"></span>
+                    <label for="func_reorient_enabled">reorient</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(reorient functional images to template orientation when given, otherwise to RAS. When conform is enabled, reorient is not needed.)</span>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_slice_timing_correction_enabled" name="func_slice_timing_correction_enabled" checked></span>
+                    <label for="func_slice_timing_correction_enabled">slice_timing_correction</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(perform slice timing correction.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
+                <div class="advanced-settings" id="func_slice_timing_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_slice_timing_correction_repetition_time">repetition_time</label>
+                            <span class="param-control">
+                                <input type="number" id="func_slice_timing_correction_repetition_time" name="func_slice_timing_correction_repetition_time" step="0.001" min="0" placeholder="auto-detect from metadata">
+                            </span>
+                        </div>
+                        <span class="help-text">(repetition time in seconds, leave empty for auto-detect from metadata)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_slice_timing_correction_slice_timing">slice_timing</label>
+                            <span class="param-control">
+                                <input type="text" id="func_slice_timing_correction_slice_timing" name="func_slice_timing_correction_slice_timing" placeholder="auto-detect from metadata">
+                            </span>
+                        </div>
+                        <span class="help-text">(list of floats: slice times in seconds, leave empty for auto-detect from metadata)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_slice_timing_correction_tzero">tzero</label>
+                            <span class="param-control">
+                                <input type="number" id="func_slice_timing_correction_tzero" name="func_slice_timing_correction_tzero" step="0.001" placeholder="auto-calculate from metadata">
+                            </span>
+                        </div>
+                        <span class="help-text">(reference time point in seconds, leave empty for auto-calculate from metadata)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_slice_timing_correction_slice_time_ref">slice_time_ref</label>
+                            <span class="param-control">
+                                <input type="number" id="func_slice_timing_correction_slice_time_ref" name="func_slice_timing_correction_slice_time_ref" value="0.5" step="0.1" min="0" max="1">
+                            </span>
+                        </div>
+                        <span class="help-text">(reference slice time, 0.0-1.0, 0.5 = middle slice)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_slice_timing_correction_slice_encoding_direction">slice_encoding_direction</label>
+                            <span class="param-control">
+                                <select id="func_slice_timing_correction_slice_encoding_direction" name="func_slice_timing_correction_slice_encoding_direction">
+                                    <option value="">auto-detect from metadata</option>
+                                    <option value="x">x</option>
+                                    <option value="-x">-x</option>
+                                    <option value="y">y</option>
+                                    <option value="-y">-y</option>
+                                    <option value="z">z</option>
+                                    <option value="-z">-z</option>
+                                </select>
+                            </span>
+                        </div>
+                        <span class="help-text">("x", "-x", "y", "-y", "z", "-z", or auto-detect from metadata)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_motion_correction_enabled" name="func_motion_correction_enabled" checked></span>
+                    <label for="func_motion_correction_enabled">motion_correction</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(perform motion correction.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
+                <div class="advanced-settings" id="func_motion_correction_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_motion_correction_dof">dof</label>
+                            <span class="param-control">
+                                <select id="func_motion_correction_dof" name="func_motion_correction_dof">
+                                    <option value="6" selected>6</option>
+                                    <option value="9">9</option>
+                                    <option value="12">12</option>
+                                </select>
+                            </span>
+                        </div>
+                        <span class="help-text">(degrees of freedom: 6, 9, or 12)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_motion_correction_cost">cost</label>
+                            <span class="param-control">
+                                <select id="func_motion_correction_cost" name="func_motion_correction_cost">
+                                    <option value="mutualinfo" selected>mutualinfo</option>
+                                    <option value="woods">woods</option>
+                                    <option value="corratio">corratio</option>
+                                    <option value="normcorr">normcorr</option>
+                                    <option value="normmi">normmi</option>
+                                    <option value="leastsq">leastsq</option>
+                                </select>
+                            </span>
+                        </div>
+                        <span class="help-text">(cost function)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_motion_correction_smooth">smooth</label>
+                            <span class="param-control">
+                                <input type="number" id="func_motion_correction_smooth" name="func_motion_correction_smooth" value="1.0" step="0.1" min="0">
+                            </span>
+                        </div>
+                        <span class="help-text">(smoothing factor for motion correction)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_motion_correction_ref_vol">ref_vol</label>
+                            <span class="param-control">
+                                <input type="text" id="func_motion_correction_ref_vol" name="func_motion_correction_ref_vol" value="mid">
+                            </span>
+                        </div>
+                        <span class="help-text">(reference volume: integer index, "Tmean", or "mid")</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_motion_correction_cost_tolerance">cost_tolerance</label>
+                            <span class="param-control">
+                                <input type="number" id="func_motion_correction_cost_tolerance" name="func_motion_correction_cost_tolerance" value="0.01" step="0.001" min="0">
+                            </span>
+                        </div>
+                        <span class="help-text">(cost function tolerance)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_motion_correction_parameter_tolerance">parameter_tolerance</label>
+                            <span class="param-control">
+                                <input type="number" id="func_motion_correction_parameter_tolerance" name="func_motion_correction_parameter_tolerance" value="0.01" step="0.001" min="0">
+                            </span>
+                        </div>
+                        <span class="help-text">(parameter tolerance)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_despike_enabled" name="func_despike_enabled"></span>
+                    <label for="func_despike_enabled">despike</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(perform despiking/outlier removal.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
+                <div class="advanced-settings" id="func_despike_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_despike_c1">c1</label>
+                            <span class="param-control">
+                                <input type="number" id="func_despike_c1" name="func_despike_c1" value="5" step="0.1" min="0.1">
+                            </span>
+                        </div>
+                        <span class="help-text">(first cutoff parameter, > 0, must be &lt; c2)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_despike_c2">c2</label>
+                            <span class="param-control">
+                                <input type="number" id="func_despike_c2" name="func_despike_c2" value="10" step="0.1" min="0.1">
+                            </span>
+                        </div>
+                        <span class="help-text">(second cutoff parameter, > 0, must be > c1)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"><input type="checkbox" id="func_despike_localedit" name="func_despike_localedit" checked></span>
+                            <label for="func_despike_localedit">localedit</label>
+                            <span class="param-control"></span>
+                        </div>
+                        <span class="help-text">(use local editing for despiking)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_despike_ignore_first_volumes">ignore_first_volumes</label>
+                            <span class="param-control">
+                                <input type="number" id="func_despike_ignore_first_volumes" name="func_despike_ignore_first_volumes" value="0" min="0">
+                            </span>
+                        </div>
+                        <span class="help-text">(number of initial volumes to ignore, >= 0)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_bias_correction_enabled" name="func_bias_correction_enabled" checked></span>
+                    <label for="func_bias_correction_enabled">bias_correction</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(perform bias field correction on tmean image for better registration.)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
+                <div class="advanced-settings" id="func_bias_correction_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_bias_correction_algorithm">algorithm</label>
+                            <span class="param-control">
+                                <select id="func_bias_correction_algorithm" name="func_bias_correction_algorithm">
+                                    <option value="N4BiasFieldCorrection" selected>N4BiasFieldCorrection</option>
+                                </select>
+                            </span>
+                        </div>
+                        <span class="help-text">(bias correction algorithm)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_bias_correction_shrink_factor">shrink_factor</label>
+                            <span class="param-control">
+                                <input type="number" id="func_bias_correction_shrink_factor" name="func_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
+                            </span>
+                        </div>
+                        <span class="help-text">(shrink factor for faster processing, > 0)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_bias_correction_bspline_fitting">bspline_fitting</label>
+                            <span class="param-control">
+                                <input type="text" id="func_bias_correction_bspline_fitting" name="func_bias_correction_bspline_fitting" value="[ 100 ]">
+                            </span>
+                        </div>
+                        <span class="help-text">(b-spline fitting parameters in ANTs format)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"><input type="checkbox" id="func_bias_correction_rescale_mean_to_100" name="func_bias_correction_rescale_mean_to_100" checked></span>
+                            <label for="func_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
+                            <span class="param-control"></span>
+                        </div>
+                        <span class="help-text">(rescale image mean intensity to 100)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_conform_enabled" name="func_conform_enabled" checked></span>
+                    <label for="func_conform_enabled">conform</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(HIGHLY RECOMMENDED. Conform functional tmean image to target space using FLIRT rigid registration.)</span>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_skullstripping_enabled" name="func_skullstripping_enabled" checked></span>
+                    <label for="func_skullstripping_enabled">skullstripping</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(HIGHLY RECOMMENDED. Perform brain extraction.)</span>
+            </div>
+        </div>
+
+        <!-- Registration -->
+        <h2 id="registration">registration</h2>
+        <div class="section">
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="registration_anat2template_xfm_type">anat2template_xfm_type</label>
+                    <span class="param-control">
+                        <select id="registration_anat2template_xfm_type" name="registration_anat2template_xfm_type">
+                            <option value="translation">translation</option>
+                            <option value="rigid">rigid</option>
+                            <option value="affine">affine</option>
+                            <option value="syn" selected>syn</option>
+                        </select>
+                    </span>
+                </div>
+                <span class="help-text">(transform type for anat->template: "translation", "rigid", "affine", or "syn")</span>
+            </div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="registration_func2anat_xfm_type">func2anat_xfm_type</label>
+                    <span class="param-control">
+                        <select id="registration_func2anat_xfm_type" name="registration_func2anat_xfm_type">
+                            <option value="translation">translation</option>
+                            <option value="rigid">rigid</option>
+                            <option value="affine">affine</option>
+                            <option value="syn" selected>syn</option>
+                        </select>
+                    </span>
+                </div>
+                <span class="help-text">(transform type for func->anat: "translation", "rigid", "affine", or "syn")</span>
+            </div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="registration_func2template_xfm_type">func2template_xfm_type</label>
+                    <span class="param-control">
+                        <select id="registration_func2template_xfm_type" name="registration_func2template_xfm_type">
+                            <option value="translation">translation</option>
+                            <option value="rigid">rigid</option>
+                            <option value="affine">affine</option>
+                            <option value="syn" selected>syn</option>
+                        </select>
+                    </span>
+                </div>
+                <span class="help-text">(transform type for func->template: "translation", "rigid", "affine", or "syn")</span>
+            </div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="registration_keep_func_resolution" name="registration_keep_func_resolution" checked></span>
+                    <label for="registration_keep_func_resolution">keep_func_resolution</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(keep original functional image resolution after registration)</span>
+            </div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"></span>
+                    <label for="registration_interpolation">interpolation</label>
+                    <span class="param-control">
+                        <select id="registration_interpolation" name="registration_interpolation">
+                            <option value="BSpline" selected>BSpline</option>
+                            <option value="CosineWindowedSinc">CosineWindowedSinc</option>
+                            <option value="GenericLabel">GenericLabel</option>
+                            <option value="Gaussian">Gaussian</option>
+                            <option value="HammingWindowedSinc">HammingWindowedSinc</option>
+                            <option value="LanczosWindowedSinc">LanczosWindowedSinc</option>
+                            <option value="Linear">Linear</option>
+                            <option value="MultiLabel">MultiLabel</option>
+                            <option value="NearestNeighbor">NearestNeighbor</option>
+                            <option value="WelchWindowedSinc">WelchWindowedSinc</option>
+                        </select>
+                    </span>
+                </div>
+                <span class="help-text">(interpolation method)</span>
+            </div>
+        </div>
+
+        <div class="generator-section">
+        <!-- Preview Section (injected by CLI if dataset_dir provided) -->
+        <!-- PREVIEW_PLACEHOLDER -->
+        
+        <button type="button" id="generate" onclick="generateConfig()">Generate Preprocessing Configuration File</button>
+        <div id="errorMessages"></div>
+        <div id="yamlOutput" class="yaml-output hidden">
+            <h3>Generated Configuration YAML</h3>
+            <textarea id="yamlText" readonly></textarea>
+            <button type="button" class="copy-button" onclick="copyToClipboard()">Copy to Clipboard</button>
+            <button type="button" class="copy-button" onclick="downloadConfig()" style="margin-left: 10px;">Download Config File</button>
+        </div>
+        </div>
+    </form>
+        </main>
+    </div>
+
+    <script>
+        // Configuration embedded from defaults.yaml
+        const defaults = {
+            _description: "Configuration for brainana preprocessing pipeline",
+            general: {
+                verbose: 2,
+                anat_only: false,
+                gpu_device: "auto"
+            },
+            bids_filtering: {
+                subjects: null,
+                sessions: null,
+                tasks: null,
+                runs: null
+            },
+            template: {
+                output_space: "NMT2Sym:res-05"
+            },
+            anat: {
+                synthesis_level: "subject",
+                reorient: { enabled: false },
+                conform: { enabled: true },
+                bias_correction: {
+                    enabled: true,
+                    algorithm: "N4BiasFieldCorrection",
+                    shrink_factor: 2,
+                    bspline_fitting: "[ 150 ]",
+                    rescale_mean_to_100: true
+                },
+                skullstripping_segmentation: {
+                    enabled: true,
+                    method: "fastSurferCNN",
+                    fastSurferCNN: {
+                        gpu_device: "auto",
+                        batch_size: 8,
+                        plane_weight_coronal: 0.4,
+                        plane_weight_axial: 0.4,
+                        plane_weight_sagittal: 0.2,
+                        fix_V1_WM: true
+                    }
+                },
+                surface_reconstruction: {
+                    enabled: true,
+                    use_t1wt2wcombined: false
+                }
+            },
+            func: {
+                coreg_runs_within_session: true,
+                reorient: { enabled: false },
+                slice_timing_correction: {
+                    enabled: true,
+                    repetition_time: null,
+                    slice_timing: null,
+                    tzero: null,
+                    slice_time_ref: 0.5,
+                    slice_encoding_direction: null
+                },
+                motion_correction: {
+                    enabled: true,
+                    dof: 6,
+                    cost: "mutualinfo",
+                    smooth: 1.0,
+                    ref_vol: "mid",
+                    cost_tolerance: 0.01,
+                    parameter_tolerance: 0.01
+                },
+                despike: {
+                    enabled: false,
+                    c1: 5,
+                    c2: 10,
+                    localedit: true,
+                    ignore_first_volumes: 0
+                },
+                bias_correction: {
+                    enabled: true,
+                    algorithm: "N4BiasFieldCorrection",
+                    shrink_factor: 2,
+                    bspline_fitting: "[ 100 ]",
+                    rescale_mean_to_100: true
+                },
+                conform: { enabled: true },
+                skullstripping: {
+                    enabled: true
+                }
+            },
+            registration: {
+                anat2template_xfm_type: "syn",
+                func2anat_xfm_type: "syn",
+                func2template_xfm_type: "syn",
+                keep_func_resolution: true,
+                interpolation: "BSpline"
+            }
+        };
+
+        // Show/hide conditional sections
+        function toggleAdvanced(el) {
+            const toggle = el;
+            const next = toggle.nextElementSibling;
+            if (next && next.classList.contains('advanced-settings')) {
+                next.classList.toggle('visible');
+                toggle.classList.toggle('open', next.classList.contains('visible'));
+            }
+        }
+
+        function updateConditionalVisibility() {
+            const anatMethod = document.getElementById('anat_skullstripping_method').value;
+            
+            document.getElementById('anat_fastSurferCNN_options').classList.toggle('hidden', anatMethod !== 'fastSurferCNN');
+            // func.skullstripping doesn't have method or fastSurferCNN options
+        }
+
+        // Initialize conditional visibility
+        updateConditionalVisibility();
+
+        // Validation functions matching Python validation
+        function validateConfig(config) {
+            const errors = [];
+            
+            // Validate general.gpu_device
+            const gpuDevice = config.general && config.general.gpu_device;
+            if (gpuDevice !== undefined && gpuDevice !== null && gpuDevice !== 'auto') {
+                if (typeof gpuDevice === 'number') {
+                    if (gpuDevice < -1) errors.push("general.gpu_device must be >= -1 (where -1 = CPU) or 'auto'");
+                } else if (typeof gpuDevice === 'string' && !gpuDevice.startsWith('cuda:')) {
+                    if (gpuDevice !== 'cpu' && isNaN(parseInt(gpuDevice))) {
+                        errors.push("general.gpu_device must be 'auto', -1, CPU index (0..N), or 'cuda:N'");
+                    }
+                }
+            }
+            
+            // Validate motion correction
+            if (config.func.motion_correction.enabled) {
+                const dof = config.func.motion_correction.dof;
+                if (![6, 9, 12].includes(dof)) {
+                    errors.push("func.motion_correction.dof must be 6, 9, or 12");
+                }
+                
+                const cost = config.func.motion_correction.cost;
+                const validCosts = ["mutualinfo", "woods", "corratio", "normcorr", "normmi", "leastsq"];
+                if (!validCosts.includes(cost)) {
+                    errors.push(`func.motion_correction.cost must be one of ${validCosts.join(', ')}`);
+                }
+                
+                const refVol = config.func.motion_correction.ref_vol;
+                if (typeof refVol !== 'string' && typeof refVol !== 'number') {
+                    errors.push("func.motion_correction.ref_vol must be an integer or 'Tmean'/'mid'");
+                } else if (typeof refVol === 'string' && !['Tmean', 'mid'].includes(refVol)) {
+                    if (isNaN(parseInt(refVol))) {
+                        errors.push("func.motion_correction.ref_vol must be an integer or 'Tmean'/'mid'");
+                    }
+                }
+            }
+            
+            // Validate despike
+            if (config.func.despike.enabled) {
+                const c1 = config.func.despike.c1;
+                const c2 = config.func.despike.c2;
+                if (c1 <= 0) {
+                    errors.push("func.despike.c1 must be > 0");
+                }
+                if (c2 <= 0) {
+                    errors.push("func.despike.c2 must be > 0");
+                }
+                if (c1 >= c2) {
+                    errors.push("func.despike.c1 must be < c2");
+                }
+            }
+            
+            // Validate slice timing
+            if (config.func.slice_timing_correction.enabled) {
+                const tr = config.func.slice_timing_correction.repetition_time;
+                if (tr !== null && tr !== undefined && tr <= 0) {
+                    errors.push("func.slice_timing_correction.repetition_time must be > 0");
+                }
+                
+                const tzero = config.func.slice_timing_correction.tzero;
+                if (tzero !== null && tzero !== undefined) {
+                    if (typeof tzero !== 'number') {
+                        errors.push("func.slice_timing_correction.tzero must be a number");
+                    } else if (tr !== null && tr !== undefined && tzero > tr) {
+                        errors.push("func.slice_timing_correction.tzero must be < repetition_time");
+                    }
+                }
+            }
+            
+            // Validate skullstripping
+            function validateSkullstripping(config, prefix, keyName) {
+                if (!config.enabled) return;
+                
+                const method = config.method;
+                if (method !== 'fastSurferCNN') {
+                    errors.push(`${prefix}.${keyName}.method must be 'fastSurferCNN'`);
+                    return;
+                }
+                
+                if (config.fastSurferCNN) {
+                    const fscnn = config.fastSurferCNN;
+                    const gpuDevice = fscnn.gpu_device;
+                    if (gpuDevice !== 'auto' && (typeof gpuDevice !== 'number' || gpuDevice < -1)) {
+                        errors.push(`${prefix}.${keyName}.fastSurferCNN.gpu_device must be integer >= -1 or 'auto'`);
+                    }
+                    if (!Number.isInteger(fscnn.batch_size) || fscnn.batch_size < 1) {
+                        errors.push(`${prefix}.${keyName}.fastSurferCNN.batch_size must be a positive integer`);
+                    }
+                    
+                    ['plane_weight_coronal', 'plane_weight_axial', 'plane_weight_sagittal'].forEach(weight => {
+                        if (fscnn[weight] !== null && fscnn[weight] !== undefined) {
+                            if (typeof fscnn[weight] !== 'number' || fscnn[weight] < 0 || fscnn[weight] > 1) {
+                                errors.push(`${prefix}.${keyName}.fastSurferCNN.${weight} must be between 0 and 1`);
+                            }
+                        }
+                    });
+                }
+            }
+            
+            validateSkullstripping(config.anat.skullstripping_segmentation, 'anat', 'skullstripping_segmentation');
+            // func.skullstripping only has 'enabled', no method or fastSurferCNN options
+            
+            // Validate bias correction
+            function validateBiasCorrection(config, prefix) {
+                if (!config.enabled) return;
+                
+                if (config.shrink_factor <= 0) {
+                    errors.push(`${prefix}.bias_correction.shrink_factor must be > 0`);
+                }
+            }
+            
+            validateBiasCorrection(config.anat.bias_correction, 'anat');
+            validateBiasCorrection(config.func.bias_correction, 'func');
+            
+            // Validate registration
+            const validInterpolations = [
+                "Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline",
+                "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc",
+                "LanczosWindowedSinc", "GenericLabel"
+            ];
+            if (config.registration && !validInterpolations.includes(config.registration.interpolation)) {
+                errors.push(`registration.interpolation must be one of ${validInterpolations.join(', ')}`);
+            }
+            
+            return errors;
+        }
+
+        // Parse list input (comma-separated)
+        function parseListInput(value) {
+            if (!value || value.trim() === '') {
+                return null;
+            }
+            return value.split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
+        }
+
+        // Parse number or null
+        function parseNumberOrNull(value) {
+            if (!value || value.trim() === '') {
+                return null;
+            }
+            const num = parseFloat(value);
+            return isNaN(num) ? null : num;
+        }
+
+        // Parse integer or string (for ref_vol)
+        function parseRefVol(value) {
+            if (value === 'mid' || value === 'Tmean') {
+                return value;
+            }
+            const num = parseInt(value);
+            if (!isNaN(num)) {
+                return num;
+            }
+            return value;
+        }
+
+        // Generate YAML from config object
+        function objectToYAML(obj, indent = 0) {
+            const indentStr = '  '.repeat(indent);
+            let yaml = '';
+            
+            for (const [key, value] of Object.entries(obj)) {
+                if (key.startsWith('_')) {
+                    if (typeof value === 'string') {
+                        yaml += `${indentStr}${key}: "${value}"\n`;
+                    } else {
+                        yaml += `${indentStr}${key}: ${value}\n`;
+                    }
+                } else if (value === null) {
+                    yaml += `${indentStr}${key}: null\n`;
+                } else if (typeof value === 'boolean') {
+                    yaml += `${indentStr}${key}: ${value}\n`;
+                } else if (typeof value === 'number') {
+                    yaml += `${indentStr}${key}: ${value}\n`;
+                } else if (typeof value === 'string') {
+                    if (value.includes(':') || value.includes('[') || value.includes(']') || value.includes(',')) {
+                        yaml += `${indentStr}${key}: "${value}"\n`;
+                    } else {
+                        yaml += `${indentStr}${key}: ${value}\n`;
+                    }
+                } else if (Array.isArray(value)) {
+                    if (value.length === 0) {
+                        yaml += `${indentStr}${key}: []\n`;
+                    } else {
+                        yaml += `${indentStr}${key}:\n`;
+                        value.forEach(item => {
+                            if (typeof item === 'string') {
+                                yaml += `${indentStr}  - "${item}"\n`;
+                            } else {
+                                yaml += `${indentStr}  - ${item}\n`;
+                            }
+                        });
+                    }
+                } else if (typeof value === 'object') {
+                    yaml += `${indentStr}${key}:\n`;
+                    yaml += objectToYAML(value, indent + 1);
+                }
+            }
+            
+            return yaml;
+        }
+
+        // Copy to clipboard
+        function copyToClipboard() {
+            const yamlText = document.getElementById('yamlText');
+            yamlText.select();
+            document.execCommand('copy');
+            alert('YAML copied to clipboard!');
+        }
+        
+        // Download config file
+        async function downloadConfig() {
+            const yaml = document.getElementById('yamlText').value;
+            const filename = 'config.yaml';
+            
+            // Try to use File System Access API if available (allows user to choose save location)
+            // This API requires HTTPS or localhost
+            if ('showSaveFilePicker' in window) {
+                try {
+                    const fileHandle = await window.showSaveFilePicker({
+                        suggestedName: filename,
+                        types: [{
+                            description: 'YAML Configuration File',
+                            accept: { 'text/yaml': ['.yaml', '.yml'] }
+                        }],
+                        excludeAcceptAllOption: false
+                    });
+                    
+                    // Write the file content
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(yaml);
+                    await writable.close();
+                    
+                    // Get the file name for confirmation
+                    const savedName = fileHandle.name || filename;
+                    alert(`Configuration file saved successfully to:\n${savedName}`);
+                    return;
+                } catch (err) {
+                    // Only fall back if user explicitly cancelled
+                    if (err.name === 'AbortError') {
+                        // User cancelled the file picker, don't do anything
+                        return;
+                    }
+                    // For other errors, show error and fall back to download
+                    console.error('Error using File System Access API:', err);
+                    alert(`Error saving file: ${err.message}\n\nFalling back to download method.`);
+                    // Continue to fallback download method below
+                }
+            }
+            
+            // Fallback: download to default download folder
+            // This always saves to browser's default download location
+            const blob = new Blob([yaml], { type: 'text/yaml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            // Provide helpful message about save location
+            if ('showSaveFilePicker' in window) {
+                alert('Configuration file downloaded to your default download folder.\n\nNote: To choose a custom save location, ensure you are using HTTPS or localhost, and that your browser supports the File System Access API.');
+            } else {
+                alert('Configuration file downloaded to your default download folder.\n\nNote: Your browser does not support choosing a custom save location. Please use a modern browser (Chrome 86+, Edge 86+, or Opera 72+) for this feature.');
+            }
+        }
+
+        // Collect form data and generate config
+        function generateConfig() {
+            const errorDiv = document.getElementById('errorMessages');
+            const yamlOutput = document.getElementById('yamlOutput');
+            errorDiv.innerHTML = '';
+            yamlOutput.classList.add('hidden');
+            
+            // Collect all form values
+            const config = JSON.parse(JSON.stringify(defaults));
+            
+            // General
+            config.general.verbose = parseInt(document.getElementById('general_verbose').value);
+            config.general.anat_only = document.getElementById('general_anat_only').checked;
+            const gpuDeviceVal = document.getElementById('general_gpu_device').value.trim();
+            if (gpuDeviceVal === '' || gpuDeviceVal === 'auto') {
+                config.general.gpu_device = 'auto';
+            } else if (gpuDeviceVal === '-1' || gpuDeviceVal.toLowerCase() === 'cpu') {
+                config.general.gpu_device = -1;
+            } else if (gpuDeviceVal.startsWith('cuda:')) {
+                config.general.gpu_device = gpuDeviceVal;
+            } else {
+                const n = parseInt(gpuDeviceVal);
+                config.general.gpu_device = isNaN(n) ? 'auto' : n;
+            }
+
+            // BIDS filtering
+            config.bids_filtering.subjects = parseListInput(document.getElementById('bids_subjects').value);
+            config.bids_filtering.sessions = parseListInput(document.getElementById('bids_sessions').value);
+            config.bids_filtering.tasks = parseListInput(document.getElementById('bids_tasks').value);
+            config.bids_filtering.runs = parseListInput(document.getElementById('bids_runs').value);
+            
+            // Template
+            config.template.output_space = document.getElementById('template_output_space').value || defaults.template.output_space;
+            
+            // Anatomical
+            config.anat.synthesis_level = document.getElementById('anat_synthesis_level').value;
+            config.anat.reorient.enabled = document.getElementById('anat_reorient_enabled').checked;
+            config.anat.conform.enabled = document.getElementById('anat_conform_enabled').checked;
+            config.anat.bias_correction.enabled = document.getElementById('anat_bias_correction_enabled').checked;
+            config.anat.bias_correction.algorithm = document.getElementById('anat_bias_correction_algorithm').value;
+            config.anat.bias_correction.shrink_factor = parseFloat(document.getElementById('anat_bias_correction_shrink_factor').value);
+            config.anat.bias_correction.bspline_fitting = document.getElementById('anat_bias_correction_bspline_fitting').value;
+            config.anat.bias_correction.rescale_mean_to_100 = document.getElementById('anat_bias_correction_rescale_mean_to_100').checked;
+            
+            config.anat.skullstripping_segmentation.enabled = document.getElementById('anat_skullstripping_enabled').checked;
+            config.anat.skullstripping_segmentation.method = document.getElementById('anat_skullstripping_method').value;
+            if (config.anat.skullstripping_segmentation.method === 'fastSurferCNN') {
+                config.anat.skullstripping_segmentation.fastSurferCNN.gpu_device = config.general.gpu_device;
+                config.anat.skullstripping_segmentation.fastSurferCNN.batch_size = parseInt(document.getElementById('anat_fastSurferCNN_batch_size').value);
+                config.anat.skullstripping_segmentation.fastSurferCNN.plane_weight_coronal = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_coronal').value);
+                config.anat.skullstripping_segmentation.fastSurferCNN.plane_weight_axial = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_axial').value);
+                config.anat.skullstripping_segmentation.fastSurferCNN.plane_weight_sagittal = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_sagittal').value);
+                config.anat.skullstripping_segmentation.fastSurferCNN.fix_V1_WM = document.getElementById('anat_fastSurferCNN_fix_V1_WM').checked;
+            }
+            
+            config.anat.surface_reconstruction.enabled = document.getElementById('anat_surface_reconstruction_enabled').checked;
+            config.anat.surface_reconstruction.use_t1wt2wcombined = document.getElementById('anat_surface_reconstruction_use_t1wt2wcombined').checked;
+            
+            // Functional
+            config.func.coreg_runs_within_session = document.getElementById('func_coreg_runs_within_session').checked;
+            config.func.reorient.enabled = document.getElementById('func_reorient_enabled').checked;
+            config.func.conform.enabled = document.getElementById('func_conform_enabled').checked;
+            
+            config.func.slice_timing_correction.enabled = document.getElementById('func_slice_timing_correction_enabled').checked;
+            const tr = parseNumberOrNull(document.getElementById('func_slice_timing_correction_repetition_time').value);
+            config.func.slice_timing_correction.repetition_time = tr;
+            const sliceTiming = parseListInput(document.getElementById('func_slice_timing_correction_slice_timing').value);
+            config.func.slice_timing_correction.slice_timing = sliceTiming ? sliceTiming.map(s => parseFloat(s)) : null;
+            const tzero = parseNumberOrNull(document.getElementById('func_slice_timing_correction_tzero').value);
+            config.func.slice_timing_correction.tzero = tzero;
+            config.func.slice_timing_correction.slice_time_ref = parseFloat(document.getElementById('func_slice_timing_correction_slice_time_ref').value);
+            const sliceEncodingDir = document.getElementById('func_slice_timing_correction_slice_encoding_direction').value;
+            config.func.slice_timing_correction.slice_encoding_direction = sliceEncodingDir === '' ? null : sliceEncodingDir;
+            
+            config.func.motion_correction.enabled = document.getElementById('func_motion_correction_enabled').checked;
+            config.func.motion_correction.dof = parseInt(document.getElementById('func_motion_correction_dof').value);
+            config.func.motion_correction.cost = document.getElementById('func_motion_correction_cost').value;
+            config.func.motion_correction.smooth = parseFloat(document.getElementById('func_motion_correction_smooth').value);
+            const refVol = document.getElementById('func_motion_correction_ref_vol').value;
+            config.func.motion_correction.ref_vol = parseRefVol(refVol);
+            config.func.motion_correction.cost_tolerance = parseFloat(document.getElementById('func_motion_correction_cost_tolerance').value);
+            config.func.motion_correction.parameter_tolerance = parseFloat(document.getElementById('func_motion_correction_parameter_tolerance').value);
+            
+            config.func.despike.enabled = document.getElementById('func_despike_enabled').checked;
+            config.func.despike.c1 = parseFloat(document.getElementById('func_despike_c1').value);
+            config.func.despike.c2 = parseFloat(document.getElementById('func_despike_c2').value);
+            config.func.despike.localedit = document.getElementById('func_despike_localedit').checked;
+            config.func.despike.ignore_first_volumes = parseInt(document.getElementById('func_despike_ignore_first_volumes').value);
+            
+            config.func.skullstripping.enabled = document.getElementById('func_skullstripping_enabled').checked;
+            // func.skullstripping only has 'enabled', no method or fastSurferCNN options
+            
+            config.func.bias_correction.enabled = document.getElementById('func_bias_correction_enabled').checked;
+            config.func.bias_correction.algorithm = document.getElementById('func_bias_correction_algorithm').value;
+            config.func.bias_correction.shrink_factor = parseFloat(document.getElementById('func_bias_correction_shrink_factor').value);
+            config.func.bias_correction.bspline_fitting = document.getElementById('func_bias_correction_bspline_fitting').value;
+            config.func.bias_correction.rescale_mean_to_100 = document.getElementById('func_bias_correction_rescale_mean_to_100').checked;
+            
+            // Registration
+            config.registration.anat2template_xfm_type = document.getElementById('registration_anat2template_xfm_type').value;
+            config.registration.func2anat_xfm_type = document.getElementById('registration_func2anat_xfm_type').value;
+            config.registration.func2template_xfm_type = document.getElementById('registration_func2template_xfm_type').value;
+            config.registration.keep_func_resolution = document.getElementById('registration_keep_func_resolution').checked;
+            config.registration.interpolation = document.getElementById('registration_interpolation').value;
+            
+            // Validate
+            const errors = validateConfig(config);
+            if (errors.length > 0) {
+                errorDiv.innerHTML = '<div class="error"><strong>Validation Errors:</strong><ul>' + 
+                    errors.map(e => '<li>' + e + '</li>').join('') + '</ul></div>';
+                return;
+            }
+            
+            // Generate YAML
+            let yaml = '# Configuration for brainana preprocessing pipeline\n';
+            yaml += '# Generated by Configuration Generator\n\n';
+            yaml += objectToYAML(config);
+            
+            // Show YAML in textarea
+            document.getElementById('yamlText').value = yaml;
+            yamlOutput.classList.remove('hidden');
+            
+            // Show success message
+            errorDiv.innerHTML = '<div class="success">✓ Configuration file generated successfully!<br>Use "Copy to Clipboard" or "Download Config File" to save it.</div>';
+        }
+    </script>
+</body>
+</html>

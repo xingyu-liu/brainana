@@ -2,11 +2,13 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# This file drives "uv pip install -e ." and defines the package and its dependencies.
+
 [project]
-name = "macacaMRIprep"
-version = "0.1.0"
+name = "brainana"
+version = "1.0.0"
 description = "A Python package for preprocessing and registration of macaque neuroimaging data with BIDS dataset support"
-readme = "README_for_inz.rst"
+readme = { file = "README_Docker.md", content-type = "text/markdown" }
 license = {text = "MIT"}
 requires-python = ">=3.11"
 authors = [
@@ -21,6 +23,7 @@ keywords = [
     "registration",
     "freesurfer",
     "fastsurfer",
+
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -41,20 +44,27 @@ dependencies = [
     "matplotlib>=3.10.3",
     "pandas>=2.3.0",
     "packaging>=20.0",
-    # PyTorch for FastSurferCNN models
-    "torch>=2.0.0",
+    # PyTorch for fastsurfer_nn models (>=2.3 for FireANTs compatibility)
+    "torch>=2.3.0",
     "torchvision>=0.15.0",
     "torchio>=0.18.0",
-    # Image processing
+    # Image processing (SimpleITK 2.2.1 for FireANTs compatibility)
     "Pillow>=8.0.0",
     "scikit-image>=0.20.0",
-    "SimpleITK>=2.1.0",
-    # FastSurferCNN dependencies
+    "SimpleITK==2.2.1",
+    # FireANTs for GPU-accelerated registration
+    "fireants",
+    # fastsurfer_nn dependencies
     "yacs>=0.1.8",
     "h5py>=3.8.0",
-    # FastSurferRecon dependencies
+    # fastsurfer_surfrecon dependencies
     "pydantic>=2.0.0",
     "lapy>=1.0.0",
+    "pymeshfix>=0.16.0",
+    "pyvista>=0.43.0",
+    "scikit-sparse>=0.4.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
     # BIDS support
     "pybids>=0.15.0",
     # System utilities
@@ -66,10 +76,10 @@ dependencies = [
     "requests>=2.31.0",
     "scikit-learn>=1.3.0",
     "seaborn>=0.13.0",
+    "surfplot>=0.2.0",
     "tensorboard>=2.15.0",
-    # For reading pyproject.toml in Python < 3.11
-    "tomli>=2.0.0; python_version<'3.11'",
 ]
+# Note: tomli not needed since requires-python >= 3.11 (has built-in tomllib)
 
 [project.optional-dependencies]
 dev = [
@@ -79,35 +89,41 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0",
 ]
+docs = [
+    "sphinx>=7.0",
+    "myst-parser>=2.0",
+    "sphinx-rtd-theme>=2.0",
+]
 
-[project.scripts]
-macacaMRIprep-preproc = "macacaMRIprep.cli.preproc:main"
+# System dependencies (not Python packages): Connectome Workbench (wb_command) for QC surface snapshots
+# Install: apt install connectome-workbench (Debian/Ubuntu) or see https://humanconnectome.org/software/connectome-workbench
 
 [project.urls]
-Homepage = "https://github.com/yourusername/banana"
-Documentation = "https://github.com/yourusername/banana"
-Repository = "https://github.com/yourusername/banana"
-Issues = "https://github.com/yourusername/banana/issues"
+Homepage = "https://github.com/yourusername/brainana"
+Documentation = "https://github.com/yourusername/brainana"
+Repository = "https://github.com/yourusername/brainana"
+Issues = "https://github.com/yourusername/brainana/issues"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["macacaMRIprep*", "FastSurferCNN*", "FastSurferRecon*", "NHPskullstripNN*"]
+where = ["src"]
+include = ["nhp_mri_prep*", "fastsurfer_nn*", "fastsurfer_surfrecon*", "nhp_skullstrip_nn*"]
 
 [tool.setuptools.package-data]
-"macacaMRIprep" = [
+"nhp_mri_prep" = [
     "config/*.yaml",
     "config/*.html",
+    "quality_control/resources/*.scene",
 ]
-"FastSurferCNN" = [
+"fastsurfer_nn" = [
     "config/*.yaml",
     "atlas/**/*",
     "pretrained_model/*.pkl",
 ]
-"FastSurferRecon" = [
+"fastsurfer_surfrecon" = [
     "config/*.yaml",
-    "fastsurfer_recon/atlas/**/*",
+    "atlas/**/*",
 ]
-"NHPskullstripNN" = [
-    "config_example/*.yaml",
+"nhp_skullstrip_nn" = [
+    "config/*.yaml",
     "pretrained_model/*.pth",
 ]

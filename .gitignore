@@ -19,10 +19,13 @@ sdist/
 var/
 wheels/
 *.egg-info/
+PKG-INFO
 .installed.cfg
 *.egg
 
 # Virtual environments
+.venv/
+.fireants-src/
 venv/
 env/
 ENV/
@@ -38,3 +41,28 @@ ENV/
 .DS_Store
 Thumbs.db
 license.txt
+
+# Secrets / local env (never commit)
+.env
+.env.local
+.env.*.local
+*.key
+
+# Optional: large data (uncomment if you host elsewhere or use Git LFS)
+# template_zoo/
+# src/*/pretrained_model/
+# src/*/pretrained_model/**/*.pth
+# src/*/pretrained_model/**/*.pkl
+
+# Nextflow - all generated files
+.nextflow/
+.nextflow.log*
+nextflow
+work/
+null/
+*.nextflow.log
+*.nextflow.log.*
+
+# Sphinx build output
+doc/_build/
+docs/_build/

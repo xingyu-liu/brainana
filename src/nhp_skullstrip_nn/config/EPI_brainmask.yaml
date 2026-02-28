@@ -1,0 +1,136 @@
+# ============================================================================
+# PATH CONFIGURATION - Direct Paths (Simpler Format)
+# ============================================================================
+# Direct path to training data directory (contains images/ and labels/ subdirectories, or JSON file)
+TRAINING_DATA_DIR: /mnt/DataDrive3/xliu/monkey_training_groundtruth/nhp_skullstrip_nn_training/training_data/EPI_seg-brainmask
+
+# Direct path to output directory (for training logs, checkpoints, HDF5 files, etc.)
+OUTPUT_DIR: /mnt/DataDrive3/xliu/monkey_training_groundtruth/nhp_skullstrip_nn_training/training_output/EPI_seg-brainmask_v1
+
+# ============================================================================
+# REQUIRED PARAMETERS (no defaults - must be provided)
+# ============================================================================
+modal: EPI
+label: brainmask
+
+# ============================================================================
+# MODEL CONFIGURATION
+# ============================================================================
+num_input_slices: 3
+num_conv_block: 5
+kernel_root: 16
+use_inst_norm: true
+num_classes: 2  # 0:non-brain, 1:CSF, 2:gray matter, 3:subcortex, 4:white matter 5:others
+pretrained_model_path: /home/star/github/brainana/nhp_skullstrip_nn/pretrained_model/EPI_brainmask.pth
+
+# ============================================================================
+# TRAINING CONFIGURATION
+# ============================================================================
+training_mode: fine_tuning  # Training mode: 'scratch', 'fine_tuning', 'continual_learning'
+
+num_epochs: 20
+batch_size: 64
+enable_dynamic_batch_sizing: true
+learning_rate: 1.0e-04  # Increased from 1.0e-05 (10x) for faster fine-tuning convergence
+                        # fastsurfer_nn uses 0.002, but for fine-tuning 1.0e-04 to 5.0e-04 is more appropriate
+weight_decay: 0.0001  # Increased from 0.00001 (10x) to match fastsurfer_nn and improve regularization
+
+# Loss function
+loss_type: combined
+
+# Learning rate scheduling
+use_cosine_scheduler: true  # Changed to true for better convergence (matches fastsurfer_nn approach)
+scheduler_factor: 0.5
+min_lr: 1.0e-06  # Increased from 1e-07 for better minimum learning rate
+warmup_epochs: 5
+
+# Training control
+patience: 15
+early_stopping_min_delta: 0.001  # Less sensitive than continual learning
+early_stopping_restore_best_weights: true
+dropout_rate: 0.2
+gradient_clip_norm: 0.5
+checkpoint_frequency: 1  # Save checkpoint every N epochs (default: 5)
+
+# Advanced training features
+mixed_precision: true
+enable_augmentation: true
+
+# ============================================================================
+# DATA CONFIGURATION
+# ============================================================================
+rescale_dim: 256
+validation_split: 0.2
+test_split: 0.0
+validation_frequency: 1
+validation_metrics:
+  dice: true
+  iou: true
+  precision: true
+  recall: true
+  hausdorff: true
+
+# Note: HDF5 datasets are automatically detected and used if available
+# HDF5 files are created by step2_create_hdf5.py and stored in {OUTPUT_DIR}/hdf5/
+# Training will automatically use HDF5 files if they exist, otherwise falls back to file-based mode
+
+# ============================================================================
+# SYSTEM CONFIGURATION
+# ============================================================================
+device: auto
+random_seed: 42
+num_workers: 8  # Number of data loader workers (default: 8)
+log_level: INFO  # DEBUG, INFO, WARNING, ERROR
+
+# ============================================================================
+# AUGMENTATION CONFIGURATION
+# ============================================================================
+augmentation_config:
+  enable_scale: true
+  enable_translation: true
+  enable_flips: true
+  enable_rotation: true
+  enable_noise: true
+  enable_brightness: true
+  enable_field_bias: true
+  
+  # Probability of applying each augmentation (0.0 to 1.0)
+  prob_scale: 0.5
+  prob_translation: 0.5
+  prob_flips: 0.3
+  prob_rotation: 0.7
+  prob_noise: 0.5
+  prob_brightness: 0.5
+  prob_field_bias: 0.5
+  
+  scale_range:
+  - 0.8
+  - 1.15
+  translation_range:
+  - 15.0
+  - 15.0
+  rotation_angle: 180
+  noise_std: 0.02
+  brightness_range:
+  - -0.2
+  - 0.2
+  contrast_range:
+  - 0.8
+  - 1.2
+  bias_strength_range:
+  - 0.15
+  - 0.45
+  spatial_freq_range:
+  - 0.2
+  - 0.7
+  num_peaks_range:
+  - 1
+  - 3
+
+# ============================================================================
+# TRAINING LOGGING CONFIGURATION
+# ============================================================================
+# log_level is already defined in SYSTEM CONFIGURATION section above
+enable_progress_bars: true
+track_training_metrics: true
+track_validation_metrics: true

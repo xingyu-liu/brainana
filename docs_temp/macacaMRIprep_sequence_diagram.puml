@@ -1,0 +1,223 @@
+@startuml brainana_Nextflow_Workflow_Sequence
+
+!theme plain
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor User
+participant "Discovery Script" as Discovery
+participant "Nextflow Pipeline" as Nextflow
+participant "Step Functions" as Steps
+participant "Processing Operations" as Ops
+participant "Quality Control" as QC
+
+User -> Discovery: ./run_nextflow.sh run main.nf --bids_dir /data --output_dir /output
+activate Discovery
+
+Discovery -> Discovery: Run BIDS discovery
+Discovery -> Steps: discover_bids_dataset
+activate Steps
+Steps --> Discovery: anatomical_jobs, functional_jobs
+deactivate Steps
+Discovery -> Discovery: Save JSON files (anatomical_jobs.json, functional_jobs.json)
+Discovery --> Discovery: Discovery complete
+deactivate Discovery
+
+User -> Nextflow: Nextflow starts (after discovery)
+activate Nextflow
+
+Nextflow -> Nextflow: Load configuration
+Nextflow -> Nextflow: Read job JSON files
+
+note over Nextflow: **PHASE 1: ANATOMICAL PROCESSING**\nAll anatomical steps run in parallel
+
+par For each anatomical job (parallel)
+    Nextflow -> Nextflow: T1W_SYNTHESIS (if multiple runs)
+    Nextflow -> Nextflow: ANAT_REORIENT
+    Nextflow -> Steps: anat_reorient
+    activate Steps
+    Steps -> Ops: reorient_image
+    activate Ops
+    Ops --> Steps: reoriented_file
+    deactivate Ops
+    Steps --> Nextflow: anat_reoriented
+    deactivate Steps
+    
+    Nextflow -> Nextflow: ANAT_CONFORM
+    Nextflow -> Steps: anat_conform
+    activate Steps
+    Steps -> Ops: conform_image
+    activate Ops
+    Ops --> Steps: conformed_file
+    deactivate Ops
+    Steps --> Nextflow: anat_conformed
+    deactivate Steps
+    
+    Nextflow -> Nextflow: ANAT_BIAS_CORRECTION
+    Nextflow -> Steps: anat_bias_correction
+    activate Steps
+    Steps -> Ops: bias_correction
+    activate Ops
+    Ops --> Steps: bias_corrected_file
+    deactivate Ops
+    Steps --> Nextflow: anat_bias_corrected
+    deactivate Steps
+    
+    Nextflow [#0066CC]-> QC: create_bias_correction_qc
+    activate QC
+    QC -[#0066CC]-> Nextflow: anat_bias_qc_snapshot
+    deactivate QC
+    
+    Nextflow -> Nextflow: ANAT_SKULLSTRIPPING (GPU)
+    Nextflow -> Steps: anat_skullstripping
+    activate Steps
+    Steps -> Ops: skullstripping
+    activate Ops
+    Ops --> Steps: brain_mask
+    deactivate Ops
+    Steps --> Nextflow: anat_skullstripped
+    deactivate Steps
+    
+    Nextflow [#0066CC]-> QC: create_skullstripping_qc
+    activate QC
+    QC -[#0066CC]-> Nextflow: anat_skull_qc_snapshot
+    deactivate QC
+    
+    Nextflow -> Nextflow: ANAT_REGISTRATION
+    Nextflow -> Steps: anat_registration
+    activate Steps
+    Steps -> Ops: ants_register
+    activate Ops
+    Ops --> Steps: registered_file
+    deactivate Ops
+    Steps --> Nextflow: anat_registered
+    deactivate Steps
+    
+    Nextflow [#0066CC]-> QC: create_registration_qc
+    activate QC
+    QC -[#0066CC]-> Nextflow: anat_reg_qc_snapshot
+    deactivate QC
+end
+
+note over Nextflow: **PHASE 2: FUNCTIONAL PROCESSING**\nAll functional steps run in parallel (after anatomical dependencies)
+
+par For each functional job (parallel)
+    Nextflow -> Nextflow: FUNC_REORIENT
+    Nextflow -> Steps: func_reorient
+    activate Steps
+    Steps -> Ops: reorient_and_tmean
+    activate Ops
+    Ops --> Steps: reoriented_file, tmean_file
+    deactivate Ops
+    Steps --> Nextflow: func_reoriented
+    deactivate Steps
+    
+    Nextflow -> Nextflow: FUNC_SLICE_TIMING
+    Nextflow -> Steps: func_slice_timing_correction
+    activate Steps
+    Steps -> Ops: slice_timing_correction
+    activate Ops
+    Ops --> Steps: slice_timed_file
+    deactivate Ops
+    Steps --> Nextflow: func_slice_timed
+    deactivate Steps
+    
+    Nextflow -> Nextflow: FUNC_MOTION_CORRECTION
+    Nextflow -> Steps: func_motion_correction
+    activate Steps
+    Steps -> Ops: motion_correction
+    activate Ops
+    Ops --> Steps: motion_corrected_file
+    deactivate Ops
+    Steps --> Nextflow: func_motion_corrected
+    deactivate Steps
+    
+    Nextflow [#0066CC]-> QC: create_motion_correction_qc
+    activate QC
+    QC -[#0066CC]-> Nextflow: motion_qc_snapshot
+    deactivate QC
+    
+    Nextflow -> Nextflow: FUNC_DESPIKE
+    Nextflow -> Steps: func_despike
+    activate Steps
+    Steps -> Ops: despike
+    activate Ops
+    Ops --> Steps: despiked_file
+    deactivate Ops
+    Steps --> Nextflow: func_despiked
+    deactivate Steps
+    
+    Nextflow -> Nextflow: FUNC_BIAS_CORRECTION (on tmean)
+    Nextflow -> Steps: func_bias_correction
+    activate Steps
+    Steps -> Ops: bias_correction
+    activate Ops
+    Ops --> Steps: bias_corrected_tmean
+    deactivate Ops
+    Steps --> Nextflow: func_bias_corrected
+    deactivate Steps
+    
+    Nextflow -> Nextflow: FUNC_CONFORM (tmean)
+    Nextflow -> Steps: func_conform
+    activate Steps
+    Steps -> Ops: conform_image
+    activate Ops
+    Ops --> Steps: conformed_tmean
+    deactivate Ops
+    Steps --> Nextflow: func_conformed
+    deactivate Steps
+    
+    Nextflow -> Nextflow: FUNC_SKULLSTRIPPING (on tmean, GPU)
+    Nextflow -> Steps: func_skullstripping
+    activate Steps
+    Steps -> Ops: skullstripping
+    activate Ops
+    Ops --> Steps: func_brain_mask
+    deactivate Ops
+    Steps --> Nextflow: func_skullstripped
+    deactivate Steps
+    
+    Nextflow [#0066CC]-> QC: create_skullstripping_qc
+    activate QC
+    QC -[#0066CC]-> Nextflow: func_skull_qc_snapshot
+    deactivate QC
+    
+    Nextflow -> Nextflow: FUNC_REGISTRATION (tmean to target)
+    Nextflow -> Steps: func_registration
+    activate Steps
+    Steps -> Ops: ants_register
+    activate Ops
+    Ops --> Steps: registered_tmean
+    deactivate Ops
+    Steps --> Nextflow: func_registered
+    deactivate Steps
+    
+    Nextflow -> Nextflow: FUNC_APPLY_TRANSFORMS (to full 4D BOLD)
+    Nextflow -> Steps: func_apply_transforms
+    activate Steps
+    Steps -> Ops: ants_apply_transforms
+    activate Ops
+    Ops --> Steps: final_func_file
+    deactivate Ops
+    Steps --> Nextflow: func_final
+    deactivate Steps
+    
+    Nextflow [#0066CC]-> QC: create_registration_qc
+    activate QC
+    QC -[#0066CC]-> Nextflow: func_reg_qc_snapshot
+    deactivate QC
+end
+
+note over Nextflow: **PHASE 3: QC REPORT GENERATION**
+
+Nextflow [#0066CC]-> Nextflow: QC_ANATOMICAL
+Nextflow [#0066CC]-> Nextflow: QC_FUNCTIONAL
+Nextflow [#0066CC]-> QC: generate_qc_report
+activate QC
+QC -[#0066CC]-> Nextflow: qc_report
+deactivate QC
+
+Nextflow --> User: Processing complete
+deactivate Nextflow
+
+@enduml

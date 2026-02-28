@@ -1,14 +1,63 @@
-.venv
-uv.lock
+# Version control
 .git
 .github
-__pycache__
+.gitignore
+
+# Python artifacts
+.venv
+venv/
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Development
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Testing (not needed in runtime image)
+tests/
+
+# Documentation (not needed in runtime image)
+docs/
+*.md
+!README.md
+
+# Docker files (don't copy Dockerfile into image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Nextflow work directories and local binary
+work/
+nextflow
+.nextflow/
+.nextflow.log*
+
+# Misc
 .db
-.ipynb_checkpoints
-.pytest_cache
-.vscode
-.idea
+.DS_Store
+*.log
+*.tmp
+*.bak
 

@@ -1,38 +1,36 @@
 # Changelog
 
-All notable changes to macacaMRIprep will be documented in this file.
+All notable changes to brainana will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added
-- **Immediate job completion caching**: Jobs are now stamped as completed immediately when they finish processing, rather than waiting for all jobs in a batch to complete
-- **Robust resumption support**: Processing can now be safely resumed even if interrupted mid-batch, with completed jobs properly recognized
-- **Enhanced cache validation**: Added optional output file verification for cached completion status
-- **Streamlined cache management**: Consolidated cache operations into a single `_stamp_job_completion` method
-
 ### Changed
-- **Improved cache reliability**: Fixed issue where job completion status was not updated in cache when processing was interrupted
-- **Reduced code duplication**: Added `_handle_job_completion` helper function to eliminate duplicate completion handling code
-- **Simplified cache architecture**: Removed redundant `_update_job_cache` method in favor of unified `_stamp_job_completion`
+- **Project renamed**: Project renamed from nhp_mri_prep to brainana
+- **Architecture migration**: Migrated from CLI-based workflow to Nextflow-based pipeline for maximum parallelization
+- **Docker image**: Docker image name changed from `macacamriprep:latest` to `brainana:latest`
+- **Removed CLI**: Removed command-line interface (`nhp_mri_prep-preproc`); use Nextflow pipeline instead
+- **Step-based architecture**: Processing now uses individual step functions orchestrated by Nextflow modules
 
-### Fixed
-- **Cache persistence bug**: Jobs that completed successfully but were interrupted before batch completion are now properly cached
-- **Resumption reliability**: Processing can now be safely resumed from any point without losing progress
-- **Cross-session dependency handling**: Improved handling of functional jobs that depend on anatomical jobs from different sessions
+### Added
+- **Nextflow pipeline**: Complete Nextflow implementation with per-step parallelization
+- **Nextflow modules**: Modular Nextflow components for BIDS discovery, anatomical, functional, and QC processing
+- **Step functions**: Individual processing step functions in `nhp_mri_prep/steps/` for use by Nextflow
+- **Nextflow wrapper script**: `run_nextflow.sh` for clean project directory management
+- **Automatic resumption**: Nextflow automatically handles resumption from any failed step
+- **Per-step parallelization**: Each processing step runs in parallel across all subjects/sessions/runs
 
-### Technical Details
-- **Cache key generation**: Uses MD5 hash of job identity (inputs + template) for reliable job identification
-- **Generated file tracking**: Tracks actual output files generated during processing for validation
-- **Immediate persistence**: Cache is saved to disk immediately after each job completion
-- **Backward compatibility**: Existing cache files are automatically migrated to new format
+### Removed
+- **CLI command**: `nhp_mri_prep-preproc` command removed (use Nextflow instead)
+- **Workflow classes**: Old workflow classes (`BIDSDatasetProcessor`, `AnatomicalProcessor`, `FunctionalProcessor`) removed
+- **Pipeline management**: Old pipeline management system removed (Nextflow handles orchestration)
 
 ## [1.0.0] - 2024-01-01
 
 ### Added
-- Initial release of macacaMRIprep
+- Initial release of brainana (formerly nhp_mri_prep)
 - BIDS dataset processing support
 - Anatomical and functional preprocessing workflows
 - Template registration capabilities

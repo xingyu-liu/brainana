@@ -1,0 +1,399 @@
+@startuml brainana_Workflow
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 10
+skinparam ArrowColor #666666
+skinparam ActivityBorderColor #666666
+
+title brainana Neuroimaging Preprocessing Pipeline\n(Corrected: T1w and T2w Parallel Processing)
+
+|#E3F2FD| Anatomical Preprocessing |
+start
+
+fork
+  |#E3F2FD| T1w Branch |
+  :Input: T1w files (BIDS);
+  
+  if (Multiple T1w files?) then (yes)
+    :ANAT_SYNTHESIS\n(Combine multiple T1w);
+  else (no)
+    :Single T1w (pass-through);
+  endif
+  
+  if (Reorient enabled?) then (yes)
+    :ANAT_REORIENT\n(Reorient to standard);
+  else (no)
+    :Skip reorient;
+  endif
+  note right
+    **T1w after reorient**
+    Used for T2w→T1w registration
+  end note
+
+fork again
+  |#D1C4E9| T2w Branch (Optional) |
+  if (T2w available?) then (yes)
+    :Input: T2w files (BIDS);
+    
+    if (Multiple T2w files?) then (yes)
+      :ANAT_SYNTHESIS_T2W\n(Combine multiple T2w);
+    else (no)
+      :Single T2w (pass-through);
+    endif
+    
+    if (Reorient enabled?) then (yes)
+      :ANAT_REORIENT_T2W\n(Reorient to standard);
+    else (no)
+      :Skip reorient;
+    endif
+    note right
+      **T2w after reorient**
+      Ready for registration to T1w
+    end note
+  else (no)
+    :No T2w available;
+    detach
+  endif
+end fork
+
+|#E3F2FD| T1w Processing (continued) |
+
+if (Conform enabled?) then (yes)
+  :ANAT_CONFORM\n(Resample to template space);
+  note right
+    Generates forward/inverse transforms
+  end note
+else (no)
+  :ANAT_CONFORM_PASSTHROUGH\n(Identity transforms);
+endif
+
+if (Skullstripping enabled?) then (yes)
+  :ANAT_SKULLSTRIPPING (GPU)\n(SynthStrip);
+  note right
+    Generates:
+    - Full head (unchanged)
+    - Brain-only version
+    - Brain mask
+    - Atlas segmentation
+    - Hemisphere mask
+  end note
+else (no)
+  :Dummy mask/seg;
+endif
+
+if (Bias correction enabled?) then (yes)
+  if (Real mask available?) then (yes)
+    :ANAT_BIAS_CORRECTION\n(N4 with brain mask);
+  else (no)
+    :ANAT_BIAS_CORRECTION_PASSTHROUGH;
+  endif
+else (no)
+  :ANAT_BIAS_CORRECTION_PASSTHROUGH;
+endif
+
+:ANAT_PUBLISH_PHASE1;
+note right
+  Published:
+  - *_desc-preproc_T1w.nii.gz
+  - *_desc-preproc_brain.nii.gz
+end note
+
+if (Registration enabled?) then (yes)
+  :ANAT_REGISTRATION (CPU/GPU)\n(Register brain to template,\napply to full head);
+  note right
+    Optional GPU via FireANTs
+  end note
+  
+  if (Skullstripping enabled?) then (yes)
+    :ANAT_APPLY_TRANSFORM_MASK\n(Transform mask to template);
+  endif
+  
+  :ANAT_BACKPROJECT_ATLASES\n(Transform atlases to native);
+  note right
+    Published to: sub-XX/anat/atlas/
+  end note
+else (no)
+  :ANAT_REGISTRATION_PASSTHROUGH\n(Identity transforms);
+endif
+
+|#D1C4E9| T2w Processing (continued) |
+
+if (T2w available?) then (yes)
+  :Anatomical Selection\n(Find matching T1w);
+  note right
+    Uses **reoriented T1w**
+    (BEFORE conform/bias/registration)
+    
+    Priority:
+    1. Subject-level T1w
+    2. Same session T1w
+    3. Cross-session T1w
+    4. None → stop
+  end note
+  
+  if (T1w found?) then (yes)
+    :ANAT_T2W_TO_T1W_REGISTRATION\n(Register to T1w native space);
+    note right
+      from-T2w_to-T1wNative
+      from-T1wNative_to-T2w
+    end note
+    
+    if (Conform enabled?) then (yes)
+      :ANAT_APPLY_CONFORM\n(Apply T1w conform transform);
+      note right
+        T2w → space-T1w
+      end note
+    endif
+    
+    if (Bias correction enabled?) then (yes)
+      if (Real mask from T1w?) then (yes)
+        :ANAT_BIAS_CORRECTION_T2W\n(N4 with T1w mask);
+      else (no)
+        :ANAT_BIAS_CORRECTION_PASSTHROUGH_T2W;
+      endif
+    endif
+    
+    :ANAT_PUBLISH_T2W;
+    note right
+      Published:
+      *_space-T1w_desc-preproc_T2w.nii.gz
+    end note
+    
+    if (Registration enabled?) then (yes)
+      :ANAT_APPLY_TRANSFORMATION\n(Apply T1w→template transform);
+      note right
+        T2w → space-{template}
+        
+        Published:
+        *_space-{template}_desc-preproc_T2w.nii.gz
+      end note
+    endif
+    
+    if (T1wT2wCombined enabled\nAND same session\nAND segmentation available?) then (yes)
+      :ANAT_T1WT2W_COMBINED\n(T1w/T2w ratio);
+      note right
+        Uses bias-corrected T1w + T2w
+        Creates T1wT2wCombined
+        
+        Merged into unified channel:
+        anat_after_t1wt2wcombined
+      end note
+    endif
+  else (no)
+    :Stop T2w\n(no matching T1w);
+    detach
+  endif
+else (no)
+  note right
+    No T2w data
+    anat_after_t1wt2wcombined
+    = bias-corrected T1w
+  end note
+endif
+
+|#E1BEE7| Surface Reconstruction |
+
+if (Surface recon enabled\nAND skullstripping enabled?) then (yes)
+  note right
+    **Inputs:**
+    - anat_for_surf_recon (unified channel):
+      • T1wT2wCombined (if created)
+      • OR bias-corrected T1w (fallback)
+    - Segmentation (from skullstripping)
+    - Mask (from skullstripping)
+    
+    Starts when all inputs ready
+  end note
+  
+  :ANAT_SURFACE_RECONSTRUCTION\n(FastSurfer);
+  note right
+    ErrorStrategy: ignore
+    
+    Published to:
+    fastsurfer/sub-XX[_ses-XX]/
+    
+    Runs in parallel to functional
+  end note
+else (no)
+  :Skip surface recon;
+endif
+
+|#FFF8E1| Functional Preprocessing |
+
+if (anat_only mode?) then (yes)
+  :Skip functional;
+  stop
+endif
+
+:Input: BOLD time series;
+
+if (Slice timing enabled?) then (yes)
+  :FUNC_SLICE_TIMING\n(AFNI 3dTshift);
+endif
+
+if (Reorient enabled?) then (yes)
+  :FUNC_REORIENT;
+endif
+
+if (Motion correction enabled?) then (yes)
+  :FUNC_MOTION_CORRECTION\n(AFNI 3dvolreg);
+  note right
+    Generates:
+    - Motion-corrected BOLD
+    - Temporal mean
+    - Motion params (TSV)
+  end note
+else (no)
+  :FUNC_GENERATE_TMEAN;
+endif
+
+if (Despike enabled?) then (yes)
+  :FUNC_DESPIKE\n(AFNI 3dDespike);
+endif
+
+if (Within-session coreg enabled\nAND multiple runs?) then (yes)
+  :FUNC_WITHIN_SES_COREG (CPU/GPU)\n(Register to reference run);
+  note right
+    Multi-run: coreg + average
+    Single-run: pass-through
+    
+    Optional GPU via FireANTs
+  end note
+  
+  :FUNC_AVERAGE_TMEAN\n(Session-level boldref);
+  note right
+    Multi-run: averaged tmean
+    Single-run: original tmean
+  end note
+endif
+
+:Anatomical Selection\n(Find matching T1w brain);
+note right
+  Priority:
+  1. Same session
+  2. Different session
+  3. Dummy (no anatomical)
+end note
+
+if (Bias correction enabled?) then (yes)
+  :FUNC_BIAS_CORRECTION\n(N4 on tmean);
+endif
+
+if (Conform enabled?) then (yes)
+  :FUNC_COMPUTE_CONFORM\n(Compute transform to T1w/template);
+  note right
+    Session-level OR per-run
+    (depends on coreg mode)
+  end note
+endif
+
+if (Skullstripping enabled?) then (yes)
+  :FUNC_COMPUTE_BRAIN_MASK (GPU)\n(SynthStrip);
+  note right
+    Session-level OR per-run
+  end note
+endif
+
+if (Registration enabled?) then (yes)
+  :FUNC_COMPUTE_REGISTRATION (CPU/GPU)\n(Register to T1w brain or template);
+  note right
+    Session-level OR per-run
+    
+    Target: T1w brain → template
+    Optional GPU via FireANTs
+  end note
+endif
+
+:FUNC_APPLY_CONFORM\n(Apply to BOLD);
+note right
+  Per-run application
+  
+  Phase 1 outputs:
+  - *_desc-preproc_bold.nii.gz
+  - *_desc-preproc_boldref.nii.gz
+end note
+
+if (Registration enabled?) then (yes)
+  fork
+    :FUNC_APPLY_TRANSFORMS (BOLD)\n(Apply registration);
+    note right
+      Per-run application
+      
+      Sequential: func→T1w→template
+      OR Direct: func→template
+      
+      Outputs:
+      - space-T1w_desc-preproc_bold
+      - space-{template}_desc-preproc_bold
+    end note
+  fork again
+    if (Skullstripping enabled?) then (yes)
+      :FUNC_APPLY_TRANSFORMS (MASK)\n(Apply to mask);
+      note right
+        NearestNeighbor interpolation
+        Expands session-level mask
+        to all runs if needed
+      end note
+    endif
+  end fork
+endif
+
+|#E8F5E9| QC Report Generation |
+
+:Collect all QC snapshots;
+note right
+  **Anatomical QC:**
+  - Conform, skullstripping
+  - Atlas segmentation
+  - Bias correction
+  - Registration
+  - T2w→T1w registration
+  - T2w template space
+  - T1wT2wCombined
+  - Surface recon (tissue seg, surfaces)
+  
+  **Functional QC:**
+  - Motion correction
+  - Conform, skullstripping
+  - Within-session coreg
+  - Registration (intermediate + final)
+end note
+
+:Wait for completion;
+note right
+  anat_qc_channels.last()
+  + func_qc_channels.last()
+  + surf_qc_channels
+end note
+
+:QC_GENERATE_REPORT\n(Per-subject HTML);
+note right
+  Output: sub-XX/figures/qc_report.html
+end note
+
+stop
+
+legend right
+  |= Symbol |= Meaning |
+  | (GPU) | GPU-accelerated |
+  | (CPU/GPU) | Optional GPU |
+  
+  |= Key Insight |
+  | **T1w and T2w process in PARALLEL** |
+  | **then T2w registers to reoriented T1w** |
+  | **(BEFORE T1w conform/bias/registration)** |
+  
+  |= Processing Modes |
+  | Session-level | Multi-run with coreg enabled |
+  | Per-run | Coreg disabled or single-run |
+  
+  |= Features |
+  | • Per-step parallelization |
+  | • Global GPU token pool |
+  | • Configurable steps |
+  | • BIDS-compliant naming |
+  | • Symlinks until publishing |
+endlegend
+
+@enduml
