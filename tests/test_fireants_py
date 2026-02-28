@@ -432,7 +432,8 @@ def fireants_registration(
                 optimizer=params.optimizer_affine,
                 optimizer_lr=params.lr_affine,
                 cc_kernel_size=params.cc_kernel_size,
-                init_moment=moments.get_affine_init().detach()[:, :3, :3],
+                **moments.get_rigid_init_dict(),
+                # init_moment=moments.get_affine_init().detach()[:, :3, :3],
                 # init_translation='cof',
             )
         else:  # affine
@@ -444,6 +445,7 @@ def fireants_registration(
                 optimizer=params.optimizer_affine,
                 optimizer_lr=params.lr_affine,
                 cc_kernel_size=params.cc_kernel_size,
+                **moments.get_affine_init_dict(),
             )
         
         # Run registration

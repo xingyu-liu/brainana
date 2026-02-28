@@ -1,7 +1,7 @@
 Configuration
 =============
 
-You can run brainana with built-in defaults and common options (e.g. ``--anat_only``, ``--output_space``) passed on the command line. For full control over pipeline options (anatomical and functional steps, registration, template, etc.), use a custom YAML config file and pass it with ``--config /path/to/config.yaml``. See :doc:`command_line` for how to pass the config when using Docker or ``run_brainana.sh``.
+You can run brainana with built-in defaults and common options (e.g. ``--anat_only``, ``--output_space``) passed on the command line. For full control over pipeline options (anatomical and functional steps, registration, template, etc.), use a custom YAML config file and pass it with ``--config /path/to/config.yaml``. See :doc:`usage_local` (:ref:`command-line-reference`) for how to pass the config when using Docker or ``run_brainana.sh``.
 
 Generate your own config
 ------------------------

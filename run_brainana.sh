@@ -30,11 +30,11 @@ fi
 
 # Launch directory — where Nextflow creates .nextflow/ (history + cache for resume).
 #   Docker: NXF_LAUNCH_DIR is set by entrypoint.sh (persistent work dir).
-#   Local:  Derived from --work_dir arg if present, else SCRIPT_DIR.
+#   Local:  Derived from --work_dir or --work-dir arg if present, else SCRIPT_DIR.
 if [ -z "$NXF_LAUNCH_DIR" ]; then
     _prev=""
     for _arg in "$@"; do
-        if [ "$_prev" = "--work_dir" ]; then
+        if [ "$_prev" = "--work_dir" ] || [ "$_prev" = "--work-dir" ]; then
             NXF_LAUNCH_DIR="$_arg"
             break
         fi
@@ -76,22 +76,21 @@ extract_param() {
     return 1  # Not found
 }
 
-# Function to check if --config_file is provided in arguments
-check_config_file() {
-    extract_param "config_file" "$@" > /dev/null
-}
+# Default config when --config_file / --config not provided (same as Nextflow default)
+DEFAULT_CONFIG="$SCRIPT_DIR/src/nhp_mri_prep/config/defaults.yaml"
 
 # Function to run BIDS discovery before Nextflow
 run_bids_discovery() {
     local args=("$@")
     
-    # Extract required parameters
+    # Extract required parameters (config_file has default)
     local bids_dir=$(extract_param "bids_dir" "${args[@]}")
     local output_dir=$(extract_param "output_dir" "${args[@]}")
     local config_file=$(extract_param "config_file" "${args[@]}")
+    [ -z "$config_file" ] && config_file="$DEFAULT_CONFIG"
     
-    # Check if all required parameters are present
-    if [ -z "$bids_dir" ] || [ -z "$output_dir" ] || [ -z "$config_file" ]; then
+    # Check if required path parameters are present
+    if [ -z "$bids_dir" ] || [ -z "$output_dir" ]; then
         return 0  # Skip discovery if params not available (Nextflow will error later)
     fi
     
@@ -181,24 +180,61 @@ elif [ "$1" = "run" ]; then
     done
     remaining_args=("${filtered_args[@]}")
     
-    # Check if --config_file is provided (required for main.nf)
+    # For main.nf: normalize config (--config and --config_file are aliases; default to DEFAULT_CONFIG) and work-dir (--work-dir → --work_dir)
     if [[ "$workflow_file" == "main.nf" ]] || [[ "$workflow_file" == */main.nf ]]; then
-        if ! check_config_file "${remaining_args[@]}"; then
-            echo "Error: --config_file is required when running main.nf" >&2
-            echo "" >&2
-            echo "Usage: $0 run main.nf --config_file /path/to/config.yaml [other options...]" >&2
-            echo "" >&2
-            echo "Example:" >&2
-            echo "  $0 run main.nf --config_file /path/to/config.yaml --bids_dir /data --output_dir /output --output_space \"NMT2Sym:res-1\"" >&2
-            exit 1
-        fi
+        effective_config=$(extract_param "config_file" "${remaining_args[@]}")
+        [ -z "$effective_config" ] && effective_config=$(extract_param "config" "${remaining_args[@]}")
+        [ -z "$effective_config" ] && effective_config="$DEFAULT_CONFIG"
         
-        # Run BIDS discovery before Nextflow
-        run_bids_discovery "${remaining_args[@]}"
+        # Build normalized args: drop --config/--config_file and their values; map --work-dir → --work_dir; append --config_file
+        normalized_args=()
+        i=0
+        while [ $i -lt ${#remaining_args[@]} ]; do
+            arg="${remaining_args[$i]}"
+            if [[ "$arg" == --config=* ]]; then
+                ((i++))
+                continue
+            fi
+            if [[ "$arg" == --config ]]; then
+                ((i++))
+                [ $i -lt ${#remaining_args[@]} ] && ((i++))
+                continue
+            fi
+            if [[ "$arg" == --config_file=* ]]; then
+                ((i++))
+                continue
+            fi
+            if [[ "$arg" == --config_file ]]; then
+                ((i++))
+                [ $i -lt ${#remaining_args[@]} ] && ((i++))
+                continue
+            fi
+            if [[ "$arg" == --work-dir ]]; then
+                normalized_args+=("--work_dir")
+                ((i++))
+                [ $i -lt ${#remaining_args[@]} ] && normalized_args+=("${remaining_args[$i]}") && ((i++))
+                continue
+            fi
+            if [[ "$arg" == --work-dir=* ]]; then
+                normalized_args+=("--work_dir=${arg#--work-dir=}")
+                ((i++))
+                continue
+            fi
+            normalized_args+=("$arg")
+            ((i++))
+        done
+        normalized_args+=("--config_file" "$effective_config")
+        
+        # Run BIDS discovery with normalized args (always has --config_file)
+        run_bids_discovery "${normalized_args[@]}"
     fi
     
-    # Execute Nextflow
-    exec "$NEXTFLOW" "${CMD_ARGS[@]}" run "$workflow_file" "${remaining_args[@]}"
+    # Use normalized_args for Nextflow if we built them (main.nf), else remaining_args
+    if [ -n "${normalized_args+x}" ]; then
+        exec "$NEXTFLOW" "${CMD_ARGS[@]}" run "$workflow_file" "${normalized_args[@]}"
+    else
+        exec "$NEXTFLOW" "${CMD_ARGS[@]}" run "$workflow_file" "${remaining_args[@]}"
+    fi
 else
     # Other Nextflow commands (info, clean, etc.) - pass through as-is
     # But still run from RUN_DIR to keep project clean

@@ -8,6 +8,7 @@ including embedded snapshots, processing parameters, and quality metrics.
 import os
 import json
 import logging
+import html
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Union, List, Optional, Tuple
@@ -56,8 +57,8 @@ SNAPSHOT_ORDER = [
     'bias_correction_comparison', 
     'anat2template_registration_overlay', 
     'T2w2T1w_registration_overlay', 
-    'T2w2template_registration_overlay',
     't1wt2w_combined_comparison',
+    'T2w2template_registration_overlay',
     'surf_recon_tissue_seg_overlay', 'cortical_surf_and_measures_overlay',
     'func_coreg_overlay',  # Within-session coregistration (appears before run-specific snapshots)
     'func2anat_registration_overlay',  # Functional to anatomical (intermediate step in sequential transforms)
@@ -66,6 +67,31 @@ SNAPSHOT_ORDER = [
 ]
 
 SNAPSHOT_ORDER_INDEX = {key: index for index, key in enumerate(SNAPSHOT_ORDER)}
+
+# Boilerplate text for the Methods section (fMRIPrep-style). Placeholders: VERSION, N_T1W, N_T2W, N_FUNC. Package is always referred to as brainana.
+# Full reference: docs_temp/paper/methods_reference.md and docs_temp/paper/boilerplate_methods.txt
+BOILERPLATE_METHODS_TEMPLATE = """Results included in this manuscript come from preprocessing performed using brainana {VERSION}, a BIDS-based, Nextflow-orchestrated pipeline for non-human primate (macaque) anatomical and functional MRI.
+
+Anatomical data preprocessing
+A total of {N_T1W} T1-weighted (T1w) and {N_T2W} T2-weighted (T2w) images were found within the input BIDS dataset (or used after synthesis when multiple runs/sessions were combined). When multiple T1w or T2w images existed per session or subject, a single synthesized anatomical was created by rigid coregistration to the first image using ANTs (Avants et al. 2008; RRID:SCR_004757) and averaging in reference space. Anatomical images were reoriented to the target orientation using AFNI 3dresample (Cox 1996; RRID:SCR_005927). The T1w (and optionally T2w) was then conformed to template space: initial skullstripping was performed using a UNet-based model (nhp_skullstrip_nn, fine-tuned from NHP-BrainExtraction/DeepBet; Wang et al. 2021) or FastSurfer-style segmentation (fastsurfer_nn; Henschel et al. 2020), and rigid registration to the template was performed with FLIRT (FSL; Jenkinson et al. 2002; RRID:SCR_002823). Brain tissue segmentation (and brain mask) was produced using FastSurfer-style CNN segmentation (fastsurfer_nn, fine-tuned from FastSurfer FastSurferCNN) trained on macaque atlases (CHARM/SARM level 2). The T1w was corrected for intensity non-uniformity (INU) with N4BiasFieldCorrection (Tustison et al. 2010), distributed with ANTs, using the brain mask to restrict the correction. Volume-based spatial normalization to the template (e.g. NMT2Sym) was performed through multi-stage registration with antsRegistration (ANTs): translation, rigid, affine, and optionally SyN (Klein et al. 2009). When available, FireANTs (GPU) was used for the SyN stage. The T2w was rigidly coregistered to the T1w using ANTs and resampled into T1w space. Optional cortical surface reconstruction was performed using the fastsurfer_surfrecon pipeline (modified from FastSurfer recon_surf) with FreeSurfer (Dale et al. 1999; Henschel et al. 2020; RRID:SCR_001847).
+
+Functional data preprocessing
+For each of the {N_FUNC} BOLD run(s) found per subject (across all tasks and sessions), the following preprocessing was performed. Slice timing correction was applied using AFNI 3dTshift (Cox 1996), with the slice acquisition pattern derived from BIDS SliceTiming and SliceEncodingDirection metadata. Functional images were reoriented using AFNI 3dresample. Head motion correction was performed with mcflirt (FSL; Jenkinson et al. 2002), using a reference volume (middle timepoint, specified timepoint, or temporal mean). Motion parameters (rotation and translation) were saved for confound regression or QC. Despiking was applied using AFNI 3dDespike to reduce the impact of extreme timepoints. When multiple BOLD runs existed within a session, within-session coregistration was performed using ANTs or FLIRT rigid registration of each run's mean image to a reference run. The temporal mean of the (motion-corrected and optionally despiked) BOLD was bias-corrected with N4BiasFieldCorrection (ANTs). The mean functional was conformed to template space (FLIRT rigid to template after skull stripping with nhp_skullstrip_nn) and a brain mask was computed on the mean functional using nhp_skullstrip_nn (functional model, fine-tuned from NHP-BrainExtraction/DeepBet). The mean functional was registered to the preprocessed anatomical (or template) using ANTs (rigid, affine, or SyN as configured; optionally FireANTs for SyN). The composite transform was applied to the full 4D BOLD and brain mask using antsApplyTransforms (ANTs), with BSpline interpolation for the BOLD series. Runs with fewer than 15 volumes skipped motion correction and despiking; pass-through outputs were generated.
+
+Many internal operations use Python (nibabel, numpy, scipy) and the tools cited above. For a detailed reference of methods per step and full citations, see the pipeline documentation (methods_reference.md in the repository).
+
+Copyright and reuse
+This boilerplate text was automatically generated by brainana with the intention that users may copy it into their manuscripts and reports. Adapt as needed for your specific run (e.g. template name, number of runs). Pipeline source code and documentation are available at the project repository.
+
+References
+Avants, B. B., Epstein, C. L., Grossman, M., & Gee, J. C. (2008). Symmetric diffeomorphic image registration with cross-correlation: Evaluating automated labeling of elderly and neurodegenerative brain. Medical Image Analysis, 12(1), 26–41. https://doi.org/10.1016/j.media.2007.06.004
+Cox, R. W. (1996). AFNI: software for analysis and visualization of functional magnetic resonance neuroimages. Computers and Biomedical Research, 29(3), 162–173. https://doi.org/10.1006/cbmr.1996.0014
+Dale, A. M., Fischl, B., & Sereno, M. I. (1999). Cortical surface-based analysis: I. Segmentation and surface reconstruction. NeuroImage, 9(2), 179–194. https://doi.org/10.1006/nimg.1998.0395
+Henschel, L., Conjeti, S., Estrada, S., Diers, K., Fischl, B., & Reuter, M. (2020). FastSurfer: A fast and accurate deep learning based neuroimaging pipeline. NeuroImage, 219, 117012. https://doi.org/10.1016/j.neuroimage.2020.117012
+Jenkinson, M., Bannister, P., Brady, M., & Smith, S. (2002). Improved optimization for the robust and accurate linear registration and motion correction of brain images. NeuroImage, 17(2), 825–841. https://doi.org/10.1006/nimg.2002.1132
+Klein, A., Andersson, J., Ardekani, B. A., et al. (2009). Evaluation of 14 nonlinear deformation algorithms applied to human brain MRI registration. NeuroImage, 46(3), 786–802. https://doi.org/10.1016/j.neuroimage.2008.12.037
+Tustison, N. J., Avants, B. B., Cook, P. A., Zheng, Y., Egan, A., Yushkevich, P. A., & Gee, J. C. (2010). N4ITK: Improved N3 bias correction. IEEE Transactions on Medical Imaging, 29(6), 1310–1320. https://doi.org/10.1109/TMI.2010.2046908
+Wang, X., Li, X., & Xu, T. (2021). U-net model for brain extraction: Trained on humans for transfer to non-human primates. NeuroImage, 235, 118001. https://doi.org/10.1016/j.neuroimage.2021.118001"""
 
 
 class BidsEntityProcessor:
@@ -370,12 +396,13 @@ class HtmlGenerator:
         for modality, title in [("anatomical", "Structural"), ("functional", "Functional"),
                                ("field_mapping", "B₀ field mapping")]:
             if organized_snapshots[modality]:
-                # Use same grouping as content so nav IDs match header IDs (incl. T1w/T2w for anatomical)
                 section_prefix = modality
-                groups = HtmlGenerator._group_snapshots_by_entities(organized_snapshots[modality])
-                if len(groups) > 1:  # Create dropdown for multiple items
+                groups = HtmlGenerator._group_snapshots_by_entities(organized_snapshots[modality], section_prefix)
+                # Anatomical returns two-level dict (ses/run -> modality -> list); nav uses top-level keys
+                group_keys = list(groups.keys())
+                if len(group_keys) > 1:
                     dropdown_items = []
-                    for group_key in groups:
+                    for group_key in group_keys:
                         nav_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(group_key)}"
                         dropdown_items.append(f'<a class="dropdown-item" href="#{nav_id}">{group_key}</a>')
                     dropdown_content = '\n'.join(dropdown_items)
@@ -385,7 +412,7 @@ class HtmlGenerator:
 {dropdown_content}
 </div>
 </li>''')
-                else:  # Single item, no dropdown needed
+                else:
                     nav_items.append(f'<li class="nav-item"><a class="nav-link" href="#{modality.title()}">{title}</a></li>')
         
         nav_items.extend([
@@ -425,19 +452,13 @@ class HtmlGenerator:
             t2w_count = anat_counts["t2w"]
             func_count = HtmlGenerator._count_unique_images(organized["functional"])
 
-        # Build structural images description
-        structural_desc = []
-        if t1w_count and t1w_count != "N/A" and t1w_count > 0:
-            structural_desc.append(f"{t1w_count} T1w")
-        if t2w_count and t2w_count != "N/A" and t2w_count > 0:
-            structural_desc.append(f"{t2w_count} T2w")
-
-        if structural_desc:
-            structural_text = ", ".join(structural_desc)
-        elif t1w_count == "N/A":
+        # Build structural images description: always show both T1w and T2w
+        if t1w_count == "N/A" or t2w_count == "N/A":
             structural_text = "N/A"
         else:
-            structural_text = "0"
+            t1w = int(t1w_count) if t1w_count is not None else 0
+            t2w = int(t2w_count) if t2w_count is not None else 0
+            structural_text = f"{t1w} T1w, {t2w} T2w"
 
         # Standard output space: template.output_space (e.g. "NMT2Sym:res-05") -> display template name
         output_space_raw = (
@@ -453,7 +474,7 @@ class HtmlGenerator:
 
         content = f'''<div class="boiler-html">
 <p><strong>Configuration:</strong> For detailed processing parameters and configuration settings,
-please refer to the nhp_mri_prep configuration files in your preprocessing directory.</p>
+please refer to the brainana configuration files in your preprocessing directory.</p>
 </div>
 <ul class="elem-desc">
 <li>Subject ID: {subject_id}</li>
@@ -482,14 +503,10 @@ please refer to the nhp_mri_prep configuration files in your preprocessing direc
         """Render snapshots with grouping."""
         html_parts = []
         
-        # Group snapshots by BIDS entities
-        snapshot_groups = HtmlGenerator._group_snapshots_by_entities(data)
+        # Group snapshots by BIDS entities (two-level for anatomical: ses/run then T1w/T2w)
+        snapshot_groups = HtmlGenerator._group_snapshots_by_entities(data, section_prefix)
         
-        for group_key, snapshots in snapshot_groups.items():
-            if group_key:
-                header_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(group_key)}"
-                html_parts.append(f'<h2 class="sub-report-group" id="{header_id}">{group_key}</h2>')
-            
+        def render_snapshot_blocks(snapshots: List[Dict[str, Any]]) -> None:
             for snapshot_data in snapshots:
                 snapshot_id = f"{section_prefix}-{snapshot_data['filename'].replace('.', '-')}"
                 title = snapshot_data.get('description', snapshot_data['filename'])
@@ -504,12 +521,32 @@ please refer to the nhp_mri_prep configuration files in your preprocessing direc
 <div class="elem-filename">
     Get figure file: <a href="{snapshot_data["path"]}" target="_blank">{snapshot_data["filename"]}</a>
 </div>''')
+
+        # Two-level structure (anatomical): ses/run -> T1w/T2w -> snapshots
+        first_val = next(iter(snapshot_groups.values()), None) if snapshot_groups else None
+        two_level = isinstance(first_val, dict)
+        if two_level:
+            for group_key, modality_dict in snapshot_groups.items():
+                if group_key:
+                    header_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(group_key)}"
+                    html_parts.append(f'<h2 class="sub-report-group" id="{header_id}">{group_key}</h2>')
+                for modality in ('T1w', 'T2w'):
+                    if modality in modality_dict:
+                        html_parts.append(f'<h3 class="sub-report-group">{modality}</h3>')
+                        render_snapshot_blocks(modality_dict[modality])
+        else:
+            for group_key, snapshots in snapshot_groups.items():
+                if group_key:
+                    header_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(group_key)}"
+                    html_parts.append(f'<h2 class="sub-report-group" id="{header_id}">{group_key}</h2>')
+                render_snapshot_blocks(snapshots)
         
         return '\n'.join(html_parts)
     
     @staticmethod
-    def _group_snapshots_by_entities(data: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
-        """Group snapshots by BIDS entities."""
+    def _group_snapshots_by_entities(data: Dict[str, Any], section_prefix: str = "") -> Dict[str, Any]:
+        """Group snapshots by BIDS entities. For anatomical (section_prefix=='anatomical'),
+        returns two-level Dict[ses/run_key, Dict[modality, list]]; otherwise flat Dict[group_key, list]."""
         all_snapshots = []
         
         def collect_snapshots(level_data: Dict[str, Any]) -> None:
@@ -531,84 +568,95 @@ please refer to the nhp_mri_prep configuration files in your preprocessing direc
         
         collect_snapshots(data)
         
-        # Group by entity combinations, with special handling for T1w/T2w separation
+        def snapshot_sort_key(snapshot: Dict[str, Any]):
+            base_order = SNAPSHOT_ORDER_INDEX.get(snapshot.get('snapshot_type', ''), 999)
+            filename = snapshot.get('filename', '')
+            modality_order = 0
+            if filename.endswith('_T1w.png') or (snapshot.get('entities', {}).get('suffix') == 'T1w'):
+                modality_order = 0
+            elif filename.endswith('_T2w.png') or (snapshot.get('entities', {}).get('suffix') == 'T2w'):
+                modality_order = 1
+            return (base_order, modality_order, filename)
+        
+        # Anatomical: two-level grouping (ses/run -> T1w/T2w -> snapshots)
+        if section_prefix == "anatomical":
+            groups = {}
+            for snapshot in all_snapshots:
+                entities = snapshot['entities']
+                entities_no_suffix = {k: v for k, v in entities.items() if k not in ['sub', 'desc', 'space', 'suffix']}
+                base_group_key = BidsEntityProcessor.create_display_text(entities_no_suffix) or 'sub-level'
+                filename = snapshot.get('filename', '')
+                suffix = entities.get('suffix', '')
+                # T1wT2wCombined comparison is shown under T2w (between T2w2T1w and T2w2template)
+                if snapshot.get('snapshot_type') == 't1wt2w_combined_comparison':
+                    modality = 'T2w'
+                elif suffix == 'T1w' or (suffix != 'T2w' and filename.endswith('_T1w.png')):
+                    modality = 'T1w'
+                elif suffix == 'T2w' or filename.endswith('_T2w.png'):
+                    modality = 'T2w'
+                else:
+                    modality = 'T1w'
+                if base_group_key not in groups:
+                    groups[base_group_key] = {}
+                if modality not in groups[base_group_key]:
+                    groups[base_group_key][modality] = []
+                groups[base_group_key][modality].append(snapshot)
+            for base_key in groups:
+                for mod in groups[base_key]:
+                    groups[base_key][mod].sort(key=snapshot_sort_key)
+            # Sort top-level by session
+            def anat_group_sort(item):
+                group_name, modality_dict = item
+                session_value = ''
+                for snap_list in modality_dict.values():
+                    if snap_list:
+                        session_value = snap_list[0].get('entities', {}).get('ses', '')
+                        break
+                return (session_value or '', group_name)
+            return dict(sorted(groups.items(), key=anat_group_sort))
+        
+        # Flat grouping for functional / field_mapping
         groups = {}
         for snapshot in all_snapshots:
             entities = {k: v for k, v in snapshot['entities'].items() if k not in ['sub', 'desc', 'space']}
-            base_group_key = BidsEntityProcessor.create_display_text(entities) or 'ungrouped'
-            
-            # For anatomical snapshots, separate T1w and T2w into different groups
+            base_group_key = BidsEntityProcessor.create_display_text(entities) or 'sub-level'
             filename = snapshot.get('filename', '')
-            # Use entities to determine modality - more reliable than filename parsing
-            entities = snapshot.get('entities', {})
-            if entities.get('suffix') == 'T1w' or (entities.get('suffix') != 'T2w' and filename.endswith('_T1w.png')):
-                # Don't show "ungrouped" prefix when there's no prefix
-                if base_group_key == 'ungrouped':
-                    group_key = "(T1w)"
-                else:
-                    group_key = f"{base_group_key} (T1w)"
-            elif entities.get('suffix') == 'T2w' or filename.endswith('_T2w.png'):
-                # Don't show "ungrouped" prefix when there's no prefix
-                if base_group_key == 'ungrouped':
-                    group_key = "(T2w)"
-                else:
-                    group_key = f"{base_group_key} (T2w)"
+            ent = snapshot.get('entities', {})
+            # T1wT2wCombined comparison is shown under T2w
+            if snapshot.get('snapshot_type') == 't1wt2w_combined_comparison':
+                group_key = "T2w" if base_group_key == 'sub-level' else f"{base_group_key} T2w"
+            elif ent.get('suffix') == 'T1w' or (ent.get('suffix') != 'T2w' and filename.endswith('_T1w.png')):
+                group_key = "T1w" if base_group_key == 'sub-level' else f"{base_group_key} T1w"
+            elif ent.get('suffix') == 'T2w' or filename.endswith('_T2w.png'):
+                group_key = "T2w" if base_group_key == 'sub-level' else f"{base_group_key} T2w"
             else:
                 group_key = base_group_key
-            
             if group_key not in groups:
                 groups[group_key] = []
             groups[group_key].append(snapshot)
         
-        # Sort snapshots within groups
         for group_key in groups:
-            def sort_key(snapshot):
-                base_order = SNAPSHOT_ORDER_INDEX.get(snapshot.get('snapshot_type', ''), 999)
-                filename = snapshot.get('filename', '')
-                
-                # For anatomical snapshots, ensure T1w comes before T2w
-                # Also ensure that within the same snapshot type, T1w comes before T2w
-                modality_order = 0
-                # Use more specific logic - check file ending for modality
-                if filename.endswith('_T1w.png') or (snapshot.get('entities', {}).get('suffix') == 'T1w'):
-                    modality_order = 0  # T1w first
-                elif filename.endswith('_T2w.png') or (snapshot.get('entities', {}).get('suffix') == 'T2w'):
-                    modality_order = 1  # T2w second
-                
-                return (base_order, modality_order, filename)
-            
-            groups[group_key].sort(key=sort_key)
+            groups[group_key].sort(key=snapshot_sort_key)
         
-        # Sort groups so that:
-        # 1. T1w comes before T2w (for anatomical)
-        # 2. Within functional, session-only groups (func_coreg) come before session+task+run groups
-        # 3. Within the same session, func_coreg appears first
         def group_sort_key(group_item):
             group_name, snapshots = group_item
-            # Check if this is a func_coreg group (has func_coreg snapshots without task/run)
             is_func_coreg = any(
-                s.get('snapshot_type') == 'func_coreg_overlay' 
+                s.get('snapshot_type') == 'func_coreg_overlay'
                 and 'task' not in s.get('entities', {})
                 and 'run' not in s.get('entities', {})
                 for s in snapshots
             )
-            
-            # Extract session from first snapshot's entities for consistent session ordering
             session_value = None
             if snapshots:
-                first_snapshot = snapshots[0]
-                session_value = first_snapshot.get('entities', {}).get('ses', '')
-            
-            # For anatomical snapshots, ensure T1w comes before T2w
-            if '(T1w)' in group_name:
-                return (0, 0, session_value or '', group_name)  # (anatomical, T1w, session, name)
-            elif '(T2w)' in group_name:
-                return (0, 1, session_value or '', group_name)  # (anatomical, T2w, session, name)
-            # For functional snapshots, func_coreg (session-only) comes first within each session
+                session_value = snapshots[0].get('entities', {}).get('ses', '')
+            if group_name == 'T1w' or group_name.endswith(' T1w'):
+                return (0, 0, session_value or '', group_name)
+            elif group_name == 'T2w' or group_name.endswith(' T2w'):
+                return (0, 1, session_value or '', group_name)
             elif is_func_coreg:
-                return (1, 0, session_value or '', group_name)  # (functional, func_coreg first, session, name)
+                return (1, 0, session_value or '', group_name)
             else:
-                return (1, 1, session_value or '', group_name)  # (functional, run-specific, session, name)
+                return (1, 1, session_value or '', group_name)
         
         return dict(sorted(groups.items(), key=group_sort_key))
     
@@ -652,11 +700,13 @@ please refer to the nhp_mri_prep configuration files in your preprocessing direc
                             (k, v) for k, v in entities.items()
                             if k not in ['desc', 'sub']
                         ))
-                        suffix = (entities.get('suffix') or '').lower()
-                        if suffix == 't2w':
+                        # BIDS suffix (T1w/T2w) is often not in entities for PNG filenames;
+                        # parse_bids_entities only extracts key-value pairs. Use filename.
+                        filename = Path(value['path']).name
+                        if filename.endswith('_T2w.png'):
                             t2w_ids.add(image_id)
                         else:
-                            # T1w or unspecified anatomical
+                            # T1w or unspecified anatomical (_T1w.png or other)
                             t1w_ids.add(image_id)
                     else:
                         collect(value)
@@ -697,13 +747,84 @@ please refer to the nhp_mri_prep configuration files in your preprocessing direc
         return HtmlGenerator.create_section("About", "About", content)
     
     @staticmethod
+    def _get_methods_counts(report_data: Dict[str, Any]) -> tuple:
+        """Get T1w, T2w, and functional counts for boilerplate (same logic as summary)."""
+        dataset_context = report_data.get("dataset_context", {})
+        organized = report_data.get("organized_snapshots", {})
+        if "subject_file_counts" in dataset_context:
+            t1w = dataset_context["subject_file_counts"].get("t1w", 0)
+            t2w = dataset_context["subject_file_counts"].get("t2w", 0)
+            func = dataset_context["subject_file_counts"].get("functional", 0)
+        elif "job_file_counts" in dataset_context:
+            t1w = dataset_context["job_file_counts"].get("anatomical", 0)
+            t2w = 0
+            func = dataset_context["job_file_counts"].get("functional", 0)
+        else:
+            anat_counts = HtmlGenerator._count_anatomical_by_modality(organized.get("anatomical", {}))
+            t1w = anat_counts.get("t1w", 0)
+            t2w = anat_counts.get("t2w", 0)
+            func = HtmlGenerator._count_unique_images(organized.get("functional", {}))
+        n_t1w = int(t1w) if t1w is not None else 0
+        n_t2w = int(t2w) if t2w is not None else 0
+        n_func = int(func) if func is not None else 0
+        return n_t1w, n_t2w, n_func
+
+    @staticmethod
     def create_methods_section(report_data: Dict[str, Any]) -> str:
-        """Create methods section."""
-        content = '''<div class="boiler-html">
-<p>This report was generated using nhp_mri_prep, a preprocessing pipeline for macaque functional MRI data.</p>
-<p><strong>Configuration Details:</strong> Complete processing parameters and configuration settings are available in the nhp_mri_prep configuration files located in your preprocessing output directory.</p>
-<p><strong>Source Code:</strong> The nhp_mri_prep pipeline source code and documentation are available at the project repository.</p>
-</div>'''
+        """Create methods section with fMRIPrep-style boilerplate (methods and references), structured with headings and lists."""
+        meta = report_data.get("metadata", {})
+        version = meta.get("version", "unknown")
+        n_t1w, n_t2w, n_func = HtmlGenerator._get_methods_counts(report_data)
+        # Ensure at least 1 for anatomical when we have no context (avoid "0 T1w" in text)
+        if n_t1w == 0 and n_t2w == 0:
+            n_t1w = 1
+        try:
+            body = BOILERPLATE_METHODS_TEMPLATE.format(
+                VERSION=version,
+                N_T1W=n_t1w,
+                N_T2W=n_t2w,
+                N_FUNC=n_func,
+            )
+        except KeyError:
+            body = BOILERPLATE_METHODS_TEMPLATE.replace("{VERSION}", version).replace(
+                "{N_T1W}", str(n_t1w)
+            ).replace("{N_T2W}", str(n_t2w)).replace("{N_FUNC}", str(n_func))
+        # Parse into structured blocks and build HTML with headings
+        blocks = [b.strip() for b in body.split("\n\n") if b.strip()]
+        parts = []
+        section_headers = (
+            "Anatomical data preprocessing",
+            "Functional data preprocessing",
+            "Copyright and reuse",
+            "References",
+        )
+        for block in blocks:
+            if block.startswith("Results included"):
+                parts.append(f"<p class=\"methods-intro\">{html.escape(block)}</p>")
+                continue
+            if block.startswith("Many internal operations"):
+                parts.append(f"<p>{html.escape(block)}</p>")
+                continue
+            if block.startswith("References"):
+                lines = block.split("\n")
+                title = lines[0]
+                ref_lines = [ln.strip() for ln in lines[1:] if ln.strip()]
+                parts.append(f"<h3 class=\"methods-subtitle\">{html.escape(title)}</h3>")
+                if ref_lines:
+                    items = "".join(f"<li>{html.escape(ref)}</li>" for ref in ref_lines)
+                    parts.append(f"<ol class=\"methods-refs\">{items}</ol>")
+                continue
+            for header in section_headers:
+                if block.startswith(header):
+                    rest = block[len(header):].strip()
+                    parts.append(f"<h3 class=\"methods-subtitle\">{html.escape(header)}</h3>")
+                    if rest:
+                        parts.append(f"<p>{html.escape(rest)}</p>")
+                    break
+            else:
+                # Fallback: plain paragraph
+                parts.append(f"<p>{html.escape(block)}</p>")
+        content = "<div class=\"boiler-html methods-structured\">\n" + "\n".join(parts) + "\n</div>"
         return HtmlGenerator.create_section("Methods", "Methods", content)
 
 def generate_qc_report(
@@ -738,7 +859,7 @@ def generate_qc_report(
         report_data = {
             "metadata": {
                 "generation_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "pipeline_name": "nhp_mri_prep",
+                "pipeline_name": "brainana",
                 "version": __version__,
                 "working_directory": str(report_path.parent),
                 "subject_id": subject_id
@@ -783,7 +904,6 @@ def _generate_html_report(report_data: Dict[str, Any], report_path: Path, logger
         ABOUT_SECTION=about,
         METHODS_SECTION=methods,
         GENERATION_TIME=report_data["metadata"]["generation_time"],
-        PIPELINE_NAME=report_data["metadata"]["pipeline_name"],
         VERSION=report_data["metadata"]["version"]
     )
     
@@ -800,8 +920,8 @@ def _create_html_template() -> str:
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<meta name="generator" content="nhp_mri_prep {VERSION}" />
-<title>nhp_mri_prep Quality Control Report</title>
+<meta name="generator" content="brainana {VERSION}" />
+<title>brainana Quality Control Report</title>
 <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
@@ -846,6 +966,30 @@ body {{
     background-color: #F8F9FA;
 }}
 
+.methods-structured .methods-subtitle {{
+    font-size: 1.1em;
+    font-weight: 600;
+    margin-top: 1em;
+    margin-bottom: 0.4em;
+}}
+
+.methods-structured .methods-subtitle:first-of-type {{
+    margin-top: 0;
+}}
+
+.methods-structured .methods-intro {{
+    margin-bottom: 0.5em;
+}}
+
+.methods-structured .methods-refs {{
+    margin: 0.5em 0 1em 1.2em;
+    padding-left: 1.5em;
+}}
+
+.methods-structured .methods-refs li {{
+    margin-bottom: 0.35em;
+}}
+
 div#boilerplate pre {{
     margin: 20px 25px;
     padding: 10px;
@@ -862,6 +1006,11 @@ div#boilerplate pre {{
     border-radius: 2px;
     font-family: monospace;
     font-size: 0.9em;
+}}
+
+.dropdown-menu {{
+    max-height: 70vh;
+    overflow-y: auto;
 }}
 </style>
 </head>

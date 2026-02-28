@@ -2,7 +2,7 @@ Installation
 ============
 
 Docker (recommended)
--------------------
+--------------------
 
 The easiest way to run brainana is with the official Docker image. It includes neuroimaging toolkits (FSL, ANTs, AFNI, FreeSurfer, Connectome Workbench), Nextflow, and a pre-configured Python environment.
 
@@ -24,7 +24,7 @@ The easiest way to run brainana is with the official Docker image. It includes n
 See :doc:`usage_local` for how to run the container and :doc:`faq` for GPU and resource tuning.
 
 Install from source
-------------------
+-------------------
 
 If you prefer to run without Docker (e.g. on a cluster):
 
@@ -38,6 +38,6 @@ If you prefer to run without Docker (e.g. on a cluster):
       uv pip install -e .   # or: pip install -e .
 
 3. Ensure the FreeSurfer license is set (e.g. ``FS_LICENSE`` or ``/path/to/license.txt``).
-4. Run the pipeline via ``./run_brainana.sh run main.nf --bids_dir <path> --output_dir <path> --config_file <path>`` (see :doc:`command_line`).
+4. Run the pipeline via ``./run_brainana.sh run main.nf --bids_dir <path> --output_dir <path>`` (optionally ``--config_file <path>`` or ``--config <path>``; see :doc:`usage_local`).
 
 For full usage and Docker details, continue to :doc:`usage_local`.

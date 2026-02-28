@@ -65,7 +65,7 @@ site_list.sort()
 
 # %%
 # 2. prepare the surface input files
-for site_dir in site_list[::1]:
+for site_dir in site_list[::-1]:
     site_dir = Path(site_dir)
     site_name = site_dir.name
     print(f'Processing {site_name}...')

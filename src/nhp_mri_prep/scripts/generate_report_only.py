@@ -14,7 +14,7 @@ except ImportError:
     raise ImportError("Failed to import generate_qc_report from nhp_mri_prep.quality_control.reports")
 
 # %%
-dataset_dir = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v1'
+dataset_dir = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v2'
 
 # %%
 # get sub dir list

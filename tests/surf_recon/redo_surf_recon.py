@@ -28,7 +28,9 @@ lut_file = Path('/home/star/github/brainana/src/fastsurfer_nn/atlas/atlas-ARM2/A
 site_list = list(dataset_root.glob('site-*'))
 site_list = [i for i in site_list if i.is_dir()]
 site_list.sort()
-print(site_list)
+# print(site_list)
+
+# site_list = [dataset_root / 'site-oxford']
 
 # %%
 # # 1. back up the existing surface reconstruction results
@@ -68,7 +70,7 @@ for site_dir in site_list[::-1]:
     print(f'Processing {site_name}...')
 
     # load the config file
-    config_file = Path(site_dir) / 'nextflow_reports' / 'config.yaml'
+    config_file = site_dir / 'nextflow_reports' / 'config.yaml'
     config = load_config(config_file)
 
     # create a working directory for the site
@@ -81,6 +83,9 @@ for site_dir in site_list[::-1]:
     sub_list = site_dir.glob('sub-*')
     sub_list = [i for i in sub_list if i.is_dir()]
     sub_list.sort()
+
+    # sub_list = [site_dir / 'sub-032172_badQC']
+
     for sub_dir in sub_list:
         sub_dir = Path(sub_dir)
         sub = sub_dir.name

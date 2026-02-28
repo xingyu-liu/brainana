@@ -19,7 +19,7 @@ Docker and GPU
 Add ``--gpus all`` to your ``docker run`` command. You need the `NVIDIA Container Toolkit <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html>`_ installed on the host.
 
 **How do I align Docker limits with Nextflow?**  
-The container defaults to 8 CPUs and 20 GB for Nextflow. To cap the container to match: ``--memory 20g --cpus 8``. To give Nextflow more resources (e.g. for a larger run): ``-e NXF_MAX_CPUS=16 -e NXF_MAX_MEMORY=32g`` or use ``-profile recommended`` (e.g. 32 GB). See :doc:`usage_local` and :doc:`command_line`.
+The container defaults to 8 CPUs and 20 GB for Nextflow. To cap the container to match: ``--memory 20g --cpus 8``. To give Nextflow more resources (e.g. for a larger run): ``-e NXF_MAX_CPUS=16 -e NXF_MAX_MEMORY=32g`` or use ``-profile recommended`` (e.g. 32 GB). See :doc:`usage_local` (:ref:`command-line-reference`).
 
 **“Cannot connect to X server” when running GUI tools.**  
 On the host, run ``xhost +local:root``. Over SSH, use X11 forwarding (e.g. ``ssh -X`` or ``-Y``).
@@ -46,6 +46,6 @@ Pipeline and config
 Under ``output_dir/nextflow_reports/`` (e.g. ``nextflow_trace.txt``). Check that path for failed or aborted tasks.
 
 **How do I run only a subset of subjects?**  
-Use ``--subjects`` (and optionally ``--sessions``) when invoking the container or ``run_brainana.sh run main.nf``. Example: ``... /input /output --subjects sub-001 sub-002`` (syntax may depend on config; see :doc:`command_line`).
+Use ``--subjects`` (and optionally ``--sessions``) when invoking the container or ``run_brainana.sh run main.nf``. Example: ``... /input /output --subjects sub-001 sub-002`` (syntax may depend on config; see :doc:`usage_local`).
 
 For more details on resources and tuning, see the internal doc ``docs/RESOURCE_CALIBRATION.md`` in the repository.

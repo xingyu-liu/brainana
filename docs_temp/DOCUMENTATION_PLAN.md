@@ -1,205 +1,99 @@
 # brainana documentation plan
 
-This guide describes how to build documentation similar to [DeepPrep](https://deepprep.readthedocs.io/en/latest/usage_local.html) and [fMRIPrep](https://fmriprep.org/en/stable/usage.html): Sphinx-based docs hosted on Read the Docs, with clear **Installation** and **Usage (Local)** sections including BIDS, FreeSurfer, Docker, and command-line arguments.
+This guide is a step-by-step plan to complete and publish the brainana user docs (Sphinx, Read the Docs), with a clear split between **internal materials** (paper, methods text) and **user-facing docs**.
 
 ---
 
-## Step 1: Choose the doc stack
+## Content model
 
-- **Sphinx** – Same as DeepPrep and fMRIPrep. Generates HTML (and PDF/LaTeX if needed), supports RST and Markdown (via MyST), versioned docs, and Read the Docs integration.
-- **Read the Docs (RtD)** – Free hosting for public repos, automatic builds on push, version selector (e.g. `stable`, `latest`).
-- **Optional later:** Custom domain (e.g. `brainana.org`) like fMRIPrep; RtD supports this.
+| Location | Role |
+|----------|------|
+| **`docs_temp/paper/`** | Internal materials for writing the paper and QC boilerplate. You author here (e.g. `methods_reference.md`, `04-core-components-and-methods.md`). |
+| **`docs/`** | User-facing Sphinx docs (Read the Docs). Single place users see installation, usage, and pipeline/methods. |
+| **Rule** | User docs **mirror** the latest internal materials. When you change methods or steps, update `docs_temp/paper/` first, then propagate into `docs/` (and QC boilerplate). |
 
-**Recommendation:** Sphinx + MyST (Markdown) so you can keep writing `.md` and reuse `README_Docker.md` content.
-
----
-
-## Step 2: Add Sphinx and doc dependencies
-
-In `pyproject.toml`, add an optional dependency group for docs:
-
-```toml
-[project.optional-dependencies]
-dev = [ ... ]
-docs = [
-    "sphinx>=7.0",
-    "myst-parser>=2.0",
-    "sphinx-rtd-theme>=2.0",
-]
-```
-
-Then install:
-
-```bash
-uv pip install -e ".[docs]"
-# or: pip install -e ".[docs]"
-```
+**Processing/methods:** All pipeline and methods content for users lives in **one page**: `docs/processing.rst`. It is kept in sync with `docs_temp/paper/methods_reference.md` (and optionally `04-core-components-and-methods.md`).
 
 ---
 
-## Step 3: Create the docs layout
+## Step-by-step plan
 
-Create a **dedicated Sphinx source tree** (so built HTML lives in one place and RtD can point at it):
+### Phase 1 – Content and structure (done or in progress)
 
-```
-docs/
-  doc/                    # Sphinx source (or use docs/ and build in docs/_build)
-    conf.py               # Sphinx config
-    index.rst             # Home page
-    installation.rst      # Installation
-    usage_local.rst       # Usage (Local) – main user-facing page
-    usage_cluster.rst     # Optional: Usage on HPC/cluster
-    docker.rst            # Docker details (can be under usage_local)
-    command_line.rst      # Command-line arguments
-    outputs.rst           # Outputs / derivatives
-    faq.rst               # FAQ / troubleshooting
-    _static/              # Optional: custom CSS/images
-  _build/                 # Generated HTML (gitignore this)
-```
-
-**Alternative:** Keep current `docs/` for design/planning and add `doc/` (or `docs/source/`) for Sphinx; index can link to “Other docs” (paper, plans) if you want.
+| Step | Action | Status |--config_file
+|------|--------|--------|
+| 1.1 | Ensure `docs_temp/paper/methods_reference.md` is the canonical methods reference (paper + QC boilerplate). | ✓ |
+| 1.2 | Single pipeline/methods page: `docs/processing.rst` contains full methods (overview, discovery, anatomical, functional, QC, summary table). No separate “methods reference” page. | ✓ |
+| 1.3 | Point at internal materials from `processing.rst` (e.g. “See `docs_temp/paper/` for design and manuscript text”). | ✓ |
+| 1.4 | When you add or change a pipeline step: update `methods_reference.md` → then `processing.rst` → then QC boilerplate (`boilerplate_methods.txt` / `reports.py`) so everything stays aligned. | Ongoing |
 
 ---
 
-## Step 4: Configure Sphinx (`doc/conf.py`)
+### Phase 2 – Sphinx setup
 
-Create `doc/conf.py` with:
-
-- **Extensions:** `sphinx.ext.autodoc`, `sphinx.ext.viewcode`, `myst_parser` (if using `.md`), `sphinx.ext.intersphinx` (for Python/NumPy links).
-- **Theme:** `sphinx_rtd_theme` (Read the Docs theme).
-- **Version:** Read from `pyproject.toml` or set in `conf.py` (e.g. `release = "0.1.0"`).
-- **Project:** `brainana`, `html_title`, `html_short_title`.
-- **Options:** `html_show_sourcelink`, `html_copy_source = False`, etc.
-
-Example (minimal):
-
-```python
-project = "brainana"
-copyright = "2025, brainana developers"
-release = "0.1.0"
-extensions = ["myst_parser", "sphinx.ext.autodoc", "sphinx.ext.intersphinx"]
-templates_path = ["_templates"]
-exclude_patterns = []
-html_theme = "sphinx_rtd_theme"
-html_static_path = ["_static"]
-```
-
-Use `myst_parser` so you can write `.md` and include `README_Docker.md` with `.. include::` or by copying sections.
+| Step | Action |
+|------|--------|
+| 2.1 | **Dependencies.** In `pyproject.toml`, add (or confirm) optional group: `docs = ["sphinx>=7.0", "myst-parser>=2.0", "sphinx-rtd-theme>=2.0"]`. |
+| 2.2 | **Install.** Run `pip install -e ".[docs]"` (or `uv pip install -e ".[docs]"`) from repo root. |
+| 2.3 | **Layout.** Sphinx source is `docs/`. |
+| 2.4 | **Config.** In `docs/conf.py`: set project/version, `html_theme = "sphinx_rtd_theme"`, extensions (e.g. `myst_parser`, `sphinx.ext.autodoc`, `sphinx.ext.intersphinx`). |
+| 2.5 | **Toctree.** `index.rst` lists: installation, usage_local, command_line, configuration, outputs, processing, faq; plus “Other” (e.g. other_docs). No separate methods_reference. |
 
 ---
 
-## Step 5: Write the main pages (mirroring DeepPrep/fMRIPrep)
+### Phase 3 – Local build and fix
 
-### 5.1 `index.rst`
-
-- Short project description (macaque neuroimaging, BIDS, preprocessing).
-- Links to: **Installation**, **Usage (Local)**, **Outputs**, **FAQ**, **Other info** (e.g. paper, design docs).
-- Optional: “Quick start” one-liner (Docker + three mounts).
-
-### 5.2 `installation.rst`
-
-- How to get brainana: Docker (recommended), optionally build from source / `uv pip install -e .`, system deps (Nextflow, FreeSurfer, etc.).
-- Link to **Usage (Local)** and **FreeSurfer license** section.
-
-### 5.3 `usage_local.rst` (main usage page)
-
-Structure it like the references:
-
-1. **The BIDS format**  
-   - Input must be valid BIDS; link to [BIDS Validator](https://bids-standard.github.io/bids-validator/) and NiPreps/BIDS-Apps if relevant.
-
-2. **The FreeSurfer license**  
-   - Required for surface reconstruction; how to get it; mount path: `-v <path>:/fs_license.txt`.
-
-3. **Docker user guide**  
-   - **Command-line arguments:** table or list of Docker invocation args and pipeline args (e.g. `[input_dir] [output_dir]`, `--config`, `--anat_only`, `--output_space`, `-profile minimal`, `--skip_bids_validation`, `--subjects`, `--sessions`, etc.).  
-   - **Sample Docker command:**  
-     - Minimal: `docker run -it --rm --gpus all -v <bids_dir>:/input -v <output_dir>:/output -v <fs_license>:/fs_license.txt xxxlab/brainana:latest`  
-     - With options: custom config, anat-only, output space, resource limits.
-   - **Quick start:**  
-     - Optional: link to a small test dataset or one-line curl if you add one (like DeepPrep’s test_sample).
-
-4. **Running as host user (file permissions)**  
-   - `--user $(id -u):$(id -g)`, `NXF_WORK`, `NXF_HOME` (from `README_Docker.md`).
-
-5. **Interactive / development mode**  
-   - X11, mounting repo, config generator GUI, running Nextflow manually (short subsection).
-
-6. **Optional: Singularity**  
-   - If you support it: build from Docker image, `-B` mounts, `--nv` for GPU, equivalent of `--device cpu`/gpu.
-
-### 5.4 `command_line.rst`
-
-- Document **container interface:**  
-  - Positional: `[input_dir]` (default `/input`), `[output_dir]` (default `/output`).  
-  - Pipeline options passed after: `--config`, `--anat_only`, `--output_space`, `-profile minimal|recommended`, `--skip_bids_validation`, `--subjects`, `--sessions`, `--tasks`, `--runs`, etc.
-- Pull from `param_resolver.groovy` (e.g. `output_space`, `anat_only`, `subjects`, `sessions`, `tasks`, `runs`) and from `run_brainana.sh` / `entrypoint.sh` so the doc is the single source of truth.
-- Optional: add a “Reference” section that lists every option in a table (like fMRIPrep’s “Command-Line Arguments”).
-
-### 5.5 `outputs.rst`
-
-- Where outputs go: `output_dir`, layout (e.g. `sub-XXX/`, `nextflow_reports/`, `fastsurfer/`), main derivatives (anatomical, surfaces, functional if applicable).
-- Link to any existing internal docs (e.g. pipeline design) if useful.
-
-### 5.6 `faq.rst` or **Troubleshooting** in `usage_local.rst`
-
-- From `README_Docker.md`: X server, GPU, config file, FreeSurfer license, Docker vs Nextflow resource limits.
-- Add: “Where are logs?” (e.g. `output_dir/nextflow_reports/`), “How to resume?” if supported.
+| Step | Action |
+|------|--------|
+| 3.1 | From repo root: `sphinx-build -b html docs docs/_build`. |
+| 3.2 | Open `docs/_build/index.html` and click through all pages. Fix broken `:doc:` refs, wrong paths, RST warnings. |
+| 3.3 | Add `docs/_build/` to `.gitignore` if not already. |
+| 3.4 | (Optional) Run with `-W` to treat warnings as errors: `sphinx-build -b html docs docs/_build -W`. |
 
 ---
 
-## Step 6: Build HTML locally
+### Phase 4 – Read the Docs
 
-From repo root:
-
-```bash
-sphinx-build -b html doc doc/_build
-```
-
-Open `doc/_build/index.html`. Fix any warnings (missing refs, wrong paths). Add `doc/_build/` to `.gitignore` if not already.
-
----
-
-## Step 7: Connect Read the Docs
-
-1. **Sign up:** [readthedocs.org](https://readthedocs.org), log in with GitHub.
-2. **Import project:** “Import a Project” → select your `brainana` repo.
-3. **Configure:**
-   - **Documentation type:** Sphinx.
-   - **Config file:** `doc/conf.py` (or leave default and set “Docs directory” to `doc` and “Config file” to `doc/conf.py`; RtD expects `conf.py` inside the docs dir).
-   - **Python interpreter:** Install dependency group `docs` (e.g. “Install your project inside a virtualenv using `pip install -e .[docs]`” in the RtD “Admin” → “Advanced settings”).
-4. **Build:** Trigger a build; fix any failing builds (paths, missing deps).
-5. **URL:** You’ll get `brainana.readthedocs.io` (or similar). Enable “Show version warning” for `stable` if you use version tags.
+| Step | Action |
+|------|--------|
+| 4.1 | Sign up at [readthedocs.org](https://readthedocs.org) and connect GitHub. |
+| 4.2 | **Import project:** “Import a Project” → select the `brainana` repo. |
+| 4.3 | **Configure build:** Documentation type = Sphinx. Docs directory = `docs`. Config file = `docs/conf.py`. |
+| 4.4 | **Install deps:** In project Admin → Advanced settings, set “Install your project” with `pip install -e .[docs]` (or equivalent so the `docs` extra is installed). |
+| 4.5 | Trigger a build. Fix any failures (paths, missing deps, Python version). |
+| 4.6 | Note the URL (e.g. `brainana.readthedocs.io`). Optionally add a “Documentation” link in the repo `README.md`. |
 
 ---
 
-## Step 8: Optional – versioning and custom domain
+### Phase 5 – Optional enhancements
 
-- **Versioning:** In RtD, under “Versions”, activate branches/tags (e.g. `stable` → latest release tag, `latest` → default branch). In Sphinx, set `release` from env or from `pyproject.toml` so each build gets the right version.
-- **Custom domain:** In RtD “Admin” → “Domains”, add a CNAME (e.g. `docs.brainana.org`). Then in your DNS, point that host to RtD. fMRIPrep uses `fmriprep.org` for the main site; you can do “docs.brainana.org” → RtD.
+| Step | Action |
+|------|--------|
+| 5.1 | **Versioning:** In RtD “Versions”, activate `stable` (e.g. latest release tag) and `latest` (default branch). In `conf.py`, set `release` from package or env. |
+| 5.2 | **Custom domain:** e.g. `docs.brainana.org` → RtD (Admin → Domains, then DNS CNAME). |
+| 5.3 | **CI:** Add a job (e.g. GitHub Actions) that runs `sphinx-build -b html docs docs/_build -W` so broken docs fail the build. |
 
 ---
 
-## Step 9: Keep docs in sync
+### Phase 6 – Keeping docs in sync (ongoing)
 
-- **Single source:** Prefer one place for “how to run” (e.g. `usage_local.rst` or a `usage_local.md` included from RST). Reuse content from `README_Docker.md` via include or copy; when you change Docker usage, update the doc and optionally a short summary in `README_Docker.md` that links to the full doc.
-- **CLI reference:** When you add or change pipeline parameters (in Nextflow or `param_resolver.groovy`), update `command_line.rst` (and the “Command-line arguments” section in `usage_local.rst`).
-- **CI:** Optional: add a “docs” job that runs `sphinx-build -b html doc doc/_build` and fails on warnings (`-W`) so broken refs don’t get merged.
+| When | Do this |
+|------|---------|
+| You change pipeline steps or tools | 1. Update `docs_temp/paper/methods_reference.md`. 2. Update `docs/processing.rst`. 3. Update QC boilerplate (`boilerplate_methods.txt`, `reports.py`) if the methods section text changed. |
+| You change CLI or Docker usage | Update `docs/command_line.rst` and relevant parts of `docs/usage_local.rst`. |
+| You change installation or config | Update `docs/installation.rst` and/or `docs/configuration.rst`. |
 
 ---
 
 ## Summary checklist
 
-| Step | Action |
-|------|--------|
-| 1 | Choose Sphinx + Read the Docs (+ optional MyST) |
-| 2 | Add `docs` optional deps and install |
-| 3 | Create `doc/` layout (conf.py, index, usage_local, etc.) |
-| 4 | Configure `conf.py` (theme, extensions, version) |
-| 5 | Write index, installation, usage_local (BIDS, FreeSurfer, Docker, CLI, quick start), command_line, outputs, faq |
-| 6 | Build locally and fix warnings |
-| 7 | Import project on Read the Docs, set docs dir and config, install `.[docs]`, build |
-| 8 | (Optional) Versioning and custom domain |
-| 9 | Keep usage and CLI docs in sync with code and README |
+| # | Phase | Action |
+|---|--------|--------|
+| 1 | Content | methods_reference.md = canonical; processing.rst = single methods page; sync to boilerplate when methods change. |
+| 2 | Sphinx | docs deps in pyproject.toml; install .[docs]; conf.py and toctree in docs/. |
+| 3 | Local | sphinx-build docs → docs/_build; fix warnings; gitignore _build. |
+| 4 | RtD | Import repo; set docs dir and conf; install .[docs]; build and fix. |
+| 5 | Optional | Versioning, custom domain, CI docs build. |
+| 6 | Ongoing | On method/CLI/install changes: update docs_temp/paper → docs/ (and boilerplate). |
 
-After this, you’ll have a doc site similar to DeepPrep’s “Usage Notes (Local)” and fMRIPrep’s “Usage Notes”, with a clear path from installation to Docker and command-line reference.
+After this, you have a single user-facing doc site that stays aligned with your internal paper materials and is published on Read the Docs.

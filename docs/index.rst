@@ -1,5 +1,5 @@
 brainana
-=======
+========
 
 **brainana** is a preprocessing and registration pipeline for macaque neuroimaging data with BIDS dataset support. It provides anatomical and (optionally) functional processing, surface reconstruction (FreeSurfer/FastSurfer), and template registration.
 
@@ -23,17 +23,10 @@ Contents
 
    installation
    usage_local
-   command_line
    configuration
    outputs
    processing
    faq
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Other
-
-   other_docs
 
 Indices and tables
 ------------------
