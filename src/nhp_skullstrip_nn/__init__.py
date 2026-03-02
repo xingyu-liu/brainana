@@ -2,6 +2,8 @@
 nhp_skullstrip_nn: NHP brain extraction using deep learning (brainana package).
 
 A focused deep learning framework for automatic brain extraction from macaque/NHP MRI scans.
+Adapted from NHP-BrainExtraction (DeepBet): https://github.com/HumanBrainED/NHP-BrainExtraction
+(Wang et al. 2021, NeuroImage 235:118001).
 """
 
 # Import main modules

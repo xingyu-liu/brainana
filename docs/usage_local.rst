@@ -8,6 +8,20 @@ The BIDS format
 
 The input dataset must be in valid `BIDS <https://bids-specification.readthedocs.io/>`_ format. We recommend validating your dataset with the free online `BIDS Validator <https://bids-standard.github.io/bids-validator/>`_.
 
+Minimal example layout (dataset root with one subject, one session, anat + func)::
+
+   ./   # dataset root
+   └── sub-aaa
+       ├── ses-bbb
+       │   ├── anat
+       │   │   ├── sub-aaa_ses-bbb_run-ccc_T1w.nii.gz
+       │   │   └── sub-aaa_ses-bbb_run-ccc_T1w.json   # optional
+       │   └── func
+       │       ├── sub-aaa_ses-bbb_task-ddd_run-eee_bold.nii.gz
+       │       └── sub-aaa_ses-bbb_task-ddd_run-eee_bold.json   # optional
+
+If you start with DICOM, you can either (1) use `dcm2niix <https://github.com/rordenlab/dcm2niix>`_ to convert DICOM to NIfTI and then manually reorganise and rename files to BIDS, or (2) use `dcm2bids <https://unfmontgomery.github.io/Dcm2Bids/>`_, which converts DICOM to NIfTI and organises output into BIDS for you.
+
 The FreeSurfer license
 ----------------------
 

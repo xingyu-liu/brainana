@@ -67,7 +67,7 @@
 
 ## 9. Availability and Reproducibility
 
-- **Software**: GitHub URL, license (MIT), Python package (install from repo).
+- **Software**: GitHub URL, license (TBD), Python package (install from repo).
 - **Containers**: Docker image and how to run it.
 - **Documentation**: README, Nextflow docs, Docker docs; reference to `docs/` (e.g. ANAT_SYNTHESIS_FLOW, PROJECT_STRUCTURE, CORE_COMPONENTS).
 - **Templates**: NMT2Sym template zoo (included or documented download).

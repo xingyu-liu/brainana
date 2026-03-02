@@ -1,7 +1,8 @@
 fs_license=/mnt/DataDrive3/xliu/prep_test/freesurfer_license.txt
 
 # 1. prime-de
-site=site-mountsinaiS
+site=site-amu
+# site-rockefeller
 # site-mountsinaiP
 # site-rockefeller
 # site-uminn    

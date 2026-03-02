@@ -1,27 +1,92 @@
 Installation
 ============
 
-Docker (recommended)
---------------------
+Docker
+------
 
-The easiest way to run brainana is with the official Docker image. It includes neuroimaging toolkits (FSL, ANTs, AFNI, FreeSurfer, Connectome Workbench), Nextflow, and a pre-configured Python environment.
+The recommended way to run brainana is with Docker. The image includes neuroimaging toolkits (FSL, ANTs, AFNI, FreeSurfer), Nextflow, and a pre-configured Python environment.
 
-**Build the image** (from the project root):
+.. list-table::
+   :header-rows: 1
+   :widths: 15 12 45 28
 
-.. code-block:: bash
+   * - Image
+     - Version
+     - Download / build command
+     - User guide
+   * - Docker
+     - latest
+     - ``docker pull xxxlab/brainana:latest`` (or build from source, see below)
+     - :doc:`usage_local` (Docker guide)
 
-   docker build \
-       --build-arg USER_ID=$(id -u) \
-       --build-arg GROUP_ID=$(id -g) \
-       -t xxxlab/brainana:latest .
+If no pre-built image is available, build the Docker image from the project root (see **Run with Docker (step-by-step)** below).
 
-**System requirements (rough guide):**
+Run with Docker (step-by-step)
+------------------------------
+
+brainana provides a Docker image as the recommended way to get started.
+
+.. warning::
+   **Required environment**
+
+   - **OS:** Linux (e.g. Ubuntu ≥ 20.04)
+   - **RAM + swap:** ≥ 16 GB (recommended 20 GB+ for full pipeline)
+   - **Disk:** ≥ 20 GB (recommended 50 GB+ for multiple subjects)
+   - **CPU:** ≥ 4 logical cores (recommended 8+)
+   - **GPU (optional):** ≥ 6 GB VRAM (recommended ≥ 10 GB for production)
+   - **NVIDIA Driver (optional):** ≥ 520.61.05 if using GPU
+   - **CUDA (optional):** ≥ 11.8 if using GPU
+
+1. **Install Docker** if you do not have it (`Docker Installation <https://docs.docker.com/get-docker/>`_).
+
+2. **Test Docker** with the hello-world image:
+
+   .. code-block:: bash
+
+      docker run -it --rm hello-world
+
+   You should see a message indicating that Docker is working correctly.
+
+3. **Check GPU access** (optional, if you have GPUs on the host):
+
+   .. code-block:: bash
+
+      docker run -it --rm --gpus all hello-world
+
+   The same hello-world output is expected. If you see an error about ``nvidia-container-cli`` or ``libnvidia-ml.so``, ensure the NVIDIA Container Toolkit and drivers are installed. Without ``--gpus all``, the container uses only CPU.
+
+4. **Pull or build the image:**
+
+   **Option A — Pull from Docker Hub (if available):**
+
+   .. code-block:: bash
+
+      docker pull xxxlab/brainana:latest
+
+   **Option B — Build from source** (from the project root):
+
+   .. code-block:: bash
+
+      docker build \
+          --build-arg USER_ID=$(id -u) \
+          --build-arg GROUP_ID=$(id -g) \
+          -t xxxlab/brainana:latest .
+
+5. **Run the container:**
+
+   .. code-block:: bash
+
+      docker run --rm xxxlab/brainana:latest
+
+   For a full run with BIDS input, output, and FreeSurfer license, see :doc:`usage_local`.
+
+**Resource guidelines:**
 
 - **Minimal:** 16 GB RAM, 4 CPUs, 20 GB disk (anat-only, 1–2 subjects)
-- **Recommended:** 20 GB RAM, 8 CPUs, 50 GB disk, 1 GPU with ≥6 GB VRAM
-- **Production:** 32 GB RAM, 8+ CPUs, 100 GB+ disk, 1 GPU with ≥10 GB VRAM
+- **Recommended:** 20 GB RAM, 8 CPUs, 50 GB disk, 1 GPU with ≥ 6 GB VRAM
+- **Production:** 32 GB RAM, 8+ CPUs, 100 GB+ disk, 1 GPU with ≥ 10 GB VRAM
 
-See :doc:`usage_local` for how to run the container and :doc:`faq` for GPU and resource tuning.
+See :doc:`usage_local` for how to run the container with your data and :doc:`faq` for GPU and resource tuning.
 
 Install from source
 -------------------

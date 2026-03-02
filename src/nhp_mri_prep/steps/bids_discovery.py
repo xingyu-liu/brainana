@@ -67,6 +67,28 @@ def _normalize_bids_id(value, prefix):
     return value_str
 
 
+def _is_top_level_subject_path(
+    bids_dir: Path,
+    file_path: Path,
+    subject_id: str,
+) -> bool:
+    """
+    Return True iff the file lives under bids_dir/sub-{subject_id}/ (top-level subject only).
+
+    Used to exclude nested subject dirs (e.g. bids_dir/badQC/sub-aaa). Paths are resolved
+    so symlinks and relative components do not affect the check.
+    """
+    try:
+        root = bids_dir.resolve()
+        path = Path(file_path).resolve()
+        rel = path.relative_to(root)
+    except (ValueError, OSError):
+        return False
+    if not rel.parts:
+        return False
+    return rel.parts[0] == f"sub-{subject_id}"
+
+
 def discover_bids_dataset(
     bids_dir: Path,
     config: Dict[str, Any],
@@ -104,6 +126,7 @@ def discover_bids_dataset(
         - needs_synthesis: Whether multiple T1w runs need synthesis (anat only)
     """
     bids_dir = Path(bids_dir)
+    resolved_bids_dir = bids_dir.resolve()
     
     if not bids_dir.exists():
         raise FileNotFoundError(f"BIDS directory not found: {bids_dir}")
@@ -145,12 +168,20 @@ def discover_bids_dataset(
     if runs is not None:
         runs = [_normalize_bids_id(r, 'run-') for r in runs]
     
-    # Get all subjects
+    # Get all subjects; keep only those with data under top-level sub-* (exclude e.g. badQC/sub-xxx)
     all_subjects = layout.get_subjects()
+    top_level_subjects = [
+        sub
+        for sub in all_subjects
+        if any(
+            _is_top_level_subject_path(resolved_bids_dir, Path(f.path), sub)
+            for f in layout.get(subject=sub, extension=[".nii.gz", ".nii"])
+        )
+    ]
     if subjects is None:
-        target_subjects = all_subjects
+        target_subjects = top_level_subjects
     else:
-        target_subjects = [s for s in subjects if s in all_subjects]
+        target_subjects = [s for s in subjects if s in top_level_subjects]
         if len(target_subjects) != len(subjects):
             missing = set(subjects) - set(target_subjects)
             logger.warning(
@@ -197,7 +228,10 @@ def discover_bids_dataset(
                     if ses:
                         anat_filters["session"] = ses
                     
-                    anat_files = list(layout.get(**anat_filters))
+                    anat_files = [
+                        f for f in layout.get(**anat_filters)
+                        if _is_top_level_subject_path(resolved_bids_dir, Path(f.path), sub)
+                    ]
                     if not anat_files:
                         continue
                     
@@ -363,7 +397,10 @@ def discover_bids_dataset(
                     if ses:
                         anat_filters["session"] = ses
                     
-                    anat_files = list(layout.get(**anat_filters))
+                    anat_files = [
+                        f for f in layout.get(**anat_filters)
+                        if _is_top_level_subject_path(resolved_bids_dir, Path(f.path), sub)
+                    ]
                     
                     if not anat_files:
                         continue
@@ -478,7 +515,10 @@ def discover_bids_dataset(
                 if runs:
                     func_filters["run"] = runs
                 
-                func_files = list(layout.get(**func_filters))
+                func_files = [
+                    f for f in layout.get(**func_filters)
+                    if _is_top_level_subject_path(resolved_bids_dir, Path(f.path), sub)
+                ]
                 
                 # Create job for each functional file
                 for func_file in func_files:
