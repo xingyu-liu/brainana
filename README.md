@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/_static/brainana_logo_side.png" alt="brainana logo" width="400">
+  <img src="docs/_static/brainana_logo_side.png" alt="brainana logo" width="500">
 </p>
 
 # Brainana: a non-human primate MRI preprocessing pipeline
@@ -117,7 +117,7 @@ Directory layout and file naming are described in the outputs section of the doc
 
 If you use **Brainana**, please cite:
 
-> Brainana — a non-human primate MRI volume and surface preprocessing pipeline (in preparation).
+> Brainana: a non-human primate MRI volume and surface preprocessing pipeline (in preparation).
 
 Please also cite the toolboxes **Brainana** uses (FSL, ANTs, AFNI, FreeSurfer, FastSurfer, FireANTs, and any macaque templates). Detailed references are in the pipeline output (e.g. the QC report).
 
