@@ -15,18 +15,12 @@ Structure:
 - steps: Step logic for Nextflow (functional.py, anatomical.py, qc.py, bids_discovery.py)
 """
 
-# Get version from pyproject.toml
-from pathlib import Path
-import tomllib  # Python 3.11+ built-in
+from importlib.metadata import version, PackageNotFoundError
 
-def _get_version_from_pyproject() -> str:
-    """Get version from pyproject.toml."""
-    pyproject_path = Path(__file__).parent.parent.parent / "pyproject.toml"
-    with open(pyproject_path, "rb") as f:
-        data = tomllib.load(f)
-        return data["project"]["version"]
-
-__version__ = _get_version_from_pyproject()
+try:
+    __version__ = version("brainana")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
 
 # Note: Package metadata (author, email, classifiers) is defined in pyproject.toml
 # No need to duplicate it here - use `importlib.metadata` if needed at runtime

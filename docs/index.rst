@@ -12,7 +12,7 @@ brainana
         -v <bids_dir>:/input \
         -v <output_dir>:/output \
         -v <path/to/license.txt>:/fs_license.txt \
-        xxxlab/brainana:latest
+        liuxingyu987/brainana:latest
 
 Contents
 --------

@@ -10,13 +10,13 @@
 #     -v <bids_dir>:/input \
 #     -v <output_dir>:/output \
 #     -v <license.txt>:/fs_license.txt \
-#     xxxlab/brainana:latest
+#     liuxingyu987/brainana:latest
 #
 # With custom config:
-#   docker run ... xxxlab/brainana:latest /input /output --config /path/to/config.yaml
+#   docker run ... liuxingyu987/brainana:latest /input /output --config /path/to/config.yaml
 #
 # For interactive shell:
-#   docker run -it ... xxxlab/brainana:latest bash
+#   docker run -it ... liuxingyu987/brainana:latest bash
 #
 
 set -e
@@ -154,7 +154,7 @@ fi
 # Validate
 if [ ! -d "$INPUT_DIR" ]; then
     echo "ERROR: Input directory not found: $INPUT_DIR" >&2
-    echo "Usage: docker run ... xxxlab/brainana:latest [input_dir] [output_dir]" >&2
+    echo "Usage: docker run ... liuxingyu987/brainana:latest [input_dir] [output_dir]" >&2
     echo "       Default: /input /output (must be mounted with -v)" >&2
     exit 1
 fi

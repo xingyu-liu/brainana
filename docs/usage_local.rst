@@ -59,7 +59,7 @@ Sample Docker command
        -v <bids_dir>:/input \
        -v <output_dir>:/output \
        -v <path/to/license.txt>:/fs_license.txt \
-       xxxlab/brainana:latest /input /output --freesurfer-license /fs_license.txt
+       liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
 
 **Example with real paths:**
 
@@ -69,7 +69,7 @@ Sample Docker command
        -v /data/my_bids_dataset:/input \
        -v /data/preprocessed:/output \
        -v /home/user/license.txt:/fs_license.txt \
-       xxxlab/brainana:latest /input /output --freesurfer-license /fs_license.txt
+       liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
 
 **With optional arguments** (e.g. anat-only, custom output space, or resource profile):
 
@@ -79,7 +79,7 @@ Sample Docker command
        -v /data/bids:/input \
        -v /data/output:/output \
        -v /path/to/license.txt:/fs_license.txt \
-       xxxlab/brainana:latest /input /output --freesurfer-license /fs_license.txt --anat_only --output_space "NMT2Sym:res-1"
+       liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt --anat_only --output_space "NMT2Sym:res-1"
 
 **Hard-cap container resources** (e.g. on a shared host):
 
@@ -90,7 +90,7 @@ Sample Docker command
        -v <bids_dir>:/input \
        -v <output_dir>:/output \
        -v <path/to/license.txt>:/fs_license.txt \
-       xxxlab/brainana:latest /input /output --freesurfer-license /fs_license.txt
+       liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
 
 **Minimal resources** (anat-only, 1–2 subjects) with profile:
 
@@ -102,7 +102,7 @@ Sample Docker command
        -v <bids_dir>:/input \
        -v <output_dir>:/output \
        -v <path/to/license.txt>:/fs_license.txt \
-       xxxlab/brainana:latest /input /output --freesurfer-license /fs_license.txt -profile minimal
+       liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt -profile minimal
 
 Quick start
 ~~~~~~~~~~~
@@ -116,7 +116,7 @@ The full list of options is in :ref:`command-line-reference` below.
 Input arguments: Docker vs local
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- **Docker:** After the image name you can pass *positional* paths and *pipeline* options. Positionals are optional and default to ``/input`` and ``/output`` (so your mounts must use those names if you omit them). Pipeline options (e.g. ``--anat_only``, ``--output_space``, ``-profile minimal``) are passed through to the workflow. The entrypoint also accepts ``--config``, ``-w`` / ``--work-dir``, ``--no-resume``, and ``--freesurfer-license`` (see below). Example: ``xxxlab/brainana:latest /input /output --anat_only``.
+- **Docker:** After the image name you can pass *positional* paths and *pipeline* options. Positionals are optional and default to ``/input`` and ``/output`` (so your mounts must use those names if you omit them). Pipeline options (e.g. ``--anat_only``, ``--output_space``, ``-profile minimal``) are passed through to the workflow. The entrypoint also accepts ``--config``, ``-w`` / ``--work-dir``, ``--no-resume``, and ``--freesurfer-license`` (see below). Example: ``liuxingyu987/brainana:latest /input /output --anat_only``.
 - **Local (run_brainana.sh):** No positionals. Use *named* arguments: ``--bids_dir``, ``--output_dir`` (required); ``--config_file`` or ``--config`` (optional; built-in defaults used when omitted); plus any optional pipeline options. Example: ``./run_brainana.sh run main.nf --bids_dir /data/bids --output_dir /data/out``.
 
 When surface reconstruction is enabled (default), you must pass ``--freesurfer-license <path>`` so the container sets ``FS_LICENSE``; use the same path you mounted (e.g. ``--freesurfer-license /fs_license.txt``). If you only mount the file and do not pass this flag, surface recon will fail.
@@ -135,7 +135,7 @@ When using Docker, the entrypoint expects:
 
 .. code-block:: text
 
-   docker run ... xxxlab/brainana:latest [input_dir] [output_dir] [extra args...]
+   docker run ... liuxingyu987/brainana:latest [input_dir] [output_dir] [extra args...]
 
 - **input_dir** — BIDS input directory (default: ``/input``). Must be mounted if using default.
 - **output_dir** — Output directory (default: ``/output``). Must be mounted if using default.
@@ -233,9 +233,9 @@ To have output files owned by your host user, pass ``--user`` and set writable N
        -v <bids_dir>:/input \
        -v <output_dir>:/output \
        -v <path/to/license.txt>:/fs_license.txt \
-       xxxlab/brainana:latest /input /output --freesurfer-license /fs_license.txt
+       liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
 
-When using ``--user``, the default Nextflow work directory (``~/.nextflow/work``) may not be writable; ``NXF_WORK`` and ``NXF_HOME`` set it to ``/tmp`` so the run can complete.
+   When using ``--user``, the default Nextflow work directory (``~/.nextflow/work``) may not be writable; ``NXF_WORK`` and ``NXF_HOME`` set it to ``/tmp`` so the run can complete.
 
 Interactive / development mode
 ------------------------------
@@ -260,7 +260,7 @@ For debugging or running the config generator GUI:
           -v /path/to/your/output:/output \
           -v /path/to/license.txt:/fs_license.txt \
           --workdir /opt/brainana \
-          xxxlab/brainana:latest bash
+          liuxingyu987/brainana:latest bash
 
    Replace ``/path/to/your/bids``, ``/path/to/your/output``, and ``/path/to/license.txt`` with your host paths. Inside the container you can:
 

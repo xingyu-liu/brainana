@@ -8,11 +8,12 @@ build-backend = "setuptools.build_meta"
 name = "brainana"
 version = "1.0.0"
 description = "A Python package for preprocessing and registration of macaque neuroimaging data with BIDS dataset support"
-readme = { file = "README_Docker.md", content-type = "text/markdown" }
-license = {text = "License TBD"}
+readme = { file = "README.md", content-type = "text/markdown" }
+license = {text = "AGPL-3.0"}
 requires-python = ">=3.11"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"},
+    {name = "Xingyu Liu", email = "liuxingyu987@gmail.com"},
+    {name = "Michael Arcaro", email = "marcaro@sas.upenn.edu"},
 ]
 keywords = [
     "neuroimaging",
@@ -33,6 +34,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
 ]
 
 dependencies = [
@@ -98,10 +100,9 @@ docs = [
 # Install: apt install connectome-workbench (Debian/Ubuntu) or see https://humanconnectome.org/software/connectome-workbench
 
 [project.urls]
-Homepage = "https://github.com/yourusername/brainana"
-Documentation = "https://github.com/yourusername/brainana"
-Repository = "https://github.com/yourusername/brainana"
-Issues = "https://github.com/yourusername/brainana/issues"
+Homepage = "https://github.com/xingyu-liu/brainana"
+Documentation = "https://brainana.readthedocs.io"
+Repository = "https://github.com/xingyu-liu/brainana"
 
 [tool.setuptools.packages.find]
 where = ["src"]

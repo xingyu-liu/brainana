@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Brainana Configuration Generator</title>
+    <title>Configuration Generator</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -28,11 +28,19 @@
             max-height: 100vh;
             overflow-y: auto;
         }
+        .nav-logo {
+            display: block;
+            width: 180px;
+            height: auto;
+            margin: 0 auto 12px auto;
+            image-rendering: auto;
+        }
         .nav-brand {
             font-weight: 600;
             font-size: 1.2rem;
             color: #000000;
             margin-bottom: 16px;
+            text-align: center;
         }
         .nav-search {
             width: 100%;
@@ -256,7 +264,8 @@
 <body>
     <div class="app-layout">
         <nav class="nav-sidebar">
-            <div class="nav-brand">Brainana</div>
+            <img src="brainana_logo.png" alt="Brainana" class="nav-logo">
+            <div class="nav-brand">BRAINANA</div>
             <input type="text" class="nav-search" placeholder="Search options..." aria-label="Search">
             <div class="nav-section">
                 <div class="nav-section-title">Configuration</div>
@@ -273,7 +282,7 @@
             </div>
         </nav>
         <main class="main-content">
-    <h1>Brainana Configuration Generator</h1>
+    <h1>Configuration Generator</h1>
     
     <form id="configForm">
         <!-- General Settings -->
@@ -291,7 +300,7 @@
                         </select>
                     </span>
                 </div>
-                <span class="help-text">(verbosity level: 0=quiet/ERROR, 1=normal/INFO, 2=verbose/DEBUG)</span>
+                <span class="help-text">(logging level: 0=ERROR, 1=INFO, 2=DEBUG)</span>
             </div>
             <div class="param-block">
                 <div class="param-row">
@@ -299,7 +308,7 @@
                     <label for="general_anat_only" class="option-bold">anat_only</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(process only anatomical data)</span>
+                <span class="help-text">(process anatomical data only; skip functional)</span>
             </div>
             <div class="param-block">
                 <div class="param-row">
@@ -309,7 +318,7 @@
                         <input type="text" id="general_gpu_device" name="general_gpu_device" value="auto">
                     </span>
                 </div>
-                <span class="help-text">(GPU for skull stripping, segmentation, registration: "auto", -1 for CPU, or GPU index 0..N)</span>
+                <span class="help-text">(GPU device for skull stripping, segmentation, registration: "auto", -1 for CPU, or index 0..N)</span>
             </div>
         </div>
 
@@ -324,7 +333,7 @@
                         <input type="text" id="bids_subjects" name="bids_subjects" placeholder='e.g., "01", "02"'>
                     </span>
                 </div>
-                <span class="help-text">(comma-separated, leave empty for processing all)</span>
+                <span class="help-text">(comma-separated list; leave empty for all)</span>
             </div>
             <div class="param-block">
                 <div class="param-row">
@@ -334,7 +343,7 @@
                         <input type="text" id="bids_sessions" name="bids_sessions" placeholder='e.g., "01", "02"'>
                     </span>
                 </div>
-                <span class="help-text">(comma-separated, leave empty for processing all)</span>
+                <span class="help-text">(comma-separated list; leave empty for all)</span>
             </div>
             <div class="param-block">
                 <div class="param-row">
@@ -344,7 +353,7 @@
                         <input type="text" id="bids_tasks" name="bids_tasks" placeholder='e.g., "rest", "task"'>
                     </span>
                 </div>
-                <span class="help-text">(comma-separated, leave empty for processing all)</span>
+                <span class="help-text">(comma-separated list; leave empty for all)</span>
             </div>
             <div class="param-block">
                 <div class="param-row">
@@ -354,7 +363,7 @@
                         <input type="text" id="bids_runs" name="bids_runs" placeholder='e.g., "01", "02"'>
                     </span>
                 </div>
-                <span class="help-text">(comma-separated, leave empty for processing all)</span>
+                <span class="help-text">(comma-separated list; leave empty for all)</span>
             </div>
         </div>
 
@@ -377,7 +386,7 @@
                         </select>
                     </span>
                 </div>
-                <span class="help-text">(T1w space or template space in format "TEMPLATE_NAME:[:DESCRIPTION]")</span>
+                <span class="help-text">(output space: T1w or TEMPLATE_NAME[:DESCRIPTION])</span>
             </div>
         </div>
 
@@ -395,7 +404,7 @@
                         </select>
                     </span>
                 </div>
-                <span class="help-text">(T1w/T2w synthesis level: "subject" = cross-session/cross-sectional, "session" = within-session/longitudinal)</span>
+                <span class="help-text">(T1w/T2w synthesis when multiple images exist: "subject" = cross-session, "session" = within-session)</span>
             </div>
             <div class="step">
                 <div class="param-row">
@@ -403,7 +412,7 @@
                     <label for="anat_reorient_enabled">reorient</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(reorient anatomical images to template orientation when given, otherwise to RAS. When conform is enabled, reorient is not needed.)</span>
+                <span class="help-text">(reorient to template or RAS; redundant if conform is enabled)</span>
             </div>
             <div class="step">
                 <div class="param-row">
@@ -411,58 +420,7 @@
                     <label for="anat_conform_enabled">conform</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(HIGHLY RECOMMENDED. Conform input image to template space using FLIRT rigid registration.)</span>
-            </div>
-            <div class="step">
-                <div class="param-row">
-                    <span class="param-check"><input type="checkbox" id="anat_bias_correction_enabled" name="anat_bias_correction_enabled" checked></span>
-                    <label for="anat_bias_correction_enabled">bias_correction</label>
-                    <span class="param-control"></span>
-                </div>
-                <span class="help-text">(perform bias field correction.)</span>
-                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
-                <div class="advanced-settings" id="anat_bias_correction_advanced">
-                    <div class="param-block">
-                        <div class="param-row">
-                            <span class="param-check"></span>
-                            <label for="anat_bias_correction_algorithm">algorithm</label>
-                            <span class="param-control">
-                                <select id="anat_bias_correction_algorithm" name="anat_bias_correction_algorithm">
-                                    <option value="N4BiasFieldCorrection" selected>N4BiasFieldCorrection</option>
-                                </select>
-                            </span>
-                        </div>
-                        <span class="help-text">(bias correction algorithm)</span>
-                    </div>
-                    <div class="param-block">
-                        <div class="param-row">
-                            <span class="param-check"></span>
-                            <label for="anat_bias_correction_shrink_factor">shrink_factor</label>
-                            <span class="param-control">
-                                <input type="number" id="anat_bias_correction_shrink_factor" name="anat_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
-                            </span>
-                        </div>
-                        <span class="help-text">(shrink factor for faster processing, > 0)</span>
-                    </div>
-                    <div class="param-block">
-                        <div class="param-row">
-                            <span class="param-check"></span>
-                            <label for="anat_bias_correction_bspline_fitting">bspline_fitting</label>
-                            <span class="param-control">
-                                <input type="text" id="anat_bias_correction_bspline_fitting" name="anat_bias_correction_bspline_fitting" value="[ 150 ]">
-                            </span>
-                        </div>
-                        <span class="help-text">(b-spline fitting parameters in ANTs format)</span>
-                    </div>
-                    <div class="param-block">
-                        <div class="param-row">
-                            <span class="param-check"><input type="checkbox" id="anat_bias_correction_rescale_mean_to_100" name="anat_bias_correction_rescale_mean_to_100" checked></span>
-                            <label for="anat_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
-                            <span class="param-control"></span>
-                        </div>
-                        <span class="help-text">(rescale image mean intensity to 100)</span>
-                    </div>
-                </div>
+                <span class="help-text">(HIGHLY RECOMMENDED: conform input to template space via FLIRT rigid registration)</span>
             </div>
             <div class="step">
                 <div class="param-row">
@@ -470,7 +428,7 @@
                     <label for="anat_skullstripping_enabled">skullstripping_segmentation</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(highly recommended. Perform brain extraction and segmentation.)</span>
+                <span class="help-text">(HIGHLY RECOMMENDED: brain extraction and segmentation)</span>
                 <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="anat_skullstripping_advanced">
                     <div class="param-block">
@@ -494,7 +452,7 @@
                                     <input type="number" id="anat_fastSurferCNN_batch_size" name="anat_fastSurferCNN_batch_size" value="8" min="1">
                                 </span>
                             </div>
-                            <span class="help-text">(batch size for inference, >= 1)</span>
+                            <span class="help-text">(inference batch size, ≥1)</span>
                         </div>
                         <div class="param-block">
                             <div class="param-row">
@@ -504,7 +462,7 @@
                                     <input type="number" id="anat_fastSurferCNN_plane_weight_coronal" name="anat_fastSurferCNN_plane_weight_coronal" value="0.4" step="0.1" min="0" max="1">
                                 </span>
                             </div>
-                            <span class="help-text">(weight for coronal plane, 0.0-1.0)</span>
+                            <span class="help-text">(coronal plane weight, 0–1)</span>
                         </div>
                         <div class="param-block">
                             <div class="param-row">
@@ -514,7 +472,7 @@
                                     <input type="number" id="anat_fastSurferCNN_plane_weight_axial" name="anat_fastSurferCNN_plane_weight_axial" value="0.4" step="0.1" min="0" max="1">
                                 </span>
                             </div>
-                            <span class="help-text">(weight for axial plane, 0.0-1.0)</span>
+                            <span class="help-text">(axial plane weight, 0–1)</span>
                         </div>
                         <div class="param-block">
                             <div class="param-row">
@@ -524,7 +482,7 @@
                                     <input type="number" id="anat_fastSurferCNN_plane_weight_sagittal" name="anat_fastSurferCNN_plane_weight_sagittal" value="0.2" step="0.1" min="0" max="1">
                                 </span>
                             </div>
-                            <span class="help-text">(weight for sagittal plane, 0.0-1.0)</span>
+                            <span class="help-text">(sagittal plane weight, 0–1)</span>
                         </div>
                         <div class="param-block">
                             <div class="param-row">
@@ -532,8 +490,59 @@
                                 <label for="anat_fastSurferCNN_fix_V1_WM">fix_V1_WM</label>
                                 <span class="param-control"></span>
                             </div>
-                            <span class="help-text">(fix missing thin WM in V1 by registering template V1 WM to individual space)</span>
+                            <span class="help-text">(fix thin V1 white matter by registering template V1 WM to subject space)</span>
                         </div>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="anat_bias_correction_enabled" name="anat_bias_correction_enabled" checked></span>
+                    <label for="anat_bias_correction_enabled">bias_correction</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(apply N4 bias field correction)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
+                <div class="advanced-settings" id="anat_bias_correction_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="anat_bias_correction_algorithm">algorithm</label>
+                            <span class="param-control">
+                                <select id="anat_bias_correction_algorithm" name="anat_bias_correction_algorithm">
+                                    <option value="N4BiasFieldCorrection" selected>N4BiasFieldCorrection</option>
+                                </select>
+                            </span>
+                        </div>
+                        <span class="help-text">(algorithm; currently only N4BiasFieldCorrection)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="anat_bias_correction_shrink_factor">shrink_factor</label>
+                            <span class="param-control">
+                                <input type="number" id="anat_bias_correction_shrink_factor" name="anat_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
+                            </span>
+                        </div>
+                        <span class="help-text">(shrink factor for speed, >0)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="anat_bias_correction_bspline_fitting">bspline_fitting</label>
+                            <span class="param-control">
+                                <input type="text" id="anat_bias_correction_bspline_fitting" name="anat_bias_correction_bspline_fitting" value="[ 150 ]">
+                            </span>
+                        </div>
+                        <span class="help-text">(B-spline fitting grid in ANTs format)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"><input type="checkbox" id="anat_bias_correction_rescale_mean_to_100" name="anat_bias_correction_rescale_mean_to_100" checked></span>
+                            <label for="anat_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
+                            <span class="param-control"></span>
+                        </div>
+                        <span class="help-text">(rescale mean intensity to 100)</span>
                     </div>
                 </div>
             </div>
@@ -543,7 +552,7 @@
                     <label for="anat_surface_reconstruction_enabled">surface_reconstruction</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(perform surface reconstruction.)</span>
+                <span class="help-text">(run surface reconstruction)</span>
                 <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="anat_surface_reconstruction_advanced">
                     <div class="param-block">
@@ -552,7 +561,7 @@
                             <label for="anat_surface_reconstruction_use_t1wt2wcombined">use_t1wt2wcombined</label>
                             <span class="param-control"></span>
                         </div>
-                        <span class="help-text">(use t1wt2wcombined image for surface recon if possible)</span>
+                        <span class="help-text">(use T1w and T2w combined (enhanced T1w) image if available)</span>
                     </div>
                 </div>
             </div>
@@ -567,7 +576,7 @@
                     <label for="func_coreg_runs_within_session">coreg_runs_within_session</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(coregister runs within session before processing.)</span>
+                <span class="help-text">(coregister all runs within each session before other steps)</span>
             </div>
             <div class="step">
                 <div class="param-row">
@@ -575,7 +584,15 @@
                     <label for="func_reorient_enabled">reorient</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(reorient functional images to template orientation when given, otherwise to RAS. When conform is enabled, reorient is not needed.)</span>
+                <span class="help-text">(reorient to template or RAS; redundant if conform is enabled)</span>
+            </div>
+            <div class="step">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_conform_enabled" name="func_conform_enabled" checked></span>
+                    <label for="func_conform_enabled">conform</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(HIGHLY RECOMMENDED: conform functional image to target space via FLIRT rigid registration)</span>
             </div>
             <div class="step">
                 <div class="param-row">
@@ -583,7 +600,7 @@
                     <label for="func_slice_timing_correction_enabled">slice_timing_correction</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(perform slice timing correction.)</span>
+                <span class="help-text">(apply slice timing correction)</span>
                 <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="func_slice_timing_advanced">
                     <div class="param-block">
@@ -594,7 +611,7 @@
                                 <input type="number" id="func_slice_timing_correction_repetition_time" name="func_slice_timing_correction_repetition_time" step="0.001" min="0" placeholder="auto-detect from metadata">
                             </span>
                         </div>
-                        <span class="help-text">(repetition time in seconds, leave empty for auto-detect from metadata)</span>
+                        <span class="help-text">(repetition time in seconds; leave empty to use metadata)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -604,7 +621,7 @@
                                 <input type="text" id="func_slice_timing_correction_slice_timing" name="func_slice_timing_correction_slice_timing" placeholder="auto-detect from metadata">
                             </span>
                         </div>
-                        <span class="help-text">(list of floats: slice times in seconds, leave empty for auto-detect from metadata)</span>
+                        <span class="help-text">(slice acquisition times in seconds; leave empty to use metadata)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -614,7 +631,7 @@
                                 <input type="number" id="func_slice_timing_correction_tzero" name="func_slice_timing_correction_tzero" step="0.001" placeholder="auto-calculate from metadata">
                             </span>
                         </div>
-                        <span class="help-text">(reference time point in seconds, leave empty for auto-calculate from metadata)</span>
+                        <span class="help-text">(reference time in seconds; leave empty to compute from metadata)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -624,7 +641,7 @@
                                 <input type="number" id="func_slice_timing_correction_slice_time_ref" name="func_slice_timing_correction_slice_time_ref" value="0.5" step="0.1" min="0" max="1">
                             </span>
                         </div>
-                        <span class="help-text">(reference slice time, 0.0-1.0, 0.5 = middle slice)</span>
+                        <span class="help-text">(reference slice position, 0–1; 0.5 = middle slice)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -642,7 +659,7 @@
                                 </select>
                             </span>
                         </div>
-                        <span class="help-text">("x", "-x", "y", "-y", "z", "-z", or auto-detect from metadata)</span>
+                        <span class="help-text">(slice encoding axis; leave empty to use metadata)</span>
                     </div>
                 </div>
             </div>
@@ -652,7 +669,7 @@
                     <label for="func_motion_correction_enabled">motion_correction</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(perform motion correction.)</span>
+                <span class="help-text">(apply motion correction / realignment)</span>
                 <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="func_motion_correction_advanced">
                     <div class="param-block">
@@ -684,7 +701,7 @@
                                 </select>
                             </span>
                         </div>
-                        <span class="help-text">(cost function)</span>
+                        <span class="help-text">(registration cost function)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -694,7 +711,7 @@
                                 <input type="number" id="func_motion_correction_smooth" name="func_motion_correction_smooth" value="1.0" step="0.1" min="0">
                             </span>
                         </div>
-                        <span class="help-text">(smoothing factor for motion correction)</span>
+                        <span class="help-text">(smoothing factor)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -704,7 +721,7 @@
                                 <input type="text" id="func_motion_correction_ref_vol" name="func_motion_correction_ref_vol" value="mid">
                             </span>
                         </div>
-                        <span class="help-text">(reference volume: integer index, "Tmean", or "mid")</span>
+                        <span class="help-text">(reference volume: index, "Tmean", or "mid")</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -714,7 +731,7 @@
                                 <input type="number" id="func_motion_correction_cost_tolerance" name="func_motion_correction_cost_tolerance" value="0.01" step="0.001" min="0">
                             </span>
                         </div>
-                        <span class="help-text">(cost function tolerance)</span>
+                        <span class="help-text">(cost convergence tolerance)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -724,7 +741,7 @@
                                 <input type="number" id="func_motion_correction_parameter_tolerance" name="func_motion_correction_parameter_tolerance" value="0.01" step="0.001" min="0">
                             </span>
                         </div>
-                        <span class="help-text">(parameter tolerance)</span>
+                        <span class="help-text">(parameter convergence tolerance)</span>
                     </div>
                 </div>
             </div>
@@ -734,7 +751,7 @@
                     <label for="func_despike_enabled">despike</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(perform despiking/outlier removal.)</span>
+                <span class="help-text">(remove temporal outliers / despiking)</span>
                 <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="func_despike_advanced">
                     <div class="param-block">
@@ -745,7 +762,7 @@
                                 <input type="number" id="func_despike_c1" name="func_despike_c1" value="5" step="0.1" min="0.1">
                             </span>
                         </div>
-                        <span class="help-text">(first cutoff parameter, > 0, must be &lt; c2)</span>
+                        <span class="help-text">(first cutoff, >0, must be &lt; c2)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -755,7 +772,7 @@
                                 <input type="number" id="func_despike_c2" name="func_despike_c2" value="10" step="0.1" min="0.1">
                             </span>
                         </div>
-                        <span class="help-text">(second cutoff parameter, > 0, must be > c1)</span>
+                        <span class="help-text">(second cutoff, >0, must be > c1)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -763,7 +780,7 @@
                             <label for="func_despike_localedit">localedit</label>
                             <span class="param-control"></span>
                         </div>
-                        <span class="help-text">(use local editing for despiking)</span>
+                        <span class="help-text">(use local editing)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -773,7 +790,7 @@
                                 <input type="number" id="func_despike_ignore_first_volumes" name="func_despike_ignore_first_volumes" value="0" min="0">
                             </span>
                         </div>
-                        <span class="help-text">(number of initial volumes to ignore, >= 0)</span>
+                        <span class="help-text">(number of initial volumes to exclude, ≥0)</span>
                     </div>
                 </div>
             </div>
@@ -783,7 +800,7 @@
                     <label for="func_bias_correction_enabled">bias_correction</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(perform bias field correction on tmean image for better registration.)</span>
+                <span class="help-text">(bias correction on mean functional image, for registration only)</span>
                 <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
                 <div class="advanced-settings" id="func_bias_correction_advanced">
                     <div class="param-block">
@@ -796,7 +813,7 @@
                                 </select>
                             </span>
                         </div>
-                        <span class="help-text">(bias correction algorithm)</span>
+                        <span class="help-text">(algorithm; currently only N4BiasFieldCorrection)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -806,7 +823,7 @@
                                 <input type="number" id="func_bias_correction_shrink_factor" name="func_bias_correction_shrink_factor" value="2" step="0.1" min="0.1">
                             </span>
                         </div>
-                        <span class="help-text">(shrink factor for faster processing, > 0)</span>
+                        <span class="help-text">(shrink factor for speed, >0)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -816,7 +833,7 @@
                                 <input type="text" id="func_bias_correction_bspline_fitting" name="func_bias_correction_bspline_fitting" value="[ 100 ]">
                             </span>
                         </div>
-                        <span class="help-text">(b-spline fitting parameters in ANTs format)</span>
+                        <span class="help-text">(B-spline fitting grid in ANTs format)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -824,17 +841,9 @@
                             <label for="func_bias_correction_rescale_mean_to_100">rescale_mean_to_100</label>
                             <span class="param-control"></span>
                         </div>
-                        <span class="help-text">(rescale image mean intensity to 100)</span>
+                        <span class="help-text">(rescale mean intensity to 100)</span>
                     </div>
                 </div>
-            </div>
-            <div class="step">
-                <div class="param-row">
-                    <span class="param-check"><input type="checkbox" id="func_conform_enabled" name="func_conform_enabled" checked></span>
-                    <label for="func_conform_enabled">conform</label>
-                    <span class="param-control"></span>
-                </div>
-                <span class="help-text">(HIGHLY RECOMMENDED. Conform functional tmean image to target space using FLIRT rigid registration.)</span>
             </div>
             <div class="step">
                 <div class="param-row">
@@ -842,7 +851,7 @@
                     <label for="func_skullstripping_enabled">skullstripping</label>
                     <span class="param-control"></span>
                 </div>
-                <span class="help-text">(HIGHLY RECOMMENDED. Perform brain extraction.)</span>
+                <span class="help-text">(HIGHLY RECOMMENDED: brain extraction on functional data)</span>
             </div>
         </div>
 
@@ -862,7 +871,7 @@
                         </select>
                     </span>
                 </div>
-                <span class="help-text">(transform type for anat->template: "translation", "rigid", "affine", or "syn")</span>
+                <span class="help-text">(transform for anatomical to template)</span>
             </div>
             <div class="param-block">
                 <div class="param-row">
@@ -877,7 +886,7 @@
                         </select>
                     </span>
                 </div>
-                <span class="help-text">(transform type for func->anat: "translation", "rigid", "affine", or "syn")</span>
+                <span class="help-text">(transform for functional to anatomical)</span>
             </div>
             <div class="param-block">
                 <div class="param-row">
@@ -892,15 +901,7 @@
                         </select>
                     </span>
                 </div>
-                <span class="help-text">(transform type for func->template: "translation", "rigid", "affine", or "syn")</span>
-            </div>
-            <div class="param-block">
-                <div class="param-row">
-                    <span class="param-check"><input type="checkbox" id="registration_keep_func_resolution" name="registration_keep_func_resolution" checked></span>
-                    <label for="registration_keep_func_resolution">keep_func_resolution</label>
-                    <span class="param-control"></span>
-                </div>
-                <span class="help-text">(keep original functional image resolution after registration)</span>
+                <span class="help-text">(transform for functional to template)</span>
             </div>
             <div class="param-block">
                 <div class="param-row">
@@ -921,7 +922,15 @@
                         </select>
                     </span>
                 </div>
-                <span class="help-text">(interpolation method)</span>
+                <span class="help-text">(resampling interpolation method)</span>
+            </div>
+            <div class="param-block">
+                <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="registration_keep_func_resolution" name="registration_keep_func_resolution" checked></span>
+                    <label for="registration_keep_func_resolution">keep_func_resolution</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(preserve native functional resolution when resampling)</span>
             </div>
         </div>
 
@@ -945,7 +954,7 @@
     <script>
         // Configuration embedded from defaults.yaml
         const defaults = {
-            _description: "Configuration for brainana preprocessing pipeline",
+            _description: "Default configuration for brainana preprocessing pipeline",
             general: {
                 verbose: 2,
                 anat_only: false,
@@ -964,13 +973,6 @@
                 synthesis_level: "subject",
                 reorient: { enabled: false },
                 conform: { enabled: true },
-                bias_correction: {
-                    enabled: true,
-                    algorithm: "N4BiasFieldCorrection",
-                    shrink_factor: 2,
-                    bspline_fitting: "[ 150 ]",
-                    rescale_mean_to_100: true
-                },
                 skullstripping_segmentation: {
                     enabled: true,
                     method: "fastSurferCNN",
@@ -983,6 +985,13 @@
                         fix_V1_WM: true
                     }
                 },
+                bias_correction: {
+                    enabled: true,
+                    algorithm: "N4BiasFieldCorrection",
+                    shrink_factor: 2,
+                    bspline_fitting: "[ 150 ]",
+                    rescale_mean_to_100: true
+                },
                 surface_reconstruction: {
                     enabled: true,
                     use_t1wt2wcombined: false
@@ -991,6 +1000,7 @@
             func: {
                 coreg_runs_within_session: true,
                 reorient: { enabled: false },
+                conform: { enabled: true },
                 slice_timing_correction: {
                     enabled: true,
                     repetition_time: null,
@@ -1022,7 +1032,6 @@
                     bspline_fitting: "[ 100 ]",
                     rescale_mean_to_100: true
                 },
-                conform: { enabled: true },
                 skullstripping: {
                     enabled: true
                 }
@@ -1031,8 +1040,8 @@
                 anat2template_xfm_type: "syn",
                 func2anat_xfm_type: "syn",
                 func2template_xfm_type: "syn",
-                keep_func_resolution: true,
-                interpolation: "BSpline"
+                interpolation: "BSpline",
+                keep_func_resolution: true
             }
         };
 
@@ -1362,15 +1371,10 @@
             // Template
             config.template.output_space = document.getElementById('template_output_space').value || defaults.template.output_space;
             
-            // Anatomical
+            // Anatomical (order matches defaults.yaml: synthesis_level, reorient, conform, skullstripping_segmentation, bias_correction, surface_reconstruction)
             config.anat.synthesis_level = document.getElementById('anat_synthesis_level').value;
             config.anat.reorient.enabled = document.getElementById('anat_reorient_enabled').checked;
             config.anat.conform.enabled = document.getElementById('anat_conform_enabled').checked;
-            config.anat.bias_correction.enabled = document.getElementById('anat_bias_correction_enabled').checked;
-            config.anat.bias_correction.algorithm = document.getElementById('anat_bias_correction_algorithm').value;
-            config.anat.bias_correction.shrink_factor = parseFloat(document.getElementById('anat_bias_correction_shrink_factor').value);
-            config.anat.bias_correction.bspline_fitting = document.getElementById('anat_bias_correction_bspline_fitting').value;
-            config.anat.bias_correction.rescale_mean_to_100 = document.getElementById('anat_bias_correction_rescale_mean_to_100').checked;
             
             config.anat.skullstripping_segmentation.enabled = document.getElementById('anat_skullstripping_enabled').checked;
             config.anat.skullstripping_segmentation.method = document.getElementById('anat_skullstripping_method').value;
@@ -1382,6 +1386,12 @@
                 config.anat.skullstripping_segmentation.fastSurferCNN.plane_weight_sagittal = parseFloat(document.getElementById('anat_fastSurferCNN_plane_weight_sagittal').value);
                 config.anat.skullstripping_segmentation.fastSurferCNN.fix_V1_WM = document.getElementById('anat_fastSurferCNN_fix_V1_WM').checked;
             }
+            
+            config.anat.bias_correction.enabled = document.getElementById('anat_bias_correction_enabled').checked;
+            config.anat.bias_correction.algorithm = document.getElementById('anat_bias_correction_algorithm').value;
+            config.anat.bias_correction.shrink_factor = parseFloat(document.getElementById('anat_bias_correction_shrink_factor').value);
+            config.anat.bias_correction.bspline_fitting = document.getElementById('anat_bias_correction_bspline_fitting').value;
+            config.anat.bias_correction.rescale_mean_to_100 = document.getElementById('anat_bias_correction_rescale_mean_to_100').checked;
             
             config.anat.surface_reconstruction.enabled = document.getElementById('anat_surface_reconstruction_enabled').checked;
             config.anat.surface_reconstruction.use_t1wt2wcombined = document.getElementById('anat_surface_reconstruction_use_t1wt2wcombined').checked;
@@ -1430,8 +1440,8 @@
             config.registration.anat2template_xfm_type = document.getElementById('registration_anat2template_xfm_type').value;
             config.registration.func2anat_xfm_type = document.getElementById('registration_func2anat_xfm_type').value;
             config.registration.func2template_xfm_type = document.getElementById('registration_func2template_xfm_type').value;
-            config.registration.keep_func_resolution = document.getElementById('registration_keep_func_resolution').checked;
             config.registration.interpolation = document.getElementById('registration_interpolation').value;
+            config.registration.keep_func_resolution = document.getElementById('registration_keep_func_resolution').checked;
             
             // Validate
             const errors = validateConfig(config);

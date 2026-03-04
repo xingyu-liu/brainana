@@ -16,7 +16,7 @@ The recommended way to run brainana is with Docker. The image includes neuroimag
      - User guide
    * - Docker
      - latest
-     - ``docker pull xxxlab/brainana:latest`` (or build from source, see below)
+     - ``docker pull liuxingyu987/brainana:latest`` (or build from source, see below)
      - :doc:`usage_local` (Docker guide)
 
 If no pre-built image is available, build the Docker image from the project root (see **Run with Docker (step-by-step)** below).
@@ -61,7 +61,7 @@ brainana provides a Docker image as the recommended way to get started.
 
    .. code-block:: bash
 
-      docker pull xxxlab/brainana:latest
+      docker pull liuxingyu987/brainana:latest
 
    **Option B — Build from source** (from the project root):
 
@@ -70,13 +70,13 @@ brainana provides a Docker image as the recommended way to get started.
       docker build \
           --build-arg USER_ID=$(id -u) \
           --build-arg GROUP_ID=$(id -g) \
-          -t xxxlab/brainana:latest .
+          -t liuxingyu987/brainana:latest .
 
 5. **Run the container:**
 
    .. code-block:: bash
 
-      docker run --rm xxxlab/brainana:latest
+      docker run --rm liuxingyu987/brainana:latest
 
    For a full run with BIDS input, output, and FreeSurfer license, see :doc:`usage_local`.
 
@@ -98,7 +98,7 @@ If you prefer to run without Docker (e.g. on a cluster):
 
    .. code-block:: bash
 
-      git clone https://github.com/yourusername/brainana.git
+      git clone https://github.com/xingyu-liu/brainana.git
       cd brainana
       uv pip install -e .   # or: pip install -e .
 

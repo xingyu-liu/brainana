@@ -418,8 +418,8 @@ HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=3 \
 # Labels for image metadata
 LABEL org.opencontainers.image.title="brainana" \
       org.opencontainers.image.description="Macaque MRI preprocessing pipeline" \
-      org.opencontainers.image.version="0.1.0" \
-      org.opencontainers.image.source="https://github.com/yourusername/brainana"
+      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.source="https://github.com/xingyu-liu/brainana"
 
 ENTRYPOINT ["/opt/brainana/entrypoint.sh"]
 CMD ["/input", "/output"]
