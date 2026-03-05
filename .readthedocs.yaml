@@ -7,14 +7,12 @@ build:
     python: "3.12"
   jobs:
     post_checkout: []
+  # Docs-only install: no torch/SimpleITK/fireants etc., faster builds.
+  commands:
+    - pip install "sphinx>=7.0" "myst-parser>=2.0" "sphinx-rtd-theme>=2.0"
+    - pip install --no-deps .
+    - sphinx-build -b html -c docs docs _readthedocs/html
 
 sphinx:
   configuration: docs/conf.py
   fail_on_warning: false
-
-python:
-  install:
-    - method: pip
-      path: .
-      extra_requirements:
-        - docs

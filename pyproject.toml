@@ -13,6 +13,9 @@ license = {text = "AGPL-3.0"}
 requires-python = ">=3.11"
 authors = [
     {name = "Xingyu Liu", email = "liuxingyu987@gmail.com"},
+    {name = "Yijun Zhuang"},
+    {name = "Zi Yin"},
+    {name = "Zonglei Zhen"},
     {name = "Michael Arcaro", email = "marcaro@sas.upenn.edu"},
 ]
 keywords = [
@@ -49,10 +52,10 @@ dependencies = [
     "torch>=2.3.0",
     "torchvision>=0.15.0",
     "torchio>=0.18.0",
-    # Image processing (SimpleITK 2.2.1 for FireANTs compatibility)
+    # Image processing (SimpleITK >=2.3 for FireANTs compatibility; 2.2.1 not on PyPI for all platforms)
     "Pillow>=8.0.0",
     "scikit-image>=0.20.0",
-    "SimpleITK==2.2.1",
+    "SimpleITK>=2.3.0",
     # FireANTs for GPU-accelerated registration
     "fireants",
     # fastsurfer_nn dependencies

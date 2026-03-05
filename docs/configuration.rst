@@ -1,14 +1,11 @@
 Configuration
 =============
 
-You can run brainana with built-in defaults and common options (e.g. ``--anat_only``, ``--output_space``) passed on the command line. For full control over pipeline options (anatomical and functional steps, registration, template, etc.), use a custom YAML config file and pass it with ``--config /path/to/config.yaml``. See :doc:`usage_local` (:ref:`command-line-reference`) for how to pass the config when using Docker or ``run_brainana.sh``.
+Use a YAML config file for full control over pipeline options. Pass it with ``--config /path/to/config.yaml`` (see :doc:`usage_notes` :ref:`command-line-reference`).
 
-Generate your own config
-------------------------
+Configuration generator
+-----------------------
 
-A static HTML tool lets you set all options and download a valid config file. Open it from the built documentation or from the repository:
+**Recommended:** Use the interactive Configuration generator to set options and download a valid YAML file.
 
-- **From the docs:** `Configuration generator <_static/config_generator.html>`_
-- **From the repo:** open ``docs/_static/config_generator.html`` in a browser.
-
-Save the generated YAML, then mount it into the container and pass ``--config /path/to/config.yaml`` (see :doc:`usage_local` and :doc:`faq`).
+- **Open:** `Configuration generator <_static/config_generator.html>`_

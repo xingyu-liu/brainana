@@ -6,15 +6,15 @@ including embedded snapshots, processing parameters, and quality metrics.
 """
 
 import os
-import json
 import logging
 import html
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Union, List, Optional, Tuple
+from typing import Dict, Any, Union, List, Optional
 import re
 
 from ..utils.bids import parse_bids_entities, BIDS_ENTITY_ORDER
+from ..config.config_io import get_nested_config_value
 
 
 # Configuration constants
@@ -68,30 +68,91 @@ SNAPSHOT_ORDER = [
 
 SNAPSHOT_ORDER_INDEX = {key: index for index, key in enumerate(SNAPSHOT_ORDER)}
 
-# Boilerplate text for the Methods section (fMRIPrep-style). Placeholders: VERSION, N_T1W, N_T2W, N_FUNC. Package is always referred to as brainana.
-# Full reference: docs_temp/paper/methods_reference.md and docs_temp/paper/boilerplate_methods.txt
-BOILERPLATE_METHODS_TEMPLATE = """Results included in this manuscript come from preprocessing performed using brainana {VERSION}, a BIDS-based, Nextflow-orchestrated pipeline for non-human primate (macaque) anatomical and functional MRI.
+# Full sequential stage labels used in anat-to-template normalization sentences.
+_XFM_STAGE_LABELS: Dict[str, str] = {
+    "translation": "translation-only",
+    "rigid": "rigid",
+    "affine": "translation, rigid, and affine",
+    "syn": "translation, rigid, affine, and non-linear (SyN)",
+}
 
-Anatomical data preprocessing
-A total of {N_T1W} T1-weighted (T1w) and {N_T2W} T2-weighted (T2w) images were found within the input BIDS dataset (or used after synthesis when multiple runs/sessions were combined). When multiple T1w or T2w images existed per session or subject, a single synthesized anatomical was created by rigid coregistration to the first image using ANTs (Avants et al. 2008; RRID:SCR_004757) and averaging in reference space. Anatomical images were reoriented to the target orientation using AFNI 3dresample (Cox 1996; RRID:SCR_005927). The T1w (and optionally T2w) was then conformed to template space: initial skullstripping was performed using a UNet-based model (nhp_skullstrip_nn, fine-tuned from NHP-BrainExtraction/DeepBet; Wang et al. 2021) or FastSurfer-style segmentation (fastsurfer_nn; Henschel et al. 2020), and rigid registration to the template was performed with FLIRT (FSL; Jenkinson et al. 2002; RRID:SCR_002823). Brain tissue segmentation (and brain mask) was produced using FastSurfer-style CNN segmentation (fastsurfer_nn, fine-tuned from FastSurfer FastSurferCNN) trained on macaque atlases (CHARM/SARM level 2). The T1w was corrected for intensity non-uniformity (INU) with N4BiasFieldCorrection (Tustison et al. 2010), distributed with ANTs, using the brain mask to restrict the correction. Volume-based spatial normalization to the template (e.g. NMT2Sym) was performed through multi-stage registration with antsRegistration (ANTs): translation, rigid, affine, and optionally SyN (Klein et al. 2009). When available, FireANTs (GPU) was used for the SyN stage. The T2w was rigidly coregistered to the T1w using ANTs and resampled into T1w space. Optional cortical surface reconstruction was performed using the fastsurfer_surfrecon pipeline (modified from FastSurfer recon_surf) with FreeSurfer (Dale et al. 1999; Henschel et al. 2020; RRID:SCR_001847).
+# Abbreviated transform labels used in parenthetical func coregistration sentences.
+_XFM_COREG_LABELS: Dict[str, str] = {
+    "translation": "translation",
+    "rigid": "rigid",
+    "affine": "rigid and affine",
+    "syn": "rigid, affine, and SyN",
+}
 
-Functional data preprocessing
-For each of the {N_FUNC} BOLD run(s) found per subject (across all tasks and sessions), the following preprocessing was performed. Slice timing correction was applied using AFNI 3dTshift (Cox 1996), with the slice acquisition pattern derived from BIDS SliceTiming and SliceEncodingDirection metadata. Functional images were reoriented using AFNI 3dresample. Head motion correction was performed with mcflirt (FSL; Jenkinson et al. 2002), using a reference volume (middle timepoint, specified timepoint, or temporal mean). Motion parameters (rotation and translation) were saved for confound regression or QC. Despiking was applied using AFNI 3dDespike to reduce the impact of extreme timepoints. When multiple BOLD runs existed within a session, within-session coregistration was performed using ANTs or FLIRT rigid registration of each run's mean image to a reference run. The temporal mean of the (motion-corrected and optionally despiked) BOLD was bias-corrected with N4BiasFieldCorrection (ANTs). The mean functional was conformed to template space (FLIRT rigid to template after skull stripping with nhp_skullstrip_nn) and a brain mask was computed on the mean functional using nhp_skullstrip_nn (functional model, fine-tuned from NHP-BrainExtraction/DeepBet). The mean functional was registered to the preprocessed anatomical (or template) using ANTs (rigid, affine, or SyN as configured; optionally FireANTs for SyN). The composite transform was applied to the full 4D BOLD and brain mask using antsApplyTransforms (ANTs), with BSpline interpolation for the BOLD series. Runs with fewer than 15 volumes skipped motion correction and despiking; pass-through outputs were generated.
+# APA 7 references for the Methods section. Key = exact in-text citation (Author et al., YEAR).
+# Only references whose key appears in the methods body are included in the report.
+# Full reference: docs_temp/paper/methods_reference.md
+_METHODS_REFERENCE_MAP = {
+    "Avants et al., 2008": (
+        "Avants, B. B., Epstein, C. L., Grossman, M., & Gee, J. C. (2008). Symmetric diffeomorphic "
+        "image registration with cross-correlation: Evaluating automated labeling of elderly and "
+        "neurodegenerative brain. Medical Image Analysis, 12(1), 26–41. "
+        "https://doi.org/10.1016/j.media.2007.06.004"
+    ),
+    "Cox, 1996": (
+        "Cox, R. W. (1996). AFNI: Software for analysis and visualization of functional magnetic "
+        "resonance neuroimages. Computers and Biomedical Research, 29(3), 162–173. "
+        "https://doi.org/10.1006/cbmr.1996.0014"
+    ),
+    "Cox & Hyde, 1997": (
+        "Cox, R. W., & Hyde, J. S. (1997). Software tools for analysis and visualization of fMRI "
+        "data. NMR in Biomedicine, 10(4–5), 171–178. "
+        "https://doi.org/10.1002/(SICI)1099-1492(199706/08)10:4/5<171::AID-NBM453>3.0.CO;2-L"
+    ),
+    "Dale et al., 1999": (
+        "Dale, A. M., Fischl, B., & Sereno, M. I. (1999). Cortical surface-based analysis: "
+        "Segmentation and surface reconstruction. NeuroImage, 9(2), 179–194. "
+        "https://doi.org/10.1006/nimg.1998.0395"
+    ),
+    "Henschel et al., 2020": (
+        "Henschel, L., Conjeti, S., Estrada, S., Diers, K., Fischl, B., & Reuter, M. (2020). "
+        "FastSurfer: A fast and accurate deep learning based neuroimaging pipeline. "
+        "NeuroImage, 219, 117012. https://doi.org/10.1016/j.neuroimage.2020.117012"
+    ),
+    "Jenkinson et al., 2002": (
+        "Jenkinson, M., Bannister, P., Brady, M., & Smith, S. (2002). Improved optimization for the "
+        "robust and accurate linear registration and motion correction of brain images. "
+        "NeuroImage, 17(2), 825–841. https://doi.org/10.1006/nimg.2002.1132"
+    ),
+    "Jena et al., 2024": (
+        "Jena, R., Chaudhari, P., & Gee, J. C. (2024). FireANTs: Adaptive Riemannian optimization "
+        "for multi-scale diffeomorphic matching. arXiv preprint arXiv:2404.01249. "
+        "https://arxiv.org/abs/2404.01249"
+    ),
+    "Jung et al., 2021": (
+        "Jung, B., Taylor, P. A., Seidlitz, J., Suber, A., Donahue, C. J., Coalson, T., Glasser, "
+        "M. F., Shafer, A. T., Van Essen, D. C., Dienes, T., Earl, E., Feczko, E., Fair, D. A., & "
+        "Donahue, J. N. (2021). A comprehensive macaque fMRI pipeline and hierarchical atlas. "
+        "NeuroImage, 235, 117997. https://doi.org/10.1016/j.neuroimage.2021.117997"
+    ),
+    "Tustison et al., 2010": (
+        "Tustison, N. J., Avants, B. B., Cook, P. A., Zheng, Y., Egan, A., Yushkevich, P. A., & "
+        "Gee, J. C. (2010). N4ITK: Improved N3 bias correction. IEEE Transactions on Medical "
+        "Imaging, 29(6), 1310–1320. https://doi.org/10.1109/TMI.2010.2046908"
+    ),
+    "Wang et al., 2021": (
+        "Wang, X., Li, X., & Xu, T. (2021). U-net model for brain extraction: Trained on humans for "
+        "transfer to non-human primates. NeuroImage, 235, 118001. "
+        "https://doi.org/10.1016/j.neuroimage.2021.118001"
+    ),
+}
 
-Many internal operations use Python (nibabel, numpy, scipy) and the tools cited above. For a detailed reference of methods per step and full citations, see the pipeline documentation (methods_reference.md in the repository).
 
-Copyright and reuse
-This boilerplate text was automatically generated by brainana with the intention that users may copy it into their manuscripts and reports. Adapt as needed for your specific run (e.g. template name, number of runs). Pipeline source code and documentation are available at the project repository.
-
-References
-Avants, B. B., Epstein, C. L., Grossman, M., & Gee, J. C. (2008). Symmetric diffeomorphic image registration with cross-correlation: Evaluating automated labeling of elderly and neurodegenerative brain. Medical Image Analysis, 12(1), 26–41. https://doi.org/10.1016/j.media.2007.06.004
-Cox, R. W. (1996). AFNI: software for analysis and visualization of functional magnetic resonance neuroimages. Computers and Biomedical Research, 29(3), 162–173. https://doi.org/10.1006/cbmr.1996.0014
-Dale, A. M., Fischl, B., & Sereno, M. I. (1999). Cortical surface-based analysis: I. Segmentation and surface reconstruction. NeuroImage, 9(2), 179–194. https://doi.org/10.1006/nimg.1998.0395
-Henschel, L., Conjeti, S., Estrada, S., Diers, K., Fischl, B., & Reuter, M. (2020). FastSurfer: A fast and accurate deep learning based neuroimaging pipeline. NeuroImage, 219, 117012. https://doi.org/10.1016/j.neuroimage.2020.117012
-Jenkinson, M., Bannister, P., Brady, M., & Smith, S. (2002). Improved optimization for the robust and accurate linear registration and motion correction of brain images. NeuroImage, 17(2), 825–841. https://doi.org/10.1006/nimg.2002.1132
-Klein, A., Andersson, J., Ardekani, B. A., et al. (2009). Evaluation of 14 nonlinear deformation algorithms applied to human brain MRI registration. NeuroImage, 46(3), 786–802. https://doi.org/10.1016/j.neuroimage.2008.12.037
-Tustison, N. J., Avants, B. B., Cook, P. A., Zheng, Y., Egan, A., Yushkevich, P. A., & Gee, J. C. (2010). N4ITK: Improved N3 bias correction. IEEE Transactions on Medical Imaging, 29(6), 1310–1320. https://doi.org/10.1109/TMI.2010.2046908
-Wang, X., Li, X., & Xu, T. (2021). U-net model for brain extraction: Trained on humans for transfer to non-human primates. NeuroImage, 235, 118001. https://doi.org/10.1016/j.neuroimage.2021.118001"""
+def _cited_references(methods_body: str) -> List[str]:
+    """Return full reference strings for all citation keys that appear in methods_body, sorted alphabetically by first author."""
+    seen: set = set()
+    for match in re.findall(r"\(([^)]+)\)", methods_body):
+        for part in match.split(";"):
+            key = part.strip()
+            if key in _METHODS_REFERENCE_MAP:
+                seen.add(key)
+    refs = [_METHODS_REFERENCE_MAP[k] for k in seen]
+    return sorted(refs)
 
 
 class BidsEntityProcessor:
@@ -468,9 +529,9 @@ class HtmlGenerator:
         )
         output_space_display = str(output_space_raw).split(":")[0] if output_space_raw else "NMT2Sym"
 
-        # Surface reconstruction: show "Applicable" if this report includes surface reconstruction QC
+        # Surface reconstruction: show "Run by Brainana" if this report includes surface reconstruction QC
         has_surf = HtmlGenerator._has_surface_recon_snapshots(organized["anatomical"])
-        freesurfer_text = "Applicable" if has_surf else "Not applicable"
+        freesurfer_text = "Run by Brainana" if has_surf else "Not applicable"
 
         content = f'''<div class="boiler-html">
 <p><strong>Configuration:</strong> For detailed processing parameters and configuration settings,
@@ -747,83 +808,235 @@ please refer to the brainana configuration files in your preprocessing directory
         return HtmlGenerator.create_section("About", "About", content)
     
     @staticmethod
-    def _get_methods_counts(report_data: Dict[str, Any]) -> tuple:
-        """Get T1w, T2w, and functional counts for boilerplate (same logic as summary)."""
-        dataset_context = report_data.get("dataset_context", {})
-        organized = report_data.get("organized_snapshots", {})
-        if "subject_file_counts" in dataset_context:
-            t1w = dataset_context["subject_file_counts"].get("t1w", 0)
-            t2w = dataset_context["subject_file_counts"].get("t2w", 0)
-            func = dataset_context["subject_file_counts"].get("functional", 0)
-        elif "job_file_counts" in dataset_context:
-            t1w = dataset_context["job_file_counts"].get("anatomical", 0)
-            t2w = 0
-            func = dataset_context["job_file_counts"].get("functional", 0)
+    def _conform_sentence(data_label: str, space_label: str, skull_enabled: bool) -> str:
+        """Return the conform-to-space sentence, shared between T1w and fMRI preprocessing."""
+        if skull_enabled:
+            return (
+                f"The {data_label} was conformed to {space_label} to ensure better performance "
+                "of the subsequent steps: first, initial skullstripping was performed using a CNN "
+                "model fine-tuned from DeepBet (Wang et al., 2021), then rigid registration to the "
+                f"{space_label} brain was performed with FLIRT (FSL; Jenkinson et al., 2002)."
+            )
+        return (
+            f"The {data_label} was conformed to {space_label} via rigid registration with FLIRT "
+            "(FSL; Jenkinson et al., 2002) to ensure better performance of the subsequent steps."
+        )
+
+    @staticmethod
+    def _build_anat_methods_paragraph(config: Dict[str, Any], has_t2w: bool) -> tuple:
+        """Build anatomical preprocessing paragraphs dynamically from config.
+
+        Returns:
+            (t1w_text, t2w_text): t2w_text is None when has_t2w is False.
+        """
+        # --- T1w paragraph ---
+        t1w = [
+            "T1w images were preprocessed as follows. "
+            "When multiple T1w images existed per session or subject, a single synthesized T1w was "
+            "created by rigid coregistration to the first image using ANTs "
+            "(Avants et al., 2008) and averaging in reference space."
+        ]
+
+        if get_nested_config_value(config, "anat.reorient.enabled", False):
+            t1w.append(
+                "The T1w was reoriented to the target or standard orientation using AFNI 3dresample "
+                "(Cox, 1996; Cox & Hyde, 1997)."
+            )
+
+        skull_enabled = bool(get_nested_config_value(config, "anat.skullstripping_segmentation.enabled", True))
+
+        if get_nested_config_value(config, "anat.conform.enabled", True):
+            t1w.append(HtmlGenerator._conform_sentence("T1w", "template space", skull_enabled))
+
+        if skull_enabled:
+            t1w.append(
+                "Brain tissue segmentation and brain mask generation were performed using a "
+                "CNN fine-tuned from FastSurfer one (Henschel et al., 2020) "
+                "and trained on macaque brain atlases (CHARM/SARM level 2; Jung et al., 2021)."
+            )
+
+        if get_nested_config_value(config, "anat.bias_correction.enabled", True):
+            t1w.append(
+                "The T1w was corrected for intensity non-uniformity with "
+                "N4BiasFieldCorrection (Tustison et al., 2010), "
+                "using the brain mask to restrict the correction."
+            )
+
+        xfm_type = (get_nested_config_value(config, "registration.anat2template_xfm_type", "syn") or "syn").lower()
+        stage = _XFM_STAGE_LABELS.get(xfm_type, xfm_type)
+        reg_sentence = (
+            f"Volume-based spatial normalization to the template was performed through "
+            f"{stage} registration with antsRegistration (ANTs; Avants et al., 2008)."
+        )
+        if xfm_type == "syn":
+            reg_sentence += (
+                " When a GPU was available, FireANTs (Jena et al., 2024) "
+                "was used for the non-linear stage."
+            )
+        t1w.append(reg_sentence)
+
+        if get_nested_config_value(config, "anat.surface_reconstruction.enabled", True):
+            t1w.append(
+                "Cortical surface reconstruction was performed using a modified FastSurfer pipeline "
+                "(Henschel et al., 2020) adapted for non-human primates, based on the FreeSurfer "
+                "surface reconstruction framework (Dale et al., 1999)."
+            )
+
+        # --- T2w paragraph (only when T2w data is present) ---
+        if not has_t2w:
+            return " ".join(t1w), None
+
+        t2w = [
+            "As with the T1w, when multiple T2w images existed per session or subject, a single "
+            "synthesized T2w was created."
+        ]
+
+        if get_nested_config_value(config, "anat.reorient.enabled", False):
+            t2w.append(
+                "The T2w was reoriented to the target or standard orientation using AFNI 3dresample "
+                "(Cox, 1996; Cox & Hyde, 1997)."
+            )
+
+        t2w.append(
+            "The T2w was rigidly coregistered to the T1w space using ANTs (Avants et al., 2008)."
+        )
+
+        return " ".join(t1w), " ".join(t2w)
+
+    @staticmethod
+    def _build_func_methods_paragraph(config: Dict[str, Any]) -> str:
+        """Build the functional preprocessing paragraph dynamically from config."""
+        anat_only = bool(get_nested_config_value(config, "general.anat_only", False))
+        if anat_only:
+            return "Functional data preprocessing was not performed (anatomical-only mode)."
+
+        sentences = [
+            "fMRI data were preprocessed as follows."
+        ]
+
+        if get_nested_config_value(config, "func.slice_timing_correction.enabled", True):
+            sentences.append(
+                "Slice timing correction was applied using AFNI 3dTshift (Cox, 1996; Cox & Hyde, 1997)."
+            )
+
+        if get_nested_config_value(config, "func.reorient.enabled", False):
+            sentences.append(
+                "fMRI data were reoriented to the target or standard orientation using AFNI 3dresample "
+                "(Cox, 1996; Cox & Hyde, 1997)."
+            )
+
+        motion_enabled = bool(get_nested_config_value(config, "func.motion_correction.enabled", True))
+        if motion_enabled:
+            sentences.append(
+                "Head motion correction was performed with mcflirt (FSL; Jenkinson et al., 2002)."
+            )
+
+        despike_enabled = bool(get_nested_config_value(config, "func.despike.enabled", False))
+        if despike_enabled:
+            sentences.append(
+                "Despiking was applied using AFNI 3dDespike (Cox, 1996; Cox & Hyde, 1997) "
+                "to reduce the impact of extreme timepoints."
+            )
+
+        if get_nested_config_value(config, "func.coreg_runs_within_session", True):
+            sentences.append(
+                "When multiple fMRI runs existed within a session, within-session coregistration was "
+                "performed using ANTs (Avants et al., 2008) by registering each run's mean image to a reference run."
+            )
+
+        func_skull = bool(get_nested_config_value(config, "func.skullstripping.enabled", True))
+        if get_nested_config_value(config, "func.conform.enabled", True):
+            sentences.append(HtmlGenerator._conform_sentence("fMRI data", "target space", func_skull))
+        elif func_skull:
+            sentences.append(
+                "The fMRI data was skullstripped using a CNN model fine-tuned from DeepBet (Wang et al., 2021)."
+            )
+
+        func2anat_xfm = (get_nested_config_value(config, "registration.func2anat_xfm_type", "syn") or "syn").lower()
+        xfm_desc = _XFM_COREG_LABELS.get(func2anat_xfm, func2anat_xfm)
+        composite = (
+            "The composite transform was applied to the full 4D BOLD and brain mask using "
+            "antsApplyTransforms (ANTs), with B-spline interpolation for the BOLD series."
+        )
+        if func2anat_xfm == "syn":
+            sentences.append(
+                f"The mean fMRI data was registered to the preprocessed anatomical (or template) using "
+                f"ANTs ({xfm_desc}; Avants et al., 2008); when a GPU was available, FireANTs "
+                f"(Jena et al., 2024) was used for the non-linear stage. {composite}"
+            )
         else:
-            anat_counts = HtmlGenerator._count_anatomical_by_modality(organized.get("anatomical", {}))
-            t1w = anat_counts.get("t1w", 0)
-            t2w = anat_counts.get("t2w", 0)
-            func = HtmlGenerator._count_unique_images(organized.get("functional", {}))
-        n_t1w = int(t1w) if t1w is not None else 0
-        n_t2w = int(t2w) if t2w is not None else 0
-        n_func = int(func) if func is not None else 0
-        return n_t1w, n_t2w, n_func
+            sentences.append(
+                f"The mean fMRI data was registered to the preprocessed anatomical (or template) using "
+                f"ANTs ({xfm_desc}; Avants et al., 2008). {composite}"
+            )
+
+        skip_steps = []
+        if motion_enabled:
+            skip_steps.append("motion correction")
+        if despike_enabled:
+            skip_steps.append("despiking")
+        if skip_steps:
+            sentences.append(
+                f"Runs with fewer than 15 volumes skipped {' and '.join(skip_steps)}; "
+                "pass-through outputs were generated."
+            )
+
+        return " ".join(sentences)
 
     @staticmethod
     def create_methods_section(report_data: Dict[str, Any]) -> str:
         """Create methods section with fMRIPrep-style boilerplate (methods and references), structured with headings and lists."""
         meta = report_data.get("metadata", {})
         version = meta.get("version", "unknown")
-        n_t1w, n_t2w, n_func = HtmlGenerator._get_methods_counts(report_data)
-        # Ensure at least 1 for anatomical when we have no context (avoid "0 T1w" in text)
-        if n_t1w == 0 and n_t2w == 0:
-            n_t1w = 1
-        try:
-            body = BOILERPLATE_METHODS_TEMPLATE.format(
-                VERSION=version,
-                N_T1W=n_t1w,
-                N_T2W=n_t2w,
-                N_FUNC=n_func,
+        config = report_data.get("configuration", {}) or {}
+
+        # Detect whether T2w data was actually processed for this subject
+        dataset_context = report_data.get("dataset_context", {})
+        if "subject_file_counts" in dataset_context:
+            has_t2w = int(dataset_context["subject_file_counts"].get("t2w", 0) or 0) > 0
+        else:
+            anat_counts = HtmlGenerator._count_anatomical_by_modality(
+                report_data.get("organized_snapshots", {}).get("anatomical", {})
             )
-        except KeyError:
-            body = BOILERPLATE_METHODS_TEMPLATE.replace("{VERSION}", version).replace(
-                "{N_T1W}", str(n_t1w)
-            ).replace("{N_T2W}", str(n_t2w)).replace("{N_FUNC}", str(n_func))
-        # Parse into structured blocks and build HTML with headings
-        blocks = [b.strip() for b in body.split("\n\n") if b.strip()]
+            has_t2w = anat_counts.get("t2w", 0) > 0
+
         parts = []
-        section_headers = (
-            "Anatomical data preprocessing",
-            "Functional data preprocessing",
-            "Copyright and reuse",
-            "References",
+
+        # Intro paragraph
+        intro = (
+            "Results included in this manuscript come from preprocessing performed using "
+            f"<b>brainana {html.escape(version)}</b>."
         )
-        for block in blocks:
-            if block.startswith("Results included"):
-                parts.append(f"<p class=\"methods-intro\">{html.escape(block)}</p>")
-                continue
-            if block.startswith("Many internal operations"):
-                parts.append(f"<p>{html.escape(block)}</p>")
-                continue
-            if block.startswith("References"):
-                lines = block.split("\n")
-                title = lines[0]
-                ref_lines = [ln.strip() for ln in lines[1:] if ln.strip()]
-                parts.append(f"<h3 class=\"methods-subtitle\">{html.escape(title)}</h3>")
-                if ref_lines:
-                    items = "".join(f"<li>{html.escape(ref)}</li>" for ref in ref_lines)
-                    parts.append(f"<ol class=\"methods-refs\">{items}</ol>")
-                continue
-            for header in section_headers:
-                if block.startswith(header):
-                    rest = block[len(header):].strip()
-                    parts.append(f"<h3 class=\"methods-subtitle\">{html.escape(header)}</h3>")
-                    if rest:
-                        parts.append(f"<p>{html.escape(rest)}</p>")
-                    break
-            else:
-                # Fallback: plain paragraph
-                parts.append(f"<p>{html.escape(block)}</p>")
+        parts.append(f"<p class=\"methods-intro\">{intro}</p>")
+
+        t1w_text = ""
+        t2w_text = None
+        func_text = ""
+
+        # Anatomical section — built directly to support optional T2w subheadings
+        parts.append("<h3 class=\"methods-subtitle\">Anatomical data preprocessing</h3>")
+        if isinstance(config, dict):
+            t1w_text, t2w_text = HtmlGenerator._build_anat_methods_paragraph(config, has_t2w)
+            if has_t2w:
+                parts.append("<h4 class=\"methods-subsubtitle\">T1w preprocessing</h4>")
+            parts.append(f"<p>{html.escape(t1w_text)}</p>")
+            if has_t2w and t2w_text:
+                parts.append("<h4 class=\"methods-subsubtitle\">T2w preprocessing</h4>")
+                parts.append(f"<p>{html.escape(t2w_text)}</p>")
+
+        # Functional section
+        parts.append("<h3 class=\"methods-subtitle\">Functional data preprocessing</h3>")
+        if isinstance(config, dict):
+            func_text = HtmlGenerator._build_func_methods_paragraph(config)
+            parts.append(f"<p>{html.escape(func_text)}</p>")
+
+        # References: only those cited in the methods text above
+        methods_body = " ".join([intro, t1w_text, t2w_text or "", func_text])
+        refs_list = _cited_references(methods_body)
+        parts.append("<h3 class=\"methods-subtitle\">References</h3>")
+        items = "".join(f"<li>{html.escape(ref)}</li>" for ref in refs_list)
+        parts.append(f"<ul class=\"methods-refs\">{items}</ul>")
+
         content = "<div class=\"boiler-html methods-structured\">\n" + "\n".join(parts) + "\n</div>"
         return HtmlGenerator.create_section("Methods", "Methods", content)
 
@@ -909,8 +1122,7 @@ def _generate_html_report(report_data: Dict[str, Any], report_path: Path, logger
     
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
-    
-        logger.info(f"Output: HTML report written - {report_path}")
+    logger.info(f"Output: HTML report written - {report_path}")
 
 
 def _create_html_template() -> str:
@@ -975,6 +1187,13 @@ body {{
 
 .methods-structured .methods-subtitle:first-of-type {{
     margin-top: 0;
+}}
+
+.methods-structured .methods-subsubtitle {{
+    font-size: 1em;
+    font-weight: 600;
+    margin-top: 0.75em;
+    margin-bottom: 0.3em;
 }}
 
 .methods-structured .methods-intro {{

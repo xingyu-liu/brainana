@@ -1,51 +1,69 @@
 FAQ and troubleshooting
 =======================
 
-Common questions and fixes when running brainana (especially with Docker).
+- `Do I need a config file?`_
+- `Can I run without a FreeSurfer license?`_
+- `How do I enable GPU acceleration?`_
+- `How do I align container resources with Nextflow?`_
+- `How do I process only a subset of subjects or sessions?`_
+- `My pipeline run is hanging.`_
 
-General
--------
+----
 
-**Do I need to provide a config file?**  
-No. In production Docker mode, built-in defaults are used. For custom settings, generate a config with the config generator (GUI), save it, mount it (e.g. ``-v /path/to/config.yaml:/config.yaml``), and pass ``--config /config.yaml`` as an extra argument.
+Do I need a config file?
+------------------------
 
-**Can I run without a FreeSurfer license?**  
-Anatomical and functional preprocessing will run, but surface reconstruction will fail. The container will warn if the license is missing. Get a free license from https://surfer.nmr.mgh.harvard.edu/registration.html and mount it with ``-v <path>:/fs_license.txt``.
+No. Built-in defaults are used for all pipeline steps. To customise the pipeline you have two options:
 
-Docker and GPU
---------------
+1. **Config file (recommended):** Generate a YAML config file with the :doc:`configuration` page's interactive generator, mount it into the container, and pass ``--config /path/to/config.yaml``.
+2. **Command-line arguments:** Pass common options directly in the ``docker run`` command (e.g. ``--anat_only``, ``--output_space "NMT2Sym:res-1"``). See :ref:`command-line-reference`.
 
-**How do I enable GPU acceleration?**  
-Add ``--gpus all`` to your ``docker run`` command. You need the `NVIDIA Container Toolkit <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html>`_ installed on the host.
+Can I run without a FreeSurfer license?
+----------------------------------------
 
-**How do I align Docker limits with Nextflow?**  
-The container defaults to 8 CPUs and 20 GB for Nextflow. To cap the container to match: ``--memory 20g --cpus 8``. To give Nextflow more resources (e.g. for a larger run): ``-e NXF_MAX_CPUS=16 -e NXF_MAX_MEMORY=32g`` or use ``-profile recommended`` (e.g. 32 GB). See :doc:`usage_local` (:ref:`command-line-reference`).
+Anatomical and functional preprocessing will still run, but surface reconstruction will be skipped. The container will warn if the license is missing.
 
-**“Cannot connect to X server” when running GUI tools.**  
-On the host, run ``xhost +local:root``. Over SSH, use X11 forwarding (e.g. ``ssh -X`` or ``-Y``).
+Get a free license at https://surfer.nmr.mgh.harvard.edu/registration.html, then mount it with ``-v <path>:/fs_license.txt`` and pass ``--freesurfer-license /fs_license.txt``.
 
-File permissions and user
--------------------------
+How do I enable GPU acceleration?
+-----------------------------------
 
-**Output files are owned by root.**  
-Run the container as your user so outputs match your host UID/GID:
+Add ``--gpus all`` to your ``docker run`` command. You must have the `NVIDIA Container Toolkit <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html>`_ installed on the host. See :doc:`installation` for setup steps.
+
+How do I align container resources with Nextflow?
+--------------------------------------------------
+
+The container defaults to 8 CPUs and 20 GB for Nextflow (controlled by ``NXF_MAX_CPUS`` and ``NXF_MAX_MEMORY``). To change these:
+
+- Pass ``-e NXF_MAX_CPUS=<n>`` and ``-e NXF_MAX_MEMORY=<n>g`` to ``docker run``.
+- Use ``-profile minimal`` (4 CPUs, 16 GB) or ``-profile recommended`` (8+ CPUs, 32 GB) for preset profiles.
+
+See :ref:`command-line-reference` for the full resource options.
+
+How do I process only a subset of subjects or sessions?
+--------------------------------------------------------
+
+Pass ``--subjects`` and/or ``--sessions`` in the ``docker run`` command:
 
 .. code-block:: bash
 
-   docker run ... --user $(id -u):$(id -g) \
-       -e NXF_WORK=/tmp/nextflow-work \
-       -e NXF_HOME=/tmp/nextflow-home \
-       ...
+   docker run -it --rm --gpus all \
+       -v /data/bids:/input \
+       -v /data/output:/output \
+       -v /path/to/license.txt:/fs_license.txt \
+       liuxingyu987/brainana:latest /input /output \
+       --freesurfer-license /fs_license.txt \
+       --subjects sub-001 sub-002 \
+       --sessions ses-01
 
-See :doc:`usage_local` for the full example.
+See :ref:`command-line-reference` for all filtering options.
 
-Pipeline and config
--------------------
+My pipeline run is hanging.
+----------------------------
 
-**Where are logs?**  
-Under ``output_dir/nextflow_reports/`` (e.g. ``nextflow_trace.txt``). Check that path for failed or aborted tasks.
+This typically happens when Nextflow runs out of memory. Try one or more of the following:
 
-**How do I run only a subset of subjects?**  
-Use ``--subjects`` (and optionally ``--sessions``) when invoking the container or ``run_brainana.sh run main.nf``. Example: ``... /input /output --subjects sub-001 sub-002`` (syntax may depend on config; see :doc:`usage_local`).
-
-For more details on resources and tuning, see the internal doc ``docs/RESOURCE_CALIBRATION.md`` in the repository.
+- Increase the RAM available to Docker.
+- Use ``-profile minimal`` to reduce resource usage.
+- Set ``-e NXF_MAX_CPUS`` and ``-e NXF_MAX_MEMORY`` to match your available resources.
+- Resume from the last checkpoint by re-running the same command (Nextflow resume is enabled by default).

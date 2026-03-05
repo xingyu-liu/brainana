@@ -14,7 +14,7 @@ except ImportError:
     raise ImportError("Failed to import generate_qc_report from nhp_mri_prep.quality_control.reports")
 
 # %%
-dataset_dir = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v2'
+dataset_dir = '/home/star/github/brainana/docs/_build/_static/QCreport_example'
 
 # %%
 # get sub dir list
@@ -25,7 +25,7 @@ sublist = [Path(sub) for sub in sublist if Path(sub).is_dir()]
 config = load_config(f'{dataset_dir}/nextflow_reports/config.yaml')
 for sub in sublist:
     snapshot_dir = sub / 'figures'
-    report_path = sub.parent / f'{sub.name}_new.html'
+    report_path = sub.parent / f'{sub.name}.html'
     generate_qc_report(
         snapshot_dir=snapshot_dir,
         report_path=report_path,

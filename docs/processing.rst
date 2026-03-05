@@ -7,10 +7,7 @@ anatomical synthesis runs only when multiple T1w/T2w runs or sessions
 are present and synthesis is enabled; slice timing correction runs
 only when slice timing information is available in the BIDS metadata.
 
-This page incorporates a detailed methods description for the
-pipeline, derived from the internal paper materials in
-``docs_temp/paper`` (including ``methods_reference.md`` and
-``04-core-components-and-methods.md``).
+This page describes the methods used at each stage of the pipeline.
 
 
 Pipeline overview
@@ -112,8 +109,7 @@ brainana can synthesize a single anatomical reference.
 
   1. Skull-strip the input with ``nhp_skullstrip_nn`` (UNet) or use
      an existing brain mask when skull stripping is disabled.
-  2. Optionally pad and/or resample the template to match the input
-     resolution.
+  2. Resample the template to match the input resolution if needed.
   3. Run FSL FLIRT (rigid, 6 DOF) from the brain-extracted input to
      the template.
   4. Use AFNI ``3dresample`` to ensure template and input share a
@@ -192,7 +188,7 @@ preprocessed T1w:
   processing and surface reconstruction.
 
 
-2.8 Surface reconstruction (optional)
+2.8 Surface reconstruction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Surface reconstruction is an optional and resource-intensive step.
@@ -254,7 +250,7 @@ applies slice timing correction.
   when slice timing metadata are missing.
 
 
-3.2 Reorient (functional)
+3.2 Reorient
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Method:** Same approach as anatomical reorient, using AFNI
@@ -284,11 +280,11 @@ applies slice timing correction.
   the BOLD signal.
 - **Method:** AFNI ``3dDespike`` is applied to the motion-corrected
   BOLD time series with configurable parameters (e.g. ``-cut`` and
-  optional ``-localedit``). The step can be skipped for very short
-  runs.
+  optional ``-localedit``). The step is skipped for runs of 15 or
+  fewer volumes.
 
 
-3.5 Within-session coregistration (optional)
+3.5 Within-session coregistration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When multiple BOLD runs exist per session, an optional within-session
@@ -303,7 +299,7 @@ a session-averaged temporal mean.
   mask.
 
 
-3.6 Bias correction (functional)
+3.6 Bias correction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Method:** N4 bias field correction (ANTs
@@ -314,7 +310,7 @@ a session-averaged temporal mean.
   BOLD in a separate step.
 
 
-3.7 Conform and skull stripping (functional)
+3.7 Conform and skull stripping
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Conform:** The functional temporal mean is conformed to the
@@ -329,7 +325,7 @@ a session-averaged temporal mean.
   ``fslmaths -mas``.
 
 
-3.8 Registration (functional to anatomical / template)
+3.8 Registration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Method:** ANTs registration (rigid, affine, or SyN as configured)
@@ -341,25 +337,7 @@ a session-averaged temporal mean.
   space, plus motion and other confounds for downstream analysis.
 
 
-4. Quality control
-------------------
-
-brainana generates visual and quantitative quality control outputs.
-
-- **Purpose:** Allow users to visually and quantitatively inspect the
-  success of preprocessing (e.g. skull stripping, registration,
-  motion).
-- **Methods:** Snapshots and overlays are generated at various stages,
-  such as conform, skull stripping, bias correction, anatomical-to-
-  template registration, and functional-to-anatomical / functional-
-  to-template registration. Motion parameters and optional
-  within-session coregistration diagnostics are plotted.
-- **Reports:** HTML reports are assembled with navigation, summary,
-  modality-specific sections, and a methods/boilerplate section
-  derived from the internal methods template.
-
-
-5. Summary table
+4. Summary table
 ----------------
 
 .. list-table::
@@ -387,7 +365,7 @@ brainana generates visual and quantitative quality control outputs.
      - Registration
      - ANTs (optional FireANTs for SyN)
    * - Anatomical
-     - Surface recon (optional)
+     - Surface recon
      - ``fastsurfer_surfrecon`` + FreeSurfer
    * - Functional
      - Slice timing
@@ -402,7 +380,7 @@ brainana generates visual and quantitative quality control outputs.
      - Despiking
      - AFNI 3dDespike
    * - Functional
-     - Within-session coreg (optional)
+     - Within-session coreg
      - ANTs or FLIRT
    * - Functional
      - Bias correction
@@ -414,7 +392,5 @@ brainana generates visual and quantitative quality control outputs.
      - Registration
      - ANTs (optional FireANTs for SyN)
 
-For outputs and directory layout, see :doc:`outputs`. For design and
-architecture details, see the repository docs under ``docs_temp/paper/``
-(e.g. ``03-design-and-architecture.md``, ``04-core-components-and-methods.md``).
+For outputs and directory layout, see :doc:`outputs`.
 

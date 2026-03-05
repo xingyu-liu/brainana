@@ -25,6 +25,7 @@ PKG-INFO
 
 # Virtual environments
 .venv/
+.rtd-venv/
 .fireants-src/
 venv/
 env/

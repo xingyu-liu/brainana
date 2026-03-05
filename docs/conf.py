@@ -15,40 +15,29 @@ release = _project.get("version", "0.0.0")
 version = ".".join(release.split(".")[:2])  # e.g. "1.0" from "1.0.0"
 
 extensions = [
+    "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
 ]
-try:
-    import myst_parser  # noqa: F401
-    extensions.insert(0, "myst_parser")
-except ImportError:
-    pass
 
 templates_path = ["_templates"]
 source_suffix = {
     ".rst": "restructuredtext",
+    ".md": "markdown",
 }
-if "myst_parser" in extensions:
-    source_suffix[".md"] = "markdown"
 
-try:
-    import sphinx_rtd_theme  # noqa: F401
-    html_theme = "sphinx_rtd_theme"
-except ImportError:
-    html_theme = "alabaster"
-
+html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
+html_logo = "_static/brainana_logo_side.png"
+html_theme_options = {"logo_only": True}
 html_show_sourcelink = False
 html_title = "brainana"
 html_short_title = "brainana"
 
-# MyST settings (Markdown in Sphinx) – only when myst_parser is loaded
-# (linkify omitted: requires linkify-it-py; use deflist only for minimal deps)
-if "myst_parser" in extensions:
-    myst_enable_extensions = ["deflist"]
+myst_enable_extensions = ["deflist"]
 
-# Intersphinx for Python/NumPy/nibabel links
+# Intersphinx for Python/NumPy links
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "numpy": ("https://numpy.org/doc/stable/", None),

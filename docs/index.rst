@@ -12,7 +12,7 @@ brainana
         -v <bids_dir>:/input \
         -v <output_dir>:/output \
         -v <path/to/license.txt>:/fs_license.txt \
-        liuxingyu987/brainana:latest
+        liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
 
 Contents
 --------
@@ -22,7 +22,7 @@ Contents
    :caption: User guide
 
    installation
-   usage_local
+   usage_notes
    configuration
    outputs
    processing
