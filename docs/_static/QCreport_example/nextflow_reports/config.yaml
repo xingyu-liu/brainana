@@ -1,0 +1,80 @@
+_description: Default configuration for brainana preprocessing pipeline
+general:
+  verbose: 2
+  anat_only: false
+  gpu_device: auto
+bids_filtering:
+  subjects: null
+  sessions: null
+  tasks: null
+  runs: null
+template:
+  output_space: NMT2Sym:res-05
+anat:
+  synthesis_level: subject
+  reorient:
+    enabled: false
+  conform:
+    enabled: true
+    padding_percentage: 0.1
+  skullstripping_segmentation:
+    enabled: true
+    method: fastSurferCNN
+    fastSurferCNN:
+      gpu_device: auto
+      batch_size: 8
+      plane_weight_coronal: 0.4
+      plane_weight_axial: 0.4
+      plane_weight_sagittal: 0.2
+      fix_V1_WM: true
+  bias_correction:
+    enabled: true
+    algorithm: N4BiasFieldCorrection
+    shrink_factor: 2
+    bspline_fitting: '[ 150 ]'
+    rescale_mean_to_100: true
+  surface_reconstruction:
+    enabled: true
+    use_t1wt2wcombined: false
+func:
+  coreg_runs_within_session: true
+  slice_timing_correction:
+    enabled: true
+    repetition_time: null
+    slice_timing: null
+    tzero: null
+    slice_time_ref: 0.5
+    slice_encoding_direction: null
+  reorient:
+    enabled: false
+  motion_correction:
+    enabled: true
+    dof: 6
+    cost: mutualinfo
+    smooth: 1.0
+    ref_vol: mid
+    cost_tolerance: 0.01
+    parameter_tolerance: 0.01
+  despike:
+    enabled: false
+    c1: 5
+    c2: 10
+    localedit: true
+    ignore_first_volumes: 0
+  bias_correction:
+    enabled: true
+    algorithm: N4BiasFieldCorrection
+    shrink_factor: 2
+    bspline_fitting: '[ 100 ]'
+    rescale_mean_to_100: true
+  conform:
+    enabled: true
+    padding_percentage: 0.1
+  skullstripping:
+    enabled: true
+registration:
+  anat2template_xfm_type: syn
+  func2anat_xfm_type: syn
+  func2template_xfm_type: syn
+  interpolation: BSpline
+  keep_func_resolution: true

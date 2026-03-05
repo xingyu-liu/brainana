@@ -29,8 +29,11 @@ source_suffix = {
 
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
-html_logo = "_static/brainana_logo_side.png"
-html_theme_options = {"logo_only": True}
+
+# Logo is optional so RTD (and local docs-only) builds succeed without the asset
+_logo = Path(__file__).resolve().parent / "_static" / "brainana_logo_side.png"
+html_logo = str(_logo) if _logo.exists() else None
+html_theme_options = {"logo_only": True} if html_logo else {}
 html_show_sourcelink = False
 html_title = "brainana"
 html_short_title = "brainana"

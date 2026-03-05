@@ -1,0 +1,358 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="brainana 1.0.0" />
+<title>brainana Quality Control Report</title>
+<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+<style type="text/css">
+.sub-report-title {}
+.run-title {}
+.sub-report-group {}
+
+h1 { padding-top: 35px; }
+h2 { padding-top: 20px; }
+h3 { padding-top: 15px; }
+
+.elem-desc {}
+.elem-caption {
+    margin-top: 15px;
+    margin-bottom: 0;
+}
+.elem-filename {}
+
+div.elem-image {
+  width: 100%;
+  page-break-before:always;
+}
+
+.elem-image object.svg-reportlet {
+    width: 100%;
+    padding-bottom: 5px;
+}
+
+.svg-reportlet {
+    width: 100%;
+}
+
+body {
+    padding: 65px 10px 10px;
+}
+
+.boiler-html {
+    font-family: "Bitstream Charter", "Georgia", Times;
+    margin: 20px 25px;
+    padding: 10px;
+    background-color: #F8F9FA;
+}
+
+.methods-structured .methods-subtitle {
+    font-size: 1.1em;
+    font-weight: 600;
+    margin-top: 1em;
+    margin-bottom: 0.4em;
+}
+
+.methods-structured .methods-subtitle:first-of-type {
+    margin-top: 0;
+}
+
+.methods-structured .methods-subsubtitle {
+    font-size: 1em;
+    font-weight: 600;
+    margin-top: 0.75em;
+    margin-bottom: 0.3em;
+}
+
+.methods-structured .methods-intro {
+    margin-bottom: 0.5em;
+}
+
+.methods-structured .methods-refs {
+    margin: 0.5em 0 1em 1.2em;
+    padding-left: 1.5em;
+}
+
+.methods-structured .methods-refs li {
+    margin-bottom: 0.35em;
+}
+
+div#boilerplate pre {
+    margin: 20px 25px;
+    padding: 10px;
+    background-color: #F8F9FA;
+}
+
+#errors div, #errors p {
+    padding-left: 1em;
+}
+
+.bids-entity {
+    background-color: #ddd;
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.dropdown-menu {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+</style>
+</head>
+<body>
+
+<nav class="navbar fixed-top navbar-expand-lg navbar-light bg-light">
+<div class="collapse navbar-collapse">
+    <ul class="navbar-nav">
+        <li class="nav-item"><a class="nav-link" href="#Summary">Summary</a></li>
+<li class="nav-item"><a class="nav-link" href="#Anatomical">Structural</a></li>
+<li class="nav-item dropdown">
+<a class="nav-link dropdown-toggle" id="navbarFunctional" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" href="#">Functional</a>
+<div class="dropdown-menu" aria-labelledby="navbarFunctional">
+<a class="dropdown-item" href="#functional-session-001">session <span class="bids-entity">001</span></a>
+<a class="dropdown-item" href="#functional-session-001-task-resting-acq-revpol-run-1">session <span class="bids-entity">001</span>, task <span class="bids-entity">resting</span>, acq <span class="bids-entity">RevPol</span>, run <span class="bids-entity">1</span></a>
+<a class="dropdown-item" href="#functional-session-001-task-resting-run-1">session <span class="bids-entity">001</span>, task <span class="bids-entity">resting</span>, run <span class="bids-entity">1</span></a>
+</div>
+</li>
+<li class="nav-item"><a class="nav-link" href="#About">About</a></li>
+<li class="nav-item"><a class="nav-link" href="#Methods">Methods</a></li>
+    </ul>
+</div>
+</nav>
+<noscript>
+    <h1 class="text-danger"> The navigation menu uses Javascript. Without it this report might not work as expected </h1>
+</noscript>
+
+<div id="Summary"><h1 class="sub-report-title">Summary</h1><div class="boiler-html">
+<p><strong>Configuration:</strong> For detailed processing parameters and configuration settings,
+please refer to the brainana configuration files in your preprocessing directory.</p>
+</div>
+<ul class="elem-desc">
+<li>Subject ID: example</li>
+<li>Structural images: 1 T1w, 1 T2w</li>
+<li>Functional images: 5</li>
+<li>Output spaces: NMT2Sym</li>
+<li>Surface reconstruction: Run by Brainana</li>
+</ul></div>
+<div id="Anatomical"><h1 class="sub-report-title">Structural</h1><h2 class="sub-report-group" id="anatomical-session-001-run-1">session <span class="bids-entity">001</span>, run <span class="bids-entity">1</span></h2>
+<h3 class="sub-report-group">T1w</h3>
+<div id="anatomical-sub-example_ses-001_run-1_desc-conform_T1w-png">
+<h3 class="run-title">Conform to template space</h3>
+<div class="elem-filename">
+    Rigid registered T1w (underlaid); template space (contour)
+</div>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_run-1_desc-conform_T1w.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_run-1_desc-conform_T1w.png" target="_blank">sub-example_ses-001_run-1_desc-conform_T1w.png</a>
+</div>
+<div id="anatomical-sub-example_ses-001_run-1_desc-skullstrip_T1w-png">
+<h3 class="run-title">Skullstripping</h3>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_run-1_desc-skullstrip_T1w.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_run-1_desc-skullstrip_T1w.png" target="_blank">sub-example_ses-001_run-1_desc-skullstrip_T1w.png</a>
+</div>
+<div id="anatomical-sub-example_ses-001_run-1_desc-atlasSegmentation_T1w-png">
+<h3 class="run-title">Atlas segmentation</h3>
+<div class="elem-filename">
+    ARM2: CHARM level 2 parcellation in cortex and SARM level 2 parcellation in subcortex
+</div>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_run-1_desc-atlasSegmentation_T1w.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_run-1_desc-atlasSegmentation_T1w.png" target="_blank">sub-example_ses-001_run-1_desc-atlasSegmentation_T1w.png</a>
+</div>
+<div id="anatomical-sub-example_ses-001_run-1_desc-biascorrect_T1w-png">
+<h3 class="run-title">Bias field correction</h3>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_run-1_desc-biascorrect_T1w.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_run-1_desc-biascorrect_T1w.png" target="_blank">sub-example_ses-001_run-1_desc-biascorrect_T1w.png</a>
+</div>
+<div id="anatomical-sub-example_ses-001_run-1_desc-anat2template_T1w-png">
+<h3 class="run-title">Structural to template registration</h3>
+<div class="elem-filename">
+    Registered T1w (underlaid); template space (contour)
+</div>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_run-1_desc-anat2template_T1w.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_run-1_desc-anat2template_T1w.png" target="_blank">sub-example_ses-001_run-1_desc-anat2template_T1w.png</a>
+</div>
+<div id="anatomical-sub-example_ses-001_run-1_desc-surfReconTissueSeg_T1w-png">
+<h3 class="run-title">Surface reconstruction tissue segmentation</h3>
+<div class="elem-filename">
+    White surface (blue contour); pial surface (red contour)
+</div>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_run-1_desc-surfReconTissueSeg_T1w.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_run-1_desc-surfReconTissueSeg_T1w.png" target="_blank">sub-example_ses-001_run-1_desc-surfReconTissueSeg_T1w.png</a>
+</div>
+<div id="anatomical-sub-example_ses-001_run-1_desc-corticalSurfAndMeasures_T1w-png">
+<h3 class="run-title">Cortical surface and measures</h3>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_run-1_desc-corticalSurfAndMeasures_T1w.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_run-1_desc-corticalSurfAndMeasures_T1w.png" target="_blank">sub-example_ses-001_run-1_desc-corticalSurfAndMeasures_T1w.png</a>
+</div>
+<h3 class="sub-report-group">T2w</h3>
+<div id="anatomical-sub-example_ses-001_run-1_desc-biascorrect_T2w-png">
+<h3 class="run-title">Bias field correction</h3>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_run-1_desc-biascorrect_T2w.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_run-1_desc-biascorrect_T2w.png" target="_blank">sub-example_ses-001_run-1_desc-biascorrect_T2w.png</a>
+</div>
+<div id="anatomical-sub-example_ses-001_run-1_desc-T2w2T1w_T2w-png">
+<h3 class="run-title">T2w to T1w coregistration</h3>
+<div class="elem-filename">
+    Rigid registered T2w (underlaid); T1w space (contour)
+</div>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_run-1_desc-T2w2T1w_T2w.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_run-1_desc-T2w2T1w_T2w.png" target="_blank">sub-example_ses-001_run-1_desc-T2w2T1w_T2w.png</a>
+</div>
+<div id="anatomical-sub-example_ses-001_run-1_desc-T1wT2wCombined_T1w-png">
+<h3 class="run-title">T1wT2wCombined comparison</h3>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_run-1_desc-T1wT2wCombined_T1w.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_run-1_desc-T1wT2wCombined_T1w.png" target="_blank">sub-example_ses-001_run-1_desc-T1wT2wCombined_T1w.png</a>
+</div>
+<div id="anatomical-sub-example_ses-001_run-1_desc-T2w2template_T2w-png">
+<h3 class="run-title">T2w to template registration</h3>
+<div class="elem-filename">
+    Registered T2w (underlaid); template space (contour)
+</div>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_run-1_desc-T2w2template_T2w.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_run-1_desc-T2w2template_T2w.png" target="_blank">sub-example_ses-001_run-1_desc-T2w2template_T2w.png</a>
+</div></div>
+<div id="Functional"><h1 class="sub-report-title">Functional</h1><h2 class="sub-report-group" id="functional-session-001">session <span class="bids-entity">001</span></h2>
+<div id="functional-sub-example_ses-001_desc-func_coreg_boldref-png">
+<h3 class="run-title"></h3>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_desc-func_coreg_boldref.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_desc-func_coreg_boldref.png" target="_blank">sub-example_ses-001_desc-func_coreg_boldref.png</a>
+</div>
+<h2 class="sub-report-group" id="functional-session-001-task-resting-acq-revpol-run-1">session <span class="bids-entity">001</span>, task <span class="bids-entity">resting</span>, acq <span class="bids-entity">RevPol</span>, run <span class="bids-entity">1</span></h2>
+<div id="functional-sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-conform_bold-png">
+<h3 class="run-title">Conform to target space</h3>
+<div class="elem-filename">
+    Rigid registered BOLD (underlaid); target space (contour)
+</div>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-conform_bold.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-conform_bold.png" target="_blank">sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-conform_bold.png</a>
+</div>
+<div id="functional-sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-skullstrip_bold-png">
+<h3 class="run-title">Skullstripping</h3>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-skullstrip_bold.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-skullstrip_bold.png" target="_blank">sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-skullstrip_bold.png</a>
+</div>
+<div id="functional-sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-func2anat_bold-png">
+<h3 class="run-title">Functional to anatomical registration</h3>
+<div class="elem-filename">
+    Registered BOLD (underlaid); T1w space (contour)
+</div>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-func2anat_bold.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-func2anat_bold.png" target="_blank">sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-func2anat_bold.png</a>
+</div>
+<div id="functional-sub-example_ses-001_task-resting_acq-RevPol_run-1_space-NMT2Sym_desc-func2target_bold-png">
+<h3 class="run-title">Functional to target registration</h3>
+<div class="elem-filename">
+    Registered BOLD (underlaid); target space (contour)
+</div>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_task-resting_acq-RevPol_run-1_space-NMT2Sym_desc-func2target_bold.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_task-resting_acq-RevPol_run-1_space-NMT2Sym_desc-func2target_bold.png" target="_blank">sub-example_ses-001_task-resting_acq-RevPol_run-1_space-NMT2Sym_desc-func2target_bold.png</a>
+</div>
+<div id="functional-sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-motion_bold-png">
+<h3 class="run-title">Motion parameters</h3>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-motion_bold.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-motion_bold.png" target="_blank">sub-example_ses-001_task-resting_acq-RevPol_run-1_desc-motion_bold.png</a>
+</div>
+<h2 class="sub-report-group" id="functional-session-001-task-resting-run-1">session <span class="bids-entity">001</span>, task <span class="bids-entity">resting</span>, run <span class="bids-entity">1</span></h2>
+<div id="functional-sub-example_ses-001_task-resting_run-1_desc-conform_bold-png">
+<h3 class="run-title">Conform to target space</h3>
+<div class="elem-filename">
+    Rigid registered BOLD (underlaid); target space (contour)
+</div>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_task-resting_run-1_desc-conform_bold.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_task-resting_run-1_desc-conform_bold.png" target="_blank">sub-example_ses-001_task-resting_run-1_desc-conform_bold.png</a>
+</div>
+<div id="functional-sub-example_ses-001_task-resting_run-1_desc-skullstrip_bold-png">
+<h3 class="run-title">Skullstripping</h3>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_task-resting_run-1_desc-skullstrip_bold.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_task-resting_run-1_desc-skullstrip_bold.png" target="_blank">sub-example_ses-001_task-resting_run-1_desc-skullstrip_bold.png</a>
+</div>
+<div id="functional-sub-example_ses-001_task-resting_run-1_desc-func2anat_bold-png">
+<h3 class="run-title">Functional to anatomical registration</h3>
+<div class="elem-filename">
+    Registered BOLD (underlaid); T1w space (contour)
+</div>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_task-resting_run-1_desc-func2anat_bold.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_task-resting_run-1_desc-func2anat_bold.png" target="_blank">sub-example_ses-001_task-resting_run-1_desc-func2anat_bold.png</a>
+</div>
+<div id="functional-sub-example_ses-001_task-resting_run-1_space-NMT2Sym_desc-func2target_bold-png">
+<h3 class="run-title">Functional to target registration</h3>
+<div class="elem-filename">
+    Registered BOLD (underlaid); target space (contour)
+</div>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_task-resting_run-1_space-NMT2Sym_desc-func2target_bold.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_task-resting_run-1_space-NMT2Sym_desc-func2target_bold.png" target="_blank">sub-example_ses-001_task-resting_run-1_space-NMT2Sym_desc-func2target_bold.png</a>
+</div>
+<div id="functional-sub-example_ses-001_task-resting_run-1_desc-motion_bold-png">
+<h3 class="run-title">Motion parameters</h3>
+<img class="svg-reportlet" src="sub-example/figures/sub-example_ses-001_task-resting_run-1_desc-motion_bold.png" style="width: 100%" />
+</div>
+<div class="elem-filename">
+    Get figure file: <a href="sub-example/figures/sub-example_ses-001_task-resting_run-1_desc-motion_bold.png" target="_blank">sub-example_ses-001_task-resting_run-1_desc-motion_bold.png</a>
+</div></div>
+
+<div id="About"><h1 class="sub-report-title">About</h1><div class="boiler-html">
+<p>This report was generated by <strong>brainana</strong> version <strong>1.0.0</strong>.</p>
+<p>Generated on: 2026-03-05 15:48:17</p>
+<p>Working directory: /home/star/github/brainana/docs/_build/_static/QCreport_example</p>
+</div></div>
+<div id="Methods"><h1 class="sub-report-title">Methods</h1><div class="boiler-html methods-structured">
+<p class="methods-intro">Results included in this manuscript come from preprocessing performed using <b>brainana 1.0.0</b>.</p>
+<h3 class="methods-subtitle">Anatomical data preprocessing</h3>
+<h4 class="methods-subsubtitle">T1w preprocessing</h4>
+<p>T1w images were preprocessed as follows. When multiple T1w images existed per session or subject, a single synthesized T1w was created by rigid coregistration to the first image using ANTs (Avants et al., 2008) and averaging in reference space. The T1w was conformed to template space to ensure better performance of the subsequent steps: first, initial skullstripping was performed using a CNN model fine-tuned from DeepBet (Wang et al., 2021), then rigid registration to the template space brain was performed with FLIRT (FSL; Jenkinson et al., 2002). Brain tissue segmentation and brain mask generation were performed using a CNN fine-tuned from FastSurfer one (Henschel et al., 2020) and trained on macaque brain atlases (CHARM/SARM level 2; Jung et al., 2021). The T1w was corrected for intensity non-uniformity with N4BiasFieldCorrection (Tustison et al., 2010), using the brain mask to restrict the correction. Volume-based spatial normalization to the template was performed through translation, rigid, affine, and non-linear (SyN) registration with antsRegistration (ANTs; Avants et al., 2008). When a GPU was available, FireANTs (Jena et al., 2024) was used for the non-linear stage. Cortical surface reconstruction was performed using a modified FastSurfer pipeline (Henschel et al., 2020) adapted for non-human primates, based on the FreeSurfer surface reconstruction framework (Dale et al., 1999).</p>
+<h4 class="methods-subsubtitle">T2w preprocessing</h4>
+<p>As with the T1w, when multiple T2w images existed per session or subject, a single synthesized T2w was created. The T2w was rigidly coregistered to the T1w space using ANTs (Avants et al., 2008).</p>
+<h3 class="methods-subtitle">Functional data preprocessing</h3>
+<p>fMRI data were preprocessed as follows. Slice timing correction was applied using AFNI 3dTshift (Cox, 1996; Cox &amp; Hyde, 1997). Head motion correction was performed with mcflirt (FSL; Jenkinson et al., 2002). When multiple fMRI runs existed within a session, within-session coregistration was performed using ANTs (Avants et al., 2008) by registering each run&#x27;s mean image to a reference run. The fMRI data was conformed to target space to ensure better performance of the subsequent steps: first, initial skullstripping was performed using a CNN model fine-tuned from DeepBet (Wang et al., 2021), then rigid registration to the target space brain was performed with FLIRT (FSL; Jenkinson et al., 2002). The mean fMRI data was registered to the preprocessed anatomical (or template) using ANTs (rigid, affine, and SyN; Avants et al., 2008); when a GPU was available, FireANTs (Jena et al., 2024) was used for the non-linear stage. The composite transform was applied to the full 4D BOLD and brain mask using antsApplyTransforms (ANTs), with B-spline interpolation for the BOLD series. Runs with fewer than 15 volumes skipped motion correction; pass-through outputs were generated.</p>
+<h3 class="methods-subtitle">References</h3>
+<ul class="methods-refs"><li>Avants, B. B., Epstein, C. L., Grossman, M., &amp; Gee, J. C. (2008). Symmetric diffeomorphic image registration with cross-correlation: Evaluating automated labeling of elderly and neurodegenerative brain. Medical Image Analysis, 12(1), 26–41. https://doi.org/10.1016/j.media.2007.06.004</li><li>Cox, R. W. (1996). AFNI: Software for analysis and visualization of functional magnetic resonance neuroimages. Computers and Biomedical Research, 29(3), 162–173. https://doi.org/10.1006/cbmr.1996.0014</li><li>Cox, R. W., &amp; Hyde, J. S. (1997). Software tools for analysis and visualization of fMRI data. NMR in Biomedicine, 10(4–5), 171–178. https://doi.org/10.1002/(SICI)1099-1492(199706/08)10:4/5&lt;171::AID-NBM453&gt;3.0.CO;2-L</li><li>Dale, A. M., Fischl, B., &amp; Sereno, M. I. (1999). Cortical surface-based analysis: Segmentation and surface reconstruction. NeuroImage, 9(2), 179–194. https://doi.org/10.1006/nimg.1998.0395</li><li>Henschel, L., Conjeti, S., Estrada, S., Diers, K., Fischl, B., &amp; Reuter, M. (2020). FastSurfer: A fast and accurate deep learning based neuroimaging pipeline. NeuroImage, 219, 117012. https://doi.org/10.1016/j.neuroimage.2020.117012</li><li>Jena, R., Chaudhari, P., &amp; Gee, J. C. (2024). FireANTs: Adaptive Riemannian optimization for multi-scale diffeomorphic matching. arXiv preprint arXiv:2404.01249. https://arxiv.org/abs/2404.01249</li><li>Jenkinson, M., Bannister, P., Brady, M., &amp; Smith, S. (2002). Improved optimization for the robust and accurate linear registration and motion correction of brain images. NeuroImage, 17(2), 825–841. https://doi.org/10.1006/nimg.2002.1132</li><li>Jung, B., Taylor, P. A., Seidlitz, J., Suber, A., Donahue, C. J., Coalson, T., Glasser, M. F., Shafer, A. T., Van Essen, D. C., Dienes, T., Earl, E., Feczko, E., Fair, D. A., &amp; Donahue, J. N. (2021). A comprehensive macaque fMRI pipeline and hierarchical atlas. NeuroImage, 235, 117997. https://doi.org/10.1016/j.neuroimage.2021.117997</li><li>Tustison, N. J., Avants, B. B., Cook, P. A., Zheng, Y., Egan, A., Yushkevich, P. A., &amp; Gee, J. C. (2010). N4ITK: Improved N3 bias correction. IEEE Transactions on Medical Imaging, 29(6), 1310–1320. https://doi.org/10.1109/TMI.2010.2046908</li><li>Wang, X., Li, X., &amp; Xu, T. (2021). U-net model for brain extraction: Trained on humans for transfer to non-human primates. NeuroImage, 235, 118001. https://doi.org/10.1016/j.neuroimage.2021.118001</li></ul>
+</div></div>
+
+</body>
+</html>

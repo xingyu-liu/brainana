@@ -1,0 +1,705 @@
+[
+  {
+    "subject_id": "032125",
+    "session_id": "001",
+    "file_path": "/input/sub-032125/ses-001/anat/sub-032125_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032125",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032125",
+    "session_id": "001",
+    "file_path": "/input/sub-032125/ses-001/anat/sub-032125_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032125",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032126",
+    "session_id": "001",
+    "file_path": "/input/sub-032126/ses-001/anat/sub-032126_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032126",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032126",
+    "session_id": "001",
+    "file_path": "/input/sub-032126/ses-001/anat/sub-032126_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032126",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032127",
+    "session_id": "001",
+    "file_path": "/input/sub-032127/ses-001/anat/sub-032127_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032127",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032127",
+    "session_id": "001",
+    "file_path": "/input/sub-032127/ses-001/anat/sub-032127_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032127",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032128",
+    "session_id": "001",
+    "file_path": "/input/sub-032128/ses-001/anat/sub-032128_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032128",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032128",
+    "session_id": "001",
+    "file_path": "/input/sub-032128/ses-001/anat/sub-032128_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032128",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032129",
+    "session_id": "001",
+    "file_path": "/input/sub-032129/ses-001/anat/sub-032129_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032129",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032129",
+    "session_id": "001",
+    "file_path": "/input/sub-032129/ses-001/anat/sub-032129_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032129",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032130",
+    "session_id": "001",
+    "file_path": "/input/sub-032130/ses-001/anat/sub-032130_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032130",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032130",
+    "session_id": "001",
+    "file_path": "/input/sub-032130/ses-001/anat/sub-032130_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032130",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032131",
+    "session_id": "001",
+    "file_path": "/input/sub-032131/ses-001/anat/sub-032131_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032131",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032131",
+    "session_id": "001",
+    "file_path": "/input/sub-032131/ses-001/anat/sub-032131_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032131",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032132",
+    "session_id": "001",
+    "file_path": "/input/sub-032132/ses-001/anat/sub-032132_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032132",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032132",
+    "session_id": "001",
+    "file_path": "/input/sub-032132/ses-001/anat/sub-032132_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032132",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032133",
+    "session_id": "001",
+    "file_path": "/input/sub-032133/ses-001/anat/sub-032133_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032133",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032133",
+    "session_id": "001",
+    "file_path": "/input/sub-032133/ses-001/anat/sub-032133_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032133",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032134",
+    "session_id": "001",
+    "file_path": "/input/sub-032134/ses-001/anat/sub-032134_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032134",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032134",
+    "session_id": "001",
+    "file_path": "/input/sub-032134/ses-001/anat/sub-032134_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032134",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032135",
+    "session_id": "001",
+    "file_path": "/input/sub-032135/ses-001/anat/sub-032135_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032135",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032135",
+    "session_id": "001",
+    "file_path": "/input/sub-032135/ses-001/anat/sub-032135_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032135",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032136",
+    "session_id": "001",
+    "file_path": "/input/sub-032136/ses-001/anat/sub-032136_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032136",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032136",
+    "session_id": "001",
+    "file_path": "/input/sub-032136/ses-001/anat/sub-032136_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032136",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032137",
+    "session_id": "001",
+    "file_path": "/input/sub-032137/ses-001/anat/sub-032137_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032137",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032137",
+    "session_id": "001",
+    "file_path": "/input/sub-032137/ses-001/anat/sub-032137_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032137",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032138",
+    "session_id": "001",
+    "file_path": "/input/sub-032138/ses-001/anat/sub-032138_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032138",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032138",
+    "session_id": "001",
+    "file_path": "/input/sub-032138/ses-001/anat/sub-032138_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032138",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032139",
+    "session_id": "001",
+    "file_path": "/input/sub-032139/ses-001/anat/sub-032139_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032139",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032139",
+    "session_id": "001",
+    "file_path": "/input/sub-032139/ses-001/anat/sub-032139_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032139",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032140",
+    "session_id": "001",
+    "file_path": "/input/sub-032140/ses-001/anat/sub-032140_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032140",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032140",
+    "session_id": "001",
+    "file_path": "/input/sub-032140/ses-001/anat/sub-032140_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032140",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032141",
+    "session_id": "001",
+    "file_path": "/input/sub-032141/ses-001/anat/sub-032141_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032141",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032141",
+    "session_id": "001",
+    "file_path": "/input/sub-032141/ses-001/anat/sub-032141_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032141",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032142",
+    "session_id": "001",
+    "file_path": "/input/sub-032142/ses-001/anat/sub-032142_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032142",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032142",
+    "session_id": "001",
+    "file_path": "/input/sub-032142/ses-001/anat/sub-032142_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032142",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  },
+  {
+    "subject_id": "032143",
+    "session_id": "001",
+    "file_path": "/input/sub-032143/ses-001/anat/sub-032143_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032143",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  },
+  {
+    "subject_id": "032143",
+    "session_id": "001",
+    "file_path": "/input/sub-032143/ses-001/anat/sub-032143_ses-001_run-1_T2w.nii.gz",
+    "modality": "anat",
+    "suffix": "T2w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "032143",
+      "suffix": "T2w"
+    },
+    "needs_synthesis": false,
+    "needs_t1w_registration": true
+  }
+]
