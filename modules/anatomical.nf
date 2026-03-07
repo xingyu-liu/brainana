@@ -869,8 +869,8 @@ process ANAT_T2W_TO_T1W_REGISTRATION {
     output:
     tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_name), emit: output
     // Transforms: [sub, ses, forward_transform, inverse_transform]
-    // Note: T1w is in native space at registration time (before conform and bias correction)
-    tuple val(subject_id), val(session_id), path("*from-T2w_to-T1wNative_mode-image_xfm*"), path("*from-T1wNative_to-T2w_mode-image_xfm*"), emit: transforms
+    // Note: T1w is in scanner (pre-conformed) space at registration time
+    tuple val(subject_id), val(session_id), path("*from-T2w_to-T1wScanner_mode-image_xfm*"), path("*from-T1wScanner_to-T2w_mode-image_xfm*"), emit: transforms
     path "*.json", emit: metadata
     
     script:
@@ -919,13 +919,13 @@ input_obj = StepInput(
 # Run step
 result = anat_t2w_to_t1w_registration(input_obj, t1w_reference=t1w_reference)
 
-# Generate BIDS-compliant output filename with space-T1wNative entity
-# Format: space-T1wNative_T2w.nii.gz (after T2w→T1w registration)
-# Note: T2w is registered to T1w in its native space (after reorient, before conform and bias correction)
+# Generate BIDS-compliant output filename with space-T1wScanner entity
+# Format: space-T1wScanner_T2w.nii.gz (after T2w→T1w registration)
+# Note: T2w is registered to T1w in scanner (pre-conformed) space; same sense as from-scanner_to-T1w
 # Only after applying conform transform is T2w in the preprocessed T1w space (space-T1w)
 bids_output_filename = create_bids_output_filename(
     original_file_path=bids_name,
-    suffix='space-T1wNative',
+    suffix='space-T1wScanner',
     modality=modality
 )
 
@@ -936,17 +936,17 @@ create_output_link(result.output_file, bids_output_filename)
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 
 # Create symlinks for transform files with BIDS-compliant names (keep nature suffix: .nii.gz or .h5)
-# Note: T1w is in native space at this point (after reorient, before conform and bias correction)
+# Note: T1w is in scanner (pre-conformed) space at this point
 def _xfm_ext(p):
     r = Path(p).resolve()
     return ''.join(r.suffixes) if r.suffixes else r.suffix
 if "forward_transform" in result.additional_files:
     ext = _xfm_ext(result.additional_files["forward_transform"])
-    bids_transform_name = f"{bids_prefix_wo_modality}_from-T2w_to-T1wNative_mode-image_xfm{ext}"
+    bids_transform_name = f"{bids_prefix_wo_modality}_from-T2w_to-T1wScanner_mode-image_xfm{ext}"
     create_output_link(result.additional_files["forward_transform"], bids_transform_name)
 if "inverse_transform" in result.additional_files:
     ext = _xfm_ext(result.additional_files["inverse_transform"])
-    bids_transform_name = f"{bids_prefix_wo_modality}_from-T1wNative_to-T2w_mode-image_xfm{ext}"
+    bids_transform_name = f"{bids_prefix_wo_modality}_from-T1wScanner_to-T2w_mode-image_xfm{ext}"
     create_output_link(result.additional_files["inverse_transform"], bids_transform_name)
 
 # Save metadata

@@ -26,10 +26,5 @@ Contents
    configuration
    outputs
    processing
+   spaces_and_transforms
    faq
-
-Indices and tables
-------------------
-
-* :ref:`genindex`
-* :ref:`search`

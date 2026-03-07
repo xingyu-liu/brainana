@@ -60,23 +60,28 @@ One file is written per atlas available in the configured template space.
 - ``<prefix>_from-T1w_to-scanner_mode-image_xfm.mat`` — Inverse conformation transform.
 - ``<prefix>_from-T1w_to-<template>_mode-image_xfm.h5`` — T1w-to-template registration (ANTs ``.h5``).
 - ``<prefix>_from-<template>_to-T1w_mode-image_xfm.h5`` — Template-to-T1w inverse registration.
-- ``<prefix>_from-T1wNative_to-T2w_mode-image_xfm.h5`` — T1w-native-to-T2w-space transform.
-- ``<prefix>_from-T2w_to-T1wNative_mode-image_xfm.h5`` — T2w-to-T1w-native inverse transform.
+- ``<prefix>_from-T2w_to-T1wScanner_mode-image_xfm.h5`` — T2w-to-T1w (scanner space) registration transform (forward).
+- ``<prefix>_from-T1wScanner_to-T2w_mode-image_xfm.h5`` — T1w (scanner space) to T2w inverse registration transform.
 
 Functional outputs (``func/``)
 -------------------------------
 
-Session-level files (no task/run entity) are shared across all runs in the session. Per-run files include
+Session-level files (no task/run entity) are shared across all runs in the session; per-run files include
 task and run entities (e.g. ``sub-001_ses-01_task-resting_run-1``).
+**Session-level files are produced only when within-session coregistration is enabled** (``func.coreg_runs_within_session``).
+When it is disabled, the brain mask, BOLD reference, and transform files below are produced **per-run** (same names but with ``<run_prefix>``).
 
-*Session-level files*
+*Session-level files* (when coreg enabled)
 
 - ``<ses_prefix>_desc-brain_mask.nii.gz`` — Brain mask for functional data (native BOLD space).
 - ``<ses_prefix>_desc-coreg_boldref.nii.gz`` — BOLD reference image used for func-to-anat coregistration.
-- ``<ses_prefix>_from-bold_to-T1w_mode-image_xfm.h5`` — BOLD-to-T1w coregistration transform.
-- ``<ses_prefix>_from-T1w_to-bold_mode-image_xfm.h5`` — Inverse T1w-to-BOLD transform.
-- ``<ses_prefix>_from-bold_to-scanner_mode-image_xfm.mat`` — BOLD-to-scanner conformation transform.
-- ``<ses_prefix>_from-scanner_to-bold_mode-image_xfm.mat`` — Inverse conformation transform.
+
+*Transform files* (session-level when coreg enabled; per-run when coreg disabled)
+
+- ``<prefix>_from-bold_to-T1w_mode-image_xfm.h5`` — BOLD-to-T1w coregistration transform.
+- ``<prefix>_from-T1w_to-bold_mode-image_xfm.h5`` — Inverse T1w-to-BOLD transform.
+- ``<prefix>_from-scanner_to-bold_mode-image_xfm.mat`` — Scanner-to-BOLD conformation transform (forward).
+- ``<prefix>_from-bold_to-scanner_mode-image_xfm.mat`` — Inverse conformation transform.
 
 *Per-run files — native BOLD space*
 
@@ -95,7 +100,7 @@ task and run entities (e.g. ``sub-001_ses-01_task-resting_run-1``).
 - ``<run_prefix>_space-<template>_desc-preproc_boldref.nii.gz`` — BOLD reference in template space.
 - ``<run_prefix>_space-<template>_desc-brain_mask.nii.gz`` — Brain mask in template space.
 
-*Confounds*
+*Per-run files — Confounds*
 
 - ``<run_prefix>_desc-confounds_timeseries.tsv`` — Motion parameters and confound regressors for downstream analysis.
 

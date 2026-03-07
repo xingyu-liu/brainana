@@ -21,7 +21,7 @@ System requirements
 
 Resource guidelines:
 
-- **Minimal:** 16 GB RAM, 4 CPUs, 20 GB disk (anat-only, 1–2 subjects)
+- **Minimal:** 16 GB RAM, 4 CPUs, 20 GB disk
 - **Recommended:** 20 GB RAM, 8 CPUs, 50 GB disk, 1 GPU with ≥ 6 GB VRAM
 - **Production:** 32 GB RAM, 8+ CPUs, 100 GB+ disk, 1 GPU with ≥ 10 GB VRAM
 

@@ -39,7 +39,11 @@ Minimal example layout (dataset root with one subject, one session, anat + func)
        │       ├── sub-aaa_ses-bbb_task-ddd_run-eee_bold.nii.gz
        │       └── sub-aaa_ses-bbb_task-ddd_run-eee_bold.json   # optional
 
-If you start with DICOM, you can either (1) use `dcm2niix <https://github.com/rordenlab/dcm2niix>`_ to convert DICOM to NIfTI and then manually reorganise and rename files to BIDS, or (2) use `dcm2bids <https://unfmontgomery.github.io/Dcm2Bids/>`_, which converts DICOM to NIfTI and organises output into BIDS for you.
+If you start with DICOM, you can either:
+
+(1) Use `dcm2niix <https://github.com/rordenlab/dcm2niix>`_ to convert DICOM to NIfTI and then manually reorganise and rename files to BIDS, or
+
+(2) Use `dcm2bids <https://unfmontgomery.github.io/Dcm2Bids/>`_, which converts DICOM to NIfTI and organises output into BIDS for you.
 
 The FreeSurfer license
 ----------------------
@@ -147,7 +151,7 @@ Entrypoint options
 
 ``--config PATH``, ``--config_file PATH``
    Path to a custom YAML config file inside the container (optional; built-in defaults
-   are used when omitted). ``--config`` is an alias for ``--config_file``.
+   are used when omitted).
 
    Default: (built-in)
 
@@ -185,11 +189,6 @@ Options for filtering BIDS queries
 
    Default: (all runs)
 
-``--skip_bids_validation``
-   Assume the input dataset is BIDS compliant and skip validation.
-
-   Default: ``False``
-
 Workflow options
 ~~~~~~~~~~~~~~~~
 
@@ -210,7 +209,7 @@ Resource options
 ``-profile PROFILE``
    Nextflow resource profile. Choices:
 
-   - ``minimal`` — 4 CPUs, 16 GB RAM (suitable for anat-only, 1–2 subjects)
+   - ``minimal`` — 4 CPUs, 16 GB RAM
    - ``recommended`` — 8+ CPUs, 32 GB RAM
 
    Default: (built-in: 8 CPUs, 20 GB)

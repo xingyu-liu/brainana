@@ -1,0 +1,452 @@
+Space tracking and transforms
+=============================
+
+Brainana tracks each image through a series of coordinate spaces and
+writes an explicit transform file for every space transition.  The
+diagram below shows all spaces and named transforms for the T1w, T2w,
+and BOLD modalities.
+
+.. figure:: _static/space_tracking.jpg
+   :alt: Space tracking diagram showing coordinate spaces and transforms
+         for T1w, T2w, BOLD, Fastsurfer, and template spaces.
+   :align: center
+   :width: 100%
+
+|
+
+- **T1w** is conformed to the template grid (``from-scanner_to-T1w``),
+  then registered to template space (``from-T1w_to-<template>``).
+  ``desc-preproc_T1w.nii.gz`` carries no ``space-`` entity; template
+  outputs carry ``space-<template>``.
+- **T2w** is first coregistered to T1w in scanner space
+  (``from-T2w_to-T1wScanner``), then brought to T1w (conformed) space
+  by reusing the T1w conformation transform.  Outputs in T1w space
+  carry ``space-T1w``.
+- **BOLD** has its own conformation transform (``from-scanner_to-bold``).
+  How BOLD reaches template space depends on whether a T1w anatomical
+  is available for the session:
+
+  - *With associated T1w* — template resampling is performed by
+    composing ``from-bold_to-T1w`` with the T1w registration transform
+    ``from-T1w_to-<template>``; no separate bold-to-template file is
+    written.
+  - *Without associated T1w* — BOLD is registered directly to the
+    template, producing dedicated ``from-bold_to-<template>`` and
+    ``from-<template>_to-bold`` transforms.
+
+  ``desc-preproc_bold.nii.gz`` carries no ``space-`` entity; T1w and
+  template outputs carry ``space-T1w`` and ``space-<template>``
+  respectively.
+- **Fastsurfer** space is reached from T1w (conformed) space by
+  resampling only — no transform file is produced.
+
+
+Transform file reference
+------------------------
+
+All transform filenames follow the convention
+``<prefix>_from-<src>_to-<dst>_mode-image_xfm.<ext>``.
+FSL ``.mat`` files are rigid conformation transforms; ANTs ``.h5``
+files are composite registration transforms (affine ± SyN).
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 55 30
+
+   * - Modality
+     - File (``<prefix>_…``)
+     - Direction
+   * - T1w
+     - ``from-scanner_to-T1w_mode-image_xfm.mat``
+     - T1w scanner → T1w
+   * - T1w
+     - ``from-T1w_to-scanner_mode-image_xfm.mat``
+     - T1w → T1w scanner
+   * - T1w
+     - ``from-T1w_to-<template>_mode-image_xfm.h5``
+     - T1w → template
+   * - T1w
+     - ``from-<template>_to-T1w_mode-image_xfm.h5``
+     - Template → T1w
+   * - T2w
+     - ``from-T2w_to-T1wScanner_mode-image_xfm.h5``
+     - T2w scanner → T1w scanner
+   * - T2w
+     - ``from-T1wScanner_to-T2w_mode-image_xfm.h5``
+     - T1w scanner → T2w scanner
+   * - BOLD
+     - ``from-scanner_to-bold_mode-image_xfm.mat``
+     - bold scanner → bold
+   * - BOLD
+     - ``from-bold_to-scanner_mode-image_xfm.mat``
+     - bold → bold scanner
+   * - BOLD
+     - ``from-bold_to-T1w_mode-image_xfm.h5``
+     - bold → T1w
+   * - BOLD
+     - ``from-T1w_to-bold_mode-image_xfm.h5``
+     - T1w → bold
+   * - BOLD (w/o T1w)
+     - ``from-bold_to-<template>_mode-image_xfm.h5``
+     - bold → template (direct, no associated T1w)
+   * - BOLD (w/o T1w)
+     - ``from-<template>_to-bold_mode-image_xfm.h5``
+     - Template → bold (direct, no associated T1w)
+
+
+Applying transforms to images
+-----------------------------
+
+Use the selectors below to choose a source space, target space, and data type.
+
+- **Direct transforms only** — only single-step paths are listed. If your
+  desired path requires two steps, a hint will appear below the code block
+  telling you which intermediate space to use.
+- **Which tool to use** is determined by the transform file type:
+  - A ``.mat`` file requires ``flirt`` (FSL).
+  - A ``.h5`` file requires ``antsApplyTransforms`` (ANTs).
+  - Fastsurfer ↔ T1w resampling requires ``3dresample`` (AFNI) and needs no
+    transform file — only a reference image defining the target grid.
+  - If any of these tools are not installed locally, mount your data and run
+    the command inside the brainana Docker image:
+
+    .. code-block:: bash
+
+       docker run -it --rm --gpus all \
+         -v /path/to/your/data:/data \
+         liuxingyu987/brainana:latest bash
+
+       # then run your flirt / antsApplyTransforms / 3dresample command as usual
+
+- **Interpolation** is chosen automatically based on data type: discrete data
+  (label maps, segmentations) always use nearest-neighbour; continuous data
+  (intensity images) use trilinear for ``flirt`` and BSpline for
+  ``antsApplyTransforms``.
+
+.. raw:: html
+
+   <style>
+   #xfm-builder {
+     background: #f6f8fa;
+     border: 1px solid #d0d7de;
+     border-radius: 8px;
+     padding: 1.2em 1.5em;
+     margin: 1.2em 0;
+     font-family: inherit;
+   }
+   #xfm-builder .xfm-controls {
+     display: flex;
+     gap: 1.5em;
+     flex-wrap: wrap;
+     align-items: flex-end;
+     margin-bottom: 1em;
+   }
+   #xfm-builder label {
+     display: block;
+     font-weight: 600;
+     margin-bottom: .35em;
+     font-size: .9em;
+   }
+   #xfm-builder select {
+     padding: .4em .7em;
+     border-radius: 5px;
+     border: 1px solid #adb5bd;
+     font-size: .9em;
+     min-width: 240px;
+   }
+   #xfm-code {
+     background: #1e1e2e;
+     color: #cdd6f4;
+     padding: 1.1em 1.2em;
+     border-radius: 6px;
+     overflow-x: auto;
+     font-size: .82em;
+     line-height: 1.6;
+     margin: .6em 0 0 0;
+     white-space: pre;
+   }
+   #xfm-hint {
+     display: none;
+     margin-top: .8em;
+     padding: .7em 1em;
+     background: #fff8e1;
+     border-left: 4px solid #f9a825;
+     border-radius: 0 4px 4px 0;
+     font-size: .88em;
+     line-height: 1.6;
+   }
+   </style>
+
+   <div id="xfm-builder">
+     <div class="xfm-controls">
+
+       <div>
+         <label for="xfm-src">From (source space)</label>
+         <select id="xfm-src">
+           <option value="scanner-T1w">T1w scanner space</option>
+           <option value="T1w">T1w space</option>
+           <option value="template">Template space</option>
+           <option value="scanner-T2w">T2w scanner space</option>
+           <option value="scanner-bold">bold scanner space</option>
+           <option value="bold-withT1w">bold space (w/ T1w)</option>
+           <option value="bold-noT1w">bold space (w/o T1w)</option>
+           <option value="fastsurfer">Fastsurfer space</option>
+         </select>
+       </div>
+
+       <div>
+         <label for="xfm-dst">To (target space)</label>
+         <select id="xfm-dst"></select>
+       </div>
+
+       <div>
+         <label for="xfm-dtype">Data type</label>
+         <select id="xfm-dtype">
+           <option value="discrete">Discrete (label map, segmentation)</option>
+           <option value="continuous">Continuous (intensity image)</option>
+         </select>
+       </div>
+
+     </div>
+
+     <pre id="xfm-code"></pre>
+     <div id="xfm-hint"></div>
+
+   </div>
+
+   <script>
+   (function () {
+
+     // Human-readable label for each space key.
+     var spaceLabel = {
+       'scanner-T1w':  'T1w scanner space',
+       'T1w':          'T1w space',
+       'template':     'Template space',
+       'scanner-T2w':  'T2w scanner space',
+       'scanner-bold': 'bold scanner space',
+       'bold-withT1w': 'bold space (w/ T1w)',
+       'bold-noT1w':   'bold space (w/o T1w)',
+       'fastsurfer':   'Fastsurfer space'
+     };
+
+     // space- entity suffix written into the output filename.
+     var outSuffix = {
+       'scanner-T1w':  'T1wScanner',
+       'T1w':          'T1w',
+       'template':     'template',
+       'scanner-T2w':  'T2wScanner',
+       'scanner-bold': 'boldScanner',
+       'bold-withT1w': 'bold',
+       'bold-noT1w':   'bold',
+       'fastsurfer':   'fastsurfer'
+     };
+
+     // Representative reference image for each target space.
+     var spaceRef = {
+       'scanner-T1w':  '<prefix>_T1w.nii.gz',
+       'T1w':          '<prefix>_desc-preproc_T1w.nii.gz',
+       'template':     '<prefix>_space-<template>_desc-preproc_T1w.nii.gz',
+       'scanner-T2w':  '<prefix>_T2w.nii.gz',
+       'scanner-bold': '<prefix>_bold.nii.gz',
+       'bold-withT1w': '<prefix>_desc-preproc_bold.nii.gz',
+       'bold-noT1w':   '<prefix>_desc-preproc_bold.nii.gz',
+       'fastsurfer':   '<fastsurfer_subject_dir>/mri/T1.mgz'
+     };
+
+     // Per-tool interpolation flags for each data type.
+     // discrete  → nearest-neighbour across all tools.
+     // continuous → trilinear (flirt), BSpline (ANTs), Li (AFNI).
+     var interpMap = {
+       'discrete':   { flirt: 'nearestneighbour', ants: 'NearestNeighbor', afni: 'NN',
+                       comment: 'discrete data  →  nearestneighbour / NearestNeighbor / NN' },
+       'continuous': { flirt: 'trilinear',        ants: 'BSpline',         afni: 'Li',
+                       comment: 'continuous data  →  trilinear (flirt) / BSpline (ANTs) / Li (AFNI)' }
+     };
+
+     // Direct (single-step) transform graph.
+     // tool : 'flirt' | 'ants' | 'afni'
+     // xfm  : transform filename fragment; null for afni (no file needed).
+     // note : optional caveat emitted as a comment in the generated script.
+     var graph = {
+       'scanner-T1w': {
+         'T1w':         { tool: 'flirt', xfm: 'from-scanner_to-T1w_mode-image_xfm.mat' },
+         'scanner-T2w': { tool: 'ants',  xfm: 'from-T1wScanner_to-T2w_mode-image_xfm.h5' }
+       },
+       'T1w': {
+         'scanner-T1w':  { tool: 'flirt', xfm: 'from-T1w_to-scanner_mode-image_xfm.mat' },
+         'template':     { tool: 'ants',  xfm: 'from-T1w_to-<template>_mode-image_xfm.h5' },
+         'bold-withT1w': { tool: 'ants',  xfm: 'from-T1w_to-bold_mode-image_xfm.h5',
+                           note: 'Requires an associated T1w for the bold session.' },
+         'fastsurfer':   { tool: 'afni',  xfm: null }
+       },
+       'template': {
+         'T1w':        { tool: 'ants', xfm: 'from-<template>_to-T1w_mode-image_xfm.h5' },
+         'bold-noT1w': { tool: 'ants', xfm: 'from-<template>_to-bold_mode-image_xfm.h5',
+                         note: 'Only available when bold was registered directly to template (w/o associated T1w).' }
+       },
+       'scanner-T2w': {
+         'scanner-T1w': { tool: 'ants', xfm: 'from-T2w_to-T1wScanner_mode-image_xfm.h5' }
+       },
+       'scanner-bold': {
+         'bold-withT1w': { tool: 'flirt', xfm: 'from-scanner_to-bold_mode-image_xfm.mat',
+                           note: 'Use this entry when the session has an associated T1w.' },
+         'bold-noT1w':   { tool: 'flirt', xfm: 'from-scanner_to-bold_mode-image_xfm.mat',
+                           note: 'Use this entry when bold was processed without an associated T1w.' }
+       },
+       'bold-withT1w': {
+         'scanner-bold': { tool: 'flirt', xfm: 'from-bold_to-scanner_mode-image_xfm.mat' },
+         'T1w':          { tool: 'ants',  xfm: 'from-bold_to-T1w_mode-image_xfm.h5' }
+       },
+       'bold-noT1w': {
+         'scanner-bold': { tool: 'flirt', xfm: 'from-bold_to-scanner_mode-image_xfm.mat' },
+         'template':     { tool: 'ants',  xfm: 'from-bold_to-<template>_mode-image_xfm.h5' }
+       },
+       'fastsurfer': {
+         'T1w': { tool: 'afni', xfm: null }
+       }
+     };
+
+     // Multi-step path hints shown below the code block for each source space.
+     var hints = {
+       'scanner-T1w':  '<b>&#9658; Multi-step paths from T1w scanner space</b><br>' +
+                       'To reach <b>Template</b> (2 steps): apply <em>T1w scanner &#8594; T1w</em>, ' +
+                       'then <em>T1w &#8594; Template</em>.',
+       'scanner-T2w':  '<b>&#9658; Multi-step paths from T2w scanner space</b><br>' +
+                       'To reach <b>T1w</b> (2 steps): apply <em>T2w scanner &#8594; T1w scanner</em>, ' +
+                       'then <em>T1w scanner &#8594; T1w</em>.<br>' +
+                       'To reach <b>Template</b> (3 steps): add <em>T1w &#8594; Template</em> afterwards.',
+       'bold-withT1w': '<b>&#9658; Multi-step paths from bold (w/ T1w)</b><br>' +
+                       'To reach <b>Template</b> (2 steps): apply <em>bold &#8594; T1w</em>, ' +
+                       'then <em>T1w &#8594; Template</em>.',
+       'template':     '<b>&#9658; Multi-step paths from Template space</b><br>' +
+                       'To reach <b>bold (w/ T1w)</b> (2 steps): apply <em>Template &#8594; T1w</em>, ' +
+                       'then <em>T1w &#8594; bold (w/ T1w)</em>.',
+       'fastsurfer':   '<b>&#9658; Multi-step paths from Fastsurfer space</b><br>' +
+                       'To reach <b>Template</b> (2 steps): apply <em>Fastsurfer &#8594; T1w</em>, ' +
+                       'then <em>T1w &#8594; Template</em>.'
+     };
+
+     function updateDstOptions(src) {
+       var dstSel  = document.getElementById('xfm-dst');
+       var targets = Object.keys(graph[src] || {});
+       dstSel.innerHTML = '';
+       targets.forEach(function (t) {
+         var opt = document.createElement('option');
+         opt.value       = t;
+         opt.textContent = spaceLabel[t] || t;
+         dstSel.appendChild(opt);
+       });
+     }
+
+     function generateCode() {
+       var src    = document.getElementById('xfm-src').value;
+       var dst    = document.getElementById('xfm-dst').value;
+       var dtype  = document.getElementById('xfm-dtype').value;
+       var step   = (graph[src] || {})[dst];
+       var hintEl = document.getElementById('xfm-hint');
+       var codeEl = document.getElementById('xfm-code');
+
+       // Show multi-step hint for the selected source space, if any.
+       var hintText = hints[src] || '';
+       hintEl.innerHTML     = hintText;
+       hintEl.style.display = hintText ? 'block' : 'none';
+
+       if (!step) {
+         codeEl.textContent = '# No direct transform available for this combination.';
+         return;
+       }
+
+       var interp = interpMap[dtype] || interpMap['discrete'];
+       var ref    = spaceRef[dst]    || '<ref_image.nii.gz>';
+       var suffix = outSuffix[dst]   || dst;
+       var lines  = [];
+
+       lines.push('#!/bin/bash');
+       lines.push('# Replace <prefix> with your file prefix (e.g. sub-01_ses-01).');
+       if (dst === 'template' || src === 'template' ||
+           (step.xfm && step.xfm.indexOf('<template>') !== -1)) {
+         lines.push('# Replace <template> with your template name (e.g. NMT2Sym).');
+       }
+       if (src === 'fastsurfer' || dst === 'fastsurfer') {
+         lines.push('# Replace <fastsurfer_subject_dir> with the path to your Fastsurfer subject directory.');
+       }
+       lines.push('# Interpolation: ' + interp.comment);
+       lines.push('');
+
+       if (step.note) {
+         lines.push('# NOTE: ' + step.note);
+         lines.push('');
+       }
+
+       lines.push('# --- set paths ---');
+       lines.push('input_image_path=""');
+       lines.push('ref_image_path=' + ref);
+       if (step.xfm) {
+         var xfmFile = step.xfm.indexOf('<prefix>') === -1
+           ? '<prefix>_' + step.xfm
+           : step.xfm;
+         lines.push('xfm_path=' + xfmFile);
+       }
+       lines.push('');
+
+       if (step.tool === 'flirt') {
+         lines.push('# --- FSL flirt ---');
+         lines.push('output_image_path="${input_image_path//.nii.gz/_space-' + suffix + '.nii.gz}"');
+         lines.push('flirt \\');
+         lines.push('  -in       "$input_image_path"  \\');
+         lines.push('  -ref      "$ref_image_path"    \\');
+         lines.push('  -out      "$output_image_path" \\');
+         lines.push('  -applyxfm                      \\');
+         lines.push('  -init     "$xfm_path"          \\');
+         lines.push('  -interp   ' + interp.flirt);
+
+       } else if (step.tool === 'ants') {
+         lines.push('# --- ANTs antsApplyTransforms ---');
+         lines.push('output_image_path="${input_image_path//.nii.gz/_space-' + suffix + '.nii.gz}"');
+         lines.push('antsApplyTransforms \\');
+         lines.push('  -i "$input_image_path"  \\');
+         lines.push('  -r "$ref_image_path"    \\');
+         lines.push('  -o "$output_image_path" \\');
+         lines.push('  -t "$xfm_path"          \\');
+         lines.push('  -n ' + interp.ants);
+
+       } else if (step.tool === 'afni') {
+         lines.push('# --- AFNI 3dresample ---');
+         lines.push('output_image_path="${input_image_path//.nii.gz/_space-' + suffix + '.nii.gz}"');
+         lines.push('3dresample \\');
+         lines.push('  -input  "$input_image_path"  \\');
+         lines.push('  -master "$ref_image_path"    \\');
+         lines.push('  -prefix "$output_image_path" \\');
+         lines.push('  -rmode  ' + interp.afni);
+       }
+
+       codeEl.textContent = lines.join('\n');
+     }
+
+     function init() {
+       var srcSel   = document.getElementById('xfm-src');
+       var dstSel   = document.getElementById('xfm-dst');
+       var dtypeSel = document.getElementById('xfm-dtype');
+
+       srcSel.addEventListener('change', function () {
+         updateDstOptions(this.value);
+         generateCode();
+       });
+       dstSel.addEventListener('change', generateCode);
+       dtypeSel.addEventListener('change', generateCode);
+
+       srcSel.value   = 'T1w';
+       updateDstOptions('T1w');
+       dstSel.value   = 'template';
+       dtypeSel.value = 'discrete';
+       generateCode();
+     }
+
+     if (document.readyState === 'loading') {
+       document.addEventListener('DOMContentLoaded', init);
+     } else {
+       init();
+     }
+
+   })();
+   </script>
