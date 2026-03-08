@@ -333,8 +333,11 @@ workflow ANAT_WF {
     // ============================================
     // Initialize with dummy mask and segmentation from anat_after_conform (never null)
     def dummy_mask = file("${workDir}/dummy_brain_mask.dummy")
+    dummy_mask.toFile().text = ""
     def dummy_seg = file("${workDir}/dummy_brain_segmentation.dummy")
+    dummy_seg.toFile().text = ""
     def dummy_brain = file("${workDir}/dummy_brain.dummy")
+    dummy_brain.toFile().text = ""
     def anat_skull_mask_dummy = anat_after_conform.map { sub, ses, anat_file, bids_name ->
         [sub, ses, dummy_mask]
     }

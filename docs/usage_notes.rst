@@ -1,13 +1,13 @@
 Usage notes
 ===========
 
-The brainana workflow takes a BIDS-formatted dataset as input and writes preprocessed outputs to a directory you specify.
+The Brainana workflow takes a BIDS-formatted dataset as input and writes preprocessed outputs to a directory you specify.
 
 Quick start
 -----------
 
 1. Prepare a valid BIDS dataset (see `The BIDS format`_ below) and an output directory.
-2. For surface reconstruction, obtain a free FreeSurfer license (see `The FreeSurfer license`_ below). Otherwise, disable surface recon in your config and omit the license mount and ``--freesurfer-license``.
+2. For surface reconstruction, prepare a FreeSurfer license (see `The FreeSurfer license`_ below).
 3. Pull the image and run:
 
    .. code-block:: bash
@@ -19,6 +19,10 @@ Quick start
           -v <output_dir>:/output \
           -v <path/to/license.txt>:/fs_license.txt \
           liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
+
+.. note::
+
+   **No GPU?** Omit ``--gpus all``; the pipeline runs on CPU with no other changes.
 
 No config file is required; built-in defaults are used. The default config can be found in the `config generator <_static/config_generator.html>`_. See :ref:`command-line-reference` below for all available options.
 
@@ -41,20 +45,26 @@ Minimal example layout (dataset root with one subject, one session, anat + func)
 
 If you start with DICOM, you can either:
 
-(1) Use `dcm2niix <https://github.com/rordenlab/dcm2niix>`_ to convert DICOM to NIfTI and then manually reorganise and rename files to BIDS, or
+(1) Use `dcm2niix <https://github.com/rordenlab/dcm2niix>`_ to convert DICOM to NIfTI and then manually reorganise and rename files to BIDS. Use ``-b y`` so dcm2niix writes BIDS-compatible JSON sidecar files (e.g. ``dcm2niix -b y -o <output_dir> <dicom_dir>``); you still need to create the BIDS folder structure and naming yourself.
 
 (2) Use `dcm2bids <https://unfmontgomery.github.io/Dcm2Bids/>`_, which converts DICOM to NIfTI and organises output into BIDS for you.
 
 The FreeSurfer license
 ----------------------
 
-brainana uses FreeSurfer (and related tools) for surface reconstruction. A valid FreeSurfer license is required for those steps.
+Brainana uses FreeSurfer for surface reconstruction. A valid license is required for those steps. The Docker image does not use your host FreeSurfer installation, so you must provide the license to the container even if you already have one on your machine.
 
-- Obtain a free license: https://surfer.nmr.mgh.harvard.edu/registration.html
-- Mount the license file into the container: ``-v <path/to/license.txt>:/fs_license.txt``
-- Pass ``--freesurfer-license /fs_license.txt`` when running the pipeline.
+**Get or locate the license**
 
-Without a valid license, anatomical and functional preprocessing can still run, but surface reconstruction will fail. The container will warn if the license is missing.
+- No license yet: obtain a free one at https://surfer.nmr.mgh.harvard.edu/registration.html
+- FreeSurfer already configured on your machine: the license is usually at ``$FREESURFER_HOME/license.txt`` (check with ``ls $FREESURFER_HOME/license.txt``)
+
+**Give it to the pipeline**
+
+1. Mount the license file: ``-v <path/to/license.txt>:/fs_license.txt``
+2. Pass the path inside the container: ``--freesurfer-license /fs_license.txt``
+
+Without a valid license, anatomical and functional preprocessing still run, but surface reconstruction fails. The container warns if the license is missing.
 
 Docker user guide
 -----------------
@@ -64,7 +74,11 @@ Mandatory mounts
 
 - **Input (BIDS):** ``-v <bids_dir>:/input``
 - **Output:** ``-v <output_dir>:/output``
-- **FreeSurfer license:** ``-v <path/to/license.txt>:/fs_license.txt``
+
+Optional (for surface reconstruction)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- **FreeSurfer license:** ``-v <path/to/license.txt>:/fs_license.txt`` — required only when surface reconstruction is enabled; omit if you disable surface recon in your config.
 
 Example with real paths
 ~~~~~~~~~~~~~~~~~~~~~~~

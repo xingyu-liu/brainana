@@ -68,7 +68,7 @@ workflow SURF_RECON_WF {
         def surf_recon_input_with_mask = surf_recon_input_base
             .join(anat_skull_mask.map { sub, ses, mask_file -> [sub, ses, mask_file] }, by: [0, 1], remainder: true)
             .map { sub, ses, anat_file, bids_name, seg_file, mask_file ->
-                def final_mask = mask_file ?: file("${workDir}/dummy_brain_mask.dummy")
+                def final_mask = mask_file ?: file("${workDir}/dummy_brain_mask.dummy").tap { it.toFile().text = "" }
                 [sub, ses, anat_file, bids_name, seg_file, final_mask]
             }
 

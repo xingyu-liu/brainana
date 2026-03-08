@@ -1,7 +1,7 @@
 Outputs
 =======
 
-brainana writes all results under the **output directory** you specify (e.g. ``/output`` when using Docker). Outputs follow a BIDS derivatives layout.
+Brainana writes all results under the **output directory** you specify (e.g. ``/output`` when using Docker). Outputs follow a BIDS derivatives layout.
 
 Directory layout
 ----------------
@@ -113,4 +113,4 @@ This includes cortical surface meshes, parcellations, and morphometric files (th
 Quality control reports
 ------------------------
 
-- ``sub-<id>_report.html`` — brainana outputs a browsable HTML report with summaries, all QC snapshots, and methods. View a `sample report for sub-example <_static/QCreport_example/sub-example.html>`_.
+- ``sub-<id>_report.html`` — Brainana outputs a browsable HTML report with summaries, all QC snapshots, and methods. View a `sample report for sub-example <_static/QCreport_example/sub-example.html>`_.

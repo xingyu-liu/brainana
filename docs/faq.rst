@@ -3,9 +3,8 @@ FAQ and troubleshooting
 
 - `Do I need a config file?`_
 - `Can I run without a FreeSurfer license?`_
-- `How do I enable GPU acceleration?`_
+- `What if I don't have a compatible GPU?`_
 - `How do I align container resources with Nextflow?`_
-- `How do I process only a subset of subjects or sessions?`_
 - `My pipeline run is hanging.`_
 
 ----
@@ -25,10 +24,12 @@ Anatomical and functional preprocessing will still run, but surface reconstructi
 
 Get a free license at https://surfer.nmr.mgh.harvard.edu/registration.html, then mount it with ``-v <path>:/fs_license.txt`` and pass ``--freesurfer-license /fs_license.txt``.
 
-How do I enable GPU acceleration?
------------------------------------
+What if I don't have a compatible GPU?
+---------------------------------------
 
-Add ``--gpus all`` to your ``docker run`` command. You must have the `NVIDIA Container Toolkit <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html>`_ installed on the host. See :doc:`installation` for setup steps.
+You can run the pipeline without a GPU; it will use the CPU. Omit ``--gpus`` from your ``docker run`` command—no other options are needed. 
+
+If you do have an NVIDIA GPU and want to use it, add ``--gpus all`` and ensure the `NVIDIA Container Toolkit <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html>`_ is installed on the host. See :doc:`installation` for setup steps.
 
 How do I align container resources with Nextflow?
 --------------------------------------------------
@@ -39,24 +40,6 @@ The container defaults to 8 CPUs and 20 GB for Nextflow (controlled by ``NXF_MAX
 - Use ``-profile minimal`` (4 CPUs, 16 GB) or ``-profile recommended`` (8+ CPUs, 32 GB) for preset profiles.
 
 See :ref:`command-line-reference` for the full resource options.
-
-How do I process only a subset of subjects or sessions?
---------------------------------------------------------
-
-Pass ``--subjects`` and/or ``--sessions`` in the ``docker run`` command:
-
-.. code-block:: bash
-
-   docker run -it --rm --gpus all \
-       -v /data/bids:/input \
-       -v /data/output:/output \
-       -v /path/to/license.txt:/fs_license.txt \
-       liuxingyu987/brainana:latest /input /output \
-       --freesurfer-license /fs_license.txt \
-       --subjects sub-001 sub-002 \
-       --sessions ses-01
-
-See :ref:`command-line-reference` for all filtering options.
 
 My pipeline run is hanging.
 ----------------------------

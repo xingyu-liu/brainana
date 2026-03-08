@@ -4,14 +4,14 @@ Installation
 Docker
 ------
 
-The recommended way to run brainana is with Docker. The image includes neuroimaging toolkits (FSL, ANTs, AFNI, FreeSurfer), Nextflow, and a pre-configured Python environment.
+The recommended way to run Brainana is with Docker. The image includes neuroimaging toolkits (FSL, ANTs, AFNI, FreeSurfer), Nextflow, and a pre-configured Python environment.
 
 System requirements
 ~~~~~~~~~~~~~~~~~~~
 
 .. warning::
 
-   - **OS:** Linux (e.g. Ubuntu ≥ 20.04)
+   - **Host:** Any OS supported by Docker (Linux, macOS, Windows with WSL2). 
    - **RAM + swap:** ≥ 16 GB (recommended 20 GB+ for full pipeline)
    - **Disk:** ≥ 20 GB (recommended 50 GB+ for multiple subjects)
    - **CPU:** ≥ 4 logical cores (recommended 8+)
@@ -38,18 +38,24 @@ Set up Docker
 
    You should see a message indicating that Docker is working correctly.
 
-3. **Check GPU access** (optional, if you have GPUs on the host):
+3. **Check GPU access** (optional — skip this step if you have no GPU):
+
+   .. note::
+
+      **No GPU?** Skip this step. When you run the pipeline, omit ``--gpus all``; it will run on CPU with no other changes.
+
+   If you do have an NVIDIA GPU, verify Docker can access it:
 
    .. code-block:: bash
 
       docker run -it --rm --gpus all hello-world
 
-   If you see an error about ``nvidia-container-cli`` or ``libnvidia-ml.so``, ensure the NVIDIA Container Toolkit and drivers are installed. Without ``--gpus all``, the container uses only CPU.
+   If you see an error about ``nvidia-container-cli`` or ``libnvidia-ml.so``, ensure the `NVIDIA Container Toolkit <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html>`_ and drivers are installed.
 
-4. **Pull the brainana image:**
+4. **Pull the Brainana image:**
 
    .. code-block:: bash
 
       docker pull liuxingyu987/brainana:latest
 
-Once the image is ready, see :doc:`usage_notes` to run the pipeline and :doc:`faq` for GPU and resource tuning.
+Once the image is ready, see :doc:`usage_notes` to run the pipeline.

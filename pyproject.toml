@@ -97,6 +97,7 @@ docs = [
     "sphinx>=7.0",
     "myst-parser>=2.0",
     "sphinx-rtd-theme>=2.0",
+    "sphinx-copybutton>=0.5.0",
 ]
 
 # System dependencies (not Python packages): Connectome Workbench (wb_command) for QC surface snapshots

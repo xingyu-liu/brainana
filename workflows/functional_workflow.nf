@@ -269,6 +269,7 @@ workflow FUNC_WF {
     //        anat_after_bias_brain: [sub, ses, brain_file, bids_name] (Phase 1 final output - brain version)
     // Output: [sub, ses, anat_file, anat_ses] (session-level only, no run_id)
     def dummy_anat = file("${workDir}/dummy_anat.dummy")
+    dummy_anat.toFile().text = ""
     def func_anat_selection = channelHelpers.performFuncAnatomicalSelection(
         func_after_coreg,
         anat_after_bias_brain,
@@ -358,7 +359,9 @@ workflow FUNC_WF {
                 [sub, ses, run_id, tmean, bids_name]
             }
         def dummy_forward_transform = file("${workDir}/dummy_conform_forward_transform.dummy")
+        dummy_forward_transform.toFile().text = ""
         def dummy_inverse_transform = file("${workDir}/dummy_conform_inverse_transform.dummy")
+        dummy_inverse_transform.toFile().text = ""
         func_compute_conform_transforms = func_after_bias
             .map { sub, ses, run_id, tmean, bids_name ->
                 [sub, ses, run_id, dummy_forward_transform, dummy_inverse_transform]
@@ -380,7 +383,7 @@ workflow FUNC_WF {
     } else {
         func_compute_mask_output = func_compute_conform_output
             .map { sub, ses, run_id, conformed_tmean, bids_name ->
-                def dummy_mask = file("${workDir}/dummy_brain_mask.dummy")
+                def dummy_mask = file("${workDir}/dummy_brain_mask.dummy").tap { it.toFile().text = "" }
                 [sub, ses, run_id, conformed_tmean, bids_name, dummy_mask]
             }
     }
@@ -421,7 +424,7 @@ workflow FUNC_WF {
     } else {
         func_compute_reg_output = func_compute_mask_output
             .map { sub, ses, run_id, masked_tmean, bids_name, mask ->
-                def dummy_transform = file("${workDir}/dummy_reg_transform.dummy")
+                def dummy_transform = file("${workDir}/dummy_reg_transform.dummy").tap { it.toFile().text = "" }
                 [sub, ses, run_id, masked_tmean, bids_name, dummy_transform, ""]
             }
     }
@@ -537,7 +540,9 @@ workflow FUNC_WF {
         // Input: func_compute_reg_output: [sub, ses, run_id, registered_tmean, bids_name, anat_ses]
         // Output: [sub, ses, dummy_xfm, dummy_ref]
         def dummy_anat2template_xfm = file("${workDir}/dummy_anat2template_xfm.dummy")
+        dummy_anat2template_xfm.toFile().text = ""
         def dummy_anat_reg_ref = file("${workDir}/dummy_anat_reg_ref.dummy")
+        dummy_anat_reg_ref.toFile().text = ""
         
         def anat_reg_all_dummy = func_compute_reg_output
             .map { sub, ses, run_id, registered_tmean, bids_name, anat_ses -> [sub, ses] }

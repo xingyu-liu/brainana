@@ -1,7 +1,7 @@
 Processing pipeline details
 ===========================
 
-brainana adapts its pipeline depending on what data and metadata are
+Brainana adapts its pipeline depending on what data and metadata are
 available and on the configuration you provide. For example,
 anatomical synthesis runs only when multiple T1w/T2w runs or sessions
 are present and synthesis is enabled; slice timing correction runs
@@ -13,8 +13,8 @@ This page describes the methods used at each stage of the pipeline.
 Pipeline overview
 -----------------
 
-Results included in analyses processed with brainana come from
-preprocessing performed using **brainana**, a BIDS-based,
+Results included in analyses processed with Brainana come from
+preprocessing performed using **Brainana**, a BIDS-based,
 Nextflow-orchestrated pipeline for macaque (and other NHP)
 anatomical and functional MRI. The pipeline adapts to available
 data and configuration:
@@ -73,7 +73,7 @@ the anatomical reference for T2w and functional workflows.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When multiple T1w or T2w images exist per session or per subject,
-brainana can synthesize a single anatomical reference.
+Brainana can synthesize a single anatomical reference.
 
 - **When:** Multiple T1w or T2w per session or subject (configurable
   synthesis level).
@@ -178,7 +178,7 @@ brainana can synthesize a single anatomical reference.
 2.7 T2w to T1w coregistration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When T2w data are present, brainana can coregister T2w to the
+When T2w data are present, Brainana can coregister T2w to the
 preprocessed T1w:
 
 - **Method:** ANTs rigid registration from T2w to preprocessed T1w,
@@ -235,7 +235,7 @@ The workflow is conceptually split into:
 3.1 Slice timing correction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When slice timing information is available in BIDS metadata, brainana
+When slice timing information is available in BIDS metadata, Brainana
 applies slice timing correction.
 
 - **Purpose:** Align voxel time series in time according to the slice

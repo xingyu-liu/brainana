@@ -1,4 +1,4 @@
-_description: Default configuration for brainana preprocessing pipeline
+_description: Default configuration for Brainana preprocessing pipeline
 general:
   verbose: 2
   anat_only: false

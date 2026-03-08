@@ -3,9 +3,9 @@
 from pathlib import Path
 import tomllib
 
-project = "brainana"
-copyright = "2025, brainana developers"
-author = "brainana developers"
+project = "Brainana"
+copyright = "2025, Brainana developers"
+author = "Brainana developers"
 
 # Version from pyproject.toml (single source of truth)
 _pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
@@ -19,6 +19,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
+    "sphinx_copybutton",
 ]
 
 templates_path = ["_templates"]
@@ -35,8 +36,8 @@ _logo = Path(__file__).resolve().parent / "_static" / "brainana_logo_side.png"
 html_logo = str(_logo) if _logo.exists() else None
 html_theme_options = {"logo_only": True} if html_logo else {}
 html_show_sourcelink = False
-html_title = "brainana"
-html_short_title = "brainana"
+html_title = "Brainana"
+html_short_title = "Brainana"
 
 myst_enable_extensions = ["deflist"]
 

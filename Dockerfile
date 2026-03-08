@@ -328,16 +328,16 @@ if [ "$PS1" ]; then\n\
     echo "Welcome to brainana Interactive Environment"\n\
     echo "--------------------------------------------------------------------------------"\n\
     echo "Installed Tools:"\n\
-    echo "  - FSL:        \$(fslval 2>/dev/null | head -n 1 || echo \"Installed\")"\n\
-    echo "  - ANTs:       \$(antsRegistration --version | grep Version | head -n 1 || echo \"Installed\")"\n\
-    echo "  - FireANTs:   \$(python3 -c \"import fireants; print(fireants.__version__)\" 2>/dev/null || echo \"Installed\")"\n\
-    echo "  - AFNI:       \$(afni -version | head -n 1 || echo \"Installed\")"\n\
-    echo "  - FreeSurfer: \$(cat \$FREESURFER_HOME/build-stamp.txt 2>/dev/null || echo \"Installed\")"\n\
-    echo "  - Python:     \$(python3 --version)"\n\
-    echo "  - Java:       \$(java -version 2>&1 | head -n 1)"\n\
-    echo "  - uv:         \$(uv --version)"\n\
-    echo "  - Nextflow:   \$(nextflow -version 2>/dev/null | head -n 1 || echo \"Installed\")"\n\
-    echo "  - Workbench:  \$(wb_command -version 2>/dev/null | head -n 1 || echo \"Installed\")"\n\
+    echo "  - FSL:        $(fslval 2>/dev/null | head -n 1 || echo \"Installed\")"\n\
+    echo "  - ANTs:       $(antsRegistration --version | grep Version | head -n 1 || echo \"Installed\")"\n\
+    echo "  - FireANTs:   $(python3 -c \"import fireants; print(fireants.__version__)\" 2>/dev/null || echo \"Installed\")"\n\
+    echo "  - AFNI:       $(afni -version | head -n 1 || echo \"Installed\")"\n\
+    echo "  - FreeSurfer: $(cat $FREESURFER_HOME/build-stamp.txt 2>/dev/null || echo \"Installed\")"\n\
+    echo "  - Python:     $(python3 --version)"\n\
+    echo "  - Java:       $(java -version 2>&1 | head -n 1)"\n\
+    echo "  - uv:         $(uv --version)"\n\
+    echo "  - Nextflow:   $(nextflow -version 2>/dev/null | head -n 1 || echo \"Installed\")"\n\
+    echo "  - Workbench:  $(wb_command -version 2>/dev/null | head -n 1 || echo \"Installed\")"\n\
     echo "--------------------------------------------------------------------------------"\n\
     echo "Usage Examples:"\n\
     echo "  ./run_brainana.sh run main.nf --bids_dir /data --output_dir /output"\n\

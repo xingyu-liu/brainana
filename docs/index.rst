@@ -1,7 +1,7 @@
-brainana
+Brainana
 ========
 
-**brainana** is a preprocessing and registration pipeline for macaque neuroimaging data with BIDS dataset support. It provides anatomical and (optionally) functional processing, surface reconstruction (FreeSurfer/FastSurfer), and template registration.
+**Brainana** is a preprocessing and registration pipeline for Non-human primate (NHP) neuroimaging data. It provides anatomical, functional processing, and surface reconstruction.
 
 .. note::
    For a quick start with Docker (recommended):
@@ -13,6 +13,8 @@ brainana
         -v <output_dir>:/output \
         -v <path/to/license.txt>:/fs_license.txt \
         liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
+
+   **No GPU?** Omit ``--gpus all``; the pipeline runs on CPU with no other changes.
 
 Contents
 --------

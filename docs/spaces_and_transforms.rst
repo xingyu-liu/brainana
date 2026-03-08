@@ -97,31 +97,32 @@ files are composite registration transforms (affine ± SyN).
 Applying transforms to images
 -----------------------------
 
-Use the selectors below to choose a source space, target space, and data type.
+Use the demo below to choose source space, target space, and data type. It
+outputs the matching command.
 
-- **Direct transforms only** — only single-step paths are listed. If your
-  desired path requires two steps, a hint will appear below the code block
-  telling you which intermediate space to use.
-- **Which tool to use** is determined by the transform file type:
-  - A ``.mat`` file requires ``flirt`` (FSL).
-  - A ``.h5`` file requires ``antsApplyTransforms`` (ANTs).
-  - Fastsurfer ↔ T1w resampling requires ``3dresample`` (AFNI) and needs no
-    transform file — only a reference image defining the target grid.
-  - If any of these tools are not installed locally, mount your data and run
-    the command inside the brainana Docker image:
+- **Single-step paths only** — the demo lists direct transforms. If you need
+  two steps, a hint below the code will suggest the intermediate space.
+- **Tool** depends on the transform file:
 
-    .. code-block:: bash
+  - ``.mat`` → ``flirt`` (FSL)
+  - ``.h5`` → ``antsApplyTransforms`` (ANTs)
+  - Fastsurfer ↔ T1w → ``3dresample`` (AFNI); no transform file, only a
+    reference image for the target grid.
+  - **No tool installed?** Mount your data and run the command inside the
+    Brainana Docker image::
 
-       docker run -it --rm --gpus all \
-         -v /path/to/your/data:/data \
-         liuxingyu987/brainana:latest bash
+      docker run -it --rm \
+        -v /path/to/your/data:/data \
+        liuxingyu987/brainana:latest bash
 
-       # then run your flirt / antsApplyTransforms / 3dresample command as usual
+      # then run your flirt / antsApplyTransforms / 3dresample command as usual
 
-- **Interpolation** is chosen automatically based on data type: discrete data
-  (label maps, segmentations) always use nearest-neighbour; continuous data
-  (intensity images) use trilinear for ``flirt`` and BSpline for
-  ``antsApplyTransforms``.
+- **Interpolation** is automatic: nearest-neighbour for discrete data (labels,
+  segmentations); trilinear for ``flirt`` and BSpline for
+  ``antsApplyTransforms`` on intensity images.
+
+Demo: command to apply a transform
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. raw:: html
 
