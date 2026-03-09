@@ -15,15 +15,15 @@ System requirements
    - **RAM + swap:** ≥ 16 GB (recommended 20 GB+ for full pipeline)
    - **Disk:** ≥ 20 GB (recommended 50 GB+ for multiple subjects)
    - **CPU:** ≥ 4 logical cores (recommended 8+)
-   - **GPU (optional):** ≥ 6 GB VRAM (recommended ≥ 10 GB for production)
+   - **GPU (optional, NVIDIA only):** ≥ 6 GB VRAM (recommended ≥ 10 GB for production)
    - **NVIDIA Driver (optional):** ≥ 520.61.05 if using GPU
    - **CUDA (optional):** ≥ 11.8 if using GPU
 
 Resource guidelines:
 
 - **Minimal:** 16 GB RAM, 4 CPUs, 20 GB disk
-- **Recommended:** 20 GB RAM, 8 CPUs, 50 GB disk, 1 GPU with ≥ 6 GB VRAM
-- **Production:** 32 GB RAM, 8+ CPUs, 100 GB+ disk, 1 GPU with ≥ 10 GB VRAM
+- **Recommended:** 20 GB RAM, 8 CPUs, 50 GB disk, 1 NVIDIA GPU with ≥ 6 GB VRAM
+- **Production:** 32 GB RAM, 8+ CPUs, 100 GB+ disk, 1 NVIDIA GPU with ≥ 10 GB VRAM
 
 Set up Docker
 ~~~~~~~~~~~~~
@@ -38,13 +38,26 @@ Set up Docker
 
    You should see a message indicating that Docker is working correctly.
 
-3. **Check GPU access** (optional — skip this step if you have no GPU):
+3. **Check GPU access** (optional):
+
+   A GPU is compatible if it is NVIDIA and meets the driver and CUDA minimums. You can check with:
+
+   .. code-block:: bash
+
+      nvidia-smi
+
+   In the output (top-right corner), check:
+
+   - **Driver version** — must be ≥ 520.61.05
+   - **CUDA version** — must be ≥ 11.8
+
+   If you have no NVIDIA GPU, or either value is below the minimum, no compatible GPU is available.
 
    .. note::
 
-      **No GPU?** Skip this step. When you run the pipeline, omit ``--gpus all``; it will run on CPU with no other changes.
+      **No compatible GPU?** Skip the rest of this step. When you run the pipeline, omit ``--gpus all``; it will run on CPU with no other changes.
 
-   If you do have an NVIDIA GPU, verify Docker can access it:
+   Next, verify Docker can access your GPU:
 
    .. code-block:: bash
 
@@ -56,6 +69,10 @@ Set up Docker
 
    .. code-block:: bash
 
-      docker pull liuxingyu987/brainana:latest
+      docker pull liuxingyu987/brainana:<version>
+
+   .. note::
+
+      Replace ``<version>`` with a published Brainana tag from Docker Hub, for example ``1.0.0``. See the `Brainana image tags on Docker Hub <https://hub.docker.com/r/liuxingyu987/brainana/tags>`_ for the list of available versions.
 
 Once the image is ready, see :doc:`usage_notes` to run the pipeline.

@@ -216,7 +216,7 @@ class ReconSurfConfig(BaseModel):
     mask: Optional[Path] = Field(default=None, description="Brain mask file")
     registration_template: Optional[Path] = Field(
         default=None,
-        description="Path to registration template subject dir (e.g. sub-MEBRAIN). If set, use its surf/label/atlas; else use fsaverage from FREESURFER_HOME. When set, fsaparc (mris_ca_label) is skipped."
+        description="Path to registration template subject dir (e.g. sub-MEBRAINS). If set, use its surf/label/atlas; else use fsaverage from FREESURFER_HOME. When set, fsaparc (mris_ca_label) is skipped."
     )
 
     # Sub-configurations

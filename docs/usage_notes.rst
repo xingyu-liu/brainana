@@ -8,21 +8,20 @@ Quick start
 
 1. Prepare a valid BIDS dataset (see `The BIDS format`_ below) and an output directory.
 2. For surface reconstruction, prepare a FreeSurfer license (see `The FreeSurfer license`_ below).
-3. Pull the image and run:
+3. Ensure the Brainana image is pulled as described in :doc:`installation`, then run:
 
    .. code-block:: bash
-
-      docker pull liuxingyu987/brainana:latest
 
       docker run -it --rm --gpus all \
           -v <bids_dir>:/input \
           -v <output_dir>:/output \
           -v <path/to/license.txt>:/fs_license.txt \
-          liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
+          liuxingyu987/brainana:<version> /input /output --freesurfer-license /fs_license.txt
 
 .. note::
 
-   **No GPU?** Omit ``--gpus all``; the pipeline runs on CPU with no other changes.
+   - Replace ``<version>`` with a published Brainana tag from Docker Hub, for example ``1.0.0``. See the `Brainana image tags on Docker Hub <https://hub.docker.com/r/liuxingyu987/brainana/tags>`_ for the list of available versions.
+   - **No compatible GPU?** Omit ``--gpus all``; the pipeline runs on CPU with no other changes. Only NVIDIA GPUs meeting the driver and CUDA requirements are supported (see :doc:`installation`).
 
 No config file is required; built-in defaults are used. The default config can be found in the `config generator <_static/config_generator.html>`_. See :ref:`command-line-reference` below for all available options.
 
@@ -47,7 +46,7 @@ If you start with DICOM, you can either:
 
 (1) Use `dcm2niix <https://github.com/rordenlab/dcm2niix>`_ to convert DICOM to NIfTI and then manually reorganise and rename files to BIDS. Use ``-b y`` so dcm2niix writes BIDS-compatible JSON sidecar files (e.g. ``dcm2niix -b y -o <output_dir> <dicom_dir>``); you still need to create the BIDS folder structure and naming yourself.
 
-(2) Use `dcm2bids <https://unfmontgomery.github.io/Dcm2Bids/>`_, which converts DICOM to NIfTI and organises output into BIDS for you.
+(2) Use `dcm2bids <https://unfmontreal.github.io/Dcm2Bids>`_, which converts DICOM to NIfTI and organises output into BIDS for you.
 
 The FreeSurfer license
 ----------------------
@@ -89,7 +88,7 @@ Example with real paths
        -v /data/my_bids_dataset:/input \
        -v /data/preprocessed:/output \
        -v /home/user/license.txt:/fs_license.txt \
-       liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
+       liuxingyu987/brainana:<version> /input /output --freesurfer-license /fs_license.txt
 
 Customizing your run
 ~~~~~~~~~~~~~~~~~~~~
@@ -107,7 +106,7 @@ Generate a full config file using the :doc:`configuration` page's interactive ge
        -v /data/preprocessed:/output \
        -v /home/user/license.txt:/fs_license.txt \
        -v /home/user/my_config.yaml:/config.yaml \
-       liuxingyu987/brainana:latest /input /output \
+       liuxingyu987/brainana:<version> /input /output \
        --freesurfer-license /fs_license.txt \
        --config /config.yaml
 
@@ -123,7 +122,7 @@ Common options can be passed directly without a config file:
        -v /data/bids:/input \
        -v /data/output:/output \
        -v /path/to/license.txt:/fs_license.txt \
-       liuxingyu987/brainana:latest /input /output \
+       liuxingyu987/brainana:<version> /input /output \
        --freesurfer-license /fs_license.txt \
        --anat_only \
        --output_space NMT2Sym:res-1 \
@@ -138,7 +137,7 @@ Command-line reference
 
 .. code-block:: text
 
-   docker run ... liuxingyu987/brainana:latest [bids_dir] [output_dir] [options]
+   docker run ... liuxingyu987/brainana:<version> [bids_dir] [output_dir] [options]
 
 Positional arguments
 ~~~~~~~~~~~~~~~~~~~~

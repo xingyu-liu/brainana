@@ -1,0 +1,16 @@
+/* Custom docs styles for Brainana */
+
+/* Tighten vertical spacing for Mermaid diagrams */
+.rst-content .mermaid,
+.rst-content .mermaid svg {
+  margin-top: 10 !important;
+  margin-bottom: 10 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  display: block;
+}
+.rst-content .mermaid svg {
+  height: auto !important;
+  max-width: 100%;
+}
+

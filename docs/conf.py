@@ -20,6 +20,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
     "sphinx_copybutton",
+    "sphinxcontrib.mermaid",
 ]
 
 templates_path = ["_templates"]
@@ -30,6 +31,7 @@ source_suffix = {
 
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 
 # Logo is optional so RTD (and local docs-only) builds succeed without the asset
 _logo = Path(__file__).resolve().parent / "_static" / "brainana_logo_side.png"

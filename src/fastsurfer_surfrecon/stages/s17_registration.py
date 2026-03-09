@@ -1,7 +1,7 @@
 """
 Stage 17: Surface Registration
 
-Registers surface to fsaverage (human) or a custom template (e.g. sub-MEBRAIN for macaque).
+Registers surface to fsaverage (human) or a custom template (e.g. sub-MEBRAINS for macaque).
 """
 
 import logging
@@ -36,7 +36,7 @@ def _template_paths(config, hemi: str):
 
 
 class Registration(HemisphereStage):
-    """Register surface to fsaverage or custom template (e.g. sub-MEBRAIN)."""
+    """Register surface to fsaverage or custom template (e.g. sub-MEBRAINS)."""
 
     name = "registration"
     description = "Surface registration to template"

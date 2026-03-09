@@ -113,7 +113,7 @@ outputs the matching command.
 
       docker run -it --rm \
         -v /path/to/your/data:/data \
-        liuxingyu987/brainana:latest bash
+        liuxingyu987/brainana:<version> bash
 
       # then run your flirt / antsApplyTransforms / 3dresample command as usual
 
@@ -246,7 +246,7 @@ Demo: command to apply a transform
      var spaceRef = {
        'scanner-T1w':  '<prefix>_T1w.nii.gz',
        'T1w':          '<prefix>_desc-preproc_T1w.nii.gz',
-       'template':     '<prefix>_space-<template>_desc-preproc_T1w.nii.gz',
+       'template':     'tpl-<template>_res-<res>_T1w.nii.gz',
        'scanner-T2w':  '<prefix>_T2w.nii.gz',
        'scanner-bold': '<prefix>_bold.nii.gz',
        'bold-withT1w': '<prefix>_desc-preproc_bold.nii.gz',

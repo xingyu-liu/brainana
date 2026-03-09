@@ -42,8 +42,8 @@ output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_dow
 
 # bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_UNC_batch1
 # output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_UNC_batch1
-# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/MEBRAIN/bids
-# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/MEBRAIN/
+# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/MEBRAINS/bids
+# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/MEBRAINS/
 # bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/ElectrodeLocalization/bids
 # output_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/ElectrodeLocalization/bids_preproc
 # bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/site-newcastle
@@ -53,7 +53,7 @@ output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_dow
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_easy.yaml"
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_UNC.yaml"
-# config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_MEBRAIN.yaml"
+# config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_MEBRAINS.yaml"
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_common.yaml"
 config_f=/home/star/github/brainana/src/nhp_mri_prep/config/defaults.yaml
 
