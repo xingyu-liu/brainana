@@ -21,26 +21,27 @@ Quick start
 .. note::
 
    - Replace ``<version>`` with a published Brainana tag from Docker Hub, for example ``1.0.0``. See the `Brainana image tags on Docker Hub <https://hub.docker.com/r/liuxingyu987/brainana/tags>`_ for the list of available versions.
-   - **No compatible GPU?** Omit ``--gpus all``; the pipeline runs on CPU with no other changes. Only NVIDIA GPUs meeting the driver and CUDA requirements are supported (see :doc:`installation`).
+   - **No compatible GPU?** Omit ``--gpus all``; the pipeline runs on CPU with no other changes. Details in :ref:`Check GPU access <installation-check-gpu-access>`.
 
 No config file is required; built-in defaults are used. The default config can be found in the `config generator <_static/config_generator.html>`_. See :ref:`command-line-reference` below for all available options.
 
 The BIDS format
 ---------------
 
-The input dataset must be in valid `BIDS <https://bids-specification.readthedocs.io/>`_ format. We recommend validating your dataset with the free online `BIDS Validator <https://bids-standard.github.io/bids-validator/>`_.
+The input dataset must be in valid `BIDS <https://bids.neuroimaging.io/getting_started/folders_and_files/folders.html>`_ format. We recommend validating your dataset with the free online `BIDS Validator <https://bids-standard.github.io/bids-validator/>`_.
 
 Minimal example layout (dataset root with one subject, one session, anat + func)::
 
    ./   # dataset root
-   └── sub-aaa
-       ├── ses-bbb
-       │   ├── anat
-       │   │   ├── sub-aaa_ses-bbb_run-ccc_T1w.nii.gz
-       │   │   └── sub-aaa_ses-bbb_run-ccc_T1w.json   # optional
-       │   └── func
-       │       ├── sub-aaa_ses-bbb_task-ddd_run-eee_bold.nii.gz
-       │       └── sub-aaa_ses-bbb_task-ddd_run-eee_bold.json   # optional
+   ├── sub-<sub_id>
+   │   └── ses-<ses_id>
+   │       ├── anat
+   │       │   ├── sub-<sub_id>_ses-<ses_id>_run-<run_id>_T1w.nii.gz
+   │       │   └── sub-<sub_id>_ses-<ses_id>_run-<run_id>_T1w.json   # optional
+   │       └── func
+   │           ├── sub-<sub_id>_ses-<ses_id>_task-<task_id>_run-<run_id>_bold.nii.gz
+   │           └── sub-<sub_id>_ses-<ses_id>_task-<task_id>_run-<run_id>_bold.json   # optional
+   └── <other_subjects>
 
 If you start with DICOM, you can either:
 

@@ -14,7 +14,7 @@ Brainana
         -v <path/to/license.txt>:/fs_license.txt \
         liuxingyu987/brainana:<version> /input /output --freesurfer-license /fs_license.txt
 
-   **No GPU?** Omit ``--gpus all``; the pipeline runs on CPU with no other changes.
+   **No compatible GPU?** First, determine whether you have a compatible GPU in :ref:`Check GPU access <installation-check-gpu-access>`. If you do not, omit ``--gpus all``; the pipeline runs on CPU with no other changes.
 
 Contents
 --------

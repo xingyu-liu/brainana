@@ -38,6 +38,8 @@ Set up Docker
 
    You should see a message indicating that Docker is working correctly.
 
+.. _installation-check-gpu-access:
+
 3. **Check GPU access** (optional):
 
    A GPU is compatible if it is NVIDIA and meets the driver and CUDA minimums. You can check with:
@@ -48,8 +50,8 @@ Set up Docker
 
    In the output (top-right corner), check:
 
-   - **Driver version** — must be ≥ 520.61.05
-   - **CUDA version** — must be ≥ 11.8
+   - Driver version — must be ≥ 520.61.05
+   - CUDA version — must be ≥ 11.8
 
    If you have no NVIDIA GPU, or either value is below the minimum, no compatible GPU is available.
 
