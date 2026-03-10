@@ -14,8 +14,8 @@ Do I need a config file?
 
 No. Built-in defaults are used for all pipeline steps. To customise the pipeline you have two options:
 
-1. **Config file (recommended):** Generate a YAML config file with the :doc:`configuration` page's interactive generator, mount it into the container, and pass ``--config /path/to/config.yaml``.
-2. **Command-line arguments:** Pass common options directly in the ``docker run`` command (e.g. ``--anat_only``, ``--output_space "NMT2Sym:res-1"``). See :ref:`command-line-reference`.
+1. **Config file (recommended):** Generate a YAML config file with the :ref:`generating-config-file` interactive generator (in :doc:`usage_notes`), mount it into the container, and pass ``--config /path/to/config.yaml``.
+2. **Command-line arguments:** Pass common options directly in the ``docker run`` command (e.g. ``--anat_only``, ``--output_space "NMT2Sym:res-1"``). See :ref:`command-line-arguments`.
 
 Can I run without a FreeSurfer license?
 ----------------------------------------
@@ -39,7 +39,7 @@ The container defaults to 8 CPUs and 20 GB for Nextflow (controlled by ``NXF_MAX
 - Pass ``-e NXF_MAX_CPUS=<n>`` and ``-e NXF_MAX_MEMORY=<n>g`` to ``docker run``.
 - Use ``-profile minimal`` (4 CPUs, 16 GB) or ``-profile recommended`` (8+ CPUs, 32 GB) for preset profiles.
 
-See :ref:`command-line-reference` for the full resource options.
+See :ref:`command-line-arguments` for the full resource options.
 
 My pipeline run is hanging.
 ----------------------------
@@ -49,4 +49,4 @@ This typically happens when Nextflow runs out of memory. Try one or more of the 
 - Increase the RAM available to Docker.
 - Use ``-profile minimal`` to reduce resource usage.
 - Set ``-e NXF_MAX_CPUS`` and ``-e NXF_MAX_MEMORY`` to match your available resources.
-- Resume from the last checkpoint by re-running the same command (Nextflow resume is enabled by default).
+- Resume from the last checkpoint by re-running the same command (Nextflow resume is enabled by default, provided the work directory is mounted — see :ref:`usage-docker-guide`).

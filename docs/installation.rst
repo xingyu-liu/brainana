@@ -42,7 +42,9 @@ Set up Docker
 
 3. **Check GPU access** (optional):
 
-   A GPU is compatible if it is NVIDIA and meets the driver and CUDA minimums. You can check with:
+   A GPU is compatible if it is NVIDIA and meets the driver and CUDA minimums. 
+   
+   1. You can check with:
 
    .. code-block:: bash
 
@@ -53,19 +55,17 @@ Set up Docker
    - Driver version — must be ≥ 520.61.05
    - CUDA version — must be ≥ 11.8
 
-   If you have no NVIDIA GPU, or either value is below the minimum, no compatible GPU is available.
+   If you have no NVIDIA GPU, or either value is below the minimum, no compatible GPU is available. Skip the rest of this step.
 
-   .. note::
-
-      **No compatible GPU?** Skip the rest of this step. When you run the pipeline, omit ``--gpus all``; it will run on CPU with no other changes.
-
-   Next, verify Docker can access your GPU:
+   2. verify Docker can access your GPU:
 
    .. code-block:: bash
 
       docker run -it --rm --gpus all hello-world
 
-   If you see an error about ``nvidia-container-cli`` or ``libnvidia-ml.so``, ensure the `NVIDIA Container Toolkit <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html>`_ and drivers are installed.
+   .. note::
+
+      If you see an error about ``nvidia-container-cli`` or ``libnvidia-ml.so``, ensure the `NVIDIA Container Toolkit <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html>`_ and drivers are installed.
 
 4. **Pull the Brainana image:**
 

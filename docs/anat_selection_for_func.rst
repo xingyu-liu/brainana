@@ -57,15 +57,15 @@ Overview
 ..                                                          other session, if absent)
 
 
-Branch 1 — No T1w for the subject
+Scenario 1 — No T1w for the subject
 -----------------------------------
 
 When no T1w image exists for the subject, all functional sessions
 automatically use the specified **template T1w**.
 
 
-Branch 2 — T1w available for the subject
------------------------------------------
+Scenario 2 — T1w available for the subject
+------------------------------------------
 
 .. note::
 
@@ -75,16 +75,16 @@ Branch 2 — T1w available for the subject
 
 .. _anat-sel-case21:
 
-Case 2.1 — T1w in only one session
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Scenario 2.1 — T1w in only one session
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - Functional runs **in the same session** as the T1w use it directly.
 - Functional runs **in any other session** also use that session's T1w as the anatomical reference.
 
 .. _anat-sel-case22:
 
-Case 2.2 — T1w in multiple sessions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Scenario 2.2 — T1w in multiple sessions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When T1w images exist across multiple sessions, the
 ``anat.synthesis_level`` config option controls what happens:

@@ -662,9 +662,9 @@ def slice_timing_correction(
     if logger is None:
         logger = logging.getLogger(__name__)
     
-    # Validate inputs
-    image_path = validate_input_file(imagef, logger)
-    work_dir = ensure_working_directory(working_dir, logger)
+    # Validate inputs - resolve to absolute paths so subprocess cwd changes don't break file lookup
+    image_path = validate_input_file(imagef, logger).resolve()
+    work_dir = ensure_working_directory(working_dir, logger).resolve()
     
     # Get configuration from new nested structure
     slice_timing_cfg = config.get('func', {}).get('slice_timing_correction')

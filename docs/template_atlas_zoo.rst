@@ -18,7 +18,7 @@ Template zoo
 Download: `template_zoo/template <https://github.com/xingyu-liu/brainana/tree/main/template_zoo/template>`_
 
 The following templates can be used as ``output_space`` (e.g. in
-:ref:`command-line-reference` or in the configuration). Choose a
+:ref:`command-line-arguments` or in the configuration). Choose a
 template and/or resolution (e.g. ``NMT2Sym:res-05``) via the
 `configuration generator <_static/config_generator.html>`_ or a config YAML.
 
