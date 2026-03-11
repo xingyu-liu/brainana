@@ -13,5 +13,5 @@ docker run --rm -t --gpus all \
     -v "$fs_license":/fs_license.txt \
     -v "$config_f":/config.yaml \
     brainana:latest /input /output \
-    --freesurfer-license /fs_license.txt \
+    --work-dir /output_wd --freesurfer-license /fs_license.txt \
     --config /config.yaml

@@ -7,16 +7,18 @@
 #
 # Usage (production):
 #   docker run --rm --gpus all \
-#     -v <bids_dir>:/input \
-#     -v <output_dir>:/output \
-#     -v <license.txt>:/fs_license.txt \
-#     liuxingyu987/brainana:latest
+#     -v <path/to/bids_dir>:/input \
+#     -v <path/to/output_dir>:/output \
+#     -v <path/to/work_dir>:/output_wd \
+#     -v <path/to/license.txt>:/fs_license.txt \
+#     liuxingyu987/brainana:<version> /input /output \
+#     --work-dir /output_wd --freesurfer-license /fs_license.txt
 #
 # With custom config:
-#   docker run ... liuxingyu987/brainana:latest /input /output --config /path/to/config.yaml
+#   docker run ... liuxingyu987/brainana:<version> /input /output --work-dir /output_wd --config /config.yaml ...
 #
 # For interactive shell:
-#   docker run -it ... liuxingyu987/brainana:latest bash
+#   docker run -it ... liuxingyu987/brainana:<version> bash
 #
 
 set -e
@@ -154,7 +156,7 @@ fi
 # Validate
 if [ ! -d "$INPUT_DIR" ]; then
     echo "ERROR: Input directory not found: $INPUT_DIR" >&2
-    echo "Usage: docker run ... liuxingyu987/brainana:latest [input_dir] [output_dir]" >&2
+    echo "Usage: docker run ... liuxingyu987/brainana:<version> [input_dir] [output_dir]" >&2
     echo "       Default: /input /output (must be mounted with -v)" >&2
     exit 1
 fi

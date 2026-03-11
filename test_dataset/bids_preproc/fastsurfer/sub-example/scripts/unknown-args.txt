@@ -1,0 +1,6 @@
+-s
+sub-example
+-apas2aseg
+-no-isrunning
+-umask
+022

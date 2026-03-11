@@ -1,0 +1,21 @@
+[
+  {
+    "subject_id": "example",
+    "session_id": "001",
+    "file_path": "/input/sub-example/ses-001/func/sub-example_ses-001_task-rest_run-1_bold.nii.gz",
+    "modality": "func",
+    "suffix": "bold",
+    "task": "rest",
+    "run": 1,
+    "entities": {
+      "datatype": "func",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "example",
+      "suffix": "bold",
+      "task": "rest"
+    },
+    "needs_synthesis": false
+  }
+]

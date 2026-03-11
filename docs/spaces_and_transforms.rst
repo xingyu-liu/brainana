@@ -112,7 +112,7 @@ outputs the matching command.
     Brainana Docker image::
 
       docker run -it --rm \
-        -v /path/to/your/data:/data \
+        -v <path/to/your/data>:/data \
         liuxingyu987/brainana:<version> bash
 
       # then run your flirt / antsApplyTransforms / 3dresample command as usual

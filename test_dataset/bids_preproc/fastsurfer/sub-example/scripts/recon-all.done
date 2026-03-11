@@ -1,0 +1,13 @@
+------------------------------
+SUBJECT sub-example
+START_TIME Wed Mar 11 06:51:59 PM UTC 2026
+END_TIME Wed Mar 11 06:52:00 PM UTC 2026
+RUNTIME_HOURS 0.000
+USER root
+HOST 3218ffa1f644
+PROCESSOR x86_64
+OS Linux
+UNAME Linux 3218ffa1f644 6.8.0-101-generic #101~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Wed Feb 11 13:19:54 UTC  x86_64 GNU/Linux
+VERSION 7.4.1 (freesurfer-linux-ubuntu22_x86_64-7.4.1-20230614-7eb8460)
+CMDPATH /usr/local/freesurfer/bin/recon-all
+CMDARGS -s sub-example -apas2aseg -no-isrunning -umask 022

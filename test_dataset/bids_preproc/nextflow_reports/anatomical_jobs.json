@@ -1,0 +1,20 @@
+[
+  {
+    "subject_id": "example",
+    "session_id": "001",
+    "file_path": "/input/sub-example/ses-001/anat/sub-example_ses-001_run-1_T1w.nii.gz",
+    "modality": "anat",
+    "suffix": "T1w",
+    "task": null,
+    "run": 1,
+    "entities": {
+      "datatype": "anat",
+      "extension": ".nii.gz",
+      "run": 1,
+      "session": "001",
+      "subject": "example",
+      "suffix": "T1w"
+    },
+    "needs_synthesis": false
+  }
+]

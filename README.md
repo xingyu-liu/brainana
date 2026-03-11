@@ -18,13 +18,13 @@ The easiest way to run **brainana** is via the pre-built Docker image, which inc
 
    ```bash
    # Pull from Docker Hub
-   docker pull liuxingyu987/brainana:latest
+   docker pull liuxingyu987/brainana:<version>
 
    # Or build from source (from the project root)
    docker build \
        --build-arg USER_ID=$(id -u) \
        --build-arg GROUP_ID=$(id -g) \
-       -t liuxingyu987/brainana:latest .
+       -t liuxingyu987/brainana:<version> .
    ```
 
 2. **Prepare input, output, and FreeSurfer license**
@@ -39,11 +39,15 @@ The easiest way to run **brainana** is via the pre-built Docker image, which inc
 
    ```bash
    docker run -it --rm --gpus all \
-       -v /data/my_bids_dataset:/input \
-       -v /data/preprocessed:/output \
-       -v $HOME/freesurfer/license.txt:/fs_license.txt \
-       liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
+       -v <path/to/bids_dir>:/input \
+       -v <path/to/output_dir>:/output \
+       -v <path/to/work_dir>:/output_wd \
+       -v <path/to/license.txt>:/fs_license.txt \
+       liuxingyu987/brainana:<version> /input /output \
+       --work-dir /output_wd --freesurfer-license /fs_license.txt
    ```
+
+   Replace ``<version>`` with a published tag (e.g. ``1.0.0``); see [Docker Hub](https://hub.docker.com/r/liuxingyu987/brainana/tags). Replace each ``<path/to/...>`` with your actual paths.
 
 This runs the full pipeline with built-in defaults. More examples are in **Usage** below and in the documentation.
 
@@ -75,9 +79,9 @@ Surface reconstruction requires a FreeSurfer license:
 - Mount it into the container and pass it to the pipeline:
 
   ```bash
-  -v /path/to/license.txt:/fs_license.txt \
+  -v <path/to/license.txt>:/fs_license.txt \
   ...
-  liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
+  liuxingyu987/brainana:<version> /input /output --work-dir /output_wd --freesurfer-license /fs_license.txt
   ```
 
 ### Example Docker commands
@@ -88,28 +92,29 @@ Omit ``--gpus all`` if no GPU is available.
 
   ```bash
   docker run -it --rm --gpus all \
-      -v <bids_dir>:/input \
-      -v <output_dir>:/output \
-      -v <work_dir>:/output_wd \
+      -v <path/to/bids_dir>:/input \
+      -v <path/to/output_dir>:/output \
+      -v <path/to/work_dir>:/output_wd \
       -v <path/to/license.txt>:/fs_license.txt \
-      liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
+      liuxingyu987/brainana:<version> /input /output \
+      --work-dir /output_wd --freesurfer-license /fs_license.txt
   ```
 
 - **Custom configuration** (YAML via ``--config``; generate one with the configuration generator in the documentation)
 
   ```bash
   docker run -it --rm --gpus all \
-      -v <bids_dir>:/input \
-      -v <output_dir>:/output \
-      -v <work_dir>:/output_wd \
+      -v <path/to/bids_dir>:/input \
+      -v <path/to/output_dir>:/output \
+      -v <path/to/work_dir>:/output_wd \
       -v <path/to/license.txt>:/fs_license.txt \
       -v <path/to/config.yaml>:/config.yaml \
-      liuxingyu987/brainana:latest /input /output \
-          --freesurfer-license /fs_license.txt \
-          --config /config.yaml
+      liuxingyu987/brainana:<version> /input /output \
+      --work-dir /output_wd --freesurfer-license /fs_license.txt \
+      --config /config.yaml
   ```
 
-  ``<work_dir>`` is a host path for Nextflow's intermediate files (e.g. ``<output_dir>_wd``). Without this mount the work directory is discarded on container exit and resume will not work.
+  ``<path/to/work_dir>`` is a host path for Nextflow's intermediate files (e.g. ``<path/to/output_dir>_wd``). Without this mount the work directory is discarded on container exit and resume will not work.
 
 For the full command-line reference, see the documentation.
 

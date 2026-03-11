@@ -13,17 +13,18 @@ Quick start
    .. code-block:: bash
 
       docker run -it --rm --gpus all \
-          -v <bids_dir>:/input \
-          -v <output_dir>:/output \
-          -v <work_dir>:/output_wd \
+          -v <path/to/bids_dir>:/input \
+          -v <path/to/output_dir>:/output \
+          -v <path/to/work_dir>:/output_wd \
           -v <path/to/license.txt>:/fs_license.txt \
-          liuxingyu987/brainana:<version> /input /output --freesurfer-license /fs_license.txt
+          liuxingyu987/brainana:<version> /input /output \
+          --work-dir /output_wd --freesurfer-license /fs_license.txt
 
 .. note::
 
    - **Replace ``<version>``** with a published Brainana tag from Docker Hub, for example ``1.0.0``. See the `Brainana image tags on Docker Hub <https://hub.docker.com/r/liuxingyu987/brainana/tags>`_ for the list of available versions.
    - **No compatible GPU?** Omit ``--gpus all``; the pipeline runs on CPU with no other changes. Details in :ref:`Check GPU access <installation-check-gpu-access>`.
-   - **``<work_dir>``** is a host path for Nextflow's intermediate files. Without this mount, resume is impossible.
+   - **``<path/to/work_dir>``** is a host path for Nextflow's intermediate files. Without this mount, resume is impossible.
 
 No configuration file is required; built-in defaults are used. To customise the pipeline, see the Configuration file section below. For all options after the image name, see :ref:`command-line-arguments`.
 
@@ -94,52 +95,53 @@ Mounts
 
 **Mandatory mounts**
 
-- Input (BIDS-formatted): ``-v <bids_dir>:/input``
-- Output: ``-v <output_dir>:/output``
+- Input (BIDS-formatted): ``-v <path/to/bids_dir>:/input``
+- Output: ``-v <path/to/output_dir>:/output``
 
 **Optional mounts**
 
-- Work directory: ``-v <work_dir>:/output_wd`` — stores Nextflow's intermediate files and cache. **Required for resume to work.** 
+- Work directory: ``-v <path/to/work_dir>:/output_wd`` — stores Nextflow's intermediate files and cache. **Required for resume to work.** 
 - FreeSurfer license: ``-v <path/to/license.txt>:/fs_license.txt`` — mount the file prepared in :ref:`the-freesurfer-license-optional`; omit to run without surface reconstruction.
 - Configuration file: ``-v <path/to/config.yaml>:/config.yaml`` — mount the file prepared in :ref:`generating-config-file`; omit to use built-in defaults.
 
-Example with real paths
-~~~~~~~~~~~~~~~~~~~~~~~
+Example commands
+~~~~~~~~~~~~~~~~~
 
 **With default config (surface reconstruction enabled)**
 
 .. code-block:: bash
 
    docker run -it --rm --gpus all \
-       -v /data/my_bids_dataset:/input \
-       -v /data/preprocessed:/output \
-       -v /data/preprocessed_wd:/output_wd \
-       -v /home/user/license.txt:/fs_license.txt \
+       -v <path/to/bids_dir>:/input \
+       -v <path/to/output_dir>:/output \
+       -v <path/to/work_dir>:/output_wd \
+       -v <path/to/license.txt>:/fs_license.txt \
        liuxingyu987/brainana:<version> /input /output \
-       --freesurfer-license /fs_license.txt
+       --work-dir /output_wd --freesurfer-license /fs_license.txt
 
 **With default config (surface reconstruction disabled)**
 
 .. code-block:: bash
 
    docker run -it --rm --gpus all \
-       -v /data/my_bids_dataset:/input \
-       -v /data/preprocessed:/output \
-       -v /data/preprocessed_wd:/output_wd \
-       liuxingyu987/brainana:<version> /input /output
+       -v <path/to/bids_dir>:/input \
+       -v <path/to/output_dir>:/output \
+       -v <path/to/work_dir>:/output_wd \
+       liuxingyu987/brainana:<version> /input /output \
+       --work-dir /output_wd
 
 **With a custom config**
 
 .. code-block:: bash
 
    docker run -it --rm --gpus all \
-       -v /data/my_bids_dataset:/input \
-       -v /data/preprocessed:/output \
-       -v /data/preprocessed_wd:/output_wd \
-       -v /home/user/license.txt:/fs_license.txt \
-       -v /home/user/my_config.yaml:/config.yaml \
+       -v <path/to/bids_dir>:/input \
+       -v <path/to/output_dir>:/output \
+       -v <path/to/work_dir>:/output_wd \
+       -v <path/to/license.txt>:/fs_license.txt \
+       -v <path/to/config.yaml>:/config.yaml \
        liuxingyu987/brainana:<version> /input /output \
-       --freesurfer-license /fs_license.txt \
+       --work-dir /output_wd --freesurfer-license /fs_license.txt \
        --config /config.yaml
 
 
@@ -186,7 +188,7 @@ The following options can be passed after the image name (or after ``bids_dir`` 
    Nextflow work directory (path inside the container).
 
    Default: ``/output_wd``. Mount a host directory here to persist the work
-   directory across runs and enable resume, e.g. ``-v <work_dir>:/output_wd``.
+   directory across runs and enable resume, e.g. ``-v <path/to/work_dir>:/output_wd``.
    Without this mount the work directory is lost when the container exits.
 
 ``--no-resume``
