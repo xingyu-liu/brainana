@@ -21,14 +21,34 @@ Contents
 --------
 
 .. toctree::
-   :maxdepth: 2
-   :caption: User guide
+   :maxdepth: 1
+   :caption: INSTALLATION
 
    installation
+
+.. toctree::
+   :maxdepth: 1
+   :caption: USER GUIDE
+
    usage_notes
-   outputs
+
+.. toctree::
+   :maxdepth: 1
+   :caption: PROCESS AND OUTPUTS
+
    processing
+   outputs
    anat_selection_for_func
    spaces_and_transforms
+
+.. toctree::
+   :maxdepth: 1
+   :caption: TEMPLATE AND ATLAS
+
    template_atlas_zoo
+
+.. toctree::
+   :maxdepth: 1
+   :caption: OTHER INFO
+
    faq

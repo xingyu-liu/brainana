@@ -1,0 +1,14 @@
+# Ensure shell scripts and other files used inside Linux containers always
+# have Unix (LF) line endings, regardless of the developer's OS.
+# Without this, Windows git (core.autocrlf=true) converts them to CRLF,
+# which breaks /bin/bash inside the container with "$'\r': command not found".
+
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.nf        text eol=lf
+*.config    text eol=lf
+*.py        text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.txt       text eol=lf
+*.md        text eol=lf

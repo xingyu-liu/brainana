@@ -1,5 +1,5 @@
-Processing pipeline details
-===========================
+Processing details
+==================
 
 Brainana adapts its pipeline depending on what data and metadata are
 available and on the configuration you provide. For example,
@@ -7,41 +7,8 @@ anatomical synthesis runs only when multiple T1w/T2w runs or sessions
 are present and synthesis is enabled; slice timing correction runs
 only when slice timing information is available in the BIDS metadata.
 
-This page describes the methods used at each stage of the pipeline.
-
-
-Pipeline overview
------------------
-
-Results included in analyses processed with Brainana come from
-preprocessing performed using **Brainana**, a BIDS-based,
-Nextflow-orchestrated pipeline for macaque (and other NHP)
-anatomical and functional MRI. The pipeline adapts to available
-data and configuration:
-
-- Anatomical synthesis runs only when multiple T1w/T2w runs or sessions
-  are present and synthesis is enabled.
-- Slice timing correction runs only when slice timing metadata are
-  available in BIDS.
-- Surface reconstruction is optional and requires a valid FreeSurfer
-  license.
-
-
-Main software stack
-~~~~~~~~~~~~~~~~~~~
-
-- Python 3.11+, Nextflow
-- AFNI, ANTs, FSL, FreeSurfer (for optional surface reconstruction)
-- PyTorch (UNet skull stripping and FastSurfer-style segmentation)
-- nibabel for NIfTI I/O, pybids for BIDS layout/metadata
-- Internal models and tools:
-
-  - ``nhp_skullstrip_nn`` (UNet skull stripping model, derived from
-    DeepBet/NHP-BrainExtraction)
-  - ``fastsurfer_nn`` (FastSurfer-style CNN segmentation, fine-tuned
-    for macaque)
-  - ``fastsurfer_surfrecon`` (modified FastSurfer recon_surf for
-    surface reconstruction)
+This page describes the methods used at each stage of the pipeline and
+links to related anatomical and space-tracking details.
 
 
 1. BIDS discovery and job creation
@@ -393,4 +360,11 @@ a session-averaged temporal mean.
      - ANTs (optional FireANTs for SyN)
 
 For outputs and directory layout, see :doc:`outputs`.
+
+
+.. toctree::
+   :maxdepth: 1
+
+   anat_selection_for_func
+   spaces_and_transforms
 

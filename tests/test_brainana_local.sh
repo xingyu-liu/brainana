@@ -25,12 +25,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
+bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_taskval
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_taskval
 # bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/bids_wrong_orient
 # output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-princetonWu
 # bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy
 # output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_v2
-bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v3
+# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
+# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v3
 # bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled"
 # output_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_v6"
 # bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_2pass"

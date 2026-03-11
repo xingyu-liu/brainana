@@ -90,6 +90,7 @@ Omit ``--gpus all`` if no GPU is available.
   docker run -it --rm --gpus all \
       -v <bids_dir>:/input \
       -v <output_dir>:/output \
+      -v <work_dir>:/output_wd \
       -v <path/to/license.txt>:/fs_license.txt \
       liuxingyu987/brainana:latest /input /output --freesurfer-license /fs_license.txt
   ```
@@ -100,12 +101,15 @@ Omit ``--gpus all`` if no GPU is available.
   docker run -it --rm --gpus all \
       -v <bids_dir>:/input \
       -v <output_dir>:/output \
+      -v <work_dir>:/output_wd \
       -v <path/to/license.txt>:/fs_license.txt \
       -v <path/to/config.yaml>:/config.yaml \
       liuxingyu987/brainana:latest /input /output \
           --freesurfer-license /fs_license.txt \
           --config /config.yaml
   ```
+
+  ``<work_dir>`` is a host path for Nextflow's intermediate files (e.g. ``<output_dir>_wd``). Without this mount the work directory is discarded on container exit and resume will not work.
 
 For the full command-line reference, see the documentation.
 

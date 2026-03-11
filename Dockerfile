@@ -1,36 +1,37 @@
 ARG DEBIAN_FRONTEND=noninteractive
+# All tools (FSL, AFNI, FreeSurfer, ANTs) ship linux/amd64 binaries only.
+# Override with --build-arg PLATFORM=linux/amd64 if needed (default is correct).
+ARG PLATFORM=linux/amd64
 
 ##############
 # ANTs build #
 ##############
-FROM debian:bookworm-slim AS ants-builder
+# Use pre-compiled release binaries (built with generic x86-64 flags) instead of
+# compiling from source. Source builds auto-detect AVX2/AVX-512 from the build
+# host, which then crash under QEMU/Rosetta2 emulation on Apple Silicon Macs.
+FROM --platform=${PLATFORM} debian:bookworm-slim AS ants-builder
 
 ARG DEBIAN_FRONTEND
-ARG ANTS_VERSION=v2.5.0
+ARG ANTS_VERSION=2.5.0
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      build-essential \
       ca-certificates \
-      cmake \
-      git \
-      ninja-build \
+      unzip \
       wget && \
     rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth 1 --branch "${ANTS_VERSION}" https://github.com/ANTsX/ANTs.git /usr/local/src/ants
-WORKDIR /tmp/ants-build
-RUN mkdir -p /opt/ants && \
-    cmake -GNinja \
-      -DBUILD_TESTING=OFF \
-      -DRUN_LONG_TESTS=OFF \
-      -DRUN_SHORT_TESTS=OFF \
-      -DBUILD_SHARED_LIBS=ON \
-      -DCMAKE_INSTALL_PREFIX=/opt/ants \
-      /usr/local/src/ants && \
-    cmake --build . --parallel && \
-    cd ANTS-build && \
-    cmake --install . && \
+RUN set -eu && \
+    mkdir -p /opt/ants/bin /opt/ants/lib && \
+    wget --no-verbose -O /tmp/ants.zip \
+      "https://github.com/ANTsX/ANTs/releases/download/v${ANTS_VERSION}/ants-${ANTS_VERSION}-ubuntu-22.04-X64-gcc.zip" && \
+    unzip -q /tmp/ants.zip -d /tmp/ants-extract && \
+    ANTS_BIN="$(find /tmp/ants-extract -name 'antsRegistration' -type f -exec dirname {} \; | head -1)" && \
+    [ -n "${ANTS_BIN}" ] || (echo "ERROR: Cannot locate antsRegistration in extracted zip" && exit 1) && \
+    cp -r "${ANTS_BIN}/." /opt/ants/bin/ && \
+    ANTS_PARENT="$(dirname "${ANTS_BIN}")" && \
+    { [ -d "${ANTS_PARENT}/lib" ] && cp -r "${ANTS_PARENT}/lib/." /opt/ants/lib/ || true; } && \
+    rm -rf /tmp/ants.zip /tmp/ants-extract && \
     test -x /opt/ants/bin/antsRegistration || (echo "ERROR: antsRegistration not found after install" && exit 1)
 
 ###########################
@@ -38,7 +39,7 @@ RUN mkdir -p /opt/ants && \
 # (build-essential only  #
 #  here, not in final)   #
 ###########################
-FROM debian:bookworm-slim AS python-builder
+FROM --platform=${PLATFORM} debian:bookworm-slim AS python-builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -77,7 +78,7 @@ RUN find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null; \
 ###########################
 # FireANTs fused_ops (CUDA) — build into venv for GreedyRegistration/syn
 ###########################
-FROM debian:bookworm-slim AS fireants-fused-ops-builder
+FROM --platform=${PLATFORM} debian:bookworm-slim AS fireants-fused-ops-builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -118,7 +119,7 @@ RUN git clone --depth 1 https://github.com/rohitrango/FireANTs.git /tmp/FireANTs
 ###########################
 # FreeSurfer (exclude-list extract)
 ###########################
-FROM debian:bookworm-slim AS freesurfer-download
+FROM --platform=${PLATFORM} debian:bookworm-slim AS freesurfer-download
 ARG DEBIAN_FRONTEND=noninteractive
 ARG FREESURFER_VERSION=7.4.1
 RUN apt-get update && \
@@ -131,7 +132,7 @@ RUN curl -fsSL "https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/${FREESUR
 #########################
 # Runtime with all libs #
 #########################
-FROM debian:bookworm-slim
+FROM --platform=${PLATFORM} debian:bookworm-slim
 
 ARG DEBIAN_FRONTEND
 ARG FSL_VERSION=6.0.5.1
