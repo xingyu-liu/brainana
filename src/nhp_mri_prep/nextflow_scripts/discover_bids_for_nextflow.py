@@ -308,8 +308,11 @@ def main():
     
     # Exit with error if no jobs found
     if not anat_jobs and not func_jobs:
-        print("WARNING: No jobs discovered. Pipeline will have nothing to process.", file=sys.stderr)
-        sys.exit(0)  # Don't fail, let Nextflow handle empty channels
+        print("ERROR: No jobs discovered. Check that:", file=sys.stderr)
+        print("  (1) The path is the BIDS dataset root.", file=sys.stderr)
+        print("  (2) It contains at least one subject with anat and/or func data in BIDS layout.", file=sys.stderr)
+        print("  (3) Validate with https://bids-standard.github.io/bids-validator/ if unsure.", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == '__main__':

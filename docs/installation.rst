@@ -11,7 +11,7 @@ System requirements
 
 .. warning::
 
-   - **Host:** Any OS supported by Docker (Linux, macOS, Windows with WSL2). 
+   - **Host:** Any OS supported by Docker (Linux, macOS, Windows with WSL2)
    - **RAM + swap:** ≥ 16 GB (recommended 20 GB+ for full pipeline)
    - **Disk:** ≥ 20 GB (recommended 50 GB+ for multiple subjects)
    - **CPU:** ≥ 4 logical cores (recommended 8+)

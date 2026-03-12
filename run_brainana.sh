@@ -130,9 +130,11 @@ run_bids_discovery() {
     [ -n "$runs" ] && cmd+=("--runs" "$runs")
     
     # Run discovery
-    if ! "${cmd[@]}"; then
-        echo "ERROR: BIDS discovery failed" >&2
-        exit 1
+    "${cmd[@]}"
+    local discovery_exit=$?
+    if [ $discovery_exit -ne 0 ]; then
+        echo "ERROR: Aborting pipeline. Fix the issues above and re-run." >&2
+        exit $discovery_exit
     fi
     
     echo "============================================"
