@@ -1,0 +1,26 @@
+ID	label	region	name	name_full	hemi
+0	background				
+1	cortex_rh_Frontal	cortex	Frontal	Frontal_Lobe	rh
+90	cortex_rh_Parietal	cortex	Parietal	Parietal_Lobe	rh
+138	cortex_rh_Temporal	cortex	Temporal	Temporal_Lobe	rh
+231	cortex_rh_Occipital	cortex	Occipital	Occipital_Lobe	rh
+1001	cortex_lh_Frontal	cortex	Frontal	Frontal_Lobe	lh
+1090	cortex_lh_Parietal	cortex	Parietal	Parietal_Lobe	lh
+1138	cortex_lh_Temporal	cortex	Temporal	Temporal_Lobe	lh
+1231	cortex_lh_Occipital	cortex	Occipital	Occipital_Lobe	lh
+501	subcortex_rh_tel	subcortex	tel	telencephalon	rh
+574	subcortex_rh_di	subcortex	di	diencephalon	rh
+662	subcortex_rh_mes	subcortex	mes	mesencephalon	rh
+704	subcortex_rh_met	subcortex	met	metencephalon	rh
+779	subcortex_rh_myel	subcortex	myel	myelencephalon	rh
+1501	subcortex_lh_tel	subcortex	tel	telencephalon	lh
+1574	subcortex_lh_di	subcortex	di	diencephalon	lh
+1662	subcortex_lh_mes	subcortex	mes	mesencephalon	lh
+1704	subcortex_lh_met	subcortex	met	metencephalon	lh
+1779	subcortex_lh_myel	subcortex	myel	myelencephalon	lh
+-1	WM_rh_ctxWM	WM	ctxWM	cerebral_white_matter	rh
+-1001	WM_lh_ctxWM	WM	ctxWM	cerebral_white_matter	lh
+-501	WM_rh_cbWM	WM	cbWM	cerebellum_white_matter	rh
+-1501	WM_lh_cbWM	WM	cbWM	cerebellum_white_matter	lh
+-2	CSF_rh_CSF	CSF	CSF	CSF	rh
+-1002	CSF_lh_CSF	CSF	CSF	CSF	lh

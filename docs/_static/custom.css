@@ -1,3 +1,10 @@
+/* FAQ question headings: make them blue to distinguish from other levels */
+.faq-question > h3,
+.faq-question > h4 {
+  /* Match the Sphinx RTD theme link blue */
+  color: #2980b9;
+}
+
 /* Custom docs styles for Brainana */
 
 /* Tighten vertical spacing for Mermaid diagrams */

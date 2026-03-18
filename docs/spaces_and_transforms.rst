@@ -6,7 +6,7 @@ writes an explicit transform file for every space transition.  The
 diagram below shows all spaces and named transforms for the T1w, T2w,
 and BOLD modalities.
 
-.. figure:: _static/space_tracking.jpg
+.. figure:: _static/pipeline_details/space_tracking.jpg
    :alt: Space tracking diagram showing coordinate spaces and transforms
          for T1w, T2w, BOLD, Fastsurfer, and template spaces.
    :align: center

@@ -1,22 +1,26 @@
 Brainana
 ========
 
+About
+^^^^^
+
 **Brainana** is a preprocessing and registration pipeline for non-human primate (NHP) neuroimaging data. It provides anatomical, functional processing, and surface reconstruction.
 
-.. note::
-   For a quick start with Docker (recommended):
+.. image:: _static/pipeline_details/pipeline_overview.png
+   :alt: Brainana pipeline overview schematic
+   :align: center
+   :width: 100%
 
-   .. code-block:: bash
+|
 
-      docker run -it --rm --gpus all \
-        -v <path/to/bids_dir>:/input \
-        -v <path/to/output_dir>:/output \
-        -v <path/to/work_dir>:/output_wd \
-        -v <path/to/license.txt>:/fs_license.txt \
-        liuxingyu987/brainana:<version> /input /output \
-        --work-dir /output_wd --freesurfer-license /fs_license.txt
+License
+^^^^^^^
+Copyright (c) the Brainana Developers. 
+Licensed under the GNU Affero General Public License v3 (AGPL-3.0).
 
-   **No compatible GPU?** First, determine whether you have a compatible GPU in :ref:`Check GPU access <installation-check-gpu-access>`. If you do not, omit ``--gpus all``; the pipeline runs on CPU with no other changes.
+Citation
+^^^^^^^^
+Brainana: a non-human primate MRI volume and surface preprocessing pipeline (in preparation).
 
 Contents
 --------

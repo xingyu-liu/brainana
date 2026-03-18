@@ -16,11 +16,14 @@ FAQ and troubleshooting
 
 - `How do I align container resources with Nextflow?`_
 - `My pipeline run is hanging.`_
+- `The pipeline fails with an out-of-memory error when I run it in Docker. What should I do?`_
 
 ----
 
 Setup and configuration
 ------------------------
+
+.. rst-class:: faq-question
 
 Do I need a config file?
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -30,12 +33,16 @@ No. Built-in defaults are used for all pipeline steps. To customise the pipeline
 1. **Config file (recommended):** Generate a YAML config file with the :ref:`generating-config-file` interactive generator (in :doc:`usage_notes`), mount it into the container (e.g. ``-v <path/to/config.yaml>:/config.yaml``), and pass ``--config /config.yaml``.
 2. **Command-line arguments:** Pass common options directly in the ``docker run`` command (e.g. ``--anat_only``, ``--output_space "NMT2Sym:res-1"``). See :ref:`command-line-arguments`.
 
+.. rst-class:: faq-question
+
 Can I run without a FreeSurfer license?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Anatomical and functional preprocessing will still run, but surface reconstruction will be skipped. The container will warn if the license is missing.
 
 Get a free license at https://surfer.nmr.mgh.harvard.edu/registration.html, then mount it with ``-v <path/to/license.txt>:/fs_license.txt`` and pass ``--freesurfer-license /fs_license.txt``.
+
+.. rst-class:: faq-question
 
 What if I don't have a compatible GPU?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -49,6 +56,8 @@ If you do have an NVIDIA GPU and want to use it, add ``--gpus all`` and ensure t
 Running on your system
 ----------------------
 
+.. rst-class:: faq-question
+
 Can I use a network drive for input or output?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -57,6 +66,8 @@ Can I use a network drive for input or output?
 **Input on a network drive is fine.** You can leave your BIDS dataset on a network share and set the output (and work directory) to a local path. For example: mount the network BIDS root with ``-v <path/on/network/bids_dir>:/input`` and use local paths for ``-v <path/on/local/output_dir>:/output`` and ``-v <path/on/local/work_dir>:/output_wd``. The pipeline reads from the network and writes only to local disk.
 
 .. _windows-paths:
+
+.. rst-class:: faq-question
 
 I'm on Windows — how do I write paths?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -71,9 +82,10 @@ Replace backslashes with forward slashes in the host path:
 
 .. code-block:: text
 
-   # Replace this:                    C:\Users\me\bids:/input
+   # Replace this:
+   #   -v C:\Users\me\bids:/input
    # With this:
-   -v C:/Users/me/bids:/input
+   #   -v C:/Users/me/bids:/input
 
 Full example:
 
@@ -88,7 +100,7 @@ Full example:
 
 .. note::
 
-   PowerShell uses a backtick `` ` `` for line continuation instead of ``\``.
+   In PowerShell, use the backtick for line continuation instead of the backslash (``\``).
 
 **WSL2 (Windows Subsystem for Linux)**
 
@@ -108,6 +120,8 @@ Use the ``/mnt/c/`` prefix to reference Windows drives:
 Resources and troubleshooting
 -----------------------------
 
+.. rst-class:: faq-question
+
 How do I align container resources with Nextflow?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -118,6 +132,8 @@ The container defaults to 8 CPUs and 20 GB for Nextflow (controlled by ``NXF_MAX
 
 See :ref:`command-line-arguments` for the full resource options.
 
+.. rst-class:: faq-question
+
 My pipeline run is hanging.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -127,3 +143,23 @@ This typically happens when Nextflow runs out of memory. Try one or more of the 
 - Use ``-profile minimal`` to reduce resource usage.
 - Set ``-e NXF_MAX_CPUS`` and ``-e NXF_MAX_MEMORY`` to match your available resources.
 - Resume from the last checkpoint by re-running the same command (Nextflow resume is enabled by default, provided the work directory is mounted — see :ref:`usage-docker-guide`).
+
+.. rst-class:: faq-question
+
+The pipeline fails with an out-of-memory error when I run it in Docker. What should I do?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**On Docker Desktop (macOS/Windows/Linux with Docker Desktop):**
+
+Docker Desktop runs containers inside a Linux virtual machine that has a configurable **Memory** limit. 
+By default, this limit is **50% of your host RAM** (see `Docker Desktop advanced settings <https://docs.docker.com/desktop/settings-and-maintenance/settings/#advanced>`_).
+If this default (for example, 4 GB on an 8 GB machine) is too low, the pipeline can run out of memory even though the host itself still has free RAM.
+
+To fix this, open Docker Desktop and go to ``Settings → Resources → Advanced``. Increase the **Memory** allocation (for example, to 6–7 GB on an 8 GB machine), apply the changes, and rerun the pipeline.
+
+**On native Docker on Linux (no Docker Desktop):**
+
+There is no Docker Desktop VM, so there is no extra global memory cap. Out-of-memory errors here usually mean either:
+the container truly exceeds available system RAM, or you (or your system) have set explicit memory limits (for example, ``--memory 4g`` or cgroup limits).
+
+In that case, you may need to run on a machine with more RAM and/or relax or remove those explicit Docker/cgroup memory limits.

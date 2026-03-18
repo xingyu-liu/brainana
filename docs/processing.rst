@@ -30,6 +30,13 @@ BIDS (and NHP-BIDS) dataset and produces structured job descriptors.
 2. Anatomical processing
 ------------------------
 
+.. figure:: _static/pipeline_details/anat_workflow.png
+   :alt: Overview of anatomical preprocessing workflow.
+   :align: center
+   :width: 100%
+
+|
+
 The anatomical branch turns raw (or synthesized) T1w/T2w images into
 bias-corrected, skull-stripped, and template-registered images, and
 optionally segmentations and cortical surfaces. These outputs provide
@@ -182,6 +189,14 @@ Surface reconstruction is an optional and resource-intensive step.
 
 3. Functional processing
 ------------------------
+
+.. figure:: _static/pipeline_details/func_workflow.png
+   :alt: Overview of functional preprocessing workflow.
+   :align: center
+   :width: 100%
+
+|
+
 
 The functional branch preprocesses BOLD data and produces
 motion-corrected, optionally slice-time-corrected, despiked,

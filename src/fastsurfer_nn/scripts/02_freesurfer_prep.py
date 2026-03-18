@@ -17,7 +17,7 @@ from fastsurfer_nn.utils.constants import REPO_ROOT
 
 # %%
 # Test paths
-common_dir = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032290/mri'
+common_dir = '/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-marge/fastsurfer/sub-baby32_T1w_wmnull'
 skullstripped_dir = f'{common_dir}'
 output_dir = f'{skullstripped_dir}/test'
 

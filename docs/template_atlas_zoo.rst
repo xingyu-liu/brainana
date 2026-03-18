@@ -5,7 +5,7 @@ Brainana supports multiple NHP templates and atlases for
 registration and parcellation. The overview below summarizes the
 template and atlas options available in the pipeline.
 
-.. figure:: _static/template_atlas_zoo.jpg
+.. figure:: _static/pipeline_details/template_atlas_zoo.jpg
    :alt: Overview of template and atlas zoo options.
    :align: center
    :width: 100%
