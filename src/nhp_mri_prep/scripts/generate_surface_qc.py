@@ -28,7 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Test directory
-fs_subject_dir = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032309")
+fs_subject_dir = Path("/home/star/github/atlas/macaque/atlas/balsa/MacaqueYerkes19_v1.2_Vj_976nz/MNINonLinear/sub-Yerkes19")
 output_dir = fs_subject_dir / "QC"
 output_dir.mkdir(parents=True, exist_ok=True)
 

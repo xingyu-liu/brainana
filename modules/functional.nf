@@ -293,7 +293,7 @@ process FUNC_GENERATE_TMEAN {
     
     output:
     // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*_bold.nii.gz"), path("*_boldref.nii.gz"), val(bids_name), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path("nf_out/*_bold.nii.gz"), path("*_boldref.nii.gz"), val(bids_name), emit: output
     path "*.json", emit: metadata
     
     script:
@@ -323,10 +323,17 @@ process FUNC_GENERATE_TMEAN {
     # Input BOLD file
     bold_file = Path('${bold_file}')
     
-    # Create symlink to BOLD file - preserve exact input structure
-    # Simply use the input filename as-is (it's already BIDS-compliant)
-    bids_bold_filename = bids_name.name
-    create_output_link(bold_file, bids_bold_filename)
+    # Write BOLD to nf_out/ subdirectory so Nextflow can collect it as an output.
+    # Cannot use the staged input path directly: Nextflow excludes files from output
+    # matching by their relative path in the work directory, so any file at the same
+    # path as a staged input is always excluded — even if the symlink is replaced with
+    # a real copy. Writing to a subdirectory gives the file a fresh relative path that
+    # Nextflow has no record of, so it is collected normally. Downstream processes are
+    # unaffected because Nextflow stages files by basename only.
+    outdir = Path('nf_out')
+    outdir.mkdir(exist_ok=True)
+    bids_bold_filename = outdir / bids_name.name
+    shutil.copy2(str(bold_file.resolve()), str(bids_bold_filename))
     
     # Generate tmean file
     # Convert _bold to _boldref while preserving all other parts of the filename
@@ -351,7 +358,7 @@ process FUNC_GENERATE_TMEAN {
         'session_id': '${session_id}' if '${session_id}' else None,
         'run_identifier': run_identifier,
         'input_file': str(bold_file),
-        'output_bold': str(bids_bold_filename),
+        'output_bold': bids_bold_filename.name,
         'output_tmean': str(bids_tmean_filename)
     }
     save_metadata(metadata)

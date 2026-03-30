@@ -13,15 +13,16 @@ from nhp_mri_prep.operations.registration import ants_register
 import logging
 
 # %%
-moving_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/T1wT2w/T2w_tilted.nii.gz'
-fixed_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/T1wT2w/T1w_tilted.nii.gz'
+moving_f = Path('/home/star/github/brainana/template_zoo/template/NMT2Asym/tpl-NMT2Asym_res-05_T1w_brain.nii.gz')
+fixed_f = Path('/home/star/github/brainana/template_zoo/template/NMT2Sym/tpl-NMT2Sym_res-05_T1w_brain.nii.gz')
+working_dir = Path('/home/star/github/atlas/macaque/xfm/reg_NMT2Asym')
 
 method = 'ants'
-xfm_type = 'rigid'
+xfm_type = 'syn'
+enable_fireants = True
 
 # %%
 # Set up working directory and output prefix (ants_register auto-runs FireANTs with GPU when available)
-working_dir = os.path.join(os.path.dirname(fixed_f), 'registration')
 os.makedirs(working_dir, exist_ok=True)
 output_prefix = f"{os.path.basename(moving_f).split('.nii')[0]}_{xfm_type}"
 
@@ -45,5 +46,6 @@ if method == 'ants':
         output_prefix=output_prefix,
         xfm_type=xfm_type,
         compute_inverse=True,
+        enable_fireants=enable_fireants,
         logger=logger
     )

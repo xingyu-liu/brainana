@@ -43,13 +43,30 @@ def create_output_link(source_file, target_file):
     source_path = Path(source_file)
     target_path = Path(target_file)
 
-    # Remove target if it exists
-    if target_path.exists() or target_path.is_symlink():
-        target_path.unlink()
-
     # Resolve source to actual file (follows symlink chain to original file)
     # This prevents creating symlinks to symlinks (deep symlink chains)
     source_resolved = source_path.resolve(strict=True)
+
+    # Guard: if source and target are the same underlying file, creating a symlink
+    # would produce a self-referential or no-op link.  Replace any existing symlink
+    # at the target with a real copy to leave a valid file in place, then return.
+    # NOTE: This does NOT fix Nextflow "Missing output file" errors for pass-through
+    # steps.  Nextflow excludes output files by relative path in the work directory,
+    # so a copy at the same path as a staged input is still excluded.  Pass-through
+    # outputs must be written to a different path (e.g. an nf_out/ subdirectory).
+    try:
+        target_resolved = target_path.resolve(strict=True)
+        if source_resolved == target_resolved:
+            if target_path.is_symlink():
+                target_path.unlink()
+                shutil.copy2(str(source_resolved), str(target_path))
+            return
+    except OSError:
+        pass  # target doesn't exist yet — proceed normally
+
+    # Remove target if it exists
+    if target_path.exists() or target_path.is_symlink():
+        target_path.unlink()
 
     try:
         # Calculate relative path from target's parent to resolved source

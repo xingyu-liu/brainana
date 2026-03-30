@@ -17,7 +17,7 @@ from fastsurfer_nn.utils.constants import REPO_ROOT
 
 # %%
 # Test paths
-common_dir = '/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-marge/fastsurfer/sub-baby32_T1w_wmnull'
+common_dir = '/home/star/github/atlas/macaque/atlas/balsa/MacaqueYerkes19_v1.2_Vj_976nz/MNINonLinear/sub-Yerkes19/mri'
 skullstripped_dir = f'{common_dir}'
 output_dir = f'{skullstripped_dir}/test'
 

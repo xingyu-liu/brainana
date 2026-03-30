@@ -24,10 +24,10 @@ from fireants.registration.affine import AffineRegistration
 from fireants.registration.greedy import GreedyRegistration
 
 # %%
-moving_f = Path('/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/T1wT2w/T2w_easy.nii.gz')
-fixed_f = Path('/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/T1wT2w/T1w_easy.nii.gz')
+moving_f = Path('/home/star/github/brainana/template_zoo/template/Yerkes19/tpl-Yerkes19_res-05_T1w_brain.nii.gz')
+fixed_f = Path('/home/star/github/brainana/template_zoo/template/NMT2Sym/tpl-NMT2Sym_res-05_T1w_brain.nii.gz')
 
-xfm_type = 'rigid'  # 'rigid' | 'affine' | 'syn'
+xfm_type = 'syn'  # 'rigid' | 'affine' | 'syn'
 
 output_dir = moving_f.parent / 'registration'
 output_dir.mkdir(parents=True, exist_ok=True)

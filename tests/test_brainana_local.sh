@@ -25,8 +25,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
-bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_taskval
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_taskval
+# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_taskval
+# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_taskval
 # bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/bids_wrong_orient
 # output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-princetonWu
 # bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy
@@ -57,7 +57,11 @@ output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_taskval
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_UNC.yaml"
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_MEBRAINS.yaml"
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_common.yaml"
-config_f=/home/star/github/brainana/src/nhp_mri_prep/config/defaults.yaml
+# config_f=/home/star/github/brainana/src/nhp_mri_prep/config/defaults.yaml
+
+bids_dir=/mnt/DataDrive3/swap/test_brainana/raw/PET_yale_cropped
+output_dir=/mnt/DataDrive3/swap/test_brainana/preproc/PET_yale_cropped_v2
+config_f=/mnt/DataDrive3/swap/test_brainana/config_pet.yaml
 
 working_dir=${output_dir}_wd
 

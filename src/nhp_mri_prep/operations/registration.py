@@ -527,7 +527,8 @@ def ants_register(
     config: Optional[Dict[str, Any]] = None,
     logger: Optional[logging.Logger] = None,
     xfm_type: Optional[str] = 'syn',
-    compute_inverse: Optional[bool] = True
+    compute_inverse: Optional[bool] = True,
+    enable_fireants: bool = True,
 ) -> Dict[str, Any]:
     """Run ANTs-style registration: FireANTs (GPU) when available, otherwise ANTs CPU.
     
@@ -543,6 +544,7 @@ def ants_register(
         logger: Logger instance (optional)
         xfm_type: Type of transformation. Options: 'translation', 'rigid', 'affine', 'syn'
         compute_inverse: If True (default), compute and include inverse transform in outputs.
+        enable_fireants: If True (default), allow FireANTs (GPU) for syn registration.
         
     Returns:
         Dictionary with output_path_prefix, imagef_registered, forward_transform, inverse_transform
@@ -550,7 +552,7 @@ def ants_register(
     if logger is None:
         logger = logging.getLogger(__name__)
     # FireANTs is only used for syn; rigid/affine are done with ANTs (FireANTs is poor at linear transforms)
-    use_fireants = xfm_type == "syn" and _use_fireants(logger)
+    use_fireants = enable_fireants and xfm_type == "syn" and _use_fireants(logger)
     if use_fireants:
         logger.info("REGISTRATION: using FireANTs (GPU) for syn")
         from .fireants_registration import fireants_registration
