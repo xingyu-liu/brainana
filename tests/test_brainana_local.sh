@@ -25,14 +25,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
-# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_taskval
-# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_taskval
-# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/bids_wrong_orient
-# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-princetonWu
-# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy
-# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_v2
-# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
-# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v3
+bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v6
 # bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled"
 # output_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_v6"
 # bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_2pass"
@@ -41,6 +35,8 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # output_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_multiple_v5"
 # bids_dir="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_baby31"
 # output_dir="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_baby31_nextflow"
+# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_taskval
+# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_taskval
 
 # bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_UNC_batch1
 # output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_UNC_batch1
@@ -59,17 +55,14 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_common.yaml"
 # config_f=/home/star/github/brainana/src/nhp_mri_prep/config/defaults.yaml
 
-bids_dir=/mnt/DataDrive3/swap/test_brainana/raw/PET_yale_cropped
-output_dir=/mnt/DataDrive3/swap/test_brainana/preproc/PET_yale_cropped_v2
-config_f=/mnt/DataDrive3/swap/test_brainana/config_pet.yaml
+# bids_dir=/mnt/DataDrive3/swap/test_brainana/raw/PET_yale_cropped
+# output_dir=/mnt/DataDrive3/swap/test_brainana/preproc/PET_yale_cropped_v2
+# config_f=/mnt/DataDrive3/swap/test_brainana/config_pet.yaml
+config_f=''
 
 working_dir=${output_dir}_wd
 
-# Check if .ymal exists (user typo), use it if .yaml doesn't exist
-if [ ! -f "$config_f" ] && [ -f "${config_f%.yaml}.ymal" ]; then
-    config_f="${config_f%.yaml}.ymal"
-    echo "Note: Using ${config_f} (found .ymal instead of .yaml)"
-fi
+# Optional config file. When empty, Nextflow uses the default config.
 
 # Validate paths
 echo "============================================"
@@ -78,7 +71,11 @@ echo "============================================"
 echo "BIDS directory: $bids_dir"
 echo "Output directory: $output_dir"
 echo "Working directory: $working_dir"
-echo "Config file: $config_f"
+if [ -n "$config_f" ]; then
+    echo "Config file: $config_f"
+else
+    echo "Config file: default (not overridden)"
+fi
 echo "============================================"
 
 # Check if BIDS directory exists
@@ -87,8 +84,8 @@ if [ ! -d "$bids_dir" ]; then
     exit 1
 fi
 
-# Check if config file exists
-if [ ! -f "$config_f" ]; then
+# Check config file if explicitly provided
+if [ -n "$config_f" ] && [ ! -f "$config_f" ]; then
     echo "Error: Config file not found: $config_f" >&2
     exit 1
 fi
@@ -114,13 +111,22 @@ if [ -n "$RESUME_FLAG" ]; then
 fi
 echo ""
 
-"$PROJECT_ROOT/run_brainana.sh" run main.nf \
-    --no-docker \
-    --bids_dir "$bids_dir" \
-    --output_dir "$output_dir" \
-    --work_dir "$working_dir" \
-    --config_file "$config_f" \
-    $RESUME_FLAG
+if [ -n "$config_f" ]; then
+    "$PROJECT_ROOT/run_brainana.sh" run main.nf \
+        --no-docker \
+        --bids_dir "$bids_dir" \
+        --output_dir "$output_dir" \
+        --work_dir "$working_dir" \
+        --config_file "$config_f" \
+        $RESUME_FLAG
+else
+    "$PROJECT_ROOT/run_brainana.sh" run main.nf \
+        --no-docker \
+        --bids_dir "$bids_dir" \
+        --output_dir "$output_dir" \
+        --work_dir "$working_dir" \
+        $RESUME_FLAG
+fi
 
 echo ""
 echo "============================================"

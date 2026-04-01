@@ -24,7 +24,7 @@ from fireants.registration.affine import AffineRegistration
 from fireants.registration.greedy import GreedyRegistration
 
 # %%
-moving_f = Path('/home/star/github/brainana/template_zoo/template/Yerkes19/tpl-Yerkes19_res-05_T1w_brain.nii.gz')
+moving_f = Path('/home/star/github/brainana/template_zoo/template/D99/tpl-D99_res-05_T1w_brain.nii.gz')
 fixed_f = Path('/home/star/github/brainana/template_zoo/template/NMT2Sym/tpl-NMT2Sym_res-05_T1w_brain.nii.gz')
 
 xfm_type = 'syn'  # 'rigid' | 'affine' | 'syn'

@@ -13,13 +13,13 @@ from nhp_mri_prep.operations.registration import ants_register
 import logging
 
 # %%
-moving_f = Path('/home/star/github/brainana/template_zoo/template/NMT2Asym/tpl-NMT2Asym_res-05_T1w_brain.nii.gz')
-fixed_f = Path('/home/star/github/brainana/template_zoo/template/NMT2Sym/tpl-NMT2Sym_res-05_T1w_brain.nii.gz')
-working_dir = Path('/home/star/github/atlas/macaque/xfm/reg_NMT2Asym')
+moving_f = Path('/home/star/github/brainana/template_zoo/template/NMT2Sym/tpl-NMT2Sym_res-05_T1w_brain.nii.gz')
+fixed_f = Path('/home/star/github/brainana/template_zoo/template/Yerkes19/tpl-Yerkes19_res-05_T1w_brain.nii.gz')
+working_dir = Path('/home/star/github/atlas/macaque/xfm/reg_Yerkes19')
 
 method = 'ants'
 xfm_type = 'syn'
-enable_fireants = True
+enable_fireants = False
 
 # %%
 # Set up working directory and output prefix (ants_register auto-runs FireANTs with GPU when available)

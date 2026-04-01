@@ -8,6 +8,7 @@ import logging
 import shutil
 
 from .base import HemisphereStage
+from ..io.surface import convert_fs_surface_to_gifti
 from ..wrappers.mris import mris_place_surface
 
 logger = logging.getLogger(__name__)
@@ -102,11 +103,20 @@ class SurfacePlacement(HemisphereStage):
                 shutil.copy(pial_t1, pial)
             else:
                 raise FileNotFoundError(f"pial.T1 not found for {self.hemi}")
-    
+        
+        # Create GIFTI surfaces for downstream QC (with CRAS-applied coordinates).
+        for surf_name in ("white", "pial"):
+            in_surf = self.hemi_path(surf_name)
+            out_gii = self.hemi_path(f"{surf_name}.surf.gii")
+            if not out_gii.exists():
+                convert_fs_surface_to_gifti(in_surf, out_gii, apply_cras=True)
+
     def should_skip(self) -> bool:
-        """Skip if white and pial exist."""
+        """Skip if white, pial and their GIFTI counterparts all exist."""
         return (
             self.hemi_path("white").exists() and
-            self.hemi_path("pial").exists()
+            self.hemi_path("pial").exists() and
+            self.hemi_path("white.surf.gii").exists() and
+            self.hemi_path("pial.surf.gii").exists()
         )
 

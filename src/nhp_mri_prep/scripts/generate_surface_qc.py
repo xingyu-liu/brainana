@@ -28,7 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Test directory
-fs_subject_dir = Path("/home/star/github/atlas/macaque/atlas/balsa/MacaqueYerkes19_v1.2_Vj_976nz/MNINonLinear/sub-Yerkes19")
+fs_subject_dir = Path("/home/star/github/atlas/public/macaque_template_surfaces/sub-D99")
 output_dir = fs_subject_dir / "QC"
 output_dir.mkdir(parents=True, exist_ok=True)
 

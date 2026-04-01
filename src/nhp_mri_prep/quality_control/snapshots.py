@@ -19,6 +19,8 @@ import tempfile
 import shutil
 import subprocess
 
+from fastsurfer_surfrecon.io.surface import convert_fs_surface_to_gifti
+
 from .mri_plotting import (
     create_overlay_grid_3xN, 
     create_motion_plot, 
@@ -688,8 +690,6 @@ def create_surf_recon_tissue_seg_qc(
         logger.info("QC: checking external tool dependencies...")
         if not check_dependency('wb_command', logger):
             raise RuntimeError("wb_command not found. Connectome Workbench is required.")
-        if not check_dependency('mris_convert', logger):
-            raise RuntimeError("mris_convert not found. FreeSurfer is required.")
         if not check_dependency('mri_convert', logger):
             raise RuntimeError("mri_convert not found. FreeSurfer is required.")
         
@@ -729,25 +729,32 @@ def create_surf_recon_tissue_seg_qc(
         work_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"QC: working directory: {work_dir}")
         
-        # Step 6: Convert FreeSurfer surfaces to GIFTI format
-        logger.info("QC: converting surfaces to GIFTI format...")
+        # Step 6: Prepare GIFTI surfaces for scene rendering.
+        # Prefer pre-generated surfaces from surf_dir; fallback to on-the-fly conversion.
+        logger.info("QC: preparing GIFTI surfaces...")
         lh_white_gii = work_dir / 'lh.white.surf.gii'
         rh_white_gii = work_dir / 'rh.white.surf.gii'
         lh_pial_gii = work_dir / 'lh.pial.surf.gii'
         rh_pial_gii = work_dir / 'rh.pial.surf.gii'
-        
-        for in_surf, out_gii in [
-            (lh_white_f, lh_white_gii),
-            (rh_white_f, rh_white_gii),
-            (lh_pial_f, lh_pial_gii),
-            (rh_pial_f, rh_pial_gii),
-        ]:
-            subprocess.run(
-                ['mris_convert', str(in_surf), str(out_gii)],
-                check=True,
-                capture_output=True,
-                text=True
-            )
+
+        precomputed_giis = [
+            (surf_dir / 'lh.white.surf.gii', lh_white_f, lh_white_gii),
+            (surf_dir / 'rh.white.surf.gii', rh_white_f, rh_white_gii),
+            (surf_dir / 'lh.pial.surf.gii', lh_pial_f, lh_pial_gii),
+            (surf_dir / 'rh.pial.surf.gii', rh_pial_f, rh_pial_gii),
+        ]
+
+        if all(pre_gii.exists() for pre_gii, _, _ in precomputed_giis):
+            logger.info("QC: using pre-generated GIFTI surfaces from surf directory")
+            for pre_gii, _, out_gii in precomputed_giis:
+                shutil.copy2(pre_gii, out_gii)
+        else:
+            logger.info("QC: pre-generated GIFTI surfaces missing, using fallback conversion")
+            if not check_dependency('mris_convert', logger):
+                raise RuntimeError("mris_convert not found. FreeSurfer is required for fallback GIFTI conversion.")
+
+            for _, in_surf, out_gii in precomputed_giis:
+                convert_fs_surface_to_gifti(in_surf, out_gii, apply_cras=True)
         
         # Step 7: Convert volume to NIfTI
         logger.info("QC: converting volume to NIfTI format...")
@@ -759,51 +766,12 @@ def create_surf_recon_tissue_seg_qc(
             text=True
         )
         
-        # Step 8: Create affine matrix from CRAS values
-        logger.info("QC: creating affine matrix from surface CRAS values...")
-        affine_mat = work_dir / 'affine.mat'
-        
-        # Read CRAS (center of RAS) from lh.white surface file header
-        _, _, header_info = nib.freesurfer.read_geometry(str(lh_white_f), read_metadata=True)
-        c_ras = header_info['cras']
-        
-        # Create affine matrix with CRAS as translation components
-        affine_list = [
-            [1, 0, 0, float(c_ras[0])],
-            [0, 1, 0, float(c_ras[1])],
-            [0, 0, 1, float(c_ras[2])],
-            [0, 0, 0, 1]
-        ]
-        
-        with open(affine_mat, 'w') as f:
-            for line in affine_list:
-                # Format as space-separated values (matching original format)
-                f.write(str(line)[1:-1].replace(',', '    ') + '\n')
-        
-        logger.debug(f"QC: created affine matrix with CRAS values: {c_ras}")
-        
-        # Step 9: Apply affine transformation to surfaces
-        logger.info("QC: applying affine transformation to surfaces...")
-        # Apply affine to each surface (in-place, overwriting the original GIFTI files)
-        for in_surf, out_gii in [
-            (lh_white_gii, lh_white_gii),
-            (rh_white_gii, rh_white_gii),
-            (lh_pial_gii, lh_pial_gii),
-            (rh_pial_gii, rh_pial_gii),
-        ]:
-            subprocess.run(
-                ['wb_command', '-surface-apply-affine', str(in_surf), str(affine_mat), str(out_gii)],
-                check=True,
-                capture_output=True,
-                text=True
-            )
-        
-        # Step 10: Copy scene file to working directory
+        # Step 8: Copy scene file to working directory
         logger.info("QC: copying scene file to working directory...")
         work_scene_file = work_dir / 'Vol_Surface.scene'
         shutil.copy2(scene_file, work_scene_file)
         
-        # Step 11: Render scene using Connectome Workbench
+        # Step 9: Render scene using Connectome Workbench
         logger.info("QC: rendering scene with Connectome Workbench...")
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)

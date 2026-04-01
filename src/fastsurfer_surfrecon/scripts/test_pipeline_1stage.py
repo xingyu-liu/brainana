@@ -54,8 +54,8 @@ from fastsurfer_surfrecon.stages import (
 RUN_STEPS = ['s14'] + [f's{i:02d}' for i in range(16, 23)]
 
 # Test subject
-subject_root = Path("/home/star/github/atlas/macaque/atlas/balsa/MacaqueYerkes19_v1.2_Vj_976nz/MNINonLinear")
-subject_dir = subject_root / "sub-Yerkes19"
+subject_root = Path("/home/star/github/atlas/public/macaque_template_surfaces")
+subject_dir = subject_root / "sub-D99"
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 
