@@ -21,6 +21,7 @@ except ImportError:
 
 from .validation import validate_input_file, ensure_working_directory, validate_output_file
 from ..utils import run_command, calculate_func_tmean
+from ..utils.bids import get_filename_stem
 from ..config import get_config
 
 # Default registration step parameters (hardcoded)
@@ -190,7 +191,7 @@ def ants_cpu_register(
     if logger is None:
         logger = logging.getLogger(__name__)
     if output_prefix is None:
-        output_prefix = os.path.basename(movingf).replace('.nii.gz', '')
+        output_prefix = get_filename_stem(Path(movingf))
     
     # Validate inputs and setup
     work_dir = ensure_working_directory(working_dir, logger)
@@ -504,9 +505,8 @@ def flirt_apply_transforms(
         
         # Generate temporal mean if requested
         if generate_tmean:
-            # Extract just the filename from outputf_name (which already includes work_dir)
-            output_filename = Path(outputf_name).name
-            tmean_filename = output_filename.replace('.nii.gz', '_tmean.nii.gz')
+            output_stem = get_filename_stem(Path(outputf_name))
+            tmean_filename = f"{output_stem}_tmean.nii.gz"
             tmean_file = work_dir / tmean_filename
             calculate_func_tmean(str(outputf_name), str(tmean_file), logger)
             outputs["imagef_registered_tmean"] = str(tmean_file)
@@ -570,9 +570,11 @@ def ants_register(
             logger.info("REGISTRATION: completed with FireANTs (GPU)")
             return result
         except Exception as e:
+            import traceback
             logger.warning(
-                f"FireANTs (GPU) registration failed: {e}. "
-                "Falling back to ANTs (CPU) registration."
+                f"FireANTs (GPU) registration failed — falling back to ANTs (CPU).\n"
+                f"Exception: {type(e).__name__}: {e}\n"
+                f"Traceback:\n{traceback.format_exc()}"
             )
     if not use_fireants:
         logger.info("REGISTRATION: using ANTs (CPU) — FireANTs not available (no CUDA or not installed)")

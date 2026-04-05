@@ -2,8 +2,9 @@
 #
 # brainana Docker entrypoint
 #
-# Starts as root and runs as root so GPU access works on any host.
-# Output files may be root-owned; chown the output dir on the host if needed.
+# Starts as root for setup (GPU/CUDA works for any UID with nvidia-container-toolkit).
+# When the mounted output dir is owned by a non-root UID, the pipeline is re-exec'd via
+# gosu as that UID:GID so derivatives are not root-owned on the host.
 #
 # Usage (production):
 #   docker run --rm --gpus all \
@@ -23,58 +24,27 @@
 
 set -e
 
-##############################################################################
-# Runtime user setup
-#
-# If the user passed -u UID:GID we run as that user and fix HOME.
-# Otherwise we run as root so GPU access works on any host (no gosu drop).
-##############################################################################
+# Source neuroimaging env (PATH, LD_LIBRARY_PATH, LD_PRELOAD for FireANTs fused CUDA ops, etc.)
+# neuroenv.sh is normally only sourced for interactive bash shells via /etc/bash.bashrc.
+# Sourcing it here explicitly ensures these variables are exported and inherited by gosu
+# and all Nextflow task subprocesses, which run non-interactively.
+# shellcheck disable=SC1091
+[ -f /etc/profile.d/neuroenv.sh ] && source /etc/profile.d/neuroenv.sh
 
-setup_runtime_user() {
-    local target_uid="$1"
-    local target_gid="$2"
+# --- functions ----------------------------------------------------------------
 
-    if [ "$target_uid" = "0" ]; then
-        return 0
-    fi
-    export HOME="/tmp/home"
-    mkdir -p "$HOME" 2>/dev/null || true
-    export NXF_TEMP=/tmp
-}
-
-if [ "$(id -u)" != "0" ]; then
-    setup_runtime_user "$(id -u)" "$(id -g)"
-fi
-# When started as root we do not drop to /output owner; stay root for GPU.
-
-##############################################################################
-# From here on we run as root (or as the user if -u was passed)
-##############################################################################
-
-# FreeSurfer license: only set when --freesurfer-license is passed (see arg parsing below).
-
-# FreeSurfer license validity probe (runs when surface recon enabled and --freesurfer-license given).
-# This runs a lightweight mri_convert on a small built-in average file to trigger
-# FreeSurfer's own license checks without touching user data.
 freesurfer_license_probe() {
-    # Only run if the core FreeSurfer average file exists (defensive against
-    # unexpected install layouts or future image changes).
     local probe_input="${FREESURFER_HOME:-/usr/local/freesurfer}/average/pons.mni152.2mm.mgz"
     local probe_output="/tmp/brainana_fs_license_test.nii.gz"
     local probe_log="/tmp/brainana_fs_license_probe.log"
 
     if [ ! -f "$probe_input" ]; then
-        # If the reference file is missing, don't block the pipeline here;
-        # FreeSurfer will fail later in a more obvious way.
         return 0
     fi
 
-    # Run a small conversion to trigger license validation. Capture all output
-    # so we can surface FreeSurfer's own error message if the license is bad.
     if ! mri_convert "$probe_input" "$probe_output" >"$probe_log" 2>&1; then
         echo "ERROR: FreeSurfer license check failed for FS_LICENSE=$FS_LICENSE" >&2
         if [ -s "$probe_log" ]; then
-            # Echo the underlying FreeSurfer error (e.g. license missing/invalid)
             cat "$probe_log" >&2
         fi
         rm -f "$probe_output" "$probe_log"
@@ -84,29 +54,141 @@ freesurfer_license_probe() {
     rm -f "$probe_output" "$probe_log"
 }
 
-# We are inside the container - do NOT spawn nested Docker for Nextflow processes
+# Root only. Sets globals: PIPELINE_UID, PIPELINE_GID, GOSU_TARGET, PIPELINE_MODE.
+# PIPELINE_MODE: gosu | root_fallback | root_output_root_owned
+setup_pipeline_identity() {
+    local output_dir="$1"
+    local work_dir="$2"
+    local _pu_name _run_as
+
+    PIPELINE_UID=$(stat -c %u "$output_dir" 2>/dev/null || echo 0)
+    PIPELINE_GID=$(stat -c %g "$output_dir" 2>/dev/null || echo 0)
+    GOSU_TARGET=""
+    PIPELINE_MODE="root_output_root_owned"
+
+    if [ "$PIPELINE_UID" = "0" ]; then
+        PIPELINE_UID=""
+        PIPELINE_GID=""
+        return
+    fi
+
+    if ! chown -R "${PIPELINE_UID}:${PIPELINE_GID}" "$work_dir" 2>/dev/null; then
+        echo "WARNING: Could not chown work dir $work_dir to ${PIPELINE_UID}:${PIPELINE_GID}" >&2
+        echo "         (e.g. NFS root_squash); work files may stay root-owned." >&2
+    fi
+
+    if ! getent passwd "$PIPELINE_UID" >/dev/null 2>&1; then
+        if ! getent group "$PIPELINE_GID" >/dev/null 2>&1; then
+            groupadd -g "$PIPELINE_GID" "brainana-g${PIPELINE_GID}" 2>/dev/null || true
+        fi
+        _pu_name="brainana${PIPELINE_UID}"
+        if ! useradd -M -u "$PIPELINE_UID" -g "$PIPELINE_GID" -d /tmp/home -s /bin/bash "$_pu_name" 2>/dev/null; then
+            echo "WARNING: Could not add /etc/passwd entry for UID $PIPELINE_UID; running pipeline as root instead." >&2
+            echo "         New outputs will be root-owned. On the host after the run, fix with e.g." >&2
+            echo "         sudo chown -R \"\$(id -u):\$(id -g)\" <mounted output and work paths>" >&2
+            PIPELINE_MODE="root_fallback"
+            return
+        fi
+    fi
+
+    # Grant GPU device access to the pipeline user.
+    # nvidia-container-toolkit mounts /dev/nvidia* from the host preserving the
+    # host group ownership (e.g. GID 1023 = vglusers on this cluster). The
+    # container has no group with that GID by default, so we create one and add
+    # the user. This is the portable fix regardless of the group name on the host.
+    _pu_name="$(getent passwd "$PIPELINE_UID" | cut -d: -f1)"
+    _nvidia_gid=$(stat -c %g /dev/nvidiactl 2>/dev/null \
+                  || stat -c %g /dev/nvidia0 2>/dev/null \
+                  || echo "")
+    if [ -n "$_nvidia_gid" ] && [ "$_nvidia_gid" != "0" ]; then
+        if ! getent group "$_nvidia_gid" >/dev/null 2>&1; then
+            groupadd -g "$_nvidia_gid" "nvidia-${_nvidia_gid}" 2>/dev/null || true
+        fi
+        _nvidia_grp=$(getent group "$_nvidia_gid" | cut -d: -f1)
+        [ -n "$_nvidia_grp" ] && usermod -aG "$_nvidia_grp" "$_pu_name" 2>/dev/null || true
+    fi
+    # Also add to render for /dev/dri/* (DRM/OpenGL devices used by some CUDA ops).
+    for _grp in render; do
+        if getent group "$_grp" >/dev/null 2>&1; then
+            usermod -aG "$_grp" "$_pu_name" 2>/dev/null || true
+        fi
+    done
+
+    # Use the username (not numeric uid:gid) so gosu calls initgroups(), which
+    # loads ALL supplementary groups from /etc/group — including the nvidia-GID
+    # group added above. With numeric "uid:gid", gosu skips initgroups() and the
+    # supplementary groups are never applied, leaving GPU devices inaccessible.
+    _run_as="$(getent passwd "$PIPELINE_UID" | cut -d: -f1)"
+    GOSU_TARGET="$_run_as"
+    PIPELINE_MODE="gosu"
+    export HOME="/tmp/home"
+    mkdir -p "$HOME" 2>/dev/null || true
+    export NXF_TEMP=/tmp
+    if [ -n "$_run_as" ]; then
+        export USER="$_run_as"
+        export LOGNAME="$_run_as"
+    fi
+}
+
+print_pipeline_banner() {
+    local resume_on="$1"
+    local gpu="$2"
+    local rs
+    rs=$([ "$resume_on" -eq 1 ] && echo on || echo off)
+
+    echo "============================================"
+    echo "brainana pipeline"
+    echo "  Input:   $INPUT_DIR"
+    echo "  Output:  $OUTPUT_DIR"
+    echo "  Config:  $CONFIG"
+    echo "  Work:    $NXF_HOME (resume: $rs)"
+    case "$PIPELINE_MODE" in
+        gosu)
+            echo "  User:    $GOSU_TARGET (matches mounted output dir owner)"
+            ;;
+        root_fallback)
+            echo "  User:    0:0 (root fallback — useradd failed for host UID $PIPELINE_UID; new files root-owned)"
+            echo "  Hint:    On the host after the run: sudo chown -R \"\$(id -u):\$(id -g)\" your mounted output/work paths."
+            ;;
+        root_output_root_owned)
+            echo "  User:    0:0 (pipeline as root; new outputs stay root-owned)"
+            echo "  Hint:    To run as your user: on the host, pre-create or chown the mounted output and work dirs, then docker run again."
+            ;;
+        explicit_u)
+            echo "  User:    $(id -u):$(id -g) (docker run -u)"
+            ;;
+    esac
+    echo "  GPUs:    $gpu"
+    echo "============================================"
+}
+
+# --- main ---------------------------------------------------------------------
+
+PIPELINE_MODE=""
+PIPELINE_UID=""
+PIPELINE_GID=""
+GOSU_TARGET=""
+
+if [ "$(id -u)" != "0" ]; then
+    export HOME="/tmp/home"
+    mkdir -p "$HOME" 2>/dev/null || true
+    export NXF_TEMP=/tmp
+    PIPELINE_MODE="explicit_u"
+fi
+
 export NXF_NO_DOCKER=1
-
-# Use colored ANSI output (override with -e NXF_ANSI_LOG=false if piping to file)
 export NXF_ANSI_LOG="${NXF_ANSI_LOG:-true}"
-
-# Default executor resources (recommended: 8 CPUs, 20 GB) - override with -e NXF_MAX_CPUS / NXF_MAX_MEMORY
 export NXF_MAX_CPUS="${NXF_MAX_CPUS:-8}"
 export NXF_MAX_MEMORY="${NXF_MAX_MEMORY:-20g}"
 
-# Default config (built-in defaults, no user config required)
 DEFAULT_CONFIG="/opt/brainana/src/nhp_mri_prep/config/defaults.yaml"
 PROJECT_ROOT="/opt/brainana"
 
-# Resolve input/output paths first (needed for default work dir)
 INPUT_DIR="${1:-/input}"
 OUTPUT_DIR="${2:-/output}"
 
-# Parse args from position 3: --config, -w/--work-dir, --no-resume; rest go to EXTRA_ARGS
-# Work dir: -w PATH or --work-dir PATH. Default: ${OUTPUT_DIR}_wd (persists, visible for cleanup).
-# Resume: on by default; use --no-resume to run from scratch.
 CONFIG="$DEFAULT_CONFIG"
-WORK_DIR=""   # empty = use default after OUTPUT_DIR is validated
+WORK_DIR=""
 RESUME_BY_DEFAULT=1
 EXTRA_ARGS=()
 FS_LICENSE_PATH=""
@@ -136,14 +218,12 @@ while [ $i -le $# ]; do
     ((i++))
 done
 
-# FS_LICENSE is only set when --freesurfer-license is passed; otherwise unset (no default).
 if [ -n "$FS_LICENSE_PATH" ]; then
     export FS_LICENSE="$FS_LICENSE_PATH"
 else
     unset FS_LICENSE
 fi
 
-# Allow interactive shell override
 if [ $# -gt 0 ]; then
     case "$1" in
         bash|sh|-bash|-sh)
@@ -153,7 +233,8 @@ if [ $# -gt 0 ]; then
     esac
 fi
 
-# Validate
+# --- validate I/O -------------------------------------------------------------
+
 if [ ! -d "$INPUT_DIR" ]; then
     echo "ERROR: Input directory not found: $INPUT_DIR" >&2
     echo "Usage: docker run ... liuxingyu987/brainana:<version> [input_dir] [output_dir]" >&2
@@ -161,7 +242,6 @@ if [ ! -d "$INPUT_DIR" ]; then
     exit 1
 fi
 
-# Create output directory if it doesn't exist (like fmriprep does)
 if [ ! -d "$OUTPUT_DIR" ]; then
     mkdir -p "$OUTPUT_DIR" || {
         echo "ERROR: Cannot create output directory: $OUTPUT_DIR" >&2
@@ -171,30 +251,32 @@ if [ ! -d "$OUTPUT_DIR" ]; then
 fi
 if ! [ -w "$OUTPUT_DIR" ]; then
     echo "ERROR: Output directory is not writable: $OUTPUT_DIR" >&2
-    echo "This is unexpected (entrypoint should have matched your UID)." >&2
-    echo "Try: mkdir -p \$output_dir  (on host, before docker run)" >&2
+    echo "Create it on the host with correct ownership before docker run, or fix permissions." >&2
+    echo "If you use docker run -u UID:GID, that UID must be able to write this path." >&2
     exit 1
 fi
 
-# Nextflow work dir and resume: default <output_dir>_wd so it persists and is visible for cleanup
+# --- work dir + pipeline identity ---------------------------------------------
+
 if [ -z "$WORK_DIR" ]; then
     WORK_DIR="${OUTPUT_DIR}_wd"
 fi
 export NXF_HOME="$WORK_DIR"
 export NXF_WORK="${WORK_DIR}/work"
-# run_brainana.sh CDs here so Nextflow's .nextflow/ (history + cache) persists for resume
 export NXF_LAUNCH_DIR="$WORK_DIR"
 mkdir -p "$NXF_HOME" "$NXF_WORK" 2>/dev/null || true
-# Symlink pre-cached framework JAR so Nextflow doesn't re-download at runtime
 if [ -d /opt/nextflow/framework ] && [ ! -e "$NXF_HOME/framework" ]; then
     ln -s /opt/nextflow/framework "$NXF_HOME/framework" 2>/dev/null || true
 fi
+
+if [ "$(id -u)" = "0" ]; then
+    setup_pipeline_identity "$OUTPUT_DIR" "$WORK_DIR"
+fi
+
 if [ "$RESUME_BY_DEFAULT" -eq 1 ]; then
     EXTRA_ARGS+=("-resume")
 fi
 
-# Determine whether surface reconstruction is enabled in the config.
-# We prefer the user config file, falling back to defaults.yaml if needed.
 SURF_RECON_ENABLED="$(
 python3 - "$CONFIG" "$DEFAULT_CONFIG" << 'PY'
 import io
@@ -204,7 +286,6 @@ from pathlib import Path
 try:
     import yaml  # type: ignore
 except Exception:
-    # If PyYAML is somehow unavailable, be conservative: assume enabled.
     print("true")
     sys.exit(0)
 
@@ -216,31 +297,24 @@ def load_yaml(p: Path):
         return {}
     try:
         raw = p.read_text()
-        raw = raw.replace("\t", " " * 4)  # YAML disallows tabs
+        raw = raw.replace("\t", " " * 4)
         return yaml.safe_load(io.StringIO(raw)) or {}
     except Exception:
         return {}
 
 cfg = load_yaml(default_cfg_path)
 user_cfg = load_yaml(user_cfg_path)
-
-# Shallow-merge anat.surface_reconstruction.enabled if present in user config.
 anat = cfg.get("anat") or {}
 user_anat = user_cfg.get("anat") or {}
 surf = anat.get("surface_reconstruction") or {}
 user_surf = user_anat.get("surface_reconstruction") or {}
-
 enabled = surf.get("enabled", True)
 if "enabled" in user_surf:
     enabled = bool(user_surf["enabled"])
-
 print("true" if enabled else "false")
 PY
 )"
 
-# FreeSurfer license policy:
-# - Surface reconstruction DISABLED -> no license handling.
-# - Surface reconstruction ENABLED -> must pass --freesurfer-license; then check file exists and run probe.
 if [ "$SURF_RECON_ENABLED" = "true" ]; then
     if [ -z "$FS_LICENSE_PATH" ]; then
         echo "ERROR: Surface reconstruction is enabled but --freesurfer-license was not provided." >&2
@@ -257,23 +331,13 @@ fi
 
 cd "$PROJECT_ROOT"
 
-# GPU count (0 if nvidia-smi missing or no GPUs)
 GPU_COUNT=0
 if command -v nvidia-smi &>/dev/null && nvidia-smi --list-gpus &>/dev/null; then
     GPU_COUNT=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
 fi
 
-echo "============================================"
-echo "brainana pipeline"
-echo "  Input:   $INPUT_DIR"
-echo "  Output:  $OUTPUT_DIR"
-echo "  Config:  $CONFIG"
-echo "  Work:    $NXF_HOME (resume: $([ "$RESUME_BY_DEFAULT" -eq 1 ] && echo on || echo off))"
-echo "  User:    $(id -u):$(id -g)"
-echo "  GPUs:    $GPU_COUNT"
-echo "============================================"
+print_pipeline_banner "$RESUME_BY_DEFAULT" "$GPU_COUNT"
 
-# Virtual display for headless QC snaps (wb_command -show-scene)
 export DISPLAY="${DISPLAY:-:99}"
 Xvfb "$DISPLAY" -screen 0 1024x768x24 -ac +extension GLX +render -noreset &
 XVFB_PID=$!
@@ -282,8 +346,17 @@ if ! kill -0 "$XVFB_PID" 2>/dev/null; then
     echo "WARNING: Xvfb failed to start; QC snapshots may fail." >&2
 fi
 
-exec ./run_brainana.sh run main.nf \
+set -- ./run_brainana.sh run main.nf \
     --bids_dir "$INPUT_DIR" \
     --output_dir "$OUTPUT_DIR" \
     --config_file "$CONFIG" \
     "${EXTRA_ARGS[@]}"
+
+if [ -n "$GOSU_TARGET" ]; then
+    if ! command -v gosu &>/dev/null; then
+        echo "ERROR: gosu not found; cannot drop to $GOSU_TARGET" >&2
+        exit 1
+    fi
+    exec gosu "$GOSU_TARGET" "$@"
+fi
+exec "$@"

@@ -19,6 +19,42 @@ BIDS_ENTITY_ORDER = [
     'flip', 'inv', 'mt', 'part', 'recording', 'others', 'space', 'split', 'desc'
 ]
 
+# Final `_`-separated BIDS suffix tokens before extension (MRI anat/func/dwi).
+# Not exhaustive for every BIDS derivative; unknown tails are left unchanged.
+# Tokens are sorted longest-first when building _BIDS_MODALITY_SUFFIXES so
+# e.g. `_boldref` beats `_bold`, `_T2w` beats `_T2`.
+# See BIDS MRI filename patterns: https://bids-specification.readthedocs.io/en/stable/04-modality-specific-files/01-magnetic-resonance-imaging-data.html
+_BIDS_MODALITY_SUFFIX_TOKENS: tuple[str, ...] = (
+    'T1w',
+    'T2w',
+    'bold',
+    'boldref'
+)
+_BIDS_MODALITY_SUFFIXES: tuple[str, ...] = tuple(
+    f'_{t}' for t in sorted(_BIDS_MODALITY_SUFFIX_TOKENS, key=len, reverse=True)
+)
+
+# BIDS ``space`` key-value segments in filename stems (``_space-<value>``).
+_BIDS_SPACE_ENTITY_IN_STEM = re.compile(r'_space-[a-zA-Z0-9-]+')
+
+
+def _strip_bids_space_entities_from_stem(stem: str) -> str:
+    """Remove every ``_space-<value>`` segment from a filename stem."""
+    return _BIDS_SPACE_ENTITY_IN_STEM.sub('', stem)
+
+
+def _suffix_introduces_space_entity(suffix: str) -> bool:
+    """True if *suffix* adds a BIDS ``space`` token (``space-...`` or ``_space-...``)."""
+    return suffix.startswith('space-') or '_space-' in suffix
+
+
+def _strip_trailing_bids_modality_suffix(stem: str) -> str:
+    """Remove one trailing recognized BIDS MRI modality suffix from a filename stem."""
+    for suffix in _BIDS_MODALITY_SUFFIXES:
+        if stem.endswith(suffix):
+            return stem[: -len(suffix)]
+    return stem
+
 
 def get_filename_stem(file_path: Union[str, Path]) -> str:
     """
@@ -90,7 +126,10 @@ def parse_bids_entities(filename: str) -> Dict[str, str]:
     return entities
 
 
-def create_bids_filename(entities: Dict[str, str], suffix: str, extension: str = ".nii.gz") -> str:
+def create_bids_filename(
+    entities: Dict[str, str], 
+    suffix: str, 
+    extension: str = ".nii.gz") -> str:
     """
     Create a BIDS-compliant filename from entities dictionary.
     
@@ -164,12 +203,24 @@ def create_bids_output_filename(
     Returns:
         BIDS-compliant output filename
         
+    When *suffix* introduces a ``space`` entity (``space-...`` or contains ``_space-``),
+    any existing ``_space-*`` segments are removed from the prefix first so names do not
+    stack two space entities.
+
     Examples:
         >>> create_bids_output_filename('sub-032309_ses-001_T1w.nii.gz', 'desc-preproc', 'T1w')
         'sub-032309_ses-001_desc-preproc_T1w.nii.gz'
         
         >>> create_bids_output_filename('sub-01_ses-pre_task-rest_bold.nii.gz', 'desc-preproc', 'bold')
         'sub-01_ses-pre_task-rest_desc-preproc_bold.nii.gz'
+
+        >>> create_bids_output_filename(
+        ...     'sub-032309_space-scanner_T2w.nii.gz', 'space-T1w_desc-preproc', 'T2w')
+        'sub-032309_space-T1w_desc-preproc_T2w.nii.gz'
+
+        >>> create_bids_output_filename(
+        ...     'sub-032309_space-scanner_T2w.nii.gz', 'desc-preproc', 'T2w')
+        'sub-032309_space-scanner_desc-preproc_T2w.nii.gz'
     """
     # Get the filename stem from the original file (e.g., 'sub-032309_ses-001_T1w')
     original_stem = get_filename_stem(original_file_path)
@@ -192,12 +243,91 @@ def create_bids_output_filename(
             else:
                 # If we can't find it, just use the original stem (fallback)
                 bids_prefix_wo_modality = original_stem
+
+    # Avoid ``..._space-A_space-B_...``: when this step's suffix introduces a new
+    # ``space`` entity, drop any existing ``_space-*`` from the prefix first.
+    if _suffix_introduces_space_entity(suffix):
+        bids_prefix_wo_modality = _strip_bids_space_entities_from_stem(bids_prefix_wo_modality)
     
     # Create the new filename: prefix + suffix + modality + extension
     # This matches: f"{bids_prefix_wo_modality}_desc-preproc_{modality}.nii.gz"
     output_filename = f"{bids_prefix_wo_modality}_{suffix}_{modality}{extension}"
     
     return output_filename
+
+
+def create_synthesized_bids_filename(
+    original_file: Path,
+    modality: str,
+    is_subject_level: bool,
+    synthesized: bool,
+) -> tuple[str, str]:
+    """
+    Basename and downstream path for outputs of the anatomical synthesis step.
+
+    The returned **basename** (first element) always includes ``space-scanner``
+    (BIDS ``space`` entity, value ``scanner``) so the linked output file matches
+    BIDS derivative naming.
+
+    The **downstream path** (second element) uses the same directory layout but a
+    basename **without** ``_space-scanner``, so later steps can key off the same
+    template stem as pre-synthesis inputs.
+
+    - **Synthesized:** Only ``sub`` and optional ``ses`` (omitted when subject-level);
+      run/acq/etc. are dropped. Intended for merged images.
+    - **Passthrough:** Uses :func:`create_bids_output_filename` so the stem (minus
+      modality) is preserved verbatim (run, acq, entity order, non-standard keys).
+      Inserts ``space-scanner`` before the modality. When subject-level, the
+      ``_ses-<value>`` segment is removed from the stem first.
+
+    Args:
+        original_file: Template input path (typically the first input)
+        modality: Modality suffix (e.g., "T1w", "T2w")
+        is_subject_level: True when the channel has no session (subject-level job)
+        synthesized: True if a merge was performed, False if single-file passthrough
+
+    Returns:
+        ``(bids_filename_with_space_scanner, bids_path_for_downstream_wo_space)``
+    """
+    parsed = parse_bids_entities(original_file.name)
+    _space_scanner = 'space-scanner'
+
+    if synthesized:
+        out_entities: Dict[str, str] = {
+            'sub': parsed.get('sub', 'unknown'),
+        }
+        if not is_subject_level and 'ses' in parsed:
+            out_entities['ses'] = parsed['ses']
+        out_entities['space'] = 'scanner'
+        bids_filename = create_bids_filename(
+            entities=out_entities,
+            suffix=modality,
+            extension='.nii.gz',
+        )
+    else:
+        stem = get_filename_stem(original_file)
+        if is_subject_level:
+            stem = re.sub(r'_ses-[a-zA-Z0-9-]+', '', stem)
+        synthetic = Path(stem + '.nii.gz')
+        bids_filename = create_bids_output_filename(
+            synthetic,
+            suffix=_space_scanner,
+            modality=modality,
+            extension='.nii.gz',
+        )
+
+    downstream_basename = (
+        _strip_bids_space_entities_from_stem(get_filename_stem(bids_filename))
+        + '.nii.gz'
+    )
+    
+    sub_id = parsed.get('sub', 'unknown')
+    if is_subject_level:
+        bids_path_for_downstream = f"sub-{sub_id}/anat/{downstream_basename}"
+    else:
+        bids_path_for_downstream = str(original_file.parent / downstream_basename)
+
+    return bids_filename, bids_path_for_downstream
 
 
 def get_bids_prefix(
@@ -219,7 +349,9 @@ def get_bids_prefix(
         session_level: Force session-level even if run_identifier is provided
         
     Returns:
-        BIDS prefix without modality suffix (e.g., '_bold', '_boldref')
+        BIDS prefix without trailing modality suffix (e.g. ``_T1w``, ``_bold``,
+        ``_boldref``) when that suffix is one of the recognized MRI tokens in
+        ``_BIDS_MODALITY_SUFFIX_TOKENS``.
         
     Examples:
         >>> # Session-level: removes run-specific entities
@@ -229,6 +361,10 @@ def get_bids_prefix(
         >>> # Run-level: preserves all entities
         >>> get_bids_prefix('sub-01_ses-001_task-rest_run-1_bold.nii.gz', run_identifier='task-rest_run-1')
         'sub-01_ses-001_task-rest_run-1'
+        
+        >>> # Run-level: strips anat suffixes too
+        >>> get_bids_prefix('sub-01_ses-001_T1w.nii.gz', run_identifier='x')
+        'sub-01_ses-001'
         
         >>> # Force session-level
         >>> get_bids_prefix('sub-01_ses-001_task-rest_run-1_bold.nii.gz', session_level=True)
@@ -253,59 +389,7 @@ def get_bids_prefix(
     else:
         # Run-level: preserve all entities from original template
         original_stem = get_filename_stem(bids_name)
-        # Remove common modality suffixes
-        return original_stem.replace('_bold', '').replace('_boldref', '')
-
-
-def create_synthesized_bids_filename(
-    original_file: Path,
-    modality: str,
-    is_subject_level: bool,
-    synthesized: bool
-) -> tuple[str, str]:
-    """
-    Create BIDS filename and path for synthesized anatomical output.
-    
-    Args:
-        original_file: Original anatomical file (for parsing entities)
-        modality: Modality suffix (e.g., "T1w", "T2w")
-        is_subject_level: True if subject-level synthesis, False if session-level
-        synthesized: True if synthesis occurred, False if passthrough
-        
-    Returns:
-        Tuple of (bids_filename, bids_path_for_downstream)
-        - bids_filename: Just the filename (e.g., "sub-001_T1w.nii.gz")
-        - bids_path_for_downstream: Full path for downstream steps
-          (e.g., "sub-001/anat/sub-001_T1w.nii.gz" for subject-level)
-    """
-    # Parse entities from original file
-    entities = parse_bids_entities(original_file.name)
-    
-    # Remove 'run' entity for synthesized files
-    if synthesized and 'run' in entities:
-        del entities['run']
-    
-    # Remove 'ses' entity for subject-level synthesis
-    if is_subject_level and 'ses' in entities:
-        del entities['ses']
-    
-    # Generate filename
-    bids_filename = create_bids_filename(
-        entities=entities,
-        suffix=modality,
-        extension='.nii.gz'
-    )
-    
-    # Generate path for downstream
-    if synthesized and is_subject_level:
-        subject_id = entities.get('sub', 'unknown')
-        bids_path = f"sub-{subject_id}/anat/{bids_filename}"
-    elif synthesized:
-        bids_path = str(original_file.parent / bids_filename)
-    else:
-        bids_path = str(original_file)
-    
-    return bids_filename, bids_path
+        return _strip_trailing_bids_modality_suffix(original_stem)
 
 
 def find_bids_metadata(nifti_path: Union[str, Path], dataset_dir: Union[str, Path]) -> Optional[Dict[str, Any]]:

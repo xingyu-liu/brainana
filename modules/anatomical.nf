@@ -23,31 +23,27 @@ process ANAT_SYNTHESIS {
     def first_file = anat_files[0]
     """
     \${PYTHON:-python3} <<'PYTHON_EOF' > /dev/null
+from pathlib import Path
+
 from nhp_mri_prep.steps.anatomical import anat_synthesis
-from nhp_mri_prep.utils.bids import parse_bids_entities, create_bids_filename
+from nhp_mri_prep.utils.bids import create_synthesized_bids_filename
 from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, normalize_session_id, save_metadata, create_output_link
 )
-from pathlib import Path
-import json
-import shutil
-import os
 
 # Load config
 config = load_config('${config_file}')
 
-# Handle empty string session_id (subject-level synthesis)
+# Empty session_id on channel => subject-level synthesis job
 session_id_raw = '${session_id}'
 session_id = normalize_session_id(session_id_raw)
+is_subject_level = session_id is None
 
 # Get anatomical files
 anat_files = [Path(f) for f in [${anat_files_list}]]
 
-# Get BIDS naming template for BIDS filename generation
+# BIDS naming template (first input)
 bids_name = Path('${first_file}')
-
-# Determine modality from BIDS naming template filename
-modality = detect_modality(bids_name)
 
 # Run synthesis (anat_synthesis function works for all anatomical modalities via underlying synthesis_multiple_anatomical)
 result = anat_synthesis(
@@ -56,24 +52,16 @@ result = anat_synthesis(
     config=config
 )
 
-# Check if synthesis actually occurred
 synthesized = result.metadata.get("synthesized", False)
 
-# Determine if subject-level synthesis
-is_subject_level = (session_id is None)
-
-# Generate BIDS filename and path using utility function
-from nhp_mri_prep.utils.bids import create_synthesized_bids_filename
-
+modality = detect_modality(bids_name)
 bids_output_filename, bids_name_for_downstream = create_synthesized_bids_filename(
     original_file=bids_name,
     modality=modality,
     is_subject_level=is_subject_level,
-    synthesized=synthesized
+    synthesized=synthesized,
 )
 
-# Use symlinks to avoid duplication - Nextflow publishDir will handle final copy
-# Always use create_output_link() which resolves symlinks to original source
 create_output_link(result.output_file, bids_output_filename)
 
 # Save metadata

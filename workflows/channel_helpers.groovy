@@ -20,20 +20,28 @@ def getSingleFilePath = { file_paths ->
 }
 
 /**
- * Map single-file job tuple to [sub, ses, file, bids_name] format
- * 
- * @param item Job tuple: [sub, ses, file_objects, needs_synth, suffix, needs_t1w_reg]
- * @return Mapped tuple: [sub, ses, anat_file, bids_name]
+ * Normalize BIDS NIfTI template paths so naming always uses .nii.gz (pipeline outputs are compressed).
+ * Staged input files keep their real extension; only the parallel bids_name string is rewritten.
+ *
+ * @param pathStr Full path or filename string
+ * @return Same path with basename ending in .nii rewritten to .nii.gz; .nii.gz unchanged
  */
-def mapSingleFileJob = { item ->
-    def sub = item[0]
-    def ses = item[1]
-    def file_objects = item[2]  // Already file objects from anat_jobs_ch
-    // For single files, file_objects is a list with one element, extract it
-    def anat_file = file_objects instanceof List ? file_objects[0] : file_objects
-    // Get bids_name from the original file path (for single files, use the file itself)
-    def bids_name = anat_file.toString()
-    [sub, ses, anat_file, bids_name]
+def normalizeBidsNiftiTemplate = { pathStr ->
+    if (pathStr == null) {
+        return pathStr
+    }
+    def s = pathStr.toString()
+    def f = new File(s)
+    def name = f.getName()
+    def parent = f.getParent()
+    if (name.endsWith('.nii.gz')) {
+        return s
+    }
+    if (name.endsWith('.nii')) {
+        def newName = name.substring(0, name.length() - 4) + '.nii.gz'
+        return parent ? new File(parent, newName).getPath() : newName
+    }
+    return s
 }
 
 /**
@@ -442,7 +450,7 @@ def performFuncAnatomicalSelection = { func_after_coreg, anat_after_bias_brain, 
 // Return a map with all helpers
 return [
     getSingleFilePath: getSingleFilePath,
-    mapSingleFileJob: mapSingleFileJob,
+    normalizeBidsNiftiTemplate: normalizeBidsNiftiTemplate,
     isT1wFile: isT1wFile,
     passThroughAnat: passThroughAnat,
     passThroughFunc: passThroughFunc,

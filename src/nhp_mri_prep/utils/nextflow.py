@@ -5,6 +5,7 @@ This module provides utilities that are commonly used in Nextflow process script
 """
 
 from pathlib import Path
+import gzip
 import os
 import shutil
 import json
@@ -12,6 +13,15 @@ from typing import Dict, Any, Optional, Union
 
 from .bids import get_filename_stem
 from ..config.config_io import load_yaml_config
+
+
+def _file_starts_with_gzip_magic(path: Path) -> bool:
+    """Return True if file begins with gzip magic (0x1f 0x8b)."""
+    try:
+        with open(path, "rb") as f:
+            return f.read(2) == b"\x1f\x8b"
+    except OSError:
+        return False
 
 
 def create_output_link(source_file, target_file):
@@ -46,6 +56,29 @@ def create_output_link(source_file, target_file):
     # Resolve source to actual file (follows symlink chain to original file)
     # This prevents creating symlinks to symlinks (deep symlink chains)
     source_resolved = source_path.resolve(strict=True)
+
+    # BIDS / nibabel expect .nii.gz files to be gzip-compressed. Symlinking or copying
+    # raw .nii bytes to a *.nii.gz name (e.g. after template normalization) breaks readers.
+    if str(target_path).endswith(".nii.gz") and not _file_starts_with_gzip_magic(
+        source_resolved
+    ):
+        try:
+            same_file = source_resolved == target_path.resolve(strict=True)
+        except OSError:
+            same_file = False
+        if same_file:
+            with open(source_resolved, "rb") as f_in:
+                raw = f_in.read()
+            target_path.unlink(missing_ok=False)
+            with gzip.open(target_path, "wb", compresslevel=6) as gz_out:
+                gz_out.write(raw)
+        else:
+            if target_path.exists() or target_path.is_symlink():
+                target_path.unlink()
+            with open(source_resolved, "rb") as f_in:
+                with gzip.open(target_path, "wb", compresslevel=6) as gz_out:
+                    shutil.copyfileobj(f_in, gz_out)
+        return
 
     # Guard: if source and target are the same underlying file, creating a symlink
     # would produce a self-referential or no-op link.  Replace any existing symlink

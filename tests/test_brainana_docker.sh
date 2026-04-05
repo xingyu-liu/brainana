@@ -7,7 +7,7 @@ fs_license=/mnt/DataDrive3/xliu/prep_test/freesurfer_license.txt
 # output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/${site}
 
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v5
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v7
 
 # bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_func
 # output_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_func

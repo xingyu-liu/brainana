@@ -107,7 +107,7 @@ workflow FUNC_WF {
             def sub = job.subject_id.toString()
             def ses = job.session_id ? job.session_id.toString() : null
             def file_obj = file(job.file_path as String)
-            def bids_name = file_obj.toString()
+            def bids_name = channelHelpers.normalizeBidsNiftiTemplate(file_obj.toString())
             def run_identifier = channelHelpers.extractRunIdentifier(bids_name)
             [sub, ses, run_identifier, file_obj, bids_name]
         }

@@ -169,7 +169,6 @@ workflow ANAT_WF {
     // PREPARE CHANNEL HELPERS
     // ============================================
     def getSingleFilePath = channelHelpers.getSingleFilePath
-    def mapSingleFileJob = channelHelpers.mapSingleFileJob
     def isT1wFile = channelHelpers.isT1wFile
     def passThroughAnat = channelHelpers.passThroughAnat
     def normalizeSessionId = channelHelpers.normalizeSessionId
@@ -184,24 +183,23 @@ workflow ANAT_WF {
     // ============================================
     // BRANCH JOBS BY TYPE
     // ============================================
-    // Split jobs into categories: T1w synthesis, T2w synthesis, T1w single, T2w single
+    // T1w vs T2w only. All jobs run through ANAT_SYNTHESIS / ANAT_SYNTHESIS_T2W so Python
+    // can passthrough single files (n<=1) while applying consistent space-scanner naming.
+    // needs_synthesis on the job record is metadata only for reporting.
     // Input: anat_jobs_ch: [sub, ses, file_objects, needs_synth, suffix, needs_t1w_reg, synthesis_type]
     // ============================================
     anat_jobs_ch.branch {
-        t1w_synthesis: it[3] == true && it[6] == "t1w"
-        t2w_synthesis: it[3] == true && it[6] == "t2w"
-        t1w_single: it[3] == false && it[4] == "T1w"
-        t2w_single: it[3] == false && it[4] == "T2w"
+        t1w: it[4] == "T1w"
+        t2w: it[4] == "T2w"
     }.set { anat_branched }
     
     // ============================================
-    // PROCESS T1W SYNTHESIS JOBS
+    // ALL T1W JOBS → ANAT_SYNTHESIS
     // ============================================
-    // Synthesize multiple T1w runs into single T1w
-    // Input: anat_branched.t1w_synthesis: [sub, ses, file_objects, needs_synth, suffix, needs_t1w_reg, synthesis_type]
-    // Output: anat_t1w_synthesis_output: [sub, ses, anat_file, bids_name]
+    // Input: anat_branched.t1w: [sub, ses, file_objects, needs_synth, suffix, needs_t1w_reg, synthesis_type]
+    // Output: anat_input_ch: [sub, ses, anat_file, bids_name]
     // ============================================
-    def anat_t1w_synthesis_input = anat_branched.t1w_synthesis
+    def anat_t1w_input = anat_branched.t1w
         .map { item ->
             def sub = item[0]
             def ses = item[1]
@@ -209,70 +207,38 @@ workflow ANAT_WF {
             [sub, ses, file_objects]
         }
     
-    def anat_t1w_synthesis_output = Channel.empty()
-    ANAT_SYNTHESIS(anat_t1w_synthesis_input, config_file)
-    anat_t1w_synthesis_output = ANAT_SYNTHESIS.out.synthesized
+    ANAT_SYNTHESIS(anat_t1w_input, config_file)
+    def anat_input_ch = ANAT_SYNTHESIS.out.synthesized
         .map { sub, ses, anat_file, bids_name_file ->
             def bids_name = bids_name_file.text.trim()
             [sub, ses, anat_file, bids_name]
         }
     
     // ============================================
-    // PROCESS T2W SYNTHESIS JOBS
+    // ALL T2W JOBS → ANAT_SYNTHESIS_T2W
     // ============================================
-    // Synthesize multiple T2w runs into single T2w
-    // Input: anat_branched.t2w_synthesis: [sub, ses, file_objects, needs_synth, suffix, needs_t1w_reg, synthesis_type]
-    // Output: anat_t2w_synthesis_output: [sub, ses, anat_file, bids_name, needs_t1w_reg]
+    // Fork t2w branch (single consumer per channel): process inputs + needs_t1w_reg for downstream join.
+    // Output: anat_t2w_all_jobs: [sub, ses, anat_file, bids_name, needs_t1w_reg]
     // ============================================
-    // Store needs_t1w_reg before synthesis
-    def t2w_synthesis_needs_t1w_reg = anat_branched.t2w_synthesis
-        .map { item ->
-            def sub = item[0]
-            def ses = item[1]
-            def needs_t1w_reg = item[5]
-            [sub, ses, needs_t1w_reg]
-        }
+    anat_branched.t2w.multiMap { item ->
+        def sub = item[0]
+        def ses = item[1]
+        def file_objects = item[2]
+        def needs_t1w_reg = item[5]
+        for_synthesis: [sub, ses, file_objects]
+        needs_t1w_reg_lookup: [sub, ses, needs_t1w_reg]
+    }.set { t2w_synthesis_fork }
     
-    def anat_t2w_synthesis_input = anat_branched.t2w_synthesis
-        .map { item ->
-            def sub = item[0]
-            def ses = item[1]
-            def file_objects = item[2]
-            [sub, ses, file_objects]
-        }
-    
-    def anat_t2w_synthesis_output = Channel.empty()
-    ANAT_SYNTHESIS_T2W(anat_t2w_synthesis_input, config_file)
-    anat_t2w_synthesis_output = ANAT_SYNTHESIS_T2W.out.synthesized
+    ANAT_SYNTHESIS_T2W(t2w_synthesis_fork.for_synthesis, config_file)
+    def anat_t2w_all_jobs = ANAT_SYNTHESIS_T2W.out.synthesized
         .map { sub, ses, anat_file, bids_name_file ->
             def bids_name = bids_name_file.text.trim()
             [sub, ses, anat_file, bids_name]
         }
-        .join(t2w_synthesis_needs_t1w_reg, by: [0, 1])
+        .join(t2w_synthesis_fork.needs_t1w_reg_lookup, by: [0, 1])
         .map { sub, ses, anat_file, bids_name, needs_t1w_reg ->
             [sub, ses, anat_file, bids_name, needs_t1w_reg]
         }
-    
-    // ============================================
-    // PROCESS SINGLE FILE JOBS
-    // ============================================
-    // Process T1w single files
-    // Input: anat_branched.t1w_single: [sub, ses, file_objects, needs_synth, suffix, needs_t1w_reg, synthesis_type]
-    // Output: anat_t1w_jobs: [sub, ses, anat_file, bids_name]
-    // ============================================
-    anat_branched.t1w_single
-        .map(mapSingleFileJob)
-        .set { anat_t1w_jobs }
-    
-    // ============================================
-    // COMBINE ALL T1W INPUTS
-    // ============================================
-    // Merge synthesized and single T1w file jobs for normal processing pipeline
-    // Input: anat_t1w_synthesis_output, anat_t1w_jobs: [sub, ses, anat_file, bids_name]
-    // Output: anat_input_ch: [sub, ses, anat_file, bids_name]
-    // ============================================
-    def anat_input_ch = anat_t1w_synthesis_output
-        .mix(anat_t1w_jobs)
     
     // ============================================
     // ANATOMICAL PROCESSING PIPELINE
@@ -654,28 +620,11 @@ workflow ANAT_WF {
     // ============================================
     // T2W PROCESSING
     // ============================================
-    // Process all T2w files (both synthesized and single files)
-    // Flow: synthesis → reorient → T2w→T1w registration → apply conform → bias correction → apply registration
-    //       OR: synthesis → reorient → STOP (for T2w without T1w)
+    // All T2w already passed through ANAT_SYNTHESIS_T2W (see anat_t2w_all_jobs above).
+    // Flow: reorient → T2w→T1w registration → apply conform → bias correction → apply registration
+    //       OR: reorient → STOP (for T2w without T1w)
     // ============================================
-    // Step 1: Combine T2w synthesis output with single T2w files
-    // anat_t2w_synthesis_output: [sub, ses, anat_file, bids_name, needs_t1w_reg]
-    // anat_branched.t2w_single: [sub, ses, file_objects, needs_synth, suffix, needs_t1w_reg, synthesis_type]
-    def anat_t2w_single_jobs = anat_branched.t2w_single
-        .map { item ->
-            def sub = item[0]
-            def ses = item[1]
-            def file_objects = item[2]
-            def needs_t1w_reg = item[5]
-            def anat_file = file_objects instanceof List ? file_objects[0] : file_objects
-            def bids_name = anat_file.toString()
-            [sub, ses, anat_file, bids_name, needs_t1w_reg]
-        }
-    
-    def anat_t2w_all_jobs = anat_t2w_synthesis_output
-        .mix(anat_t2w_single_jobs)
-    
-    // Step 2: Reorient T2w files
+    // Step 1: Reorient T2w files
     // Input: anat_t2w_all_jobs: [sub, ses, anat_file, bids_name, needs_t1w_reg]
     // Output: t2w_after_reorient: [sub, ses, anat_file, bids_name, needs_t1w_reg]
     def t2w_after_reorient = anat_t2w_all_jobs

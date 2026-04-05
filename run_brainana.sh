@@ -5,11 +5,20 @@
 # Locally:   launches from the project directory.
 #
 
+# Guard: gosu with an unknown UID may reset HOME to "/" (UID not in /etc/passwd).
+# Ensure HOME is a writable path before anything else.
+if [ -z "$HOME" ] || [ "$HOME" = "/" ]; then
+    export HOME=/tmp/home
+    mkdir -p "$HOME" 2>/dev/null || true
+fi
+
 # Set Nextflow home directory (for global cache, history, etc.)
 export NXF_HOME="${NXF_HOME:-$HOME/.nextflow}"
 
-# Set log file location (outside project)
-export NXF_LOG="${NXF_LOG:-$HOME/.nextflow/logs/nextflow.log}"
+# Log path must live under NXF_HOME when NXF_LOG is unset. Do not use $HOME here:
+# after gosu to a numeric UID, HOME may be "/" so $HOME/.nextflow becomes //.nextflow
+# and mkdir fails with permission denied.
+export NXF_LOG="${NXF_LOG:-$NXF_HOME/logs/nextflow.log}"
 
 # Create directories if they don't exist
 mkdir -p "$(dirname "$NXF_LOG")"
