@@ -188,8 +188,8 @@ workflow FUNC_WF {
             }
             .set { func_coreg_multi }
         
-        // Use GPU token when GPUs available (ants_register uses FireANTs when available)
-        def use_coreg_gpu = (params.gpu_count ?: 0) > 0
+        // Use GPU token only when workflow-level GPU scheduling is enabled.
+        def use_coreg_gpu = params.use_gpu
         def coreg_gpu_input = use_coreg_gpu ? gpu_queue : Channel.value('none')
 
         FUNC_WITHIN_SES_COREG(func_coreg_multi.combined, func_coreg_multi.reference, func_coreg_multi.ref_run_identifier_val, config_file, coreg_gpu_input)
@@ -411,7 +411,7 @@ workflow FUNC_WF {
             }
             .set { func_compute_reg_multi }
 
-        def use_registration_gpu = (params.gpu_count ?: 0) > 0
+        def use_registration_gpu = params.use_gpu
         def gpu_input = use_registration_gpu ? gpu_queue : Channel.value('none')
 
         FUNC_COMPUTE_REGISTRATION(func_compute_reg_multi.combined, func_compute_reg_multi.reference, config_file, gpu_input)

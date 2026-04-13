@@ -329,8 +329,10 @@ def anat_registration(input: StepInput, template_file: Path, template_name: str)
             metadata={"step": "registration", "skipped": True}
         )
     
-    # Get transform type from config
-    xfm_type = input.config.get("registration", {}).get("anat2template_xfm_type", "syn")
+    # Get registration behavior from config
+    reg_config = input.config.get("registration", {})
+    xfm_type = reg_config.get("anat2template_xfm_type", "syn")
+    enable_fireants = reg_config.get("enable_fireants", True)
     
     # Call operation
     result = ants_register(
@@ -340,7 +342,8 @@ def anat_registration(input: StepInput, template_file: Path, template_name: str)
         output_prefix="anat2template",
         config=input.config,
         logger=logger,
-        xfm_type=xfm_type
+        xfm_type=xfm_type,
+        enable_fireants=enable_fireants,
     )
     
     output_file = Path(result["imagef_registered"])
@@ -357,7 +360,8 @@ def anat_registration(input: StepInput, template_file: Path, template_name: str)
             "step": "registration",
             "modality": "anat",
             "target": template_name,
-            "xfm_type": xfm_type
+            "xfm_type": xfm_type,
+            "fireants_requested": enable_fireants,
         },
         additional_files=additional_files
     )

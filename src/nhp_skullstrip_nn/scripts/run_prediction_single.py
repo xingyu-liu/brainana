@@ -20,7 +20,7 @@ from nhp_skullstrip_nn.model import ModelLoader
 
 # %%
 # anat
-input_f = '/home/star/github/atlas/macaque/atlas/balsa/MacaqueYerkes19_v1.2_Vj_976nz/MNINonLinear/MacaqueYerkes19_v1.2_AverageT1w_restore.nii.gz'
+input_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_pet_noss/preprocessed/sub-NM745/ses-112days/func/sub-NM745_ses-112days_acq-FDG_desc-preproc_boldref.nii.gz'
 model_f = '/home/star/github/brainana/src/nhp_skullstrip_nn/pretrained_model/T1w_brainmask.pth'
 
 # # func

@@ -90,4 +90,5 @@ registration:
   func2anat_xfm_type: "syn"  # str: transform type for func->anat ("translation", "rigid", "affine", or "syn")
   func2template_xfm_type: "syn"  # str: transform type for func->template ("translation", "rigid", "affine", or "syn")
   interpolation: "BSpline"  # str: interpolation method ("Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline", "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc", "LanczosWindowedSinc", "GenericLabel")
+  enable_fireants: true  # bool: use FireANTs for syn registration if available, otherwise use ANTs
   keep_func_resolution: true  # bool: keep original functional image resolution after registration

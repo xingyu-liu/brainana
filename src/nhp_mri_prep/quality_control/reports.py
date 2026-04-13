@@ -723,21 +723,32 @@ please refer to the brainana configuration files in your preprocessing directory
     
     @staticmethod
     def _count_unique_images(data: Dict[str, Any]) -> int:
-        """Count unique images from organized snapshots (excluding different processing steps)."""
+        """Count unique functional BOLD runs from organized snapshots.
+
+        Excludes ``desc`` (QC/processing step), ``sub`` (report subject), and
+        ``space`` — derivative QC filenames use ``space`` for the reference
+        grid (e.g. func2anat vs func2target), not a distinct acquisition.
+
+        Session-level within-session coregistration QC (``func_coreg_overlay``)
+        is named with only subject/session (no task/run); it must not be
+        counted as an extra functional acquisition.
+        """
         if not data:
             return 0
         
         unique_images = set()
+        _exclude_from_func_identity = frozenset({'desc', 'sub', 'space'})
         
         def collect_unique_entities(level_data: Dict[str, Any]) -> None:
             for value in level_data.values():
                 if isinstance(value, dict):
                     if 'path' in value and 'entities' in value:
-                        # Create identifier from entities excluding 'desc' (processing step)
+                        if value.get('snapshot_type') == 'func_coreg_overlay':
+                            continue
                         entities = value['entities']
                         image_id = tuple(sorted(
-                            (k, v) for k, v in entities.items() 
-                            if k not in ['desc', 'sub']  # Exclude processing description and subject
+                            (k, v) for k, v in entities.items()
+                            if k not in _exclude_from_func_identity
                         ))
                         unique_images.add(image_id)
                     else:

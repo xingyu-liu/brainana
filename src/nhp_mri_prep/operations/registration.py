@@ -278,13 +278,9 @@ def ants_cpu_register(
 
 
 def _use_fireants(logger: logging.Logger) -> bool:
-    """Return True if FireANTs (GPU) registration should be used: FireANTs importable and CUDA available."""
+    """Return True if FireANTs registration is available (importable)."""
     try:
-        import torch as _torch
         from .fireants_registration import fireants_registration  # noqa: F401
-        if not _torch.cuda.is_available():
-            logger.debug("REGISTRATION: FireANTs skipped — CUDA not available (torch.cuda.is_available() is False)")
-            return False
         return True
     except ImportError as e:
         logger.debug(f"REGISTRATION: FireANTs skipped — not installed or dependency missing: {e}")
@@ -530,10 +526,10 @@ def ants_register(
     compute_inverse: Optional[bool] = True,
     enable_fireants: bool = True,
 ) -> Dict[str, Any]:
-    """Run ANTs-style registration: FireANTs (GPU) when available, otherwise ANTs CPU.
+    """Run ANTs-style registration: FireANTs when available, otherwise ANTs CPU.
     
-    Dispatcher: when GPU is available and FireANTs is installed, runs fireants_registration;
-    otherwise runs ants_cpu_register (subprocess antsRegistration).
+    Dispatcher: when FireANTs is installed and enabled for syn transforms, runs
+    fireants_registration; otherwise runs ants_cpu_register (subprocess antsRegistration).
     
     Args:
         fixedf: Fixed (template) image path
@@ -544,7 +540,7 @@ def ants_register(
         logger: Logger instance (optional)
         xfm_type: Type of transformation. Options: 'translation', 'rigid', 'affine', 'syn'
         compute_inverse: If True (default), compute and include inverse transform in outputs.
-        enable_fireants: If True (default), allow FireANTs (GPU) for syn registration.
+        enable_fireants: If True (default), allow FireANTs for syn registration.
         
     Returns:
         Dictionary with output_path_prefix, imagef_registered, forward_transform, inverse_transform
@@ -552,9 +548,10 @@ def ants_register(
     if logger is None:
         logger = logging.getLogger(__name__)
     # FireANTs is only used for syn; rigid/affine are done with ANTs (FireANTs is poor at linear transforms)
-    use_fireants = enable_fireants and xfm_type == "syn" and _use_fireants(logger)
+    fireants_available = _use_fireants(logger) if (enable_fireants and xfm_type == "syn") else False
+    use_fireants = enable_fireants and xfm_type == "syn" and fireants_available
     if use_fireants:
-        logger.info("REGISTRATION: using FireANTs (GPU) for syn")
+        logger.info("REGISTRATION: using FireANTs for syn")
         from .fireants_registration import fireants_registration
         try:
             result = fireants_registration(
@@ -567,17 +564,22 @@ def ants_register(
                 xfm_type=xfm_type,
                 compute_inverse=compute_inverse,
             )
-            logger.info("REGISTRATION: completed with FireANTs (GPU)")
+            logger.info("REGISTRATION: completed with FireANTs")
             return result
         except Exception as e:
             import traceback
             logger.warning(
-                f"FireANTs (GPU) registration failed — falling back to ANTs (CPU).\n"
+                f"FireANTs registration failed — falling back to ANTs (CPU).\n"
                 f"Exception: {type(e).__name__}: {e}\n"
                 f"Traceback:\n{traceback.format_exc()}"
             )
     if not use_fireants:
-        logger.info("REGISTRATION: using ANTs (CPU) — FireANTs not available (no CUDA or not installed)")
+        if not enable_fireants:
+            logger.info("REGISTRATION: using ANTs (CPU) — FireANTs disabled by configuration")
+        elif xfm_type != "syn":
+            logger.info(f"REGISTRATION: using ANTs (CPU) — FireANTs only applies to syn, got xfm_type={xfm_type!r}")
+        else:
+            logger.info("REGISTRATION: using ANTs (CPU) — FireANTs not installed or dependencies unavailable")
     else:
         logger.info("REGISTRATION: using ANTs (CPU) — fallback after FireANTs error")
     result = ants_cpu_register(

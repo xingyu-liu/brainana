@@ -926,6 +926,14 @@
             </div>
             <div class="param-block">
                 <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="registration_enable_fireants" name="registration_enable_fireants" checked></span>
+                    <label for="registration_enable_fireants">enable_fireants</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(attempt FireANTs for syn registration; fallback to ANTs if unavailable)</span>
+            </div>
+            <div class="param-block">
+                <div class="param-row">
                     <span class="param-check"><input type="checkbox" id="registration_keep_func_resolution" name="registration_keep_func_resolution" checked></span>
                     <label for="registration_keep_func_resolution">keep_func_resolution</label>
                     <span class="param-control"></span>
@@ -1041,6 +1049,7 @@
                 func2anat_xfm_type: "syn",
                 func2template_xfm_type: "syn",
                 interpolation: "BSpline",
+                enable_fireants: true,
                 keep_func_resolution: true
             }
         };
@@ -1189,6 +1198,9 @@
             ];
             if (config.registration && !validInterpolations.includes(config.registration.interpolation)) {
                 errors.push(`registration.interpolation must be one of ${validInterpolations.join(', ')}`);
+            }
+            if (config.registration && typeof config.registration.enable_fireants !== 'boolean') {
+                errors.push("registration.enable_fireants must be a boolean");
             }
             
             return errors;
@@ -1441,6 +1453,7 @@
             config.registration.func2anat_xfm_type = document.getElementById('registration_func2anat_xfm_type').value;
             config.registration.func2template_xfm_type = document.getElementById('registration_func2template_xfm_type').value;
             config.registration.interpolation = document.getElementById('registration_interpolation').value;
+            config.registration.enable_fireants = document.getElementById('registration_enable_fireants').checked;
             config.registration.keep_func_resolution = document.getElementById('registration_keep_func_resolution').checked;
             
             // Validate

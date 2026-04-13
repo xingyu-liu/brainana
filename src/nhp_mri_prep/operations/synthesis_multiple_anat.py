@@ -46,6 +46,7 @@ def synthesize_multiple_anatomical(
     
     if config is None:
         config = get_config().to_dict()
+    enable_fireants = config.get("registration", {}).get("enable_fireants", True)
     
     # Determine modality from the first file
     modality = anat_files[0].suffix  # T1w or T2w
@@ -105,7 +106,8 @@ def synthesize_multiple_anatomical(
                     output_prefix=output_prefix,
                     config=config,
                     logger=logger,
-                    xfm_type='rigid'  # Use only linear registration (affine)
+                    xfm_type='rigid',  # Use only linear registration (affine)
+                    enable_fireants=enable_fireants,
                 )
                 
                 forward_transform = registration_result.get("forward_transform")

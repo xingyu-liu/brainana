@@ -861,9 +861,11 @@ process FUNC_COMPUTE_BRAIN_MASK {
     
     script:
     """
-    # GPU Assignment: Assign this job to GPU ${gpu_id} (round-robin distribution)
-    export CUDA_VISIBLE_DEVICES=${gpu_id}
-    echo "[GPU Assignment] Task ${task.index} -> GPU ${gpu_id} (of ${params.gpu_count} available)"
+    # Conditional GPU assignment
+    if [ "${gpu_id}" != "none" ]; then
+        export CUDA_VISIBLE_DEVICES=${gpu_id}
+        echo "[GPU Assignment] Task ${task.index} -> GPU ${gpu_id} (of ${params.gpu_count} available)"
+    fi
     
     \${PYTHON:-python3} <<EOF
     from nhp_mri_prep.steps.functional import func_skullstripping

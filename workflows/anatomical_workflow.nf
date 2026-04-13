@@ -495,8 +495,8 @@ workflow ANAT_WF {
                 [sub, ses, brain_file, brain_bids_name, anat_file]
             }
         
-        // Use GPU token when GPUs available (FireANTs used when available, ANTs otherwise)
-        def use_registration_gpu = (params.gpu_count ?: 0) > 0
+        // Use GPU token only when workflow-level GPU scheduling is enabled.
+        def use_registration_gpu = params.use_gpu
         def gpu_input = use_registration_gpu ? gpu_queue : Channel.value('none')
         
         ANAT_REGISTRATION(registration_input, config_file, gpu_input)

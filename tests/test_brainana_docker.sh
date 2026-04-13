@@ -7,16 +7,22 @@ fs_license=/mnt/DataDrive3/xliu/prep_test/freesurfer_license.txt
 # output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/${site}
 
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v7
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v1
+config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml
 
-# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_func
-# output_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_func
+# pet cropped
+# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_pet_cropped
+# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_pet_cropped_noss_cpu
+# config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_pet_noss_cpu.yaml
 
+# run docker
 docker run --rm -t --gpus all \
     -v "$bids_dir":/input \
     -v "$output_dir":/output \
     -v "$fs_license":/fs_license.txt \
+    -v "$config_f":/config.yaml \
     brainana:latest \
     /input /output/preprocessed \
     -w /output/preprocessed_wd \
+    --config /config.yaml \
     --freesurfer-license /fs_license.txt

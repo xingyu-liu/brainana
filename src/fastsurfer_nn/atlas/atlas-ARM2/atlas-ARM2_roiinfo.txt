@@ -33,7 +33,7 @@ key_nohemi	key	region	name	name_full	hemi	aseg_id	wm_id
 232	1232	cortex	MT	middle_temporal_area	lh	3	0
 233	1233	cortex	V2-V4	extrastriate_visual_areas_2-4	lh	3	0
 246	1246	cortex	V1	primary_visual_cortex	lh	3	0
-502	502	subcortex	LVPal	lateral_and_ventral_pallium	rh	51	110
+502	502	subcortex	LVPal	lateral_and_ventral_pallium	rh	50	110
 510	510	subcortex	MPal	medial_pallium	rh	53	110
 516	516	subcortex	Amy	amygdala	rh	54	110
 542	542	subcortex	BG	basal_ganglia	rh	50	110
@@ -48,7 +48,7 @@ key_nohemi	key	region	name	name_full	hemi	aseg_id	wm_id
 705	705	subcortex	Pons	pons	rh	16	110
 741	741	subcortex	Cb	cerebellum	rh	47	0
 780	780	subcortex	Med	medulla	rh	16	110
-502	1502	subcortex	LVPal	lateral_and_ventral_pallium	lh	12	110
+502	1502	subcortex	LVPal	lateral_and_ventral_pallium	lh	11	110
 510	1510	subcortex	MPal	medial_pallium	lh	17	110
 516	1516	subcortex	Amy	amygdala	lh	18	110
 542	1542	subcortex	BG	basal_ganglia	lh	11	110

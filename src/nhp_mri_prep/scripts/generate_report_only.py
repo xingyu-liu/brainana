@@ -14,7 +14,7 @@ except ImportError:
     raise ImportError("Failed to import generate_qc_report from nhp_mri_prep.quality_control.reports")
 
 # %%
-dataset_dir = '/home/star/github/brainana/docs/_build/_static/QCreport_example'
+dataset_dir = '/mnt/DataDrive2/macaque/data_preproc/macaque_mri/UNC-Wisconsin'
 
 # %%
 # get sub dir list

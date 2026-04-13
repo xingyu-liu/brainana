@@ -320,6 +320,13 @@ def validate_registration_config(config: Dict[str, Any]) -> None:
                 f"interpolation must be one of {valid_interpolations}, got {interp}. "
                 f"Please fix this in your configuration file."
             )
+
+    if "enable_fireants" in config and not isinstance(config["enable_fireants"], bool):
+        raise ValueError(
+            f"Configuration error in registration: "
+            f"enable_fireants must be a boolean, got {type(config['enable_fireants']).__name__}. "
+            f"Please fix this in your configuration file."
+        )
     
     # Validate transform stages (if present)
     for stage in ["translation", "rigid", "affine", "syn"]:

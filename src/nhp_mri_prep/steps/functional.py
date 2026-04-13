@@ -512,9 +512,11 @@ def func_registration(
     # Ensure working directory exists
     input.working_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get transform type from config
+    # Get registration behavior from config
+    reg_config = input.config.get("registration", {})
     config_key = f"func2{target_type}_xfm_type"
-    xfm_type = input.config.get("registration", {}).get(config_key, "syn")
+    xfm_type = reg_config.get(config_key, "syn")
+    enable_fireants = reg_config.get("enable_fireants", True)
     
     # Resample target to functional resolution if requested
     fixedf = str(target_file)
@@ -540,7 +542,8 @@ def func_registration(
         output_prefix=f"func2{target_type}_tmean",
         config=input.config,
         logger=logger,
-        xfm_type=xfm_type
+        xfm_type=xfm_type,
+        enable_fireants=enable_fireants,
     )
     
     output_file = Path(result["imagef_registered"])
@@ -557,7 +560,8 @@ def func_registration(
             "step": "registration",
             "modality": "func",
             "target_type": target_type,
-            "xfm_type": xfm_type
+            "xfm_type": xfm_type,
+            "fireants_requested": enable_fireants,
         },
         additional_files=additional_files
     )
@@ -656,6 +660,9 @@ def func_within_ses_coreg(
     tmean_out = f"run{current_run}_to_run{reference_run}_tmean_coreg.nii.gz"
     bold_out = f"run{current_run}_to_run{reference_run}_bold_coreg.nii.gz"
 
+    reg_config = input.config.get("registration", {})
+    enable_fireants = reg_config.get("enable_fireants", True)
+
     if method == "ants":
         # Step 1: ANTs rigid registration (FireANTs when GPU available, else ANTs CPU)
         try:
@@ -667,6 +674,7 @@ def func_within_ses_coreg(
                 config=input.config,
                 logger=logger,
                 xfm_type="rigid",
+                enable_fireants=enable_fireants,
             )
         except Exception as e:
             logger.error(f"Error during ANTs registration for run {current_run} to run {reference_run}: {e}")
@@ -789,6 +797,7 @@ def func_within_ses_coreg(
             "current_run": current_run,
             "xfm_type": "rigid",
             "method": method,
+            "fireants_requested": enable_fireants,
         },
         additional_files=additional_files,
     )

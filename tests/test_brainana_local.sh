@@ -25,8 +25,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
-bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v2
+# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
+# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v2_ses
 # bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled"
 # output_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_v6"
 # bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_2pass"
@@ -47,7 +47,6 @@ output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_dow
 # bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/site-newcastle
 # output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-newcastle
 
-# config_f=/mnt/DataDrive2/macaque/data_raw/macaque_mri/princeton_2025/preproc/config.yaml
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_easy.yaml"
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_UNC.yaml"
@@ -55,10 +54,10 @@ output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_dow
 # config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_common.yaml"
 # config_f=/home/star/github/brainana/src/nhp_mri_prep/config/defaults.yaml
 
-# bids_dir=/mnt/DataDrive3/swap/test_brainana/raw/PET_yale_cropped
-# output_dir=/mnt/DataDrive3/swap/test_brainana/preproc/PET_yale_cropped_v2
-# config_f=/mnt/DataDrive3/swap/test_brainana/config_pet.yaml
-config_f=''
+bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_pet_cropped
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_pet_cropped_ss_ants_affine
+config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_pet_ss_ants_affine.yaml
+
 
 working_dir=${output_dir}_wd
 

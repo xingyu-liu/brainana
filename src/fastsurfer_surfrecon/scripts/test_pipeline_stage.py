@@ -55,8 +55,8 @@ from fastsurfer_surfrecon.stages import (
 STOP_STEP = "s22"
 
 # Test subject
-subject_root = Path("/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-marge/fastsurfer/")
-subject_dir = subject_root / "sub-baby32_T1w_wmnull"
+subject_root = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon")
+subject_dir = subject_root / "sub-034_ses-12months_v2"
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 
