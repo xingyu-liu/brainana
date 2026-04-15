@@ -464,6 +464,53 @@ def anat_backproject_atlases(
     )
 
 
+def anat_reproject_atlases_to_scanner(
+    atlas_files: List[Path],
+    conform_inverse_xfm: Path,
+    scanner_reference: Path,
+    working_dir: Path,
+) -> StepOutput:
+    """
+    Reproject T1w-space atlases to scanner space using conform inverse transform.
+
+    Args:
+        atlas_files: Paths to already backprojected T1w-space atlas images
+        conform_inverse_xfm: Inverse conform transform (T1w -> scanner)
+        scanner_reference: Scanner-space reference image defining output grid
+        working_dir: Working directory; atlas outputs go to working_dir/atlas/
+
+    Returns:
+        StepOutput with output_file=atlas_dir, additional_files={atlas_name: path}
+    """
+    atlas_dir = working_dir / "atlas"
+    atlas_dir.mkdir(parents=True, exist_ok=True)
+
+    additional_files: Dict[str, Path] = {}
+    for atlas_path in atlas_files:
+        atlas_name = atlas_path.name
+        result = flirt_apply_transforms(
+            movingf=str(atlas_path),
+            outputf_name=atlas_name,
+            reff=str(scanner_reference),
+            working_dir=str(atlas_dir),
+            transformf=str(conform_inverse_xfm),
+            logger=logger,
+            interpolation="nearestneighbour",
+            generate_tmean=False,
+        )
+        out_path = Path(result["imagef_registered"])
+        additional_files[atlas_name] = out_path
+
+    return StepOutput(
+        output_file=atlas_dir,
+        metadata={
+            "step": "reproject_atlases_to_scanner",
+            "atlases_found": len(additional_files),
+        },
+        additional_files=additional_files,
+    )
+
+
 def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepOutput:
     """
     Register T2w image to T1w space.

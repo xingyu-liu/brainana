@@ -803,11 +803,11 @@ EOF
 }
 
 
-process ANAT_BACKPROJECT_ATLASES {
+process ANAT_BACKPROJECT_ATLASES_TO_T1W {
     label 'cpu'
     tag "${subject_id}_${session_id}"
 
-    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat/atlas",
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat/atlas_space-T1w",
         mode: 'copy',
         pattern: 'atlas/*.nii.gz',
         saveAs: { f -> new File(f.toString()).name }
@@ -835,6 +835,41 @@ result = anat_backproject_atlases(
     working_dir=Path('.'),
     config=config,
     template_dir=None,
+)
+# Outputs written to ./atlas/ (task work dir)
+EOF
+    """
+}
+
+process ANAT_BACKPROJECT_ATLASES_TO_SCANNER {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat/atlas_space-scanner",
+        mode: 'copy',
+        pattern: 'atlas/*.nii.gz',
+        saveAs: { f -> new File(f.toString()).name }
+
+    input:
+    tuple val(subject_id), val(session_id), val(bids_name), path(t1w_atlas_files, stageAs: 'atlas_input/*'), path(conform_inverse_xfm), path(scanner_reference)
+    path config_file
+
+    output:
+    // optional: true allows zero matches when upstream T1w atlas backprojection has no atlases
+    tuple val(subject_id), val(session_id), path("atlas/*.nii.gz", optional: true), val(bids_name), emit: output
+
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+from nhp_mri_prep.steps.anatomical import anat_reproject_atlases_to_scanner
+from pathlib import Path
+
+atlas_files = sorted(Path('atlas_input').glob('*.nii.gz'))
+result = anat_reproject_atlases_to_scanner(
+    atlas_files=atlas_files,
+    conform_inverse_xfm=Path('${conform_inverse_xfm}'),
+    scanner_reference=Path('${scanner_reference}'),
+    working_dir=Path('.'),
 )
 # Outputs written to ./atlas/ (task work dir)
 EOF

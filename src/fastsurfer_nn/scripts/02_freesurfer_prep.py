@@ -17,7 +17,7 @@ from fastsurfer_nn.utils.constants import REPO_ROOT
 
 # %%
 # Test paths
-common_dir = '/home/star/github/atlas/public/macaque_template_surfaces/sub-D99/others'
+common_dir = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-NMT2Sym_test/others'
 skullstripped_dir = f'{common_dir}'
 output_dir = f'{skullstripped_dir}/test'
 

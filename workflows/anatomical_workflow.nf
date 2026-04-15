@@ -35,7 +35,8 @@ include { ANAT_REGISTRATION_PASSTHROUGH as ANAT_REGISTRATION_PASSTHROUGH_T2W } f
 include { ANAT_APPLY_CONFORM } from '../modules/anatomical.nf'
 include { ANAT_APPLY_TRANSFORMATION } from '../modules/anatomical.nf'
 include { ANAT_APPLY_TRANSFORM_MASK } from '../modules/anatomical.nf'
-include { ANAT_BACKPROJECT_ATLASES } from '../modules/anatomical.nf'
+include { ANAT_BACKPROJECT_ATLASES_TO_T1W } from '../modules/anatomical.nf'
+include { ANAT_BACKPROJECT_ATLASES_TO_SCANNER } from '../modules/anatomical.nf'
 include { ANAT_PUBLISH_PHASE1 } from '../modules/anatomical.nf'
 include { ANAT_PUBLISH_PHASE1 as ANAT_PUBLISH_T2W } from '../modules/anatomical.nf'
 include { ANAT_T1WT2W_COMBINED } from '../modules/anatomical.nf'
@@ -542,7 +543,7 @@ workflow ANAT_WF {
     // Only when registration is enabled (no backproject on passthrough)
     // Input: anat_reg_transforms [sub, ses, bids_name, forward, inverse]
     //        anat_after_bias [sub, ses, anat_file, bids_name]
-    // Output: anat/atlas/*.nii.gz
+    // Output: anat/atlas_space-T1w/*.nii.gz
     // ============================================
     anat_backproject_atlases_out = Channel.empty()
     if (registration_enabled) {
@@ -553,9 +554,33 @@ workflow ANAT_WF {
             .map { sub, ses, bids_name, forward_xfm, inverse_xfm, t1w_ref ->
                 [sub, ses, bids_name, inverse_xfm, t1w_ref]
             }
-        ANAT_BACKPROJECT_ATLASES(backproject_input, config_file)
-        anat_backproject_atlases_out = ANAT_BACKPROJECT_ATLASES.out.output
-    }    
+        ANAT_BACKPROJECT_ATLASES_TO_T1W(backproject_input, config_file)
+        anat_backproject_atlases_out = ANAT_BACKPROJECT_ATLASES_TO_T1W.out.output
+    }
+
+    // ============================================
+    // Backproject atlases to scanner space
+    // ============================================
+    // Input: anat_backproject_atlases_out [sub, ses, atlas_files, bids_name]
+    //        anat_conform_transforms [sub, ses, forward_xfm, inverse_xfm]
+    //        anat_after_reorient [sub, ses, anat_file, bids_name]
+    // Output: anat/atlas_space-scanner/*.nii.gz
+    // ============================================
+    anat_backproject_atlases_scanner_out = Channel.empty()
+    if (registration_enabled) {
+        def anat_after_reorient_by_bids = anat_after_reorient
+            .map { sub, ses, anat_file, bids_name -> [sub, ses, bids_name, anat_file] }
+        def t1w_atlases_input = anat_backproject_atlases_out
+            .map { sub, ses, atlas_files, bids_name -> [sub, ses, bids_name, atlas_files] }
+        def scanner_backproject_input = t1w_atlases_input
+            .join(anat_after_reorient_by_bids, by: [0, 1, 2])
+            .join(anat_conform_transforms, by: [0, 1])
+            .map { sub, ses, bids_name, atlas_files, scanner_ref, forward_xfm, conform_inverse_xfm ->
+                [sub, ses, bids_name, atlas_files, conform_inverse_xfm, scanner_ref]
+            }
+        ANAT_BACKPROJECT_ATLASES_TO_SCANNER(scanner_backproject_input, config_file)
+        anat_backproject_atlases_scanner_out = ANAT_BACKPROJECT_ATLASES_TO_SCANNER.out.output
+    }
     
     // ============================================
     // QUALITY CONTROL
