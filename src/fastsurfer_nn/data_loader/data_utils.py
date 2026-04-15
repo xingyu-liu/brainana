@@ -959,7 +959,13 @@ def pad_volume_to_cube(
     
     Pads the volume symmetrically to match the maximum dimension.
     For example, a volume of shape (320, 144, 210) will be padded to (320, 320, 320).
-    
+
+    Contract for callers that adjust affines (e.g. conform with img_size='cube'):
+    ``pad_widths[i][0]`` is always ``pad_total // 2`` (floor). For odd ``pad_total``,
+    ``pad_widths[i][1] == pad_widths[i][0] + 1``. Use ``pad_widths[i][0]`` as the
+    voxel-space offset of the original data block inside the padded volume — not
+    ``pad_total / 2.0``, which differs by 0.5 voxels when ``pad_total`` is odd.
+
     Parameters
     ----------
     volume : npt.NDArray
@@ -993,7 +999,14 @@ def pad_volume_to_cube(
         pad_before = pad_total // 2
         pad_after = pad_total - pad_before
         pad_widths.append((pad_before, pad_after))
-    
+
+    # Invariant: floor-half split (odd pad_total => one extra voxel after the block).
+    for pa, pb in pad_widths[:3]:
+        assert pb - pa in (0, 1), (
+            "pad_volume_to_cube split invariant broken; affine callers assume "
+            "p_before == pad_total // 2 and |p_after - p_before| <= 1"
+        )
+
     # Add zero padding for any additional dimensions (4th, 5th, etc.)
     if len(volume.shape) > 3:
         pad_widths.extend([(0, 0)] * (len(volume.shape) - 3))

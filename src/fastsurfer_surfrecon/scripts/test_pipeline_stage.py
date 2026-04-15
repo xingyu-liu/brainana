@@ -55,7 +55,7 @@ from fastsurfer_surfrecon.stages import (
 STOP_STEP = "s22"
 
 # Test subject
-subject_dir = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-NMT2Sym_110_claustrum_ARM6")
+subject_dir = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032310_fixclaustrum")
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 

@@ -753,17 +753,12 @@ def conform(
         
         # Check if padding was applied
         if any(p[0] != 0 or p[1] != 0 for p in pad_widths):
-            # Adjust affine to account for padding
-            # When we pad symmetrically, the volume center shifts by half the total padding in each dimension
-            # The brain center (Pxyz_c) in world space should stay the same
-            # But the volume center in voxel space changes, which affects the affine translation
-            
-            # Calculate how much the volume center shifted in voxel space
-            # Original center: old_shape / 2
-            # New center: new_shape / 2 = (old_shape + padding_total) / 2
-            # Shift: new_center - old_center = padding_total / 2
-            pad_total = np.array([p[0] + p[1] for p in pad_widths])  # Total padding per dimension
-            center_shift_vox = pad_total / 2.0  # Volume center shifts by half the total padding
+            # Adjust affine to account for padding.
+            # pad_volume_to_cube prepends pad_widths[i][0] voxels before the FOV block (floor-half split).
+            # For odd pad_total, that is NOT pad_total/2; using pad_total/2.0 misaligns the affine by 0.5 voxels.
+            # The translation must subtract MdcD @ p_before so cube voxel 0 still maps to the correct world corner.
+            pad_total = np.array([p[0] + p[1] for p in pad_widths])  # per-axis total padding (for logs)
+            center_shift_vox = np.array([p[0] for p in pad_widths], dtype=float)  # actual pre-padding per dim
             
             # Get MdcD matrix (rotation * voxel size) from header
             # MdcD = Mdc^T * delta (from the comment at line 872)
@@ -849,9 +844,8 @@ def conform(
             if verbose:
                 LOGGER.info(f"Padded image from {current_shape} to {padded_shape} (cubic) for img_size='cube'")
                 LOGGER.info(f"Padding (voxel space): {[f'{p[0]}+{p[1]}={p[0]+p[1]}' for p in pad_widths]}")
-                LOGGER.info(f"Volume center shift (voxel space): {center_shift_vox}")
-                LOGGER.info(f"Volume center shift (world space): {center_shift_world}")
-                LOGGER.info(f"Affine translation adjusted by: {center_shift_world}")
+                LOGGER.info(f"Pre-padding voxel shift (p_before per dim): {center_shift_vox}")
+                LOGGER.info(f"Affine translation adjustment (world, -MdcD @ p_before): {center_shift_world}")
 
     # mapped data is still float here, clip to integers now
     if np.issubdtype(target_dtype, np.integer):

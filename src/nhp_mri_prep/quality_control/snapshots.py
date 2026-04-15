@@ -704,12 +704,12 @@ def create_surf_recon_tissue_seg_qc(
         rh_pial_f = surf_dir / "rh.pial"
         
         # T1w brain file
-        brain_f = mri_dir / "brain.finalsurfs.mgz"
+        brain_f = mri_dir / "norm.mgz"
         
         # Step 3: Validate input files exist
         logger.info("QC: validating input files...")
         for file_path, name in [
-            (brain_f, "brain.finalsurfs.mgz"),
+            (brain_f, "norm.mgz"),
             (lh_white_f, "lh.white"),
             (rh_white_f, "rh.white"),
             (lh_pial_f, "lh.pial"),
@@ -758,7 +758,7 @@ def create_surf_recon_tissue_seg_qc(
         
         # Step 7: Convert volume to NIfTI
         logger.info("QC: converting volume to NIfTI format...")
-        brain_nii = work_dir / 'brain.finalsurfs.nii.gz'
+        brain_nii = work_dir / 'norm.nii.gz'
         subprocess.run(
             ['mri_convert', str(brain_f), str(brain_nii)],
             check=True,
@@ -770,6 +770,9 @@ def create_surf_recon_tissue_seg_qc(
         logger.info("QC: copying scene file to working directory...")
         work_scene_file = work_dir / 'Vol_Surface.scene'
         shutil.copy2(scene_file, work_scene_file)
+        # Keep scene volume reference aligned with the converted file name.
+        scene_text = work_scene_file.read_text()
+        work_scene_file.write_text(scene_text.replace('brain.finalsurfs.nii.gz', 'norm.nii.gz'))
         
         # Step 9: Render scene using Connectome Workbench
         logger.info("QC: rendering scene with Connectome Workbench...")
