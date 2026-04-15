@@ -3,7 +3,7 @@
  * 
  * Handles all functional processing steps including:
  * - Functional job parsing
- * - Functional processing pipeline (slice timing, reorient, motion correction, despike, bias correction, conform, skull stripping, registration)
+ * - Functional processing pipeline (slice timing, motion correction, despike, bias correction, conform, skull stripping, registration)
  * - Within-session coregistration
  * - Functional QC steps
  */
@@ -11,7 +11,6 @@
 nextflow.enable.dsl=2
 
 // Include functional processing modules
-include { FUNC_REORIENT } from '../modules/functional.nf'
 include { FUNC_SLICE_TIMING } from '../modules/functional.nf'
 include { FUNC_MOTION_CORRECTION } from '../modules/functional.nf'
 include { FUNC_GENERATE_TMEAN } from '../modules/functional.nf'
@@ -75,7 +74,6 @@ workflow FUNC_WF {
     
     // Resolve YAML-only boolean parameters
     // All defaults come from defaults.yaml
-    def func_reorient_enabled = paramResolver.getYamlBool("func.reorient.enabled")
     def func_slice_timing_enabled = paramResolver.getYamlBool("func.slice_timing_correction.enabled")
     def func_motion_correction_enabled = paramResolver.getYamlBool("func.motion_correction.enabled")
     def func_despike_enabled = paramResolver.getYamlBool("func.despike.enabled")
@@ -115,7 +113,7 @@ workflow FUNC_WF {
     // ============================================
     // FUNCTIONAL PREPROCESSING PIPELINE
     // ============================================
-    // Sequential processing: slice timing → reorient → motion correction → despike
+    // Sequential processing: slice timing → motion correction → despike
     // Channel structure maintained: [sub, ses, run_identifier, bold_file, tmean_file, bids_name]
     
     // ============================================
@@ -129,28 +127,19 @@ workflow FUNC_WF {
         func_after_slice = func_jobs_ch.map(passThroughFunc)
     }
 
-    // ============================================
-    // REORIENT
-    // ============================================
-    def func_after_reorient = func_after_slice
-    if (func_reorient_enabled) {
-        FUNC_REORIENT(func_after_slice, config_file)
-        func_after_reorient = FUNC_REORIENT.out.output
-    } else {
-        func_after_reorient = func_after_slice.map(passThroughFunc)
-    }
+    def func_after_slice_passthrough = func_after_slice.map(passThroughFunc)
     
     // ============================================
     // MOTION_CORRECTION
     // ============================================
-    def func_after_motion = func_after_reorient
+    def func_after_motion = func_after_slice_passthrough
     def func_motion_params = Channel.empty()
     if (func_motion_correction_enabled) {
-        FUNC_MOTION_CORRECTION(func_after_reorient, config_file)
+        FUNC_MOTION_CORRECTION(func_after_slice_passthrough, config_file)
         func_after_motion = FUNC_MOTION_CORRECTION.out.output
         func_motion_params = FUNC_MOTION_CORRECTION.out.motion_params
     } else {
-        FUNC_GENERATE_TMEAN(func_after_reorient, config_file)
+        FUNC_GENERATE_TMEAN(func_after_slice_passthrough, config_file)
         func_after_motion = FUNC_GENERATE_TMEAN.out.output
     }
     

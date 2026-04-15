@@ -848,12 +848,6 @@ please refer to the brainana configuration files in your preprocessing directory
             "(Avants et al., 2008) and averaging in reference space."
         ]
 
-        if get_nested_config_value(config, "anat.reorient.enabled", False):
-            t1w.append(
-                "The T1w was reoriented to the target or standard orientation using AFNI 3dresample "
-                "(Cox, 1996; Cox & Hyde, 1997)."
-            )
-
         skull_enabled = bool(get_nested_config_value(config, "anat.skullstripping_segmentation.enabled", True))
 
         if get_nested_config_value(config, "anat.conform.enabled", True):
@@ -902,12 +896,6 @@ please refer to the brainana configuration files in your preprocessing directory
             "synthesized T2w was created."
         ]
 
-        if get_nested_config_value(config, "anat.reorient.enabled", False):
-            t2w.append(
-                "The T2w was reoriented to the target or standard orientation using AFNI 3dresample "
-                "(Cox, 1996; Cox & Hyde, 1997)."
-            )
-
         t2w.append(
             "The T2w was rigidly coregistered to the T1w space using ANTs (Avants et al., 2008)."
         )
@@ -928,12 +916,6 @@ please refer to the brainana configuration files in your preprocessing directory
         if get_nested_config_value(config, "func.slice_timing_correction.enabled", True):
             sentences.append(
                 "Slice timing correction was applied using AFNI 3dTshift (Cox, 1996; Cox & Hyde, 1997)."
-            )
-
-        if get_nested_config_value(config, "func.reorient.enabled", False):
-            sentences.append(
-                "fMRI data were reoriented to the target or standard orientation using AFNI 3dresample "
-                "(Cox, 1996; Cox & Hyde, 1997)."
             )
 
         motion_enabled = bool(get_nested_config_value(config, "func.motion_correction.enabled", True))

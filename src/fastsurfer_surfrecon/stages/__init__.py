@@ -14,6 +14,7 @@ from .s04_talairach import Talairach
 from .s05_norm_t1 import NormT1
 from .s06_cc_segmentation import CCSegmentation
 from .s07_wm_filled import WMFilled
+from .s07b_claustrum_fix import ClaustrumFix
 
 # Surface stages (hemisphere-specific)
 from .s08_tessellation import Tessellation
@@ -44,6 +45,7 @@ __all__ = [
     "NormT1",
     "CCSegmentation",
     "WMFilled",
+    "ClaustrumFix",
     # Surface stages
     "Tessellation",
     "Smoothing",

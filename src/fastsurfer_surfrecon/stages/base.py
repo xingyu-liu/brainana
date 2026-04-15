@@ -88,6 +88,11 @@ class PipelineStage(ABC):
         if self.should_skip():
             self.logger.info(f"Skipping {stage_desc} (already complete)")
             return
+
+        # Apply per-stage numerical library thread caps. For hemisphere stages
+        # this uses the already-halved thread budget when parallel hemis are on.
+        from ..utils.threading import set_numerical_threads
+        set_numerical_threads(self.threads)
         
         # Set current stage identifier for command logging
         if stage_id:

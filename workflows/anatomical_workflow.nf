@@ -15,8 +15,6 @@ nextflow.enable.dsl=2
 // Include anatomical processing modules
 include { ANAT_SYNTHESIS } from '../modules/anatomical.nf'
 include { ANAT_SYNTHESIS as ANAT_SYNTHESIS_T2W } from '../modules/anatomical.nf'
-include { ANAT_REORIENT } from '../modules/anatomical.nf'
-include { ANAT_REORIENT as ANAT_REORIENT_T2W } from '../modules/anatomical.nf'
 include { ANAT_CONFORM } from '../modules/anatomical.nf'
 include { ANAT_CONFORM as ANAT_CONFORM_T2W } from '../modules/anatomical.nf'
 include { ANAT_BIAS_CORRECTION } from '../modules/anatomical.nf'
@@ -100,7 +98,6 @@ workflow ANAT_WF {
     // Priority: CLI params → YAML config → defaults.yaml
     // All defaults come from defaults.yaml - no hardcoded values
     def use_t1wt2wcombined = paramResolver.getYamlBool("anat.surface_reconstruction.use_t1wt2wcombined")
-    def anat_reorient_enabled = paramResolver.getYamlBool("anat.reorient.enabled")
     def anat_conform_enabled = paramResolver.getYamlBool("anat.conform.enabled")
     def anat_bias_correction_enabled = paramResolver.getYamlBool("anat.bias_correction.enabled")
     def anat_skullstripping_enabled = paramResolver.getYamlBool("anat.skullstripping_segmentation.enabled")
@@ -244,44 +241,33 @@ workflow ANAT_WF {
     // ============================================
     // ANATOMICAL PROCESSING PIPELINE
     // ============================================
-    // Sequential processing: reorient → conform → skull stripping → bias correction → registration
+    // Sequential processing: conform → skull stripping → bias correction → registration
     // Channel structure maintained: [sub, ses, anat_file, bids_name]
     // ============================================
     
     // ============================================
-    // REORIENT
-    // ============================================
-    // Reorient anatomical images to standard orientation
-    // Input: anat_input_ch: [sub, ses, anat_file, bids_name]
-    // Output: anat_after_reorient: [sub, ses, anat_file, bids_name]
-    // ============================================
-    anat_after_reorient = anat_input_ch
-    if (anat_reorient_enabled) {
-        ANAT_REORIENT(anat_input_ch, config_file)
-        anat_after_reorient = ANAT_REORIENT.out.output
-    } else {
-        anat_after_reorient = anat_input_ch.map(passThroughAnat)
-    }
+    // Use synthesis output directly before conform.
+    anat_preconform = anat_input_ch.map(passThroughAnat)
     
     // ============================================
     // CONFORM
     // ============================================
     // Conform anatomical images to template space
-    // Input: anat_after_reorient: [sub, ses, anat_file, bids_name]
+    // Input: anat_preconform: [sub, ses, anat_file, bids_name]
     // Output: anat_after_conform: [sub, ses, anat_file, bids_name]
     //         anat_conform_transforms: [sub, ses, forward_xfm, inverse_xfm]
     //         anat_conform_reference: [sub, ses, reference_file]
     // ============================================
-    anat_after_conform = anat_after_reorient
+    anat_after_conform = anat_preconform
     anat_conform_transforms = Channel.empty()
     anat_conform_reference = Channel.empty()
     if (anat_conform_enabled) {
-        ANAT_CONFORM(anat_after_reorient, config_file)
+        ANAT_CONFORM(anat_preconform, config_file)
         anat_after_conform = ANAT_CONFORM.out.output
         anat_conform_transforms = ANAT_CONFORM.out.transforms
         anat_conform_reference = ANAT_CONFORM.out.reference
     } else {
-        ANAT_CONFORM_PASSTHROUGH(anat_after_reorient, config_file)
+        ANAT_CONFORM_PASSTHROUGH(anat_preconform, config_file)
         anat_after_conform = ANAT_CONFORM_PASSTHROUGH.out.output
         anat_conform_transforms = ANAT_CONFORM_PASSTHROUGH.out.transforms
         anat_conform_reference = ANAT_CONFORM_PASSTHROUGH.out.reference
@@ -563,17 +549,17 @@ workflow ANAT_WF {
     // ============================================
     // Input: anat_backproject_atlases_out [sub, ses, atlas_files, bids_name]
     //        anat_conform_transforms [sub, ses, forward_xfm, inverse_xfm]
-    //        anat_after_reorient [sub, ses, anat_file, bids_name]
+    //        anat_preconform [sub, ses, anat_file, bids_name]
     // Output: anat/atlas_space-scanner/*.nii.gz
     // ============================================
     anat_backproject_atlases_scanner_out = Channel.empty()
     if (registration_enabled) {
-        def anat_after_reorient_by_bids = anat_after_reorient
+        def anat_preconform_by_bids = anat_preconform
             .map { sub, ses, anat_file, bids_name -> [sub, ses, bids_name, anat_file] }
         def t1w_atlases_input = anat_backproject_atlases_out
             .map { sub, ses, atlas_files, bids_name -> [sub, ses, bids_name, atlas_files] }
         def scanner_backproject_input = t1w_atlases_input
-            .join(anat_after_reorient_by_bids, by: [0, 1, 2])
+            .join(anat_preconform_by_bids, by: [0, 1, 2])
             .join(anat_conform_transforms, by: [0, 1])
             .map { sub, ses, bids_name, atlas_files, scanner_ref, forward_xfm, conform_inverse_xfm ->
                 [sub, ses, bids_name, atlas_files, conform_inverse_xfm, scanner_ref]
@@ -646,47 +632,31 @@ workflow ANAT_WF {
     // T2W PROCESSING
     // ============================================
     // All T2w already passed through ANAT_SYNTHESIS_T2W (see anat_t2w_all_jobs above).
-    // Flow: reorient → T2w→T1w registration → apply conform → bias correction → apply registration
-    //       OR: reorient → STOP (for T2w without T1w)
+    // Flow: T2w→T1w registration → apply conform → bias correction → apply registration
+    //       OR: STOP after anatomical selection (for T2w without T1w)
     // ============================================
-    // Step 1: Reorient T2w files
+    // Step 1: Use T2w synthesis output directly
     // Input: anat_t2w_all_jobs: [sub, ses, anat_file, bids_name, needs_t1w_reg]
-    // Output: t2w_after_reorient: [sub, ses, anat_file, bids_name, needs_t1w_reg]
-    def t2w_after_reorient = anat_t2w_all_jobs
-    if (anat_reorient_enabled) {
-        // Use multiMap to create both channels from single consumption
-        anat_t2w_all_jobs.multiMap { sub, ses, anat_file, bids_name, needs_t1w_reg ->
-            for_reorient: [sub, ses, anat_file, bids_name]
-            needs_t1w_reg_lookup: [sub, ses, needs_t1w_reg]
-        }.set { t2w_reorient_channels }
-        
-        ANAT_REORIENT_T2W(t2w_reorient_channels.for_reorient, config_file)
-        t2w_after_reorient = ANAT_REORIENT_T2W.out.output
-            .join(t2w_reorient_channels.needs_t1w_reg_lookup, by: [0, 1])
-            .map { sub, ses, anat_file, bids_name, needs_t1w_reg ->
-                [sub, ses, anat_file, bids_name, needs_t1w_reg]
-            }
-    } else {
-        t2w_after_reorient = anat_t2w_all_jobs
-    }
+    // Output: t2w_preselection: [sub, ses, anat_file, bids_name, needs_t1w_reg]
+    def t2w_preselection = anat_t2w_all_jobs
     
     // Step 3: Perform anatomical selection for ALL T2w files
-    // Note: Bias correction is skipped for T2w - T2w proceeds directly from reorient to anatomical selection
-    // Use T1w from reorient stage (anat_after_reorient) for T2w→T1w registration - BEFORE conform
+    // Note: Bias correction is skipped for T2w - T2w proceeds directly from synthesis to anatomical selection
+    // Use T1w before conform (anat_preconform) for T2w→T1w registration
     // This ensures both T2w and T1w are in their native space before registration
-    // Note: anat_after_reorient is the full head version (_T1w), not the brain version (_T1w_brain)
+    // Note: anat_preconform is the full head version (_T1w), not the brain version (_T1w_brain)
     // Check for T1w matches for all T2w files
     // Priority: 1) Subject-level T1w (ses="", HIGHEST PRIORITY), 2) Same session T1w, 3) Cross-session T1w, 4) No T1w (stop processing)
     // Output: [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses]
-    def t2w_all_after_reorient = t2w_after_reorient
+    def t2w_all_preselection = t2w_preselection
         .map { sub, ses, anat_file, bids_name, needs_t1w_reg ->
             [sub, ses, anat_file, bids_name]
         }
     
     def findUnmatchedT2w = channelHelpers.findUnmatchedT2w
     def t2w_anat_selection_raw = channelHelpers.performT2wAnatomicalSelection(
-        t2w_all_after_reorient,
-        anat_after_reorient,  // Full head T1w from reorient stage (before conform), not brain (_T1w_brain)
+        t2w_all_preselection,
+        anat_preconform,  // Full head T1w before conform, not brain (_T1w_brain)
         isT1wFile,
         findUnmatchedT2w
     )
@@ -702,7 +672,7 @@ workflow ANAT_WF {
     
     // Step 4b: Split T2w into two paths based on T1w availability
     // Path 1: T2w with T1w (same-session or cross-session) - register to T1w space, then APPLY T1w's transforms
-    // Path 2: T2w without T1w - stop after reorient
+    // Path 2: T2w without T1w - stop after anatomical selection
     t2w_anat_selection
         .branch {
             with_t1w: it[4] != null  // t1w_file != null
@@ -740,7 +710,7 @@ workflow ANAT_WF {
             [sub, ses, t2w_file, t2w_bids_name, anat_ses]
         }
     
-    // Path 2: T2w without T1w - stop after reorient
+    // Path 2: T2w without T1w - stop after anatomical selection
     // Input: t2w_branched_by_t1w.without_t1w: [sub, ses, t2w_file, t2w_bids_name, t1w_file, anat_ses]
     // Output: t2w_without_t1w_final: [sub, ses, t2w_file, t2w_bids_name]
     // (No further processing - stops here)

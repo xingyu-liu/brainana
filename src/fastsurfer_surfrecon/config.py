@@ -90,7 +90,9 @@ class ProcessingConfig(BaseModel):
     """Processing options configuration."""
     
     # Threading
-    threads: int = Field(ge=1, description="Number of threads")
+    threads: int | Literal["auto"] = Field(
+        description="Number of threads or 'auto' to detect from CPU count (capped)"
+    )
     parallel_hemis: bool = Field(
         description="Process hemispheres in parallel"
     )
@@ -193,6 +195,16 @@ class ProcessingConfig(BaseModel):
     def fssurfreg(self) -> bool:
         """Alias for do_surf_reg."""
         return self.do_surf_reg
+
+    @field_validator("threads", mode="after")
+    @classmethod
+    def resolve_threads(cls, v: int | Literal["auto"]) -> int:
+        """Resolve auto thread count and cap aggressive values."""
+        if v == "auto":
+            return min(os.cpu_count() or 1, 16)
+        if v < 1:
+            raise ValueError("threads must be >= 1")
+        return v
 
 
 class ReconSurfConfig(BaseModel):

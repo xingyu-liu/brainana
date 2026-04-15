@@ -37,7 +37,6 @@ htmlcov/
 
 # Testing (not needed in runtime image)
 tests/
-test_dataset/
 
 # Documentation (not needed in runtime image)
 docs/

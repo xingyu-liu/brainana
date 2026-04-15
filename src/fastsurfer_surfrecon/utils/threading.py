@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def set_numerical_threads(threads: int, max_threads: int = 32, include_itk: bool = False) -> int:
+def set_numerical_threads(threads: int, max_threads: int = 16, include_itk: bool = False) -> int:
     """
     Set environment variables to limit threading for numerical computing libraries.
     
@@ -30,7 +30,7 @@ def set_numerical_threads(threads: int, max_threads: int = 32, include_itk: bool
     ----------
     threads : int
         Number of threads to use (will be capped at max_threads)
-    max_threads : int, default=32
+    max_threads : int, default=16
         Maximum allowed threads to prevent excessive resource usage
     include_itk : bool, default=False
         If True, also set ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS
@@ -44,8 +44,8 @@ def set_numerical_threads(threads: int, max_threads: int = 32, include_itk: bool
     --------
     >>> set_numerical_threads(8)
     8
-    >>> set_numerical_threads(100)  # Will be capped at 32
-    32
+    >>> set_numerical_threads(100)  # Will be capped at 16
+    16
     >>> set_numerical_threads(4, include_itk=True)  # Also sets ITK threads
     4
     """

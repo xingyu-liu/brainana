@@ -17,11 +17,12 @@ from fastsurfer_nn.utils.constants import REPO_ROOT
 
 # %%
 # Test paths
-result_dir = Path('/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032310/others')
+result_dir = Path('/home/star/github/atlas/public/macaque_template_surfaces/sub-MEBRAINS/others')
 
 t1w_f = result_dir / "T1w.nii.gz"
 seg_f = result_dir / "segmentation.nii.gz"
 mask_f = result_dir / "mask.nii.gz"
+arm6_f = result_dir / "atlas-ARM6.nii.gz"
 
 # Checkpoint to extract atlas name from
 ckpt_f = '/home/star/github/brainana/src/fastsurfer_nn/pretrained_model/T1w_seg-ARM2_coronal.pkl'
@@ -47,6 +48,10 @@ if not lut_path.exists():
 print(f"Using LUT: {lut_path}")
 print(f"Atlas: {atlas_name}")
 
+# check if arm6 atlas exists, if not, set to None
+if not arm6_f.exists():
+    arm6_f = None
+
 # Run post-processing
 result = postprocess_for_freesurfer(
     t1w_image=t1w_f,
@@ -54,6 +59,7 @@ result = postprocess_for_freesurfer(
     mask=mask_f,
     lut_path=lut_path,
     subject_dir=result_dir,
+    arm6_atlas=arm6_f,
 )
 
 if result == 0:

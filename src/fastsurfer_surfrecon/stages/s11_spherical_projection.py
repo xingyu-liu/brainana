@@ -22,12 +22,6 @@ class SphericalProjection(HemisphereStage):
     
     def _run(self) -> None:
         """Project to sphere."""
-        # Set environment variables EARLY to limit numerical library threading
-        # This must be done before any numpy/scipy/lapy operations to prevent
-        # the libraries from using all available CPU cores.
-        from ..utils.threading import set_numerical_threads
-        set_numerical_threads(self.threads)
-        
         sphere = self.hemi_path("sphere")
         smoothwm_nofix = self.hemi_path("smoothwm.nofix")
         qsphere_nofix = self.hemi_path("qsphere.nofix")

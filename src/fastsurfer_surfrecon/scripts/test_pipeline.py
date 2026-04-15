@@ -9,12 +9,6 @@ import os
 import sys
 from pathlib import Path
 
-# Set environment variables BEFORE importing any modules that use numpy/scipy/lapy
-# This is critical because these libraries check environment variables at import time
-# and may initialize their threading settings then. Setting them early ensures they
-# respect the thread limits.
-n_threads = 8
-
 # Add src/ to path for fastsurfer_surfrecon package (scripts/ -> fastsurfer_surfrecon -> src)
 _src = Path(__file__).resolve().parent.parent.parent
 if str(_src) not in sys.path:
@@ -26,12 +20,10 @@ from fastsurfer_surfrecon.utils.logging import setup_logging
 
 # %%
 # Test subject
-subject_root = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/histology_test/surf")
-subject_dir = subject_root / "sub-histology"
-# subject_dir = subject_root / "arcaro_baby1_fixV1_separate" / "sub-baby1"
+result_dir = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032309m")
 
-subjects_dir = subject_dir.parent
-subject_id = subject_dir.name
+subjects_dir = result_dir.parent
+subject_id = result_dir.name
 
 # Setup logging
 setup_logging()
@@ -47,7 +39,6 @@ config = ReconSurfConfig.with_defaults(
         "skip_cc": True,  # Non-human
         "skip_talairach": True,  # Non-human
         "hires": "auto",  # Auto-detect from voxel size
-        "threads": n_threads,
     },
     verbose=2,  # DEBUG
 )

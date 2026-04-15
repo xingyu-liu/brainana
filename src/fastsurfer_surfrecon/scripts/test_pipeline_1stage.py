@@ -28,6 +28,7 @@ from fastsurfer_surfrecon.stages import (
     NormT1,
     CCSegmentation,
     WMFilled,
+    ClaustrumFix,
     # Surface stages
     Tessellation,
     Smoothing,
@@ -45,17 +46,24 @@ from fastsurfer_surfrecon.stages import (
     AparcMapping,
     WMParcMapping,
 )
+from fastsurfer_surfrecon.scripts.stage_utils import (
+    VALID_STEPS,
+    VOLUME_STEPS,
+    SURFACE_STEPS,
+    POST_SURFACE_STEPS,
+    stage_order_value,
+    validate_step,
+)
 
 # ============================================================================
 # Configuration - Edit these variables as needed
 # ============================================================================
-# RUN_STEPS = [f's{i:02d}' for i in range(1, 8)]
+# RUN_STEPS = [f's{i:02d}' for i in range(1, 8)] + ['s07b']
 # RUN_STEPS = ['s11']
 RUN_STEPS = ['s14'] + [f's{i:02d}' for i in range(16, 23)]
 
 # Test subject
-subject_root = Path("/home/star/github/atlas/public/macaque_template_surfaces")
-subject_dir = subject_root / "sub-D99"
+subject_dir = Path("/home/star/github/atlas/public/macaque_template_surfaces/sub-MEBRAINS")
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 
@@ -63,24 +71,6 @@ n_threads = 8
 parallel_hemis = True
 
 # ============================================================================
-
-
-# Valid step names
-VALID_STEPS = {
-    "s01", "s02", "s03", "s04", "s05", "s06", "s07",
-    "s08", "s09", "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18",
-    "s19", "s20", "s21", "s22",
-}
-
-
-def get_stage_number(step: str) -> int:
-    """Get numeric stage number from step string (e.g., 's07' -> 7)."""
-    if not step.startswith("s"):
-        raise ValueError(f"Step must start with 's', got: {step}")
-    try:
-        return int(step[1:])
-    except ValueError:
-        raise ValueError(f"Invalid step format: {step}")
 
 
 def run_single_stage(config: ReconSurfConfig, run_step: str):
@@ -130,15 +120,15 @@ def run_single_stage(config: ReconSurfConfig, run_step: str):
     # Set global cmd log file so all commands are logged
     set_cmd_log_file(cmd_log_path)
     
-    run_num = get_stage_number(run_step)
+    run_num = stage_order_value(run_step)
     
     print("=" * 80)
     print(f"Running single stage: {run_step}")
     print("=" * 80)
     print()
     
-    # Phase 1: Volume Processing (s01-s07)
-    if 1 <= run_num <= 7:
+    # Phase 1: Volume Processing (s01-s07b)
+    if run_step in VOLUME_STEPS:
         volume_stages = [
             ("s01", VolumePrep),
             ("s02", BiasCorrection),
@@ -147,10 +137,11 @@ def run_single_stage(config: ReconSurfConfig, run_step: str):
             ("s05", NormT1),
             ("s06", CCSegmentation),
             ("s07", WMFilled),
+            ("s07b", ClaustrumFix),
         ]
         
         for step_name, stage_class in volume_stages:
-            if get_stage_number(step_name) != run_num:
+            if stage_order_value(step_name) != run_num:
                 continue
             print("=" * 60)
             print(f"Phase 1: Volume — {step_name}: {stage_class.__name__}")
@@ -161,7 +152,7 @@ def run_single_stage(config: ReconSurfConfig, run_step: str):
             return
     
     # Phase 2: Surface Creation (s08-s17)
-    if 8 <= run_num <= 17:
+    if run_step in SURFACE_STEPS:
         surface_stages = [
             ("s08", Tessellation),
             ("s09", Smoothing),
@@ -176,7 +167,7 @@ def run_single_stage(config: ReconSurfConfig, run_step: str):
         ]
         
         for step_name, stage_class in surface_stages:
-            if get_stage_number(step_name) != run_num:
+            if stage_order_value(step_name) != run_num:
                 continue
             print("=" * 60)
             print(f"Phase 2: Surface — {step_name}: {stage_class.__name__}")
@@ -211,9 +202,9 @@ def run_single_stage(config: ReconSurfConfig, run_step: str):
     # Phase 3: Post-Surface (s18-s22)
     # s18: CorticalRibbon - creates ribbon.mgz (needs both hemispheres' surfaces)
     # s19: Statistics - computes brainvol.stats (needs ribbon.mgz for cortical volume)
-    if 18 <= run_num <= 22:
+    if run_step in POST_SURFACE_STEPS:
         # s18: CorticalRibbon (runs once for both hemispheres)
-        if run_num == 18:
+        if run_step == "s18":
             print("=" * 60)
             print(f"Phase 3: Post-Surface — s18: CorticalRibbon")
             print("=" * 60)
@@ -222,7 +213,7 @@ def run_single_stage(config: ReconSurfConfig, run_step: str):
             return
         
         # s19: Statistics (runs per hemisphere, needs ribbon.mgz)
-        if run_num == 19:
+        if run_step == "s19":
             print("=" * 60)
             print(f"Phase 3: Post-Surface — s19: Statistics")
             print("=" * 60)
@@ -241,7 +232,7 @@ def run_single_stage(config: ReconSurfConfig, run_step: str):
         ]
         
         for step_name, stage_class in post_surface_stages:
-            if get_stage_number(step_name) != run_num:
+            if stage_order_value(step_name) != run_num:
                 continue
             print("=" * 60)
             print(f"Phase 3: Post-Surface — {step_name}: {stage_class.__name__}")
@@ -258,9 +249,10 @@ def main():
     """Main entry point."""
     # Validate run step
     for run_step in RUN_STEPS:
-        if run_step not in VALID_STEPS:
-            print(f"Error: Invalid step '{run_step}'")
-            print(f"Valid steps are: {', '.join(sorted(VALID_STEPS))}")
+        try:
+            validate_step(run_step)
+        except ValueError as e:
+            print(f"Error: {e}")
             sys.exit(1)
     
     # Setup logging

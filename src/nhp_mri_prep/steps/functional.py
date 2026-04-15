@@ -81,17 +81,6 @@ def func_reorient(input: StepInput, template_file: Optional[Path] = None) -> Ste
     Returns:
         StepOutput with reoriented file and tmean
     """
-    if not input.config.get("func.reorient.enabled", True):
-        logger.info("Step: reorient skipped (disabled in configuration)")
-        # Still generate tmean from original
-        tmean_path = input.working_dir / "func_tmean.nii.gz"
-        calculate_func_tmean(str(input.input_file), str(tmean_path), logger)
-        return StepOutput(
-            output_file=input.input_file,
-            metadata={"step": "reorient", "skipped": True},
-            additional_files={"tmean": tmean_path}
-        )
-    
     # Determine target for reorientation
     target_file = None
     target_orientation = None

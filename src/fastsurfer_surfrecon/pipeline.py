@@ -21,6 +21,7 @@ from .stages import (
     NormT1,
     CCSegmentation,
     WMFilled,
+    ClaustrumFix,
     # Surface stages
     Tessellation,
     Smoothing,
@@ -83,12 +84,6 @@ class ReconSurfPipeline:
         2. Surface creation (per hemisphere)
         3. Statistics and finalization
         """
-        # Set environment variables EARLY to limit numerical library threading
-        # This must be done before any numpy/scipy/lapy operations to prevent
-        # the libraries from using all available CPU cores.
-        from .utils.threading import set_numerical_threads
-        set_numerical_threads(self.config.processing.threads)
-        
         self.start_time = datetime.now()
         logger.info(f"Starting recon-surf for {self.config.subject_id}")
         logger.info(f"Start time: {self.start_time}")
@@ -165,6 +160,7 @@ class ReconSurfPipeline:
         - s05: Normalization and T1 creation
         - s06: CC segmentation (optional)
         - s07: WM segmentation and filled creation
+        - s07b: Claustrum fix (optional, runs only if ARM6 atlas is present)
         """
         logger.info("=" * 60)
         logger.info("Phase 1: Volume Processing")
@@ -179,6 +175,7 @@ class ReconSurfPipeline:
             NormT1(self.config, self.sd),
             CCSegmentation(self.config, self.sd),
             WMFilled(self.config, self.sd),
+            ClaustrumFix(self.config, self.sd),
         ]
         
         for stage in stages:

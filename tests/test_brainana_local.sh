@@ -26,7 +26,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Test parameters
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v3
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v4
 # bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled"
 # output_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_v6"
 # bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_2pass"

@@ -28,6 +28,7 @@ from fastsurfer_surfrecon.stages import (
     NormT1,
     CCSegmentation,
     WMFilled,
+    ClaustrumFix,
     # Surface stages
     Tessellation,
     Smoothing,
@@ -45,12 +46,20 @@ from fastsurfer_surfrecon.stages import (
     AparcMapping,
     WMParcMapping,
 )
+from fastsurfer_surfrecon.scripts.stage_utils import (
+    VALID_STEPS,
+    VOLUME_STEPS,
+    SURFACE_STEPS,
+    POST_SURFACE_STEPS,
+    stage_order_value,
+    validate_step,
+)
 
 # ============================================================================
 # Configuration - Edit these variables as needed
 # ============================================================================
 
-# Stop at this step (e.g., "s07", "s12", "s21")
+# Stop at this step (e.g., "s07b", "s12", "s21")
 # Pipeline will run all steps up to and including this step
 STOP_STEP = "s22"
 
@@ -63,24 +72,6 @@ n_threads = 8
 parallel_hemis = True
 
 # ============================================================================
-
-
-# Valid step names
-VALID_STEPS = {
-    "s01", "s02", "s03", "s04", "s05", "s06", "s07",
-    "s08", "s09", "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18",
-    "s19", "s20", "s21", "s22",
-}
-
-
-def get_stage_number(step: str) -> int:
-    """Get numeric stage number from step string (e.g., 's07' -> 7)."""
-    if not step.startswith("s"):
-        raise ValueError(f"Step must start with 's', got: {step}")
-    try:
-        return int(step[1:])
-    except ValueError:
-        raise ValueError(f"Invalid step format: {step}")
 
 
 def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
@@ -130,15 +121,15 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
     # Set global cmd log file so all commands are logged
     set_cmd_log_file(cmd_log_path)
     
-    stop_num = get_stage_number(stop_step)
+    stop_num = stage_order_value(stop_step)
     
     print("=" * 80)
     print(f"Running Pipeline up to Step: {stop_step}")
     print("=" * 80)
     print()
     
-    # Phase 1: Volume Processing (s01-s07)
-    if stop_num >= 1:
+    # Phase 1: Volume Processing (s01-s07b)
+    if stop_num >= stage_order_value("s01"):
         print("=" * 60)
         print("Phase 1: Volume Processing")
         print("=" * 60)
@@ -151,10 +142,11 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
             ("s05", NormT1),
             ("s06", CCSegmentation),
             ("s07", WMFilled),
+            ("s07b", ClaustrumFix),
         ]
         
         for step_name, stage_class in volume_stages:
-            step_num = get_stage_number(step_name)
+            step_num = stage_order_value(step_name)
             if step_num > stop_num:
                 break
             
@@ -168,7 +160,7 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
                 return
     
     # Phase 2: Surface Creation (s08-s17)
-    if stop_num >= 8:
+    if stop_num >= stage_order_value("s08"):
         print("\n" + "=" * 60)
         print("Phase 2: Surface Creation")
         print("=" * 60)
@@ -187,7 +179,7 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
         ]
         
         for step_name, stage_class in surface_stages:
-            step_num = get_stage_number(step_name)
+            step_num = stage_order_value(step_name)
             if step_num > stop_num:
                 break
             
@@ -228,13 +220,13 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
     # Phase 3: Post-Surface (s18-s22)
     # s18: CorticalRibbon - creates ribbon.mgz (needs both hemispheres' surfaces)
     # s19: Statistics - computes brainvol.stats (needs ribbon.mgz for cortical volume)
-    if stop_num >= 18:
+    if stop_num >= stage_order_value("s18"):
         print("\n" + "=" * 60)
         print("Phase 3: Post-Surface Processing")
         print("=" * 60)
         
         # s18: CorticalRibbon (runs once for both hemispheres)
-        if stop_num >= 18:
+        if stage_order_value("s18") <= stop_num:
             print(f"\nRunning s18: CorticalRibbon")
             print("-" * 60)
             CorticalRibbon(config, sd).run()
@@ -243,7 +235,7 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
                 return
         
         # s19: Statistics (runs per hemisphere, needs ribbon.mgz)
-        if stop_num >= 19:
+        if stage_order_value("s19") <= stop_num:
             print(f"\nRunning s19: Statistics")
             print("-" * 60)
             print("Computing statistics for both hemispheres (sequential)")
@@ -262,7 +254,7 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
         ]
         
         for step_name, stage_class in post_surface_stages:
-            step_num = get_stage_number(step_name)
+            step_num = stage_order_value(step_name)
             if step_num > stop_num:
                 break
             
@@ -283,9 +275,10 @@ def run_pipeline_to_step(config: ReconSurfConfig, stop_step: str):
 def main():
     """Main entry point."""
     # Validate stop step
-    if STOP_STEP not in VALID_STEPS:
-        print(f"Error: Invalid step '{STOP_STEP}'")
-        print(f"Valid steps are: {', '.join(sorted(VALID_STEPS))}")
+    try:
+        validate_step(STOP_STEP)
+    except ValueError as e:
+        print(f"Error: {e}")
         sys.exit(1)
     
     # Setup logging

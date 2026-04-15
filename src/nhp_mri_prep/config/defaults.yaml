@@ -25,8 +25,6 @@ anat:
   synthesis_level: "subject"  # str: T1w/T2w synthesis level ("subject", "session"). 
   # "subject" = cross-session synthesis (cross-sectional)
   # "session" = within-session synthesis (longitudinal)
-  reorient:
-    enabled: false  # bool: reorient anatomical images to template orientation when given, otherwise to RAS. When conform is enabled, reorient is not needed.
   conform:
     enabled: true  # HIGILY RECOMMENDED: bool: conform input image to template space using FLIRT rigid registration
   skullstripping_segmentation:
@@ -51,8 +49,6 @@ anat:
 
 func:
   coreg_runs_within_session: true
-  reorient:
-    enabled: false  # bool: reorient functional images to template orientation when given, otherwise to RAS.  When conform is enabled, reorient is not needed.
   conform:
     enabled: true  # HIGILY RECOMMENDED: bool: conform functional tmean image to target space using FLIRT rigid registration
   slice_timing_correction:

@@ -110,13 +110,6 @@ def anat_reorient(input: StepInput, template_file: Optional[Path] = None) -> Ste
     Returns:
         StepOutput with reoriented file
     """
-    if not input.config.get("anat.reorient.enabled", True):
-        logger.info("Step: reorient skipped (disabled in configuration)")
-        return StepOutput(
-            output_file=input.input_file,
-            metadata={"step": "reorient", "skipped": True}
-        )
-    
     # Determine target for reorientation
     target_file = None
     target_orientation = None
@@ -583,7 +576,12 @@ def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepO
     )
 
 
-def anat_surface_reconstruction(input: StepInput, t1w_file: Path, segmentation_file: Path, brain_mask: Optional[Path] = None) -> StepOutput:
+def anat_surface_reconstruction(input: StepInput, 
+    t1w_file: Path, 
+    segmentation_file: Path, 
+    brain_mask: Optional[Path] = None,
+    arm6_atlas: Optional[Path] = None
+) -> StepOutput:
     """
     Perform surface reconstruction using fastsurfer_surfrecon.
     
@@ -592,6 +590,7 @@ def anat_surface_reconstruction(input: StepInput, t1w_file: Path, segmentation_f
         t1w_file: T1w image file (any T1w file, independent of preprocessing pipeline)
         segmentation_file: Segmentation file (from skullstripping step)
         brain_mask: Brain mask file (required for surface reconstruction)
+        arm6_atlas: Optional ARM6 atlas for claustrum fix (stage s07b)
         
     Returns:
         StepOutput with surface reconstruction directory path
@@ -656,6 +655,13 @@ def anat_surface_reconstruction(input: StepInput, t1w_file: Path, segmentation_f
         )
     
     logger.info(f"Step: LUT path = {lut_path}")
+
+    if arm6_atlas is not None:
+        logger.info(f"Step: Optional ARM6 atlas detected: {arm6_atlas}")
+        if not arm6_atlas.exists():
+            raise FileNotFoundError(f"Step: Optional ARM6 atlas file not found at {arm6_atlas}")
+    else:
+        logger.info("Step: Optional ARM6 atlas not found; claustrum fix will be skipped")
     
     # Validate required files exist before processing
     for path, name in [(t1w_file, "T1w image"), (segmentation_file, "segmentation"), (brain_mask, "mask")]:
@@ -676,7 +682,8 @@ def anat_surface_reconstruction(input: StepInput, t1w_file: Path, segmentation_f
             lut_path=str(lut_path),
             subject_dir=str(subject_dir),
             vox_size="min",
-            orientation="lia"
+            orientation="lia",
+            arm6_atlas=str(arm6_atlas) if arm6_atlas is not None else None,
         )
         
         if prep_result != 0:

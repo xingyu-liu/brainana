@@ -380,7 +380,9 @@
                             <option value="NMT2Sym:res-025">NMT2Sym:res-025</option>
                             <option value="NMT2Sym:res-1">NMT2Sym:res-1</option>
                             <option value="NMT2Asym:res-05">NMT2Asym:res-05</option>
+                            <option value="MEBRAINS:res-05">MEBRAINS:res-05</option>
                             <option value="MEBRAINS:res-04">MEBRAINS:res-04</option>
+                            <option value="D99:res-05">D99:res-05</option>
                             <option value="D99:res-025">D99:res-025</option>
                             <option value="T1w">T1w</option>
                         </select>
@@ -405,14 +407,6 @@
                     </span>
                 </div>
                 <span class="help-text">(T1w/T2w synthesis when multiple images exist: "subject" = cross-session, "session" = within-session)</span>
-            </div>
-            <div class="step">
-                <div class="param-row">
-                    <span class="param-check"><input type="checkbox" id="anat_reorient_enabled" name="anat_reorient_enabled"></span>
-                    <label for="anat_reorient_enabled">reorient</label>
-                    <span class="param-control"></span>
-                </div>
-                <span class="help-text">(reorient to template or RAS; redundant if conform is enabled)</span>
             </div>
             <div class="step">
                 <div class="param-row">
@@ -577,14 +571,6 @@
                     <span class="param-control"></span>
                 </div>
                 <span class="help-text">(coregister all runs within each session before other steps)</span>
-            </div>
-            <div class="step">
-                <div class="param-row">
-                    <span class="param-check"><input type="checkbox" id="func_reorient_enabled" name="func_reorient_enabled"></span>
-                    <label for="func_reorient_enabled">reorient</label>
-                    <span class="param-control"></span>
-                </div>
-                <span class="help-text">(reorient to template or RAS; redundant if conform is enabled)</span>
             </div>
             <div class="step">
                 <div class="param-row">
@@ -979,7 +965,6 @@
             },
             anat: {
                 synthesis_level: "subject",
-                reorient: { enabled: false },
                 conform: { enabled: true },
                 skullstripping_segmentation: {
                     enabled: true,
@@ -1007,7 +992,6 @@
             },
             func: {
                 coreg_runs_within_session: true,
-                reorient: { enabled: false },
                 conform: { enabled: true },
                 slice_timing_correction: {
                     enabled: true,
@@ -1383,9 +1367,8 @@
             // Template
             config.template.output_space = document.getElementById('template_output_space').value || defaults.template.output_space;
             
-            // Anatomical (order matches defaults.yaml: synthesis_level, reorient, conform, skullstripping_segmentation, bias_correction, surface_reconstruction)
+            // Anatomical (order matches defaults.yaml: synthesis_level, conform, skullstripping_segmentation, bias_correction, surface_reconstruction)
             config.anat.synthesis_level = document.getElementById('anat_synthesis_level').value;
-            config.anat.reorient.enabled = document.getElementById('anat_reorient_enabled').checked;
             config.anat.conform.enabled = document.getElementById('anat_conform_enabled').checked;
             
             config.anat.skullstripping_segmentation.enabled = document.getElementById('anat_skullstripping_enabled').checked;
@@ -1410,7 +1393,6 @@
             
             // Functional
             config.func.coreg_runs_within_session = document.getElementById('func_coreg_runs_within_session').checked;
-            config.func.reorient.enabled = document.getElementById('func_reorient_enabled').checked;
             config.func.conform.enabled = document.getElementById('func_conform_enabled').checked;
             
             config.func.slice_timing_correction.enabled = document.getElementById('func_slice_timing_correction_enabled').checked;

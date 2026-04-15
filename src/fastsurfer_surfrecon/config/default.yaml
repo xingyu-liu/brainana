@@ -13,7 +13,7 @@ atlas:
 # Processing options
 processing:
   # Threading
-  threads: 8
+  threads: auto
   parallel_hemis: true
   
   # Volume options

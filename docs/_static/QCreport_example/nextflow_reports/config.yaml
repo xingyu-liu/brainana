@@ -12,8 +12,6 @@ template:
   output_space: NMT2Sym:res-05
 anat:
   synthesis_level: subject
-  reorient:
-    enabled: false
   conform:
     enabled: true
     padding_percentage: 0.1
@@ -45,8 +43,6 @@ func:
     tzero: null
     slice_time_ref: 0.5
     slice_encoding_direction: null
-  reorient:
-    enabled: false
   motion_correction:
     enabled: true
     dof: 6

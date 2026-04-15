@@ -119,6 +119,7 @@ def postprocess_for_freesurfer(
     subject_dir: Path | str,
     vox_size: VoxSizeOption = "min",
     orientation: OrientationType = "lia",
+    arm6_atlas: Path | str | None = None,
 ) -> Literal[0] | str:
     """
     Post-process segmentation outputs for FreeSurfer surface reconstruction.
@@ -127,6 +128,7 @@ def postprocess_for_freesurfer(
     1. Creates FreeSurfer directory structure
     2. Conforms T1w, mask, and aseg to FreeSurfer format
     3. Saves all files in the correct FreeSurfer locations
+    4. Optionally conforms and saves an ARM6 atlas for claustrum fixing
     
     Parameters
     ----------
@@ -140,12 +142,15 @@ def postprocess_for_freesurfer(
         Path to atlas ColorLUT file (for reduce_to_aseg)
     subject_dir : Path | str
         FreeSurfer subject directory
-    hemimask : Path | str | None, optional
-        Path to hemisphere mask (native space, from skullstripping output)
     vox_size : VoxSizeOption, default="min"
         Voxel size option for conforming
     orientation : OrientationType, default="lia"
         Target orientation for conforming
+    arm6_atlas : Path | str | None, optional
+        Path to ARM6 atlas file (native space). If provided and the file exists,
+        it will be resampled to conformed space and saved as
+        ``mri/aparc.ARM6atlas+aseg.orig.mgz``. The surface reconstruction
+        pipeline uses this file to run the claustrum fix after stage s07.
     
     Returns
     -------
@@ -162,6 +167,8 @@ def postprocess_for_freesurfer(
     mask = Path(mask)
     lut_path = Path(lut_path)
     subject_dir = Path(subject_dir)
+    if arm6_atlas is not None:
+        arm6_atlas = Path(arm6_atlas)
     
     # Validate inputs
     for path, name in [(t1w_image, "T1w image"), (segmentation, "segmentation"), 
@@ -360,6 +367,35 @@ def postprocess_for_freesurfer(
     LOGGER.info("Computing segmentation volume statistics...")
     seg_voxvol = np.prod(conformed_t1w.header.get_zooms())
     check_volume(seg_resampled, seg_voxvol)
+    
+    # Step 6: Optionally conform and save ARM6 atlas for claustrum fix
+    if arm6_atlas is not None:
+        LOGGER.info("=" * 80)
+        LOGGER.info("Step 6: Resampling ARM6 atlas to conformed space")
+        LOGGER.info("=" * 80)
+        if not arm6_atlas.exists():
+            LOGGER.warning(f"ARM6 atlas not found at {arm6_atlas} — skipping claustrum prep")
+        else:
+            arm6_img = nib.load(arm6_atlas)
+            LOGGER.info(f"Resampling ARM6 atlas: {arm6_atlas.name} → aparc.ARM6atlas+aseg.orig.mgz")
+            arm6_resampled = map_image(
+                arm6_img,
+                out_affine=target_affine,
+                out_shape=target_shape,
+                order=0,  # Nearest neighbor for label image
+                dtype=np.int16,
+            )
+            # Keep ARM6 labels inside the conformed brain mask, matching aseg behavior.
+            arm6_resampled[mask_resampled == 0] = 0
+            arm6_out = mri_dir / "aparc.ARM6atlas+aseg.orig.mgz"
+            data_ultils.save_image(
+                conformed_t1w_reloaded.header.copy(),
+                target_affine,
+                arm6_resampled.astype(np.int16),
+                arm6_out,
+                dtype=np.int16,
+            )
+            LOGGER.info(f"Saved ARM6 atlas: {arm6_out.name}")
     
     LOGGER.info("=" * 80)
     LOGGER.info("Post-processing completed successfully!")

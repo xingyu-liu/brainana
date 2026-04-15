@@ -62,18 +62,7 @@ Brainana can synthesize a single anatomical reference.
   the rest of the anatomical pipeline.
 
 
-2.2 Reorient
-~~~~~~~~~~~~
-
-- **Purpose:** Standardize image orientation (e.g. RAS or template
-  orientation) before conform and registration.
-- **Method:** AFNI ``3dresample -orient`` is used to reorient each
-  image to a target orientation, or to match the orientation of a
-  target file when one is provided. This step is configurable and
-  can be disabled in the pipeline configuration.
-
-
-2.3 Conform to template
+2.2 Conform to template
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Purpose:** Align the brain to template space (orientation and
@@ -95,7 +84,7 @@ Brainana can synthesize a single anatomical reference.
   scanner space to template space.
 
 
-2.4 Skull stripping and segmentation
+2.3 Skull stripping and segmentation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Purpose:** Provide brain mask and atlas/tissue segmentation for
@@ -112,7 +101,7 @@ Brainana can synthesize a single anatomical reference.
   processing (when enabled) and surface reconstruction.
 
 
-2.5 Bias field correction (anatomical)
+2.4 Bias field correction (anatomical)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Purpose:** Correct intensity non-uniformity (INU) in anatomical
@@ -128,7 +117,7 @@ Brainana can synthesize a single anatomical reference.
   used for registration.
 
 
-2.6 Registration to template (anatomical)
+2.5 Registration to template (anatomical)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Purpose:** Map anatomical data to a standard template space (for
@@ -149,7 +138,7 @@ Brainana can synthesize a single anatomical reference.
   anatomical and template spaces.
 
 
-2.7 T2w to T1w coregistration
+2.6 T2w to T1w coregistration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When T2w data are present, Brainana can coregister T2w to the
@@ -162,7 +151,7 @@ preprocessed T1w:
   processing and surface reconstruction.
 
 
-2.8 Surface reconstruction
+2.7 Surface reconstruction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Surface reconstruction is an optional and resource-intensive step.
@@ -205,7 +194,7 @@ with associated transforms and QC outputs.
 
 The workflow is conceptually split into:
 
-- **Time-series steps:** Slice timing (if available) → reorient →
+- **Time-series steps:** Slice timing (if available) →
   motion correction and temporal mean → despiking → optional
   within-session coregistration and session-averaged temporal mean.
 - **Compute on temporal mean:** Bias correction → conform → brain mask
@@ -232,15 +221,7 @@ applies slice timing correction.
   when slice timing metadata are missing.
 
 
-3.2 Reorient
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-- **Method:** Same approach as anatomical reorient, using AFNI
-  ``3dresample -orient`` to match a desired orientation or target
-  image before motion correction and subsequent steps.
-
-
-3.3 Motion correction
+3.2 Motion correction
 ~~~~~~~~~~~~~~~~~~~~~
 
 - **Purpose:** Realign BOLD volumes to correct for subject motion.
@@ -255,7 +236,7 @@ applies slice timing correction.
   generated.
 
 
-3.4 Despiking
+3.3 Despiking
 ~~~~~~~~~~~~~
 
 - **Purpose:** Reduce the impact of extreme timepoints ("spikes") in
@@ -266,7 +247,7 @@ applies slice timing correction.
   fewer volumes.
 
 
-3.5 Within-session coregistration
+3.4 Within-session coregistration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When multiple BOLD runs exist per session, an optional within-session
