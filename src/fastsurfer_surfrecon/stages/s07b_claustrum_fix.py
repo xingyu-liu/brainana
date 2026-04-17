@@ -21,8 +21,11 @@ from .base import PipelineStage
 
 logger = logging.getLogger(__name__)
 
-# FreeSurfer's normalized WM control-point intensity (target of mri_normalize -mprage)
-WM_NORMALIZED_INTENSITY = 95
+# Adaptive claustrum fill target defaults/guards
+TARGET_OFFSET = 10
+TARGET_FALLBACK = 96
+TARGET_MIN = 80
+TARGET_MAX = 110
 
 # ARM6 atlas label IDs accepted for left/right side mask seeding:
 # - Claustrum (504/1504)
@@ -149,7 +152,7 @@ class ClaustrumFix(PipelineStage):
         return final_mask
 
     def _apply_fix(self, brain_f, claustrum_mask: np.ndarray) -> None:
-        """Back up brain.finalsurfs.mgz and fill claustrum voxels with WM intensity."""
+        """Back up brain.finalsurfs.mgz and fill claustrum voxels using an adaptive target."""
         backup_f = self.sd.mri("brain.finalsurfs_orig.mgz")
         shutil.copy(brain_f, backup_f)
         logger.info(f"Backed up brain.finalsurfs.mgz → {backup_f.name}")
@@ -161,15 +164,23 @@ class ClaustrumFix(PipelineStage):
             if side == 0:
                 continue
             side_mask = claustrum_mask == side
-            replace_mask = side_mask & (brain_data < WM_NORMALIZED_INTENSITY)
+            side_values = brain_data[side_mask]
+            side_mean = float(np.mean(side_values)) if side_values.size > 0 else np.nan
+
+            if np.isfinite(side_mean):
+                target = float(np.clip(side_mean + TARGET_OFFSET, TARGET_MIN, TARGET_MAX))
+            else:
+                target = float(TARGET_FALLBACK)
+
+            replace_mask = side_mask & (brain_data < target)
             n_side = int(np.sum(side_mask))
             n_replace = int(np.sum(replace_mask))
             hemi = "lh" if side == 1 else "rh"
             logger.info(
                 f"  Filling {hemi} claustrum: {n_replace}/{n_side} voxels "
-                f"→ {WM_NORMALIZED_INTENSITY} (only where intensity < {WM_NORMALIZED_INTENSITY})"
+                f"(mean={side_mean:.2f}, target={target:.2f} "
             )
-            brain_data[replace_mask] = WM_NORMALIZED_INTENSITY
+            brain_data[replace_mask] = target
 
         nib.save(
             nib.MGHImage(brain_data, brain_reader.affine, brain_reader.header),

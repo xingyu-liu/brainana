@@ -58,12 +58,13 @@ from fastsurfer_surfrecon.scripts.stage_utils import (
 # ============================================================================
 # Configuration - Edit these variables as needed
 # ============================================================================
+RUN_STEPS = ['s07b']
 # RUN_STEPS = [f's{i:02d}' for i in range(1, 8)] + ['s07b']
 # RUN_STEPS = ['s11']
-RUN_STEPS = ['s14'] + [f's{i:02d}' for i in range(16, 23)]
+# RUN_STEPS = ['s14'] + [f's{i:02d}' for i in range(16, 23)]
 
 # Test subject
-subject_dir = Path("/home/star/github/atlas/public/macaque_template_surfaces/sub-MEBRAINS")
+subject_dir = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032109")
 subjects_dir = subject_dir.parent
 subject_id = subject_dir.name
 
