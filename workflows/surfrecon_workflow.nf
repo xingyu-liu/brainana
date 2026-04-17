@@ -4,7 +4,7 @@
  * Generates cortical surfaces and measurements from anatomical data.
  * Requires skullstripping and optionally uses T1wT2w combined images.
  *
- * Inputs from ANAT_WF: anat_for_surf_recon, anat_skull_seg, anat_skull_mask
+ * Inputs from ANAT_WF: anat_for_surf_recon, anat_skull_seg, anat_skull_mask, anat_arm6_atlas
  */
 
 nextflow.enable.dsl=2
@@ -23,6 +23,7 @@ workflow SURF_RECON_WF {
     anat_for_surf_recon    // [sub, ses, anat_file, bids_name]
     anat_skull_seg         // [sub, ses, seg_file]
     anat_skull_mask        // [sub, ses, mask_file]
+    anat_arm6_atlas        // [sub, ses, arm6_atlas_file]
     gpu_queue
 
     main:
@@ -72,21 +73,29 @@ workflow SURF_RECON_WF {
                 [sub, ses, anat_file, bids_name, seg_file, final_mask]
             }
 
-        // Step 3: Join with session count
+        // Step 3: Join with optional ARM6 atlas
+        def surf_recon_input_with_arm6 = surf_recon_input_with_mask
+            .join(anat_arm6_atlas.map { sub, ses, arm6_file -> [sub, ses, arm6_file] }, by: [0, 1], remainder: true)
+            .map { sub, ses, anat_file, bids_name, seg_file, mask_file, arm6_file ->
+                def final_arm6 = arm6_file ?: file("${workDir}/dummy_arm6_atlas.dummy").tap { it.toFile().text = "" }
+                [sub, ses, anat_file, bids_name, seg_file, mask_file, final_arm6]
+            }
+
+        // Step 4: Join with session count
         def anat_sessions_clean = anat_sessions_per_subject
             .unique { sub, session_count -> sub }
             .map { sub, session_count -> [sub, session_count] }
 
-        def surf_recon_input = surf_recon_input_with_mask
+        def surf_recon_input = surf_recon_input_with_arm6
             .combine(anat_sessions_clean, by: 0)
-            .map { sub, ses, anat_file, bids_name, seg_file, mask_file, session_count ->
+            .map { sub, ses, anat_file, bids_name, seg_file, mask_file, arm6_atlas_file, session_count ->
                 def count = session_count instanceof List ? session_count[0] : session_count
-                [sub, ses, anat_file, bids_name, seg_file, mask_file, count]
+                [sub, ses, anat_file, bids_name, seg_file, mask_file, arm6_atlas_file, count]
             }
 
         ANAT_SURFACE_RECONSTRUCTION(surf_recon_input, config_file)
 
-        // Step 4: Prepare QC input channels
+        // Step 5: Prepare QC input channels
         def surf_qc_bids_lookup = anat_for_surf_recon
             .map { sub, ses, anat_file, bids_name ->
                 [sub, ses, bids_name]

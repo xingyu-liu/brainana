@@ -567,6 +567,19 @@ workflow ANAT_WF {
         ANAT_BACKPROJECT_ATLASES_TO_SCANNER(scanner_backproject_input, config_file)
         anat_backproject_atlases_scanner_out = ANAT_BACKPROJECT_ATLASES_TO_SCANNER.out.output
     }
+
+    // ARM6 atlas extraction for surface reconstruction
+    // Input: anat_backproject_atlases_out [sub, ses, atlas_files, bids_name]
+    // Output: anat_arm6_atlas [sub, ses, arm6_atlas_file]
+    def anat_arm6_atlas = Channel.empty()
+    if (registration_enabled) {
+        anat_arm6_atlas = anat_backproject_atlases_out
+            .map { sub, ses, atlas_files, bids_name ->
+                def atlas_list = atlas_files instanceof List ? atlas_files : (atlas_files ? [atlas_files] : [])
+                def arm6_atlas = atlas_list.find { atlas_file -> atlas_file.getName().startsWith('atlas-ARM6') }
+                [sub, ses, arm6_atlas]
+            }
+    }
     
     // ============================================
     // QUALITY CONTROL
@@ -1146,7 +1159,7 @@ workflow ANAT_WF {
     // SURFACE RECONSTRUCTION
     // ============================================
     def anat_for_surf_recon = use_t1wt2wcombined ? anat_after_t1wt2wcombined : anat_after_bias
-    SURF_RECON_WF(anat_for_surf_recon, anat_skull_seg, anat_skull_mask, gpu_queue)
+    SURF_RECON_WF(anat_for_surf_recon, anat_skull_seg, anat_skull_mask, anat_arm6_atlas, gpu_queue)
 
     // ============================================
     // COLLECT QC CHANNELS

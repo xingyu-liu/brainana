@@ -1,12 +1,4 @@
 #!/bin/bash
-#
-# Test script for Nextflow pipeline
-# Runs without Docker for local development testing
-#
-# Usage:
-#   bash tests/test_nextflow.sh           # Resume from previous run (default)
-#   bash tests/test_nextflow.sh --no-resume  # Start fresh, reprocess all steps
-#
 
 set -e  # Exit on error
 
@@ -27,41 +19,9 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Test parameters
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
 output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v4
-# bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled"
-# output_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_v6"
-# bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_2pass"
-# output_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_2pass_nextflow"
-# bids_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_multiple"
-# output_dir="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_multiple_v5"
-# bids_dir="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_baby31"
-# output_dir="/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/preproc/bids_baby31_nextflow"
-# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_taskval
-# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_taskval
-
-# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_UNC_batch1
-# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_UNC_batch1
-# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/MEBRAINS/bids
-# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/MEBRAINS/
-# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/ElectrodeLocalization/bids
-# output_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/ElectrodeLocalization/bids_preproc
-# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/site-newcastle
-# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-newcastle
-
 config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
-# config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_easy.yaml"
-# config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_UNC.yaml"
-# config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_MEBRAINS.yaml"
-# config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_common.yaml"
-# config_f=/home/star/github/brainana/src/nhp_mri_prep/config/defaults.yaml
-
-# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_pet_cropped
-# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_pet_cropped_ss_ants_affine
-# config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_pet_ss_ants_affine.yaml
-
 
 working_dir=${output_dir}_wd
-
-# Optional config file. When empty, Nextflow uses the default config.
 
 # Validate paths
 echo "============================================"

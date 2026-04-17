@@ -509,7 +509,7 @@ process ANAT_SURFACE_RECONSTRUCTION {
         }
     
     input:
-    tuple val(subject_id), val(session_id), path(t1w_file), val(bids_name), path(segmentation_file), path(brain_mask), val(session_count)
+    tuple val(subject_id), val(session_id), path(t1w_file), val(bids_name), path(segmentation_file), path(brain_mask), path(arm6_atlas_file), val(session_count)
     path config_file
     
     output:
@@ -559,12 +559,18 @@ brain_mask_path = None
 if '${brain_mask}' and Path('${brain_mask}').exists() and Path('${brain_mask}').stat().st_size > 0:
     brain_mask_path = Path('${brain_mask}')
 
+# Get ARM6 atlas if provided (check if file exists and is not empty)
+arm6_atlas_path = None
+if '${arm6_atlas_file}' and Path('${arm6_atlas_file}').exists() and Path('${arm6_atlas_file}').stat().st_size > 0:
+    arm6_atlas_path = Path('${arm6_atlas_file}')
+
 # Run surface reconstruction
 result = anat_surface_reconstruction(
     input_obj,
     t1w_file=Path('${t1w_file}'),
     segmentation_file=Path('${segmentation_file}'),
-    brain_mask=brain_mask_path
+    brain_mask=brain_mask_path,
+    arm6_atlas=arm6_atlas_path
 )
 
 # Copy directory to work directory root so Nextflow can find it
