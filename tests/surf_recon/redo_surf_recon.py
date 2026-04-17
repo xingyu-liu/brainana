@@ -116,6 +116,8 @@ if rerun_all:
             sub = sub_dir.name
             fs_sub_dir = fastsurfer_dir / sub
             try:
+                # "already_reran" means we have both a complete current output and
+                # an archival backup (<sub>_todelete), so this subject was processed before.
                 already_reran = fs_sub_dir.exists() and has_subject_backup(fs_sub_dir)
                 if already_reran and not overwrite:
                     print(f"{site_name} / {sub}: skip backup, rerun output and backup already exist")
@@ -123,13 +125,12 @@ if rerun_all:
                     continue
 
                 if already_reran and overwrite:
-                    backup_dir = fs_sub_dir.parent / f"{fs_sub_dir.name}_todelete"
-                    if dry_run:
-                        print(f"{site_name} / {sub}: DRY_RUN delete existing backup {backup_dir}")
-                    elif backup_dir.exists():
-                        shutil.rmtree(backup_dir)
-                        print(f"{site_name} / {sub}: Deleted existing backup {backup_dir} for overwrite")
+                    # Preserve existing backup history in overwrite mode.
+                    print(f"{site_name} / {sub}: overwrite=True, keeping existing backup {sub}_todelete")
+                    stats["backup_preserved_overwrite"] += 1
+                    continue
 
+                # For subjects without a prior backup, create one exactly once.
                 action = backup_subject_dir(fs_sub_dir, dry_run)
                 if action is None:
                     stats["backup_not_found"] += 1
@@ -149,7 +150,8 @@ else:
 # %%
 # 2. run surface reconstruction and regenerate QC images
 print("Step 2: Running surface reconstruction and QC...")
-for site_dir in site_list:
+# Iterate in reverse order to keep behavior consistent with earlier rerun batches.
+for site_dir in site_list[::-1]:
     site_name = site_dir.name
     print(f"Processing {site_name}...")
 
@@ -177,11 +179,12 @@ for site_dir in site_list:
         stats["site_missing_fastsurfer"] += 1
         continue
 
-    for sub_dir in list_subjects(site_dir):
+    for sub_dir in list_subjects(site_dir)[::-1]:
         sub = sub_dir.name
         fs_sub_dir = fastsurfer_dir / sub
         print(f"Processing {site_name} / {sub}...")
 
+        # wmparc.mgz is used as the marker for a completed FastSurfer subject run.
         wmparc_file = fs_sub_dir / "mri" / "wmparc.mgz"
         output_complete = wmparc_file.exists()
         already_reran = output_complete and has_subject_backup(fs_sub_dir)
@@ -190,9 +193,17 @@ for site_dir in site_list:
             stats["skipped_already_reran"] += 1
             continue
         if already_reran and overwrite:
-            print("  --> output and backup already exist, overwrite=True so forcing rerun")
+            print("  --> output and backup already exist, overwrite=True so forcing fresh rerun")
             stats["overwrite_runs"] += 1
+            # Overwrite mode refreshes ONLY current output; backup archive is preserved.
+            if dry_run:
+                print(f"  --> DRY_RUN would remove current fastsurfer dir: {fs_sub_dir}")
+            elif fs_sub_dir.exists():
+                print(f"  --> removing current fastsurfer dir before rerun: {fs_sub_dir}")
+                shutil.rmtree(fs_sub_dir)
+            stats["removed_existing_for_overwrite"] += 1
 
+        # Clean up partial runs so reconstruction starts from a clean directory.
         if fs_sub_dir.exists() and not output_complete:
             if dry_run:
                 print(f"  --> incomplete fastsurfer dir (missing wmparc.mgz), would remove: {fs_sub_dir}")
@@ -206,6 +217,7 @@ for site_dir in site_list:
             stats["skipped_existing_output"] += 1
             continue
 
+        # Enforce exactly one valid input per required artifact before launching recon.
         seg_file, seg_status = pick_single(sub_dir, "**/anat/*_desc-brain_atlasARM2.nii.gz", required=True)
         mask_file, mask_status = pick_single(sub_dir, "**/anat/*_desc-brain_mask.nii.gz", required=True)
         anat_file, anat_status = pick_single(sub_dir, "**/anat/*_desc-preproc_T1w.nii.gz", required=True)
@@ -230,6 +242,7 @@ for site_dir in site_list:
             stats["dry_run_candidates"] += 1
             continue
 
+        # Run FastSurfer reconstruction first; QC generation depends on its outputs.
         try:
             anat_surface_reconstruction(
                 input=StepInput(
@@ -293,6 +306,7 @@ for site_dir in site_list:
             stats["qc_errors"] += 1
             continue
 
+        # Remove temporary surface/volume QC workspace to keep subject directory tidy.
         shutil.rmtree(figures_dir / "volsurf_work", ignore_errors=True)
         stats["processed_ok"] += 1
 

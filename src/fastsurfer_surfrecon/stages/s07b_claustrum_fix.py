@@ -2,7 +2,7 @@
 Stage 07b: Claustrum Fix
 
 Patches brain.finalsurfs.mgz by filling claustrum voxels with the normalized
-WM intensity value (110). This prevents the claustrum region from creating
+WM intensity value. This prevents the claustrum region from creating
 spurious surface topology during tessellation.
 
 Only runs when ``mri/aparc.ARM6atlas+aseg.orig.mgz`` is present in the subject
@@ -22,14 +22,30 @@ from .base import PipelineStage
 logger = logging.getLogger(__name__)
 
 # FreeSurfer's normalized WM control-point intensity (target of mri_normalize -mprage)
-WM_NORMALIZED_INTENSITY = 110
+WM_NORMALIZED_INTENSITY = 95
 
-# ARM6 atlas label IDs for left/right claustrum, mapped to side index {1=lh, 2=rh}
-ARM6_CLAUSTRUM = {504: 1, 1504: 2}
+# ARM6 atlas label IDs accepted for left/right side mask seeding:
+# - Claustrum (504/1504)
+# - caudate_head (546/1546)
+# - Putamen (548/1548)
+# - Accumbens (552/1552)
+# - septum_diagonal_band (568/1568)
+ARM6_CLAUSTRUM = {504: 1, 1504: 2,
+                  546: 1, 1546: 2,
+                  548: 1, 1548: 2,
+                  552: 1, 1552: 2,
+                  568: 1, 1568: 2}
 
-# Primary-seg label IDs for left/right claustrum (ARM2 atlas; no-op for other atlases)
-SEG_CLAUSTRUM = {502: 1, 1502: 2}
+# Primary-seg label IDs accepted when intersecting with ARM6 target regions:
+# - Claustrum (502/1502)
+# - BG / basal_ganglia (542/1542)
+# - diagonal_subpallium (561/1561)
+# - preoptic_complex (569/1569)
 
+SEG_TARGET = {502: 1, 1502: 2, 
+              542: 1, 1542: 2,
+              561: 1, 1561: 2,
+              569: 1, 1569: 2}
 
 class ClaustrumFix(PipelineStage):
     """
@@ -45,7 +61,7 @@ class ClaustrumFix(PipelineStage):
     """
 
     name = "claustrum_fix"
-    description = "Claustrum fix (fill claustrum with WM intensity in brain.finalsurfs)"
+    description = "Claustrum fix (fill claustrum with WM intensity in brain.finalsurfs.mgz)"
 
     # ------------------------------------------------------------------
     # Skip / disable logic
@@ -71,7 +87,7 @@ class ClaustrumFix(PipelineStage):
         for path, label in [
             (arm6_f, "ARM6 atlas"),
             (seg_f, "primary segmentation"),
-            (brain_f, "brain.finalsurfs"),
+            (brain_f, "brain.finalsurfs.mgz"),
         ]:
             if not path.exists():
                 raise FileNotFoundError(f"{label} not found: {path}")
@@ -81,7 +97,7 @@ class ClaustrumFix(PipelineStage):
         n_voxels = int(np.sum(claustrum_mask > 0))
         if n_voxels == 0:
             logger.warning(
-                "Claustrum mask is empty — no claustrum labels found in the "
+                "Claustrum mask is empty — no matching labels found in the "
                 "intersection of ARM6 atlas and primary segmentation. "
                 "brain.finalsurfs.mgz will not be modified."
             )
@@ -119,13 +135,13 @@ class ClaustrumFix(PipelineStage):
             arm6_mask_dilated[dilated] = side
         arm6_mask = arm6_mask_dilated
 
-        # Build primary-seg claustrum mask (no dilation needed)
+        # Build primary-seg target mask (no dilation needed)
         seg_mask = np.zeros_like(seg_data, dtype=np.int16)
-        for label_id, side in SEG_CLAUSTRUM.items():
+        for label_id, side in SEG_TARGET.items():
             seg_mask[seg_data == label_id] = side
 
         # Intersect per side
-        sides = set(ARM6_CLAUSTRUM.values()) & set(SEG_CLAUSTRUM.values())
+        sides = set(ARM6_CLAUSTRUM.values()) & set(SEG_TARGET.values())
         final_mask = np.zeros_like(arm6_mask, dtype=np.int16)
         for side in sides:
             final_mask[(arm6_mask == side) & (seg_mask == side)] = side
@@ -144,13 +160,19 @@ class ClaustrumFix(PipelineStage):
         for side in np.unique(claustrum_mask):
             if side == 0:
                 continue
-            n = int(np.sum(claustrum_mask == side))
+            side_mask = claustrum_mask == side
+            replace_mask = side_mask & (brain_data < WM_NORMALIZED_INTENSITY)
+            n_side = int(np.sum(side_mask))
+            n_replace = int(np.sum(replace_mask))
             hemi = "lh" if side == 1 else "rh"
-            logger.info(f"  Filling {hemi} claustrum: {n} voxels → {WM_NORMALIZED_INTENSITY}")
-            brain_data[claustrum_mask == side] = WM_NORMALIZED_INTENSITY
+            logger.info(
+                f"  Filling {hemi} claustrum: {n_replace}/{n_side} voxels "
+                f"→ {WM_NORMALIZED_INTENSITY} (only where intensity < {WM_NORMALIZED_INTENSITY})"
+            )
+            brain_data[replace_mask] = WM_NORMALIZED_INTENSITY
 
         nib.save(
             nib.MGHImage(brain_data, brain_reader.affine, brain_reader.header),
             brain_f,
         )
-        logger.info(f"Saved patched brain.finalsurfs.mgz")
+        logger.info("Saved patched brain.finalsurfs.mgz")

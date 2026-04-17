@@ -441,6 +441,15 @@ def segmentation(
     )
     brain_mask = brain_mask.astype(np.uint8)
 
+    # Ensure segmentation labels remain inside the morphology-refined brain mask.
+    seg_nonzero_before_mask = int(np.count_nonzero(pred_data))
+    pred_data[brain_mask == 0] = 0
+    seg_nonzero_after_mask = int(np.count_nonzero(pred_data))
+    log.info(
+        "Applied morphology-refined brain mask to segmentation "
+        f"(removed {seg_nonzero_before_mask - seg_nonzero_after_mask} labeled voxels)"
+    )
+
     # Hemisphere mask creation and saving (multi-class only, requires LUT)
     hemi_mask = None
     if create_hemi_mask:

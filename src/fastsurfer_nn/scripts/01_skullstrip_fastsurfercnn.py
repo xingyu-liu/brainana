@@ -18,7 +18,7 @@ from fastsurfer_nn.inference.segmentation import run_segmentation
 # # # anat 
 # input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/anat"
 # input_image = f"{input_dir}/anat_marge_upright.nii.gz"
-input_image = "/home/star/github/atlas/macaque/atlas/balsa/MacaqueYerkes19_v1.2_Vj_976nz/MNINonLinear/MacaqueYerkes19_v1.2_AverageT1wDividedByT2w.nii.gz"
+input_image = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032109_enhanceWM_v2/others/T1w.nii.gz"
 
 # surfrecon_dir = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/fastsurfer_nn_training/test_surfrecon'
 # input_image = f'{surfrecon_dir}/NMT2Sym_res-05_T1w.nii.gz'

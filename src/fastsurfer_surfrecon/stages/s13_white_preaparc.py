@@ -7,8 +7,7 @@ Creates white.preaparc surface for parcellation mapping.
 import logging
 
 from .base import HemisphereStage
-from ..wrappers.base import run_recon_all
-from ..wrappers.mris import mris_place_surface
+from ..wrappers.mris import mris_autodet_gwstats, mris_place_surface
 
 logger = logging.getLogger(__name__)
 
@@ -38,17 +37,18 @@ class WhitePreaparc(HemisphereStage):
         autodet_stats = self.sdir / f"autodet.gw.stats.{self.hemi}.dat"
         if not autodet_stats.exists():
             logger.info(f"Auto-detecting GW stats for {self.hemi}...")
-            flags = []
-            if self.config.hires:
-                flags.append("-hires")
-            run_recon_all(
-                subject=self.config.subject_id,
-                hemi=self.hemi,
-                steps=["-autodetgwstats"],
-                flags=flags,
-                threads=self.threads,
+            # When claustrum fix runs, stats should be computed from the pre-fix
+            # intensity volume while placement still uses the fixed volume.
+            stats_input_vol = self.sd.mri("brain.finalsurfs_orig.mgz")
+            if not stats_input_vol.exists():
+                stats_input_vol = self.sd.mri("brain.finalsurfs.mgz")
+            logger.info(f"Using stats input volume: {stats_input_vol.name}")
+            mris_autodet_gwstats(
+                output_stats=autodet_stats,
+                input_vol=stats_input_vol,
+                wm_vol=self.sd.mri("wm.mgz"),
+                surface=self.hemi_path("orig.premesh"),
                 log_file=self.config.log_file,
-                subjects_dir=self.config.subjects_dir,
             )
         
         # Step 2: Create white.preaparc

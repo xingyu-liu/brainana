@@ -111,6 +111,70 @@ def _extract_atlas_name_from_lut(lut_path: Path) -> str:
     return atlas_name
 
 
+def _enhance_arm2_wm_with_arm6(
+    arm2_data: np.ndarray,
+    arm6_data: np.ndarray,
+    wm_keys: tuple[int, ...],
+) -> tuple[np.ndarray, dict[int, int]]:
+    """
+    Enhance ARM2 WM labels from ARM6 using constrained fill behavior.
+
+    ARM6 WM voxels are eligible only if they have at least one 26-neighbor
+    voxel in ARM2 labeled 16 or 1016. Eligible voxels are then filled into
+    ARM2 only where ARM2 does not already have a tracked WM key.
+
+    Parameters
+    ----------
+    arm2_data : np.ndarray
+        Conformed ARM2 segmentation.
+    arm6_data : np.ndarray
+        Conformed ARM6 segmentation.
+    wm_keys : tuple[int, ...]
+        WM label keys to enhance.
+
+    Returns
+    -------
+    tuple[np.ndarray, dict[int, int]]
+        Enhanced ARM2 segmentation and per-label added voxel counts.
+    """
+    if arm2_data.shape != arm6_data.shape:
+        raise ValueError(
+            f"ARM2/ARM6 shape mismatch for WM enhancement: "
+            f"{arm2_data.shape} vs {arm6_data.shape}"
+        )
+
+    enhanced = arm2_data.copy().astype(np.int16, copy=False)
+    added_voxels: dict[int, int] = {}
+
+    # Build a 26-neighbor gate from certain ARM2 labels
+    arm2_neighbor_labels = (16, 1016, 50, 1050)  # 
+    neighbor_seed = np.isin(enhanced, arm2_neighbor_labels)
+    neighbor_ok = np.zeros_like(neighbor_seed, dtype=bool)
+    padded = np.pad(neighbor_seed, 1, mode="constant", constant_values=False)
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            for dz in (-1, 0, 1):
+                if dx == 0 and dy == 0 and dz == 0:
+                    continue
+                neighbor_ok |= padded[
+                    1 + dx : 1 + dx + enhanced.shape[0],
+                    1 + dy : 1 + dy + enhanced.shape[1],
+                    1 + dz : 1 + dz + enhanced.shape[2],
+                ]
+
+    # Preserve any existing ARM2 WM assignment. ARM6 can only fill voxels where
+    # ARM2 has no WM label from the tracked WM keys.
+    arm2_has_any_wm = np.isin(enhanced, wm_keys)
+
+    for wm_key in wm_keys:
+        arm6_mask = arm6_data == wm_key
+        fill_mask = arm6_mask & neighbor_ok & (~arm2_has_any_wm)
+        added_voxels[wm_key] = int(np.count_nonzero(fill_mask))
+        enhanced[fill_mask] = wm_key
+
+    return enhanced, added_voxels
+
+
 def postprocess_for_freesurfer(
     t1w_image: Path | str,
     segmentation: Path | str,
@@ -180,7 +244,7 @@ def postprocess_for_freesurfer(
     atlas_name = _extract_atlas_name_from_lut(lut_path)
     LOGGER.info(f"Detected atlas: {atlas_name}")
     
-    # Create FreeSurfer directory structure
+    # 1. Create FreeSurfer directory structure
     LOGGER.info("=" * 80)
     LOGGER.info("Step 1: Creating FreeSurfer directory structure")
     LOGGER.info("=" * 80)
@@ -189,7 +253,7 @@ def postprocess_for_freesurfer(
     mri_dir.mkdir(parents=True, exist_ok=True)
     LOGGER.info(f"Subject directory: {subject_dir}")
     
-    # Step 2: Conform T1w image (defines target space)
+    # 1: Conform T1w image (defines target space)
     LOGGER.info("=" * 80)
     LOGGER.info("Step 2: Conforming T1w image to FreeSurfer standard space")
     LOGGER.info("=" * 80)
@@ -234,9 +298,7 @@ def postprocess_for_freesurfer(
     LOGGER.info(f"DIAGNOSTIC: After reload - conformed_t1w_reloaded.shape = {conformed_t1w_reloaded.shape}")
     reloaded_data = np.asanyarray(conformed_t1w_reloaded.dataobj)
     LOGGER.info(f"DIAGNOSTIC: After reload - reloaded_data.shape = {reloaded_data.shape}")
-    
     # Get target affine and shape from conformed T1w (for resampling other images)
-    # Use the data shape, not the image object shape, to ensure we get the actual dimensions
     target_affine = conformed_t1w_reloaded.affine
     target_shape = reloaded_data.shape[:3]  # Use actual data shape, not image.shape
     LOGGER.info(f"DIAGNOSTIC: target_shape = {target_shape}")
@@ -252,40 +314,24 @@ def postprocess_for_freesurfer(
         LOGGER.error(error_msg)
         return error_msg
     
-    # Step 3: Create aseg from segmentation (in native space first)
+    # 3: Resample segmentation and mask to conformed space
     LOGGER.info("=" * 80)
-    LOGGER.info("Step 3: Creating aseg from segmentation")
+    LOGGER.info("Step 3: Resampling ARM2 segmentation and mask to conformed space")
     LOGGER.info("=" * 80)
-    
+
     seg_img = nib.load(segmentation)
-    seg_data = np.asarray(seg_img.dataobj).astype(np.int16)
-    
-    # Create aseg in native space
-    aseg_data = rta.reduce_to_aseg(seg_data, lut_path=lut_path, verbose=True)
-    
-    # Apply mask to aseg (in native space)
     mask_img = nib.load(mask)
-    mask_data = np.asarray(mask_img.dataobj).astype(np.uint8)
-    aseg_data[mask_data == 0] = 0
-    
-    # Step 4: Resample segmentation, mask, and aseg to conformed space
-    LOGGER.info("=" * 80)
-    LOGGER.info("Step 4: Resampling images to conformed space")
-    LOGGER.info("=" * 80)
-    
-    # Resample segmentation (use nearest neighbor for labels)
     LOGGER.info("Resampling segmentation to conformed space...")
     LOGGER.info(f"DIAGNOSTIC: seg_img.shape = {seg_img.shape}, target_shape = {target_shape}")
-    seg_resampled = map_image(
+    arm2_resampled = map_image(
         seg_img,
         out_affine=target_affine,
         out_shape=target_shape,
         order=0,  # Nearest neighbor for labels
         dtype=np.int16
     )
-    LOGGER.info(f"DIAGNOSTIC: seg_resampled.shape = {seg_resampled.shape}")
-    
-    # Resample mask (use nearest neighbor)
+    LOGGER.info(f"DIAGNOSTIC: arm2_resampled.shape = {arm2_resampled.shape}")
+
     LOGGER.info("Resampling mask to conformed space...")
     LOGGER.info(f"DIAGNOSTIC: mask_img.shape = {mask_img.shape}, target_shape = {target_shape}")
     mask_resampled = map_image(
@@ -296,26 +342,62 @@ def postprocess_for_freesurfer(
         dtype=np.uint8
     )
     LOGGER.info(f"DIAGNOSTIC: mask_resampled.shape = {mask_resampled.shape}")
-    
-    # Resample aseg (use nearest neighbor)
-    LOGGER.info("Resampling aseg to conformed space...")
-    aseg_img_native = nib.nifti1.Nifti1Image(aseg_data, mask_img.affine, mask_img.header)
-    LOGGER.info(f"DIAGNOSTIC: aseg_data.shape = {aseg_data.shape}, target_shape = {target_shape}")
-    aseg_resampled = map_image(
-        aseg_img_native,
-        out_affine=target_affine,
-        out_shape=target_shape,
-        order=0,  # Nearest neighbor for labels
-        dtype=np.int16
-    )
-    LOGGER.info(f"DIAGNOSTIC: aseg_resampled.shape = {aseg_resampled.shape}")
-    
-    # Apply mask to aseg in conformed space
-    aseg_resampled[mask_resampled == 0] = 0
-    
-    # Step 5: Save all files in FreeSurfer structure
+
+    # Step 4: Optionally resample ARM6 and enhance ARM2 WM labels
     LOGGER.info("=" * 80)
-    LOGGER.info("Step 5: Saving files in FreeSurfer structure")
+    LOGGER.info("Step 4: Optional ARM6 WM enhancement in conformed space")
+    LOGGER.info("=" * 80)
+
+    wm_enhance_keys = (-1, -501, -1001, -1501)
+    arm2_for_output = arm2_resampled.astype(np.int16, copy=False)
+    arm6_resampled: np.ndarray | None = None
+
+    if arm6_atlas is not None:
+        if not arm6_atlas.exists():
+            LOGGER.warning(f"ARM6 atlas not found at {arm6_atlas} — skipping ARM6 WM enhancement")
+        else:
+            arm6_img = nib.load(arm6_atlas)
+            LOGGER.info(f"Resampling ARM6 atlas: {arm6_atlas.name} → conformed space")
+            arm6_resampled = map_image(
+                arm6_img,
+                out_affine=target_affine,
+                out_shape=target_shape,
+                order=0,  # Nearest neighbor for label image
+                dtype=np.int16,
+            )
+            arm6_resampled[mask_resampled == 0] = 0
+
+            arm2_backup_path = mri_dir / f"aparc.{atlas_name}atlas+aseg.orig.pre_arm6_wm_enhance.mgz"
+            data_ultils.save_image(
+                conformed_t1w_reloaded.header.copy(),
+                target_affine,
+                arm2_for_output.astype(np.int16),
+                arm2_backup_path,
+                dtype=np.int16,
+            )
+            LOGGER.info(f"Saved ARM2 backup before WM enhancement: {arm2_backup_path.name}")
+
+            arm2_for_output, added_voxels = _enhance_arm2_wm_with_arm6(
+                arm2_for_output,
+                arm6_resampled,
+                wm_enhance_keys,
+            )
+            for wm_key, added_count in added_voxels.items():
+                LOGGER.info(f"WM enhancement key {wm_key}: added {added_count} voxels from ARM6 union")
+
+    # Enforce brain mask after optional enhancement
+    arm2_for_output[mask_resampled == 0] = 0
+
+    # Step 5: Create aseg from enhanced conformed ARM2
+    LOGGER.info("=" * 80)
+    LOGGER.info("Step 5: Creating aseg from enhanced conformed ARM2")
+    LOGGER.info("=" * 80)
+    aseg_resampled = rta.reduce_to_aseg(arm2_for_output, lut_path=lut_path, verbose=True)
+    aseg_resampled[mask_resampled == 0] = 0
+
+    # Step 6: Save all files in FreeSurfer structure
+    LOGGER.info("=" * 80)
+    LOGGER.info("Step 6: Saving files in FreeSurfer structure")
     LOGGER.info("=" * 80)
     
     # Save segmentation (both naming conventions)
@@ -323,12 +405,12 @@ def postprocess_for_freesurfer(
     seg_file_atlas = mri_dir / f"aparc.{atlas_name}atlas+aseg.orig.mgz"
     
     # Use reloaded conformed image header for consistency
-    aseg_dtype = np.int16 if np.any(seg_resampled < 0) else np.uint8
-    LOGGER.info(f"DIAGNOSTIC: Saving segmentation with shape {seg_resampled.shape}, dtype {aseg_dtype}")
+    aseg_dtype = np.int16 if np.any(arm2_for_output < 0) else np.uint8
+    LOGGER.info(f"DIAGNOSTIC: Saving segmentation with shape {arm2_for_output.shape}, dtype {aseg_dtype}")
     data_ultils.save_image(
         conformed_t1w_reloaded.header.copy(),
         target_affine,
-        seg_resampled.astype(aseg_dtype),
+        arm2_for_output.astype(aseg_dtype),
         seg_file_generic,
         dtype=aseg_dtype
     )
@@ -362,40 +444,23 @@ def postprocess_for_freesurfer(
         dtype=aseg_dtype
     )
     LOGGER.info(f"Saved aseg: {aseg_path.name}")
-    
+
+    # Save ARM6 conformed export for claustrum fix (if available)
+    if arm6_resampled is not None:
+        arm6_out = mri_dir / "aparc.ARM6atlas+aseg.orig.mgz"
+        data_ultils.save_image(
+            conformed_t1w_reloaded.header.copy(),
+            target_affine,
+            arm6_resampled.astype(np.int16),
+            arm6_out,
+            dtype=np.int16,
+        )
+        LOGGER.info(f"Saved ARM6 atlas: {arm6_out.name}")
+
     # Run QC statistics
     LOGGER.info("Computing segmentation volume statistics...")
     seg_voxvol = np.prod(conformed_t1w.header.get_zooms())
-    check_volume(seg_resampled, seg_voxvol)
-    
-    # Step 6: Optionally conform and save ARM6 atlas for claustrum fix
-    if arm6_atlas is not None:
-        LOGGER.info("=" * 80)
-        LOGGER.info("Step 6: Resampling ARM6 atlas to conformed space")
-        LOGGER.info("=" * 80)
-        if not arm6_atlas.exists():
-            LOGGER.warning(f"ARM6 atlas not found at {arm6_atlas} — skipping claustrum prep")
-        else:
-            arm6_img = nib.load(arm6_atlas)
-            LOGGER.info(f"Resampling ARM6 atlas: {arm6_atlas.name} → aparc.ARM6atlas+aseg.orig.mgz")
-            arm6_resampled = map_image(
-                arm6_img,
-                out_affine=target_affine,
-                out_shape=target_shape,
-                order=0,  # Nearest neighbor for label image
-                dtype=np.int16,
-            )
-            # Keep ARM6 labels inside the conformed brain mask, matching aseg behavior.
-            arm6_resampled[mask_resampled == 0] = 0
-            arm6_out = mri_dir / "aparc.ARM6atlas+aseg.orig.mgz"
-            data_ultils.save_image(
-                conformed_t1w_reloaded.header.copy(),
-                target_affine,
-                arm6_resampled.astype(np.int16),
-                arm6_out,
-                dtype=np.int16,
-            )
-            LOGGER.info(f"Saved ARM6 atlas: {arm6_out.name}")
+    check_volume(arm2_for_output, seg_voxvol)
     
     LOGGER.info("=" * 80)
     LOGGER.info("Post-processing completed successfully!")
