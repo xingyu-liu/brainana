@@ -151,7 +151,7 @@ else:
 # 2. run surface reconstruction and regenerate QC images
 print("Step 2: Running surface reconstruction and QC...")
 # Iterate in reverse order to keep behavior consistent with earlier rerun batches.
-for site_dir in site_list[::-1]:
+for site_dir in site_list[::1]:
     site_name = site_dir.name
     print(f"Processing {site_name}...")
 
@@ -179,7 +179,7 @@ for site_dir in site_list[::-1]:
         stats["site_missing_fastsurfer"] += 1
         continue
 
-    for sub_dir in list_subjects(site_dir)[::-1]:
+    for sub_dir in list_subjects(site_dir)[::1]:
         sub = sub_dir.name
         fs_sub_dir = fastsurfer_dir / sub
         print(f"Processing {site_name} / {sub}...")

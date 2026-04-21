@@ -124,7 +124,7 @@ def _run_affine_registration(
     start = time.perf_counter()
     registration.optimize()
     if device.startswith("cuda"):
-        torch.cuda.synchronize()
+        torch.cuda.synchronize(device=device)
     elapsed = time.perf_counter() - start
     logger.info(f"{reg_type.capitalize()} registration: {elapsed:.1f}s")
     return elapsed
@@ -139,7 +139,7 @@ def _run_greedy_registration(
     start = time.perf_counter()
     registration.optimize()
     if device.startswith("cuda"):
-        torch.cuda.synchronize()
+        torch.cuda.synchronize(device=device)
     elapsed = time.perf_counter() - start
     logger.info(f"{direction.capitalize()} deformable registration: {elapsed:.1f}s")
     return elapsed
@@ -325,8 +325,11 @@ def fireants_registration(
     if device == "cpu":
         logger.warning("Using CPU for FireANTs registration.")
 
-    fixed_image = Image.load_file(str(fixed_path))
-    moving_image = Image.load_file(str(moving_path))
+    # Force FireANTs image tensors onto the resolved device.
+    # Without this, Image.load_file defaults to "cuda" (typically cuda:0),
+    # which can ignore our auto-selected GPU (e.g., cuda:1) and cause OOM.
+    fixed_image = Image.load_file(str(fixed_path), device=device)
+    moving_image = Image.load_file(str(moving_path), device=device)
     batch_fixed = BatchedImages([fixed_image])
     batch_moving = BatchedImages([moving_image])
     params = DEFAULT_FIREANTS_PARAMS

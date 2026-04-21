@@ -17,7 +17,7 @@ from fastsurfer_nn.utils.constants import REPO_ROOT
 
 # %%
 # Test paths
-result_dir = Path('/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032109_fixV1_enhanceWM/others')
+result_dir = Path('/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032215_noarm6/others')
 
 t1w_f = result_dir / "T1w.nii.gz"
 seg_f = result_dir / "segmentation.nii.gz"
