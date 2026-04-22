@@ -58,7 +58,8 @@ def _generate_pass_through_motion_params(input_file: Path, working_dir: Path, lo
             'rot_z': [0.0] * nvols,
             'trans_x': [0.0] * nvols,
             'trans_y': [0.0] * nvols,
-            'trans_z': [0.0] * nvols
+            'trans_z': [0.0] * nvols,
+            'enorm': [0.0] * nvols
         })
         motion_params_path = work_dir / "func_motion_corrected.tsv"
         motion_params_df.to_csv(motion_params_path, sep='\t', index=False)

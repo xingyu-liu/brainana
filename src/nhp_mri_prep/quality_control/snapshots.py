@@ -148,12 +148,15 @@ def create_motion_correction_qc(
             
         # Load and analyze motion parameters
         # Handle both old .par format (no headers) and new .tsv format (with headers)
+        enorm_data = None
         if motion_params.endswith('.tsv'):
             motion_df = pd.read_csv(motion_params, sep='\t')
             # Ensure we have the expected columns in the right order
             expected_cols = ['rot_x', 'rot_y', 'rot_z', 'trans_x', 'trans_y', 'trans_z']
             if all(col in motion_df.columns for col in expected_cols):
                 motion_data = motion_df[expected_cols].values
+                if 'enorm' in motion_df.columns:
+                    enorm_data = motion_df['enorm'].to_numpy(dtype=float)
             else:
                 logger.warning(f"Data: expected columns {expected_cols} not found in {motion_params} - using all columns")
                 motion_data = motion_df.values
@@ -170,7 +173,7 @@ def create_motion_correction_qc(
             return {}
 
         # Create motion plot
-        fig = create_motion_plot(motion_data, title="")
+        fig = create_motion_plot(motion_data, enorm_data=enorm_data, title="")
         
         # Ensure the parent directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)

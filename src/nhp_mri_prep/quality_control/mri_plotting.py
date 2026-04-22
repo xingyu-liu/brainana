@@ -646,6 +646,7 @@ def create_overlay_grid_3xN(
 
 def create_motion_plot(
     motion_data: np.ndarray,
+    enorm_data: Optional[np.ndarray] = None,
     title: str = "Head Motion Parameters",
     figsize: Tuple[int, int] = (15, 6)
 ) -> plt.Figure:
@@ -656,6 +657,7 @@ def create_motion_plot(
         motion_data: Motion parameters array (n_timepoints x 6)
                     First 3 columns: rotations (radians)
                     Last 3 columns: translations (mm)
+        enorm_data: Optional framewise displacement series in mm-equivalent units
         title: Plot title
         figsize: Figure size
         
@@ -671,19 +673,55 @@ def create_motion_plot(
     ax1.plot(np.degrees(motion_data[:, 1]), label='Y', color=colors[1], lw=2)
     ax1.plot(np.degrees(motion_data[:, 2]), label='Z', color=colors[2], lw=2)
     ax1.set_ylabel('Rotation (degrees)')
-    yrange = np.max(np.abs(np.degrees(motion_data[:, :3]))) * 1.1
-    ax1.set_ylim(-yrange, yrange)
+    # yrange = np.max(np.abs(np.degrees(motion_data[:, :3]))) * 1.1
+    # if yrange == 0:
+    #     yrange = 1e-6
+    # ax1.set_ylim(-yrange, yrange)
     
     # Plot translations (mm) - last 3 columns
     ax2.plot(motion_data[:, 3], label='X', color=colors[0], lw=2)
     ax2.plot(motion_data[:, 4], label='Y', color=colors[1], lw=2)
     ax2.plot(motion_data[:, 5], label='Z', color=colors[2], lw=2)
     ax2.set_ylabel('Translation (mm)')
-    yrange = np.max(np.abs(motion_data[:, 3:])) * 1.1
-    ax2.set_ylim(-yrange, yrange)
+    # yrange = np.max(np.abs(motion_data[:, 3:])) * 1.1
+    # if yrange == 0:
+    #     yrange = 1e-6
+    # ax2.set_ylim(-yrange, yrange)
+
+    # Overlay enorm on twin y-axes for both panels
+    if enorm_data is not None:
+        plotted_enorm = np.asarray(enorm_data, dtype=float).copy()
+        if plotted_enorm.size > 0:
+            plotted_enorm[0] = np.nan
+        ax1_enorm = ax1.twinx()
+        ax2_enorm = ax2.twinx()
+        ax1_enorm.plot(plotted_enorm, color='k', lw=2, label='Euclidean norm')
+        ax2_enorm.plot(plotted_enorm, color='k', lw=2, label='Euclidean norm')
+        ax1_enorm.set_ylabel('Euclidean norm (mm)')
+        ax2_enorm.set_ylabel('Euclidean norm (mm)')
+        max_enorm = np.nanmax(plotted_enorm) if plotted_enorm.size > 0 else 0.0
+        ax1_enorm.set_ylim(0, max_enorm * 1.1 if max_enorm > 0 else 1e-6)
+        ax2_enorm.set_ylim(0, max_enorm * 1.1 if max_enorm > 0 else 1e-6)
 
     ax1.set_title(title)
-    ax1.legend()
+    if enorm_data is not None:
+        handles1, labels1 = ax1.get_legend_handles_labels()
+        handles1b, labels1b = ax1_enorm.get_legend_handles_labels()
+        ax1.legend(
+            handles1 + handles1b,
+            labels1 + labels1b,
+            loc='upper center',
+            bbox_to_anchor=(0.5, 1.18),
+            ncol=4,
+            frameon=True,
+        )
+    else:
+        ax1.legend(
+            loc='upper center',
+            bbox_to_anchor=(0.5, 1.18),
+            ncol=3,
+            frameon=True,
+        )
     ax2.set_xlabel('Frame')
 
     # show 10 xticks if there are more than 10 timepoints, else all
