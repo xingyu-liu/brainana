@@ -137,6 +137,11 @@ FROM --platform=${PLATFORM} debian:bookworm-slim
 ARG DEBIAN_FRONTEND
 ARG FSL_VERSION=6.0.5.1
 ARG AFNI_TARBALL=linux_rocky_8.tgz
+# Image version baked in at build time (--build-arg BRAINANA_VERSION=<tag>).
+# Exposed as BRAINANA_IMAGE_TAG so nhp_mri_prep.version.get_version() can
+# surface the exact Docker image tag in QC reports and configs.
+ARG BRAINANA_VERSION=unknown
+ENV BRAINANA_IMAGE_TAG=${BRAINANA_VERSION}
 
 # Install uv (pinned version for reproducibility)
 COPY --from=ghcr.io/astral-sh/uv:0.5.14 /uv /uvx /bin/
@@ -419,7 +424,7 @@ HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=3 \
 # Labels for image metadata
 LABEL org.opencontainers.image.title="brainana" \
       org.opencontainers.image.description="Macaque MRI preprocessing pipeline" \
-      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.version="${BRAINANA_VERSION}" \
       org.opencontainers.image.source="https://github.com/xingyu-liu/brainana"
 
 ENTRYPOINT ["/opt/brainana/entrypoint.sh"]

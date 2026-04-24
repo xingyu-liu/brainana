@@ -278,13 +278,42 @@ def ants_cpu_register(
 
 
 def _use_fireants(logger: logging.Logger) -> bool:
-    """Return True if FireANTs registration is available (importable)."""
+    """Return True only when FireANTs can run on a real GPU.
+
+    FireANTs' deformable (greedy) registration requires CUDA: its fused Adam
+    optimizer is a compiled CUDA extension with no CPU fallback.  This function
+    acts as a single gate:
+
+    1. FireANTs importable?
+    2. A usable GPU exists? (basic tensor op probe)
+    3. FireANTs' fused Adam works on that GPU? (catches driver/runtime mismatches
+       where basic PyTorch CUDA succeeds but compiled extensions fail)
+
+    ``torch.cuda.synchronize()`` is called after the probe to force asynchronous
+    CUDA errors to surface immediately rather than mid-registration.
+    """
     try:
         from .fireants_registration import fireants_registration  # noqa: F401
-        return True
     except ImportError as e:
         logger.debug(f"REGISTRATION: FireANTs skipped — not installed or dependency missing: {e}")
         return False
+
+    from ..utils.gpu_device import _cuda_is_usable
+    if not _cuda_is_usable():
+        logger.debug("REGISTRATION: FireANTs skipped — no usable GPU")
+        return False
+
+    try:
+        import torch
+        from fireants.registration.optimizers.adam import adam_update_fused
+        t = torch.zeros(4, device="cuda", dtype=torch.float32)
+        adam_update_fused(t, t.clone(), t.clone(), 1.0, 1.0, 1e-8)
+        torch.cuda.synchronize()
+    except Exception as e:
+        logger.debug(f"REGISTRATION: FireANTs skipped — GPU fused ops probe failed: {e}")
+        return False
+
+    return True
 
 def flirt_register(
     fixedf: Union[str, Path],

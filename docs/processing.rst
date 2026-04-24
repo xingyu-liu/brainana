@@ -15,7 +15,7 @@ links to related anatomical and space-tracking details.
 ----------------------------------
 
 Before the Nextflow workflow runs, a Python discovery step scans the
-BIDS (and NHP-BIDS) dataset and produces structured job descriptors.
+BIDS dataset and produces structured job descriptors.
 
 - **Purpose:** Determine what data are available and which processing
   branches should run (e.g. whether anatomical synthesis is needed,

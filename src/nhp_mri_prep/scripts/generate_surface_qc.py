@@ -28,7 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Test directory
-fs_subject_dir = Path("/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/site-amu/fastsurfer/sub-032215")
+fs_subject_dir = Path("/mnt/DataDrive2/macaque/data_preproc/macaque_mri/UNC-Wisconsin/fastsurfer/sub-001_ses-12months")
 output_dir = fs_subject_dir / "QC"
 output_dir.mkdir(parents=True, exist_ok=True)
 

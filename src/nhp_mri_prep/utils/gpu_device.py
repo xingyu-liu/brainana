@@ -17,13 +17,25 @@ from typing import Union
 import torch
 
 
+def _cuda_is_usable() -> bool:
+    """Return True only when CUDA can actually execute a tensor op."""
+    if not torch.cuda.is_available():
+        return False
+    try:
+        # Probe real kernel execution, not just device enumeration.
+        _ = torch.zeros(1, device="cuda")
+        return True
+    except Exception:
+        return False
+
+
 def _get_least_busy_gpu() -> int:
     """Get the GPU index with the least memory usage.
 
     When CUDA_VISIBLE_DEVICES is set, returns 0 (only visible GPU).
     Otherwise uses nvidia-smi or PyTorch fallback.
     """
-    if not torch.cuda.is_available():
+    if not _cuda_is_usable():
         return 0
 
     gpu_count = torch.cuda.device_count()
@@ -84,7 +96,7 @@ def resolve_device(spec: Union[str, int, torch.device] = "auto") -> torch.device
 
     s = str(spec).strip().lower()
     if s == "auto" or spec is None:
-        if torch.cuda.is_available():
+        if _cuda_is_usable():
             idx = _get_least_busy_gpu()
             return torch.device(f"cuda:{idx}")
         if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():

@@ -15,15 +15,12 @@ Structure:
 - steps: Step logic for Nextflow (functional.py, anatomical.py, qc.py, bids_discovery.py)
 """
 
-from importlib.metadata import version, PackageNotFoundError
+from .version import get_version
 
-try:
-    __version__ = version("brainana")
-except PackageNotFoundError:
-    __version__ = "0.0.0"
+__version__ = get_version()
 
-# Note: Package metadata (author, email, classifiers) is defined in pyproject.toml
-# No need to duplicate it here - use `importlib.metadata` if needed at runtime
+# Note: Package metadata (author, email, classifiers) is defined in pyproject.toml.
+# Version resolution lives in version.py — do not add importlib.metadata calls here.
 
 # Import core functionality - unified preprocessing module
 from .operations import (

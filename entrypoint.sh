@@ -336,6 +336,14 @@ if command -v nvidia-smi &>/dev/null && nvidia-smi --list-gpus &>/dev/null; then
     GPU_COUNT=$(nvidia-smi --list-gpus 2>/dev/null | wc -l)
 fi
 
+# When no GPU is accessible inside the container (e.g. docker run without --gpus),
+# hide all CUDA devices so every tool (FastSurfer, FireANTs, skullstripping) sees
+# no GPU and falls back to CPU immediately — without attempting broken CUDA ops.
+# Only set when not already overridden by the user.
+if [ "$GPU_COUNT" -eq 0 ] && [ -z "${CUDA_VISIBLE_DEVICES+x}" ]; then
+    export CUDA_VISIBLE_DEVICES=""
+fi
+
 print_pipeline_banner "$RESUME_BY_DEFAULT" "$GPU_COUNT"
 
 export DISPLAY="${DISPLAY:-:99}"

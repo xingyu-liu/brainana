@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from packaging import version
 
-from . import __version__
+from .version import get_version
 
 # Read dependencies from pyproject.toml to avoid duplication
 def _load_dependencies_from_pyproject() -> Tuple[Dict[str, str], Dict[str, str]]:
@@ -799,7 +799,7 @@ def info() -> str:
     
     status = "OK" if python_compatible and packages_ok == len(key_packages) else "ISSUES"
     
-    return f"nhp_mri_prep v{__version__} | Python {python_version} | Core packages: {packages_ok}/{len(key_packages)} | Status: {status}"
+    return f"nhp_mri_prep v{get_version()} | Python {python_version} | Core packages: {packages_ok}/{len(key_packages)} | Status: {status}"
 
 
 # Note: We don't run checks on import to avoid slowing down module loading
