@@ -11,10 +11,12 @@
 nextflow.enable.dsl=2
 
 // Include functional processing modules
+include { FUNC_AVERAGE_TMEAN } from '../modules/functional.nf'
 include { FUNC_SLICE_TIMING } from '../modules/functional.nf'
 include { FUNC_MOTION_CORRECTION } from '../modules/functional.nf'
 include { FUNC_GENERATE_TMEAN } from '../modules/functional.nf'
 include { FUNC_DESPIKE } from '../modules/functional.nf'
+include { FUNC_WITHIN_SES_COREG } from '../modules/functional.nf'
 include { FUNC_BIAS_CORRECTION } from '../modules/functional.nf'
 include { FUNC_COMPUTE_CONFORM } from '../modules/functional.nf'
 include { FUNC_COMPUTE_BRAIN_MASK } from '../modules/functional.nf'
@@ -22,8 +24,6 @@ include { FUNC_COMPUTE_REGISTRATION } from '../modules/functional.nf'
 include { FUNC_APPLY_CONFORM } from '../modules/functional.nf'
 include { FUNC_APPLY_TRANSFORMS } from '../modules/functional.nf'
 include { FUNC_APPLY_TRANSFORMS as FUNC_APPLY_TRANSFORMS_MASK } from '../modules/functional.nf'
-include { FUNC_WITHIN_SES_COREG } from '../modules/functional.nf'
-include { FUNC_AVERAGE_TMEAN } from '../modules/functional.nf'
 
 // Include functional QC modules
 include { QC_MOTION_CORRECTION } from '../modules/qc.nf'
@@ -32,6 +32,10 @@ include { QC_SKULLSTRIPPING_FUNC } from '../modules/qc.nf'
 include { QC_REGISTRATION_FUNC } from '../modules/qc.nf'
 include { QC_REGISTRATION_FUNC as QC_REGISTRATION_FUNC_INTERMEDIATE } from '../modules/qc.nf'
 include { QC_WITHIN_SES_COREG } from '../modules/qc.nf'
+include { FUNC_COMPUTE_TSNR } from '../modules/functional.nf'
+include { FUNC_TSNR_SESSION_AVERAGE } from '../modules/functional.nf'
+include { FUNC_TSNR_SURF_PROJECTION } from '../modules/functional.nf'
+include { QC_TSNR } from '../modules/qc.nf'
 
 // Load external Groovy files
 def channelHelpers = evaluate(new File("${projectDir}/workflows/channel_helpers.groovy").text)
@@ -48,6 +52,7 @@ workflow FUNC_WF {
     anat_after_bias_brain  // channel from anatomical workflow (Phase 1 final output - brain version for registration)
     anat_reg_transforms  // channel from anatomical workflow
     anat_reg_reference  // channel from anatomical workflow (target_final.nii.gz from ANAT_REGISTRATION)
+    surf_actual_subject_id  // [sub, ses, fastsurfer_dir_name] from surface recon; empty when surf recon skipped
     gpu_queue
     
     main:
@@ -704,6 +709,108 @@ workflow FUNC_WF {
             FUNC_APPLY_TRANSFORMS_MASK(func_mask_multi.reg_combined, func_mask_multi.mask_file, "mask", config_file)
             func_brain_mask_registered = FUNC_APPLY_TRANSFORMS_MASK.out.output
         }
+
+        // ============================================
+        // TSNR COMPUTATION
+        // ============================================
+        // bold may be List or single Path (sequential reg stages multiple *space-*desc-*.nii.gz in work dir).
+        // Pick one BOLD + space_label here; mask matched by space token in join below (no Python staging resolve).
+        def tsnr_base = func_apply_reg
+            .map { sub, ses, run_id, bold, boldref, bids_name ->
+                def files = (bold instanceof List) ? bold : [bold]
+                def t1w = files.find { f ->
+                    "${f}".contains('space-T1w') && "${f}".contains('desc-preproc') && "${f}".endsWith('_bold.nii.gz')
+                }
+                def tmpl = files.find { f ->
+                    "${f}".contains('space-') && !"${f}".contains('space-T1w') && "${f}".contains('desc-preproc') && "${f}".endsWith('_bold.nii.gz')
+                }
+                def other = files.find { f ->
+                    !"${f}".contains('space-') && "${f}".contains('desc-preproc') && "${f}".endsWith('_bold.nii.gz')
+                }
+                def bold_sel = t1w ?: tmpl ?: other ?: files.last()
+                def m = ("${bold_sel}" =~ /space-([^_]+)/)
+                def space_token = m.find() ? m.group(1) : null
+                def space_label = (space_token == 'T1w') ? 'T1w' : (space_token ? 'template' : 'other')
+                [sub, ses, run_id, bold_sel, bids_name, space_label, space_token]
+            }
+
+        def tsnr_run_input
+        if (func_skullstripping_enabled) {
+            tsnr_run_input = tsnr_base
+                .join(
+                    func_brain_mask_registered
+                        .map { sub, ses, run_id, mask, _dup, bids_name -> [sub, ses, run_id, mask] },
+                    by: [0, 1, 2]
+                )
+                .map { sub, ses, run_id, bold_sel, bids_name, space_label, space_token, mask ->
+                    def mfiles = (mask instanceof List) ? mask : [mask]
+                    def mask_sel = space_token
+                        ? (mfiles.find { f -> "${f}".contains("space-${space_token}") } ?: mfiles.last())
+                        : mfiles.last()
+                    [sub, ses, run_id, bold_sel, bids_name, mask_sel, space_label]
+                }
+        } else {
+            tsnr_run_input = tsnr_base
+                .map { sub, ses, run_id, bold_sel, bids_name, space_label, space_token ->
+                    def dm = file("${workDir}/dummy_brain_mask_tsnr.dummy").tap { it.toFile().text = "" }
+                    [sub, ses, run_id, bold_sel, bids_name, dm, space_label]
+                }
+        }
+
+        FUNC_COMPUTE_TSNR(tsnr_run_input, config_file)
+
+        def tsnr_grouped = FUNC_COMPUTE_TSNR.out.output
+            .filter { sub, ses, run_id, tsnr_nii, bids_name, bold_space -> tsnr_nii }
+            .groupTuple(by: [0, 1])
+            .map { sub, ses, run_ids, tsnr_files, bids_names, spaces ->
+                def session_space = spaces.every { it == 'T1w' } ? 'T1w' : spaces[0]
+                [sub, ses, run_ids[0], groovy.json.JsonOutput.toJson(tsnr_files*.toString()), bids_names[0], session_space]
+            }
+
+        FUNC_TSNR_SESSION_AVERAGE(tsnr_grouped, config_file)
+
+        def surf_recon_enabled = paramResolver.getYamlBool("anat.surface_reconstruction.enabled")
+        def tsnr_t1w_ch = FUNC_TSNR_SESSION_AVERAGE.out.output.filter { sub, ses, avg, bids, space -> space == 'T1w' }
+        def tsnr_other_ch = FUNC_TSNR_SESSION_AVERAGE.out.output.filter { sub, ses, avg, bids, space -> space != 'T1w' }
+
+        def tsnr_qc_input
+        // Separate LH/RH dummy paths so Nextflow does not collide staging two path() inputs with the same basename.
+        def dummy_sf_lh = file("${workDir}/dummy_surf_tsnr_lh.dummy").tap { it.toFile().text = "" }
+        def dummy_sf_rh = file("${workDir}/dummy_surf_tsnr_rh.dummy").tap { it.toFile().text = "" }
+
+        if (surf_recon_enabled) {
+            // remainder: true emits surf-only keys as short tuples (no tSNR row); skip those before destructuring.
+            def tsnr_t1w_with_subid = tsnr_t1w_ch
+                .join(surf_actual_subject_id, by: [0, 1], remainder: true)
+                .filter { row -> row.size() == 6 }
+                .map { sub, ses, avg, bids, space, actual_subid ->
+                    [sub, ses, avg, bids, space, actual_subid ?: '']
+                }
+
+            def tsnr_t1w_has_surf = tsnr_t1w_with_subid.filter { sub, ses, avg, bids, space, aid -> aid }
+            def tsnr_t1w_no_surf = tsnr_t1w_with_subid.filter { sub, ses, avg, bids, space, aid -> !aid }
+
+            FUNC_TSNR_SURF_PROJECTION(
+                tsnr_t1w_has_surf.map { sub, ses, avg, bids, space, aid -> [sub, ses, avg, bids, aid] },
+                config_file
+            )
+            def t1w_with_surf = tsnr_t1w_has_surf
+                .join(FUNC_TSNR_SURF_PROJECTION.out.output, by: [0, 1])
+                .map { sub, ses, avg, bids, space, aid, lh_gii, rh_gii, _bids2 ->
+                    [sub, ses, avg, lh_gii, rh_gii, bids, aid]
+                }
+            def t1w_vol_only = tsnr_t1w_no_surf
+                .map { sub, ses, avg, bids, space, aid -> [sub, ses, avg, dummy_sf_lh, dummy_sf_rh, bids, ''] }
+            def other_vol_only = tsnr_other_ch
+                .map { sub, ses, avg, bids, space -> [sub, ses, avg, dummy_sf_lh, dummy_sf_rh, bids, ''] }
+
+            tsnr_qc_input = t1w_with_surf.mix(t1w_vol_only).mix(other_vol_only)
+        } else {
+            tsnr_qc_input = FUNC_TSNR_SESSION_AVERAGE.out.output
+                .map { sub, ses, avg, bids, space -> [sub, ses, avg, dummy_sf_lh, dummy_sf_rh, bids, ''] }
+        }
+
+        QC_TSNR(tsnr_qc_input, config_file)
     }
 
     // ============================================
@@ -818,6 +925,7 @@ workflow FUNC_WF {
     if (registration_enabled) {
         func_qc_channels = func_qc_channels.mix(QC_REGISTRATION_FUNC_INTERMEDIATE.out.metadata)
         func_qc_channels = func_qc_channels.mix(QC_REGISTRATION_FUNC.out.metadata)
+        func_qc_channels = func_qc_channels.mix(QC_TSNR.out.metadata)
     }
 
     emit:

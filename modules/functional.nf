@@ -1845,3 +1845,209 @@ save_metadata(result.metadata)
 PYTHON_EOF
     """
 }
+
+process FUNC_COMPUTE_TSNR {
+    label 'cpu'
+    tag "${subject_id}_${session_id}_${run_identifier}"
+
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
+        mode: 'copy',
+        pattern: '*.nii.gz'
+
+    input:
+    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_4d), val(bids_name), path(mask_file), val(bold_space)
+    path config_file
+
+    output:
+    tuple val(subject_id), val(session_id), val(run_identifier), path('*_stat-tsnr_boldmap.nii.gz', optional: true), val(bids_name), val(bold_space), emit: output
+    path "*.json", emit: metadata
+
+    script:
+    """
+    \${PYTHON:-python3} <<'PYTHON_EOF'
+from pathlib import Path
+
+from nhp_mri_prep.steps.tsnr import compute_tsnr_run
+from nhp_mri_prep.utils.nextflow import save_metadata
+
+bids_name = Path('${bids_name}')
+run_identifier = '${run_identifier}'
+bold_4d = Path('${bold_4d}')
+mask = Path('${mask_file}')
+
+# 1. Drop dummy / empty mask so compute_tsnr_run ignores it like a missing mask.
+if not mask.exists() or '.dummy' in str(mask).lower() or mask.stat().st_size == 0:
+    mask = None
+
+# 2. Output basename mirrors the staged BOLD: swap the BOLD modality tail for the tSNR map suffix.
+out_name = bold_4d.name.replace('_bold.nii.gz', '_stat-tsnr_boldmap.nii.gz')
+
+result = compute_tsnr_run(
+    bold_4d,
+    Path(out_name),
+    mask_file=mask,
+    min_n_tp=10,
+    bold_space='${bold_space}',
+)
+
+meta = dict(result.metadata)
+meta['subject_id'] = '${subject_id}'
+meta['session_id'] = '${session_id}'
+meta['run_identifier'] = run_identifier
+meta['bids_name'] = str(bids_name)
+meta['bold_space'] = '${bold_space}'
+save_metadata(meta)
+
+if meta.get('skipped'):
+    print('INFO: tSNR run skipped:', meta.get('reason', meta.get('error', '')), file=__import__('sys').stderr)
+PYTHON_EOF
+    """
+}
+
+process FUNC_TSNR_SESSION_AVERAGE {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
+        mode: 'copy',
+        pattern: '*.nii.gz'
+
+    input:
+    tuple val(subject_id), val(session_id), val(run_identifier), val(tsnr_paths_json), val(bids_name), val(bold_space)
+    path config_file
+
+    output:
+    tuple val(subject_id), val(session_id), path('*_stat-tsnr_boldmap.nii.gz'), val(bids_name), val(bold_space), emit: output
+    path "*.json", emit: metadata
+
+    script:
+    """
+    \${PYTHON:-python3} <<'PYTHON_EOF'
+from pathlib import Path
+
+import json
+
+from nhp_mri_prep.steps.tsnr import compute_tsnr_session_avg
+from nhp_mri_prep.utils.nextflow import save_metadata
+
+bids_name = Path('${bids_name}')
+run_identifier = '${run_identifier}'
+tsnr_paths_json = '${tsnr_paths_json}'
+
+# 1. Parse the JSON list of run-level tSNR paths produced upstream (groupTuple / JsonOutput).
+paths_from_json = json.loads(tsnr_paths_json)
+if not isinstance(paths_from_json, list):
+    paths_from_json = [paths_from_json]
+
+# 2. Pick the first path that exists in this task work directory (ordering matches the session's runs).
+first_existing_run_tsnr_path = None
+for path_entry in paths_from_json:
+    if not path_entry:
+        continue
+    candidate_path = Path(str(path_entry).strip().strip('"').strip("'"))
+    if candidate_path.exists():
+        first_existing_run_tsnr_path = candidate_path
+        break
+if first_existing_run_tsnr_path is None:
+    raise ValueError(f'No valid run-level tSNR path in JSON: {tsnr_paths_json}')
+
+# 3. Filename stem without extension (prefer explicit .nii.gz strip for a single predictable rule).
+run_tsnr_filename = first_existing_run_tsnr_path.name
+if run_tsnr_filename.endswith('.nii.gz'):
+    session_avg_stem = run_tsnr_filename[: -len('.nii.gz')]
+else:
+    session_avg_stem = first_existing_run_tsnr_path.stem
+
+# 4. Session-level map: remove the run key once (e.g. "_task-movie_run-1") so the output is not run-specific.
+run_key_fragment = (run_identifier or '').strip()
+if run_key_fragment:
+    session_avg_stem = session_avg_stem.replace(f'_{run_key_fragment}', '', 1)
+
+# 5. Write the averaged map under the session-level BIDS basename.
+out_name = session_avg_stem + '.nii.gz'
+
+result = compute_tsnr_session_avg(tsnr_paths_json, Path(out_name))
+
+meta = dict(result.metadata)
+meta['subject_id'] = '${subject_id}'
+meta['session_id'] = '${session_id}'
+meta['run_identifier'] = run_identifier
+meta['bids_name'] = str(bids_name)
+meta['bold_space'] = '${bold_space}'
+save_metadata(meta)
+PYTHON_EOF
+    """
+}
+
+process FUNC_TSNR_SURF_PROJECTION {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
+
+    // Downstream QC reads outputs from the work dir only; no need to copy into output_dir.
+    // Global process.publishDir is a map without `path`; a process with no publishDir can
+    // merge to a null target on finalize. Match FUNC_REORIENT: explicit path + enabled: false.
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
+        mode: 'copy',
+        enabled: false
+
+    input:
+    tuple val(subject_id), val(session_id), path(session_avg_nii), val(bids_name), val(actual_subject_id)
+    path config_file
+
+    output:
+    tuple val(subject_id), val(session_id), path('lh_tsnr_projection.surf.gii'), path('rh_tsnr_projection.surf.gii'), val(bids_name), emit: output
+    path "*.json", emit: metadata
+
+    script:
+    """
+    \${PYTHON:-python3} <<'PYTHON_EOF'
+from pathlib import Path
+import shutil
+
+from nhp_mri_prep.steps.tsnr import project_tsnr_to_surface
+from nhp_mri_prep.utils.nextflow import save_metadata
+
+session_avg = Path('${session_avg_nii}')
+bids_name = Path('${bids_name}')
+actual_id = '${actual_subject_id}'.strip()
+
+published_base = Path('${params.output_dir}') / 'fastsurfer'
+fs_subject_dir = (published_base / actual_id) if actual_id else None
+if fs_subject_dir is not None and not fs_subject_dir.is_dir():
+    fs_subject_dir = None
+
+meta = {
+    'step': 'func_tsnr_surf_projection',
+    'subject_id': '${subject_id}',
+    'session_id': '${session_id}',
+    'bids_name': str(bids_name),
+    'actual_subject_id': actual_id,
+    'fs_subject_dir': str(fs_subject_dir) if fs_subject_dir else None,
+}
+
+lh_out = Path('lh_tsnr_projection.surf.gii')
+rh_out = Path('rh_tsnr_projection.surf.gii')
+
+if fs_subject_dir is None:
+    meta['skipped'] = True
+    meta['reason'] = 'no_fastsurfer_subject_dir'
+    lh_out.write_bytes(b'')
+    rh_out.write_bytes(b'')
+else:
+    res = project_tsnr_to_surface(session_avg, fs_subject_dir, Path('.'))
+    meta.update({k: str(v) if isinstance(v, Path) else v for k, v in res.items() if k in ('skipped', 'reason')})
+    lh_gii = res.get('lh_gii')
+    rh_gii = res.get('rh_gii')
+    if lh_gii and rh_gii and Path(lh_gii).is_file() and Path(rh_gii).is_file():
+        shutil.copy2(lh_gii, lh_out)
+        shutil.copy2(rh_gii, rh_out)
+    else:
+        meta['skipped'] = True
+        lh_out.write_bytes(b'')
+        rh_out.write_bytes(b'')
+
+save_metadata(meta)
+PYTHON_EOF
+    """
+}

@@ -1019,6 +1019,85 @@ EOF
     """
 }
 
+process QC_TSNR {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+    errorStrategy 'ignore'
+
+    publishDir "${params.output_dir}/sub-${subject_id}/figures",
+        mode: 'copy',
+        pattern: '*.png'
+
+    input:
+    tuple val(subject_id), val(session_id), path(session_avg_nii), path(lh_surf_gii), path(rh_surf_gii), val(bids_name), val(actual_subject_id)
+    path config_file
+
+    output:
+    path "*.png", optional: true, emit: qc_files
+    path "*.json", emit: metadata
+
+    script:
+    """
+    \${PYTHON:-python3} <<'PYTHON_EOF'
+from pathlib import Path
+
+from nhp_mri_prep.steps.qc import qc_tsnr
+from nhp_mri_prep.utils.bids import create_bids_filename, parse_bids_entities
+from nhp_mri_prep.utils.nextflow import load_config, save_metadata
+
+# 1. Effective config and staged inputs (Nextflow copies paths into the task work dir).
+config = load_config('${config_file}')
+bids_naming_template = Path('${bids_name}')
+session_average_tsnr_nifti = Path('${session_avg_nii}')
+left_hemisphere_tsnr_gifti = Path('${lh_surf_gii}')
+right_hemisphere_tsnr_gifti = Path('${rh_surf_gii}')
+
+# 2. BIDS-compliant PNG basename from the template (sub/ses/space + desc-tSNR + bold.png).
+parsed_entities = parse_bids_entities(bids_naming_template.name)
+qc_filename_entities = {}
+for entity_key in ('sub', 'ses', 'space'):
+    if entity_key in parsed_entities:
+        qc_filename_entities[entity_key] = parsed_entities[entity_key]
+qc_filename_entities['desc'] = 'tSNR'
+qc_output_png_filename = create_bids_filename(qc_filename_entities, 'bold', extension='.png')
+
+# 3. FastSurfer subject directory under the published output tree (for inflated meshes).
+fastsurfer_actual_subject_id = '${actual_subject_id}'.strip()
+fastsurfer_output_root = Path('${params.output_dir}') / 'fastsurfer'
+freesurfer_subject_directory = (
+    (fastsurfer_output_root / fastsurfer_actual_subject_id)
+    if fastsurfer_actual_subject_id
+    else None
+)
+if freesurfer_subject_directory is not None and not freesurfer_subject_directory.is_dir():
+    freesurfer_subject_directory = None
+
+# 4. Dummy or empty gifti → skip surface QC (volume-only figure); qc_tsnr handles None fs dir.
+if (
+    '.dummy' in str(left_hemisphere_tsnr_gifti).lower()
+    or '.dummy' in str(right_hemisphere_tsnr_gifti).lower()
+    or not left_hemisphere_tsnr_gifti.exists()
+    or not right_hemisphere_tsnr_gifti.exists()
+    or left_hemisphere_tsnr_gifti.stat().st_size == 0
+    or right_hemisphere_tsnr_gifti.stat().st_size == 0
+):
+    freesurfer_subject_directory = None
+
+# 5. Render combined QC figure and write sidecar metadata.
+result = qc_tsnr(
+    session_tsnr_vol=session_average_tsnr_nifti,
+    lh_surf_gii=left_hemisphere_tsnr_gifti,
+    rh_surf_gii=right_hemisphere_tsnr_gifti,
+    fs_subject_dir=freesurfer_subject_directory,
+    output_path=Path(qc_output_png_filename),
+    config=config,
+)
+
+save_metadata(result.metadata)
+PYTHON_EOF
+    """
+}
+
 // ============================================
 // REPORT GENERATION
 // ============================================

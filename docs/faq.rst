@@ -10,6 +10,7 @@ FAQ and troubleshooting
 **Running on your system**
 
 - `Can I use a network drive for input or output?`_
+- `I don't want Brainana to run as root. I want it to run as my own user. What should I do?`_
 - `I'm on Windows — how do I write paths?`_
 
 **Resources and troubleshooting**
@@ -64,6 +65,19 @@ Can I use a network drive for input or output?
 **We recommend keeping the output directory and work directory on local storage.** Writing to a network drive (NFS, SMB, etc.) can cause permission errors, copy failures in early stages, or poor I/O performance and timeouts. If you see failures that look like permission or copy issues soon after the run starts, try pointing the output and work-directory mounts to local paths.
 
 **Input on a network drive is fine.** You can leave your BIDS dataset on a network share and set the output (and work directory) to a local path. For example: mount the network BIDS root with ``-v <path/on/network/bids_dir>:/input`` and use local paths for ``-v <path/on/local/output_dir>:/output`` and ``-v <path/on/local/work_dir>:/output_wd``. The pipeline reads from the network and writes only to local disk.
+
+.. _docker-run-as-user-not-root:
+
+.. rst-class:: faq-question
+
+I don't want Brainana to run as root. I want it to run as my own user. What should I do?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Before ``docker run``, ensure the **output** directory on your host already exists and is owned by your user. If you pass ``--work-dir`` (with a matching ``-v`` mount for the work directory), do the same for that host path. Mount those directories into the container with ``-v``.
+
+That way Docker does not create those directories as root inside the container. 
+
+Whenever practical, create fresh output and work directories (owned by you) instead of reusing old paths—this also avoids permission problems carried over from earlier runs.
 
 .. _windows-paths:
 

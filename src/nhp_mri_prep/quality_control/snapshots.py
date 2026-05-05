@@ -33,8 +33,9 @@ from .mri_plotting import (
     SURFACE_SPACING,
     SURFACE_PLOT_SIZE,
     SURFACE_PLOT_ZOOM,
-    SURFACE_PLOT_DPI,
-    CBAR_DPI,
+    PLOT_SURFACE_DPI,
+    PLOT_VOL_DPI,
+    PLOT_CBAR_DPI,
     CBAR_SPACING,
     CBAR_GRADIENT_WIDTH_RATIO,
     CBAR_TARGET_WIDTH_RATIO,
@@ -105,7 +106,7 @@ def create_conform_qc(
         
         # Ensure the parent directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='black')
+        fig.savefig(output_path, dpi=PLOT_VOL_DPI, bbox_inches='tight', facecolor='black')
         plt.close(fig)
         
         logger.info(f"QC: conform overlay saved - {os.path.basename(output_path)}")
@@ -177,7 +178,7 @@ def create_motion_correction_qc(
         
         # Ensure the parent directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
+        fig.savefig(output_path, dpi=PLOT_VOL_DPI, bbox_inches='tight', facecolor='white')
         plt.close(fig)
         
         logger.info(f"Output: motion QC plot saved - {output_path}")
@@ -240,7 +241,7 @@ def create_skullstripping_qc(
         
         # Ensure the parent directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='black')
+        fig.savefig(output_path, dpi=PLOT_VOL_DPI, bbox_inches='tight', facecolor='black')
         plt.close(fig)
         
         logger.info(f"QC: skullstripping overlay saved - {os.path.basename(output_path)}")
@@ -303,7 +304,7 @@ def create_registration_qc(
         
         # Ensure the parent directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='black')
+        fig.savefig(output_path, dpi=PLOT_VOL_DPI, bbox_inches='tight', facecolor='black')
         plt.close(fig)
         
         logger.info(f"QC: registration overlay saved - {os.path.basename(output_path)}")
@@ -532,7 +533,7 @@ def create_atlas_segmentation_qc(
         
         # Ensure the parent directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='black')
+        fig.savefig(output_path, dpi=PLOT_VOL_DPI, bbox_inches='tight', facecolor='black')
         plt.close(fig)
         
         logger.info(f"QC: atlas segmentation overlay saved - {os.path.basename(output_path)}")
@@ -594,7 +595,7 @@ def _create_before_after_comparison(
         
         # Save figure as temporary file
         temp_file = str(save_f).replace(".png", f"_{label.lower()}.png")
-        fig.savefig(temp_file, dpi=150, bbox_inches='tight', facecolor='black')
+        fig.savefig(temp_file, dpi=PLOT_VOL_DPI, bbox_inches='tight', facecolor='black')
         temp_files.append(temp_file)
         
         if logger:
@@ -613,7 +614,7 @@ def _create_before_after_comparison(
     combined_img.paste(img_after, (0, img_before.height))
     
     # Save the combined image
-    combined_img.save(str(save_f), dpi=(150, 150))
+    combined_img.save(str(save_f), dpi=(PLOT_VOL_DPI, PLOT_VOL_DPI))
     
     if logger:
         logger.info(f"Output: bias correction QC comparison saved - {save_f}")
@@ -979,7 +980,7 @@ def create_cortical_surf_and_measures_qc(
                     
                     fig = p.build()
                     temp_path = Path(temp_dir) / f"{surf_name}_{hemi}_{view}.png"
-                    fig.savefig(temp_path, dpi=SURFACE_PLOT_DPI, bbox_inches='tight', pad_inches=0.05, facecolor='white')
+                    fig.savefig(temp_path, dpi=PLOT_SURFACE_DPI, bbox_inches='tight', pad_inches=0.05, facecolor='white')
                     temp_images[(surf_name, hemi, view)] = temp_path
                     plt.close(fig)
             
@@ -1003,8 +1004,8 @@ def create_cortical_surf_and_measures_qc(
             # Create colorbars for curvature (row 0), parcellation label (row 1), and thickness (row 2)
             cbar_target_width = int(max_width * CBAR_TARGET_WIDTH_RATIO)
             cbar_height = max_height
-            cbar_fig_width_inches = cbar_target_width / CBAR_DPI
-            cbar_fig_height_inches = cbar_height / CBAR_DPI
+            cbar_fig_width_inches = cbar_target_width / PLOT_CBAR_DPI
+            cbar_fig_height_inches = cbar_height / PLOT_CBAR_DPI
             
             # Create colorbars using helper functions
             curv_cbar_img = _create_colorbar(
@@ -1014,7 +1015,7 @@ def create_cortical_surf_and_measures_qc(
                 label='Curvature',
                 fig_width_inches=cbar_fig_width_inches,
                 fig_height_inches=cbar_fig_height_inches,
-                dpi=CBAR_DPI,
+                dpi=PLOT_CBAR_DPI,
                 gradient_width_ratio=CBAR_GRADIENT_WIDTH_RATIO,
                 temp_dir=temp_dir
             )
@@ -1026,7 +1027,7 @@ def create_cortical_surf_and_measures_qc(
                 label='Thickness (mm)',
                 fig_width_inches=cbar_fig_width_inches,
                 fig_height_inches=cbar_fig_height_inches,
-                dpi=CBAR_DPI,
+                dpi=PLOT_CBAR_DPI,
                 gradient_width_ratio=CBAR_GRADIENT_WIDTH_RATIO,
                 temp_dir=temp_dir
             )
@@ -1035,7 +1036,7 @@ def create_cortical_surf_and_measures_qc(
                 label='Parcellation',
                 fig_width_inches=cbar_fig_width_inches,
                 fig_height_inches=cbar_fig_height_inches,
-                dpi=CBAR_DPI,
+                dpi=PLOT_CBAR_DPI,
                 gradient_width_ratio=CBAR_GRADIENT_WIDTH_RATIO,
                 temp_dir=temp_dir
             )
@@ -1089,7 +1090,7 @@ def create_cortical_surf_and_measures_qc(
             
             # Save combined image
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            combined_img.save(output_path, dpi=(150, 150))
+            combined_img.save(output_path, dpi=(PLOT_VOL_DPI, PLOT_VOL_DPI))
             logger.info(f"QC: cortical surface and measures plot saved - {os.path.basename(output_path)}")
             
             return {f"{modality}_cortical_surf_and_measures_overlay": str(output_path)}

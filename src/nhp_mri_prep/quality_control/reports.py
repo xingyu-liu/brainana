@@ -29,6 +29,7 @@ SNAPSHOT_MAPPINGS = {
     'T2w2template': {'key': 'T2w2template_registration_overlay', 'description': 'T2w to template registration'},
     'T1wT2wCombined': {'key': 't1wt2w_combined_comparison', 'description': 'T1wT2wCombined comparison'},
     'func_coreg': {'key': 'func_coreg_overlay', 'description': 'Within-session functional coregistration'},
+    'tSNR': {'key': 'tsnr_boldmap', 'description': 'tSNR map'},
     'motion': {'key': 'motion_parameters', 'description': 'Motion parameters'},
     'surfReconTissueSeg': {'key': 'surf_recon_tissue_seg_overlay', 'description': 'Surface reconstruction tissue segmentation'},
     'corticalSurfAndMeasures': {'key': 'cortical_surf_and_measures_overlay', 'description': 'Cortical surface and measures'},
@@ -49,6 +50,7 @@ FIGURE_DESCRIPTIONS = {
     'T2w2template': 'registered T2w (underlaid); template space (contour)',
     'func2anat': 'registered BOLD (underlaid); T1w space (contour)',
     'func2target': 'registered BOLD (underlaid); target space (contour)',
+    'tSNR': 'session-average temporal SNR map (volume; surface projection if available)',
 }
 
 SNAPSHOT_ORDER = [
@@ -61,6 +63,7 @@ SNAPSHOT_ORDER = [
     'T2w2template_registration_overlay',
     'surf_recon_tissue_seg_overlay', 'cortical_surf_and_measures_overlay',
     'func_coreg_overlay',  # Within-session coregistration (appears before run-specific snapshots)
+    'tsnr_boldmap',
     'func2anat_registration_overlay',  # Functional to anatomical (intermediate step in sequential transforms)
     'func2target_registration_overlay', 
     'motion_parameters'

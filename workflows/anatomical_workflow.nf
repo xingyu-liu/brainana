@@ -1161,6 +1161,13 @@ workflow ANAT_WF {
     def anat_for_surf_recon = use_t1wt2wcombined ? anat_after_t1wt2wcombined : anat_after_bias
     SURF_RECON_WF(anat_for_surf_recon, anat_skull_seg, anat_skull_mask, anat_arm6_atlas, gpu_queue)
 
+    def surf_recon_enabled_for_emit = paramResolver.getYamlBool("anat.surface_reconstruction.enabled")
+    
+    // No `def`: must be workflow-scoped so emit
+    surf_actual_subject_id = (surf_recon_enabled_for_emit && anat_skullstripping_enabled)
+        ? SURF_RECON_WF.out.surf_actual_subject_id_ch
+        : Channel.empty()
+
     // ============================================
     // COLLECT QC CHANNELS
     // ============================================
@@ -1190,6 +1197,7 @@ workflow ANAT_WF {
     anat_after_bias_brain
     anat_reg_transforms
     anat_reg_reference
+    surf_actual_subject_id
     anat_subjects_ch
     anat_qc_channels
 }

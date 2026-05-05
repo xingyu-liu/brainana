@@ -6,13 +6,32 @@ This module provides utilities that are commonly used in Nextflow process script
 
 from pathlib import Path
 import gzip
+import json
+import logging
 import os
 import shutil
-import json
+import sys
 from typing import Dict, Any, Optional, Union
 
 from .bids import get_filename_stem
 from ..config.config_io import load_yaml_config
+
+
+def ensure_stderr_logging_if_unconfigured(level: int = logging.INFO) -> None:
+    """
+    If the root logger has no handlers (typical in ``python3 <<'EOF'`` Nextflow tasks),
+    configure ``logging.basicConfig`` so ``logger.info`` from library code reaches stderr.
+
+    No-op when logging was already configured (e.g. CLI scripts or tests).
+    """
+    root = logging.getLogger()
+    if root.handlers:
+        return
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s | %(levelname)-8s | %(message)s',
+        stream=sys.stderr,
+    )
 
 
 def _file_starts_with_gzip_magic(path: Path) -> bool:

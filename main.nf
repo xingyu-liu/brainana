@@ -88,6 +88,7 @@ workflow {
             ANAT_WF.out.anat_after_bias_brain,  // Use brain version for functional registration
             ANAT_WF.out.anat_reg_transforms,
             ANAT_WF.out.anat_reg_reference,
+            ANAT_WF.out.surf_actual_subject_id,
             gpu_queue
         )
     }
