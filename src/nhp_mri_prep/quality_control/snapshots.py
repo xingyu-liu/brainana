@@ -544,6 +544,301 @@ def create_atlas_segmentation_qc(
         return {}
 
 
+def _tsnr_add_right_colorbar(
+    fig,
+    vmin: float,
+    vmax: float,
+    cmap_name: str,
+    *,
+    map_right: float = 0.8,
+    bar_height_ratio: float = 0.5,
+    bar_width_to_height: float = 0.06,
+    gap_ratio: float = 0.04,
+    text_color: str = "white",
+) -> None:
+    """Right-side colorbar for tSNR matplotlib figures."""
+    from matplotlib import cm, colors
+
+    fig.subplots_adjust(right=map_right)
+    fig_width_in, fig_height_in = fig.get_size_inches()
+
+    bar_height = bar_height_ratio
+    bar_width = (
+        bar_height * bar_width_to_height * (fig_height_in / fig_width_in)
+        if fig_width_in > 0
+        else 0.015
+    )
+    # Keep the colorbar fully inside the canvas so save-time cropping cannot clip it.
+    right_padding = 0.04
+    cbar_x = min(map_right + gap_ratio, 1.0 - right_padding - bar_width)
+    cbar_x = max(cbar_x, 0.0)
+    cbar_y = (1.0 - bar_height) / 2.0
+
+    cax = fig.add_axes([cbar_x, cbar_y, bar_width, bar_height])
+    cax.set_in_layout(True)
+    norm = colors.Normalize(vmin=vmin, vmax=vmax)
+    scalar_map = cm.ScalarMappable(norm=norm, cmap=cmap_name)
+    scalar_map.set_array([])
+    colorbar = fig.colorbar(scalar_map, cax=cax, label="tSNR")
+    colorbar.ax.yaxis.set_label_position("left")
+    colorbar.ax.yaxis.tick_left()
+    colorbar.ax.yaxis.label.set_color(text_color)
+    colorbar.ax.tick_params(colors=text_color)
+    for spine in colorbar.ax.spines.values():
+        spine.set_edgecolor(text_color)
+
+
+def _compute_display_range(
+    values: np.ndarray,
+    *,
+    low_pct: float,
+    high_pct: float,
+    fallback_min: float = 0.0,
+    fallback_max: float = 1.0,
+) -> tuple[float, float]:
+    """Compute a robust percentile range with safe fallback and non-zero width."""
+    finite_values = values[np.isfinite(values)]
+    if finite_values.size == 0:
+        return fallback_min, fallback_max
+
+    vmin, vmax = np.percentile(finite_values, [low_pct, high_pct])
+    if vmax <= vmin:
+        vmax = vmin + 1e-6
+    return float(vmin), float(vmax)
+
+
+def _is_valid_surface_map(path: Optional[Path]) -> bool:
+    """Check whether a candidate surface metric file looks usable."""
+    return (
+        path is not None
+        and path.exists()
+        and ".dummy" not in str(path).lower()
+        and path.stat().st_size > 0
+    )
+
+
+def _save_tsnr_volume_panel(
+    session_tsnr_vol: Path,
+    output_dir: Path,
+    cmap_name: str,
+) -> Path:
+    """Render and save the axial tSNR volume panel to a temp PNG."""
+    volume_voxels = np.asarray(nib.load(str(session_tsnr_vol)).get_fdata(), dtype=np.float64)
+    volume_vmin = 0.0
+    _, volume_vmax = _compute_display_range(volume_voxels, low_pct=0, high_pct=98)
+
+    figure_volume = create_grid_mri_image(
+        underlay_data=session_tsnr_vol,
+        overlay_data=None,
+        num_cols=6,
+        perspectives=["axial"],
+        title="",
+        alpha=0.7,
+        underlay_cmap=cmap_name,
+        show_title=False,
+        underlay_vmin=volume_vmin,
+        underlay_vmax=volume_vmax,
+    )
+    _tsnr_add_right_colorbar(
+        figure_volume, volume_vmin, volume_vmax, cmap_name, text_color="white"
+    )
+
+    volume_png_fd, volume_png_path_str = tempfile.mkstemp(
+        suffix="_tsnr_vol.png", dir=str(output_dir)
+    )
+    os.close(volume_png_fd)
+    volume_png_path = Path(volume_png_path_str)
+    figure_volume.savefig(volume_png_path, dpi=PLOT_VOL_DPI, bbox_inches="tight", pad_inches=0.1, facecolor="black")
+    plt.close(figure_volume)
+    return volume_png_path
+
+
+def _try_save_tsnr_surface_panel(
+    output_dir: Path,
+    lh_surf_gii: Optional[Path],
+    rh_surf_gii: Optional[Path],
+    fs_subject_dir: Optional[Path],
+    cmap_name: str,
+    logger: logging.Logger,
+) -> Optional[Path]:
+    """Render optional surface tSNR panel and return temp PNG path when available."""
+    if not (_is_valid_surface_map(lh_surf_gii) and _is_valid_surface_map(rh_surf_gii)):
+        return None
+    if fs_subject_dir is None or not fs_subject_dir.is_dir():
+        return None
+
+    left_inflated_mesh = fs_subject_dir / "surf" / "lh.inflated"
+    right_inflated_mesh = fs_subject_dir / "surf" / "rh.inflated"
+    if not (left_inflated_mesh.is_file() and right_inflated_mesh.is_file()):
+        return None
+
+    if not SURFPLOT_AVAILABLE:
+        logger.warning("QC: tSNR surf panel skipped (surfplot unavailable)")
+        return None
+
+    surface_png_path: Optional[Path] = None
+    try:
+        left_vertex_tsnr = np.asarray(nib.load(str(lh_surf_gii)).darrays[0].data, dtype=np.float32)
+        right_vertex_tsnr = np.asarray(
+            nib.load(str(rh_surf_gii)).darrays[0].data, dtype=np.float32
+        )
+        combined_vertices = np.concatenate([left_vertex_tsnr, right_vertex_tsnr])
+        surf_vmin = 0.0
+        _, surf_vmax = _compute_display_range(combined_vertices, low_pct=0, high_pct=98)
+
+        surf_plot = Plot(
+            surf_lh=str(left_inflated_mesh),
+            surf_rh=str(right_inflated_mesh),
+            views=["lateral", "medial"],
+            layout="row",
+            size=(1600, 180),
+            zoom=2,
+        )
+        surf_plot.add_layer(
+            {
+                "left": np.clip(left_vertex_tsnr, surf_vmin, surf_vmax),
+                "right": np.clip(right_vertex_tsnr, surf_vmin, surf_vmax),
+            },
+            cmap=cmap_name,
+            cbar=False,
+        )
+
+        figure_surface = surf_plot.build()
+        figure_surface.patch.set_facecolor("black")
+        for axis in figure_surface.axes:
+            axis.set_facecolor("black")
+        _tsnr_add_right_colorbar(
+            figure_surface, surf_vmin, surf_vmax, cmap_name, text_color="white"
+        )
+
+        surface_png_fd, surface_png_path_str = tempfile.mkstemp(
+            suffix="_tsnr_surf.png", dir=str(output_dir)
+        )
+        os.close(surface_png_fd)
+        surface_png_path = Path(surface_png_path_str)
+        figure_surface.savefig(
+            surface_png_path,
+            dpi=PLOT_VOL_DPI,
+            bbox_inches="tight",
+            pad_inches=0.1,
+            facecolor="black",
+        )
+        plt.close(figure_surface)
+        return surface_png_path
+    except Exception as exc:
+        logger.warning(f"QC: tSNR surface rendering failed: {exc}")
+        if surface_png_path and surface_png_path.exists():
+            surface_png_path.unlink(missing_ok=True)
+        return None
+
+
+def _stack_panels_to_output(
+    panel_paths: List[Path],
+    output_path: Path,
+    hspace_ratio: float = 0.05,
+) -> bool:
+    """Vertically stack panels with configurable gap and black background."""
+    if not panel_paths:
+        return False
+
+    panel_images = [Image.open(path).convert("RGB") for path in panel_paths]
+    max_width = max(image.width for image in panel_images)
+    resized_panels: List[Image.Image] = []
+    for image in panel_images:
+        if image.width != max_width:
+            new_height = int(image.height * (max_width / image.width))
+            image = image.resize((max_width, new_height), resample=Image.Resampling.LANCZOS)
+        resized_panels.append(image)
+
+    if not resized_panels:
+        return False
+
+    avg_panel_height = sum(image.height for image in resized_panels) / len(resized_panels)
+    gap_px = max(0, int(round(avg_panel_height * hspace_ratio)))
+    total_height = sum(image.height for image in resized_panels) + gap_px * (
+        len(resized_panels) - 1
+    )
+    stacked = Image.new("RGB", (max_width, total_height), color="black")
+    paste_y = 0
+    for image in resized_panels:
+        paste_x = (max_width - image.width) // 2
+        stacked.paste(image, (paste_x, paste_y))
+        paste_y += image.height + gap_px
+
+    stacked.save(output_path)
+    return True
+
+
+def create_tsnr_qc(
+    session_tsnr_vol: Union[str, Path],
+    save_f: Union[str, Path],
+    lh_surf_gii: Optional[Union[str, Path]] = None,
+    rh_surf_gii: Optional[Union[str, Path]] = None,
+    fs_subject_dir: Optional[Union[str, Path]] = None,
+    logger: Optional[logging.Logger] = None,
+    **kwargs,
+) -> Dict[str, str]:
+    """
+    Generate combined tSNR QC snapshot with a volume panel and optional surface panel.
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    output_path = Path(save_f)
+    session_tsnr_vol = Path(session_tsnr_vol)
+    lh_surf_gii = Path(lh_surf_gii) if lh_surf_gii is not None else None
+    rh_surf_gii = Path(rh_surf_gii) if rh_surf_gii is not None else None
+    fs_subject_dir = Path(fs_subject_dir) if fs_subject_dir is not None else None
+
+    try:
+        if not session_tsnr_vol.exists():
+            logger.error(f"QC: session tSNR volume not found - {session_tsnr_vol}")
+            return {}
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        colormap_name = "magma"
+        volume_png_path = _save_tsnr_volume_panel(
+            session_tsnr_vol=session_tsnr_vol,
+            output_dir=output_path.parent,
+            cmap_name=colormap_name,
+        )
+        surface_png_path = _try_save_tsnr_surface_panel(
+            output_dir=output_path.parent,
+            lh_surf_gii=lh_surf_gii,
+            rh_surf_gii=rh_surf_gii,
+            fs_subject_dir=fs_subject_dir,
+            cmap_name=colormap_name,
+            logger=logger,
+        )
+
+        panel_paths = [
+            panel_path
+            for panel_path in (volume_png_path, surface_png_path)
+            if panel_path is not None and panel_path.exists()
+        ]
+        if not panel_paths:
+            volume_png_path.unlink(missing_ok=True)
+            return {}
+
+        if not _stack_panels_to_output(panel_paths=panel_paths, output_path=output_path):
+            return {}
+
+        for panel_path in panel_paths:
+            panel_path.unlink(missing_ok=True)
+
+        logger.info(f"QC: tSNR QC saved - {output_path.name}")
+        return {"tsnr_qc": str(output_path)}
+    except ImportError as exc:
+        if "PIL" in str(exc):
+            logger.warning(f"QC: Pillow missing, skipping tSNR QC - {exc}")
+            return {}
+        logger.error(f"QC: tSNR QC dependency error - {exc}")
+        return {}
+    except Exception as e:
+        logger.error(f"QC: tSNR QC failed - {e}")
+        return {}
+
+
 def _create_before_after_comparison(
     before_data: Union[str, Path, np.ndarray],
     after_data: Union[str, Path, np.ndarray], 

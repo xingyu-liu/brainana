@@ -997,12 +997,12 @@ config = load_config('${config_file}')
 bids_naming_template = Path('${bids_naming_template}')
 
 # Generate BIDS-compliant QC output filename
-# Remove run-specific entities (other than sub and ses), add desc-func_coreg, ends with _boldref
+# Remove run-specific entities (other than sub and ses), add desc-sescoreg, ends with _boldref
 # Parse the original filename to get entities
 parsed = parse_bids_entities(str(bids_naming_template))
 # Keep only sub and ses entities, then add desc
 parsed = {k: v for k, v in parsed.items() if k in ['sub', 'ses']}
-parsed['desc'] = 'func_coreg'
+parsed['desc'] = 'sescoreg'
 qc_output_filename = create_bids_filename(parsed, 'boldref', extension='.png')
 
 # Generate QC

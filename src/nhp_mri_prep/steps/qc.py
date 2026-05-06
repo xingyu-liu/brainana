@@ -5,10 +5,8 @@ These functions generate quality control visualizations as separate steps.
 """
 
 import logging
-import os
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from .types import StepInput, StepOutput
 from ..quality_control import (
@@ -20,7 +18,8 @@ from ..quality_control import (
     create_atlas_segmentation_qc,
     create_motion_correction_qc,
     create_surf_recon_tissue_seg_qc,
-    create_cortical_surf_and_measures_qc
+    create_cortical_surf_and_measures_qc,
+    create_tsnr_qc,
 )
 from ..quality_control.snapshots import _create_before_after_comparison
 from ..quality_control.reports import generate_qc_report
@@ -582,48 +581,6 @@ def qc_within_ses_coreg(
         )
 
 
-def _tsnr_add_right_colorbar(
-    fig,
-    vmin: float,
-    vmax: float,
-    cmap_name: str,
-    *,
-    map_right: float = 0.9,
-    bar_height_ratio: float = 0.5,
-    bar_width_to_height: float = 0.06,
-    gap_ratio: float = 0.05,
-    text_color: str = "white",
-) -> None:
-    """Right-side colorbar for tSNR matplotlib figures (matches compute_tSNR script layout)."""
-    from matplotlib import colors, cm
-
-    fig.subplots_adjust(right=map_right)
-    fig_width_in, fig_height_in = fig.get_size_inches()
-
-    bar_height = bar_height_ratio
-    bar_width = (
-        bar_height * bar_width_to_height * (fig_height_in / fig_width_in)
-        if fig_width_in > 0
-        else 0.015
-    )
-    gap_frac = gap_ratio
-    cbar_x = map_right + gap_frac
-    cbar_x = min(cbar_x, 0.99 - bar_width)
-    cbar_y = (1.0 - bar_height) / 2.0
-
-    cax = fig.add_axes([cbar_x, cbar_y, bar_width, bar_height])
-    norm = colors.Normalize(vmin=vmin, vmax=vmax)
-    sm = cm.ScalarMappable(norm=norm, cmap=cmap_name)
-    sm.set_array([])
-    cb = fig.colorbar(sm, cax=cax, label="tSNR")
-    cb.ax.yaxis.set_label_position("left")
-    cb.ax.yaxis.tick_left()
-    cb.ax.yaxis.label.set_color(text_color)
-    cb.ax.tick_params(colors=text_color)
-    for spine in cb.ax.spines.values():
-        spine.set_edgecolor(text_color)
-
-
 def qc_tsnr(
     session_tsnr_vol: Path,
     lh_surf_gii: Optional[Path],
@@ -638,12 +595,6 @@ def qc_tsnr(
     Surface panel is omitted if gifti paths are missing/dummy, ``fs_subject_dir`` is missing,
     or optional dependencies (surfplot, PIL) are unavailable.
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import nibabel as nib
-
-    from ..quality_control.mri_plotting import create_grid_mri_image, PLOT_VOL_DPI
-
     if not config or not config.get("quality_control", {}).get("enabled", True):
         logger.info("QC: tSNR QC skipped (disabled in configuration)")
         return StepOutput(
@@ -652,7 +603,6 @@ def qc_tsnr(
         )
 
     try:
-        # 1. Input checks and output directory.
         if not session_tsnr_vol.exists():
             logger.error("QC: session tSNR volume not found — %s", session_tsnr_vol)
             return StepOutput(
@@ -660,186 +610,20 @@ def qc_tsnr(
                 metadata={"step": "qc_tsnr", "error": "session_tsnr_missing"},
             )
 
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        colormap_name = "magma"
-
-        # 2. Axial mosaic of the session-average tSNR volume (robust display range).
-        volume_voxels = np.asarray(nib.load(str(session_tsnr_vol)).get_fdata(), dtype=np.float64)
-        finite_voxels = volume_voxels[np.isfinite(volume_voxels)]
-        if finite_voxels.size == 0:
-            volume_vmin, volume_vmax = 0.0, 1.0
-        else:
-            volume_vmin, volume_vmax = np.percentile(finite_voxels, [2, 98])
-            if volume_vmax <= volume_vmin:
-                volume_vmax = volume_vmin + 1e-6
-
-        figure_volume = create_grid_mri_image(
-            underlay_data=session_tsnr_vol,
-            overlay_data=None,
-            num_cols=6,
-            perspectives=["axial"],
-            title="",
-            alpha=0.7,
-            underlay_cmap=colormap_name,
-            show_title=False,
-            underlay_vmin=volume_vmin,
-            underlay_vmax=volume_vmax,
+        result = create_tsnr_qc(
+            session_tsnr_vol=str(session_tsnr_vol),
+            save_f=str(output_path),
+            lh_surf_gii=str(lh_surf_gii) if lh_surf_gii else None,
+            rh_surf_gii=str(rh_surf_gii) if rh_surf_gii else None,
+            fs_subject_dir=str(fs_subject_dir) if fs_subject_dir else None,
+            logger=logger,
         )
-        _tsnr_add_right_colorbar(
-            figure_volume, volume_vmin, volume_vmax, colormap_name, text_color="white"
-        )
-        volume_png_fd, volume_png_path_str = tempfile.mkstemp(
-            suffix="_tsnr_vol.png", dir=str(output_path.parent)
-        )
-        os.close(volume_png_fd)
-        volume_png_path = Path(volume_png_path_str)
-        figure_volume.savefig(
-            volume_png_path, dpi=PLOT_VOL_DPI, bbox_inches="tight", pad_inches=0.0
-        )
-        plt.close(figure_volume)
 
-        # 3. Optional surface panel: real gifti + inflated meshes + surfplot.
-        surface_png_path: Optional[Path] = None
-        left_surf_ready = (
-            lh_surf_gii is not None
-            and lh_surf_gii.exists()
-            and ".dummy" not in str(lh_surf_gii).lower()
-            and lh_surf_gii.stat().st_size > 0
-        )
-        right_surf_ready = (
-            rh_surf_gii is not None
-            and rh_surf_gii.exists()
-            and ".dummy" not in str(rh_surf_gii).lower()
-            and rh_surf_gii.stat().st_size > 0
-        )
-        freesurfer_subject_ready = fs_subject_dir is not None and fs_subject_dir.is_dir()
-
-        if left_surf_ready and right_surf_ready and freesurfer_subject_ready:
-            left_inflated_mesh = fs_subject_dir / "surf" / "lh.inflated"
-            right_inflated_mesh = fs_subject_dir / "surf" / "rh.inflated"
-            if left_inflated_mesh.is_file() and right_inflated_mesh.is_file():
-                try:
-                    from surfplot import Plot
-                except Exception as exc:
-                    logger.warning("QC: tSNR surf panel skipped (surfplot): %s", exc)
-                    Plot = None  # type: ignore
-                if Plot is not None:
-                    try:
-                        left_vertex_tsnr = np.asarray(
-                            nib.load(str(lh_surf_gii)).darrays[0].data, dtype=np.float32
-                        )
-                        right_vertex_tsnr = np.asarray(
-                            nib.load(str(rh_surf_gii)).darrays[0].data, dtype=np.float32
-                        )
-                        combined_vertices = np.concatenate(
-                            [left_vertex_tsnr, right_vertex_tsnr]
-                        )
-                        combined_vertices = combined_vertices[np.isfinite(combined_vertices)]
-                        if combined_vertices.size == 0:
-                            surf_vmin, surf_vmax = 0.0, 1.0
-                        else:
-                            surf_vmin, surf_vmax = 0.0, float(np.percentile(combined_vertices, 98))
-                            if surf_vmax <= surf_vmin:
-                                surf_vmax = surf_vmin + 1e-6
-
-                        surf_plot = Plot(
-                            surf_lh=str(left_inflated_mesh),
-                            surf_rh=str(right_inflated_mesh),
-                            views=["lateral", "medial"],
-                            layout="row",
-                            size=(1600, 200),
-                            zoom=2,
-                        )
-                        surf_plot.add_layer(
-                            {
-                                "left": np.clip(left_vertex_tsnr, surf_vmin, surf_vmax),
-                                "right": np.clip(right_vertex_tsnr, surf_vmin, surf_vmax),
-                            },
-                            cmap=colormap_name,
-                            cbar=False,
-                        )
-                        figure_surface = surf_plot.build()
-                        figure_surface.patch.set_facecolor("black")
-                        for axis in figure_surface.axes:
-                            axis.set_facecolor("black")
-                        _tsnr_add_right_colorbar(
-                            figure_surface, surf_vmin, surf_vmax, colormap_name, text_color="white"
-                        )
-                        surface_png_fd, surface_png_path_str = tempfile.mkstemp(
-                            suffix="_tsnr_surf.png", dir=str(output_path.parent)
-                        )
-                        os.close(surface_png_fd)
-                        surface_png_path = Path(surface_png_path_str)
-                        figure_surface.savefig(
-                            surface_png_path,
-                            dpi=PLOT_VOL_DPI,
-                            bbox_inches="tight",
-                            pad_inches=0.0,
-                            facecolor="black",
-                        )
-                        plt.close(figure_surface)
-                    except Exception as exc:
-                        logger.warning("QC: tSNR surface rendering failed: %s", exc)
-                        if surface_png_path and surface_png_path.exists():
-                            surface_png_path.unlink(missing_ok=True)
-                        surface_png_path = None
-
-        # 4. Stack panels vertically with Pillow (or ship volume-only if Pillow is absent).
-        try:
-            from PIL import Image
-        except ImportError:
-            Image = None  # type: ignore
-
-        if Image is None:
-            import shutil
-
-            shutil.move(str(volume_png_path), str(output_path))
+        if not result:
             return StepOutput(
                 output_file=output_path,
-                metadata={"step": "qc_tsnr", "warning": "pillow_missing_vol_only"},
-                qc_files=[output_path],
+                metadata={"step": "qc_tsnr", "error": "render_failed"},
             )
-
-        panel_image_paths = [
-            panel_path
-            for panel_path in (volume_png_path, surface_png_path)
-            if panel_path is not None and panel_path.exists()
-        ]
-        if not panel_image_paths:
-            volume_png_path.unlink(missing_ok=True)
-            return StepOutput(
-                output_file=output_path,
-                metadata={"step": "qc_tsnr", "error": "no_panels"},
-            )
-
-        panel_rgba_images = [
-            Image.open(panel_image_path).convert("RGB")
-            for panel_image_path in panel_image_paths
-        ]
-        max_panel_width = max(image.width for image in panel_rgba_images)
-        resized_panels: List[Any] = []
-        for image in panel_rgba_images:
-            if image.width != max_panel_width:
-                new_height = int(image.height * (max_panel_width / image.width))
-                image = image.resize(
-                    (max_panel_width, new_height), resample=Image.Resampling.LANCZOS
-                )
-            resized_panels.append(image)
-
-        vertical_gap_px = 0
-        canvas_height = sum(image.height for image in resized_panels) + vertical_gap_px * (
-            len(resized_panels) - 1
-        )
-        stacked_figure = Image.new("RGB", (max_panel_width, canvas_height), color="white")
-        paste_y = 0
-        for image in resized_panels:
-            paste_x = (max_panel_width - image.width) // 2
-            stacked_figure.paste(image, (paste_x, paste_y))
-            paste_y += image.height + vertical_gap_px
-        stacked_figure.save(output_path)
-
-        for panel_image_path in panel_image_paths:
-            Path(panel_image_path).unlink(missing_ok=True)
 
         return StepOutput(
             output_file=output_path,

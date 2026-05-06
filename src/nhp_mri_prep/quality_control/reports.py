@@ -28,7 +28,7 @@ SNAPSHOT_MAPPINGS = {
     'T2w2T1w': {'key': 'T2w2T1w_registration_overlay', 'description': 'T2w to T1w coregistration'},
     'T2w2template': {'key': 'T2w2template_registration_overlay', 'description': 'T2w to template registration'},
     'T1wT2wCombined': {'key': 't1wt2w_combined_comparison', 'description': 'T1wT2wCombined comparison'},
-    'func_coreg': {'key': 'func_coreg_overlay', 'description': 'Within-session functional coregistration'},
+    'sescoreg': {'key': 'func_coreg_overlay', 'description': 'Within-session functional coregistration'},
     'tSNR': {'key': 'tsnr_boldmap', 'description': 'tSNR map'},
     'motion': {'key': 'motion_parameters', 'description': 'Motion parameters'},
     'surfReconTissueSeg': {'key': 'surf_recon_tissue_seg_overlay', 'description': 'Surface reconstruction tissue segmentation'},
@@ -50,6 +50,7 @@ FIGURE_DESCRIPTIONS = {
     'T2w2template': 'registered T2w (underlaid); template space (contour)',
     'func2anat': 'registered BOLD (underlaid); T1w space (contour)',
     'func2target': 'registered BOLD (underlaid); target space (contour)',
+    'sescoreg': 'within-session func run coregistration',
     'tSNR': 'session-average temporal SNR map (volume; surface projection if available)',
 }
 
@@ -708,23 +709,15 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
         
         def group_sort_key(group_item):
             group_name, snapshots = group_item
-            is_func_coreg = any(
-                s.get('snapshot_type') == 'func_coreg_overlay'
-                and 'task' not in s.get('entities', {})
-                and 'run' not in s.get('entities', {})
+            session_value = snapshots[0].get('entities', {}).get('ses', '') if snapshots else ''
+            has_task_or_run = any(
+                ('task' in s.get('entities', {})) or ('run' in s.get('entities', {}))
                 for s in snapshots
             )
-            session_value = None
-            if snapshots:
-                session_value = snapshots[0].get('entities', {}).get('ses', '')
-            if group_name == 'T1w' or group_name.endswith(' T1w'):
-                return (0, 0, session_value or '', group_name)
-            elif group_name == 'T2w' or group_name.endswith(' T2w'):
-                return (0, 1, session_value or '', group_name)
-            elif is_func_coreg:
-                return (1, 0, session_value or '', group_name)
-            else:
-                return (1, 1, session_value or '', group_name)
+            # Session-level groups (e.g., "session 001") should appear before
+            # task/run-specific groups within the same session.
+            group_level_order = 1 if has_task_or_run else 0
+            return (session_value or '', group_level_order, group_name)
         
         return dict(sorted(groups.items(), key=group_sort_key))
     

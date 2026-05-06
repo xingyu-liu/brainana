@@ -119,7 +119,8 @@ from .snapshots import (
     create_conform_qc,
     create_atlas_segmentation_qc,
     create_surf_recon_tissue_seg_qc,
-    create_cortical_surf_and_measures_qc
+    create_cortical_surf_and_measures_qc,
+    create_tsnr_qc,
 )
 
 from .reports import generate_qc_report
@@ -143,6 +144,7 @@ __all__ = [
     'create_atlas_segmentation_qc',
     'create_surf_recon_tissue_seg_qc',
     'create_cortical_surf_and_measures_qc',
+    'create_tsnr_qc',
     
     # Report functions
     'generate_qc_report',

@@ -779,13 +779,37 @@ workflow FUNC_WF {
         def dummy_sf_rh = file("${workDir}/dummy_surf_tsnr_rh.dummy").tap { it.toFile().text = "" }
 
         if (surf_recon_enabled) {
+            def surf_actual_subject_id_logged = surf_actual_subject_id
+
+            // Subject-level aid (no _ses- in name) -> broadcast to all T1w sessions of that subject.
+            def surf_id_subject_level = surf_actual_subject_id_logged
+                .filter { sub, ses, aid -> !("${aid}".contains('_ses-')) }
+                .map { sub, ses, aid -> [sub, aid] }
+
+            // Session-level aid (has _ses-) -> re-key by the session encoded in aid itself.
+            def surf_id_session_level = surf_actual_subject_id_logged
+                .filter { sub, ses, aid -> "${aid}".contains('_ses-') }
+                .map { sub, ses, aid ->
+                    def m = ("${aid}" =~ /_ses-([^_]+)/)
+                    def ses_from_aid = m.find() ? m.group(1) : ses
+                    [sub, ses_from_aid, aid]
+                }
+
+            def func_session_keys = tsnr_t1w_ch
+                .map { sub, ses, avg, bids, space -> [sub, ses] }
+                .unique()
+
+            def surf_id_broadcast = func_session_keys
+                .combine(surf_id_subject_level, by: 0)
+                .map { sub, ses, aid -> [sub, ses, aid] }
+
+            def surf_id_normalized = surf_id_session_level.mix(surf_id_broadcast)
+
             // remainder: true emits surf-only keys as short tuples (no tSNR row); skip those before destructuring.
             def tsnr_t1w_with_subid = tsnr_t1w_ch
-                .join(surf_actual_subject_id, by: [0, 1], remainder: true)
+                .join(surf_id_normalized, by: [0, 1], remainder: true)
                 .filter { row -> row.size() == 6 }
-                .map { sub, ses, avg, bids, space, actual_subid ->
-                    [sub, ses, avg, bids, space, actual_subid ?: '']
-                }
+                .map { sub, ses, avg, bids, space, actual_subid -> [sub, ses, avg, bids, space, actual_subid ?: ''] }
 
             def tsnr_t1w_has_surf = tsnr_t1w_with_subid.filter { sub, ses, avg, bids, space, aid -> aid }
             def tsnr_t1w_no_surf = tsnr_t1w_with_subid.filter { sub, ses, avg, bids, space, aid -> !aid }
