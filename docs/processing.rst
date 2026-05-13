@@ -22,7 +22,7 @@ BIDS dataset and produces structured job descriptors.
   whether functional runs have slice timing metadata).
 - **Methods:** Deterministic layout/metadata scan using BIDS entities
   and configuration. Discovery evaluates whether anatomical synthesis
-  is needed (``needs_synth``) and decides synthesis type/level
+  is needed and decides synthesis type/level
   (session vs. subject) from config. There are **no imaging
   algorithms** at this stage.
 
@@ -56,19 +56,15 @@ Brainana can synthesize a single anatomical reference.
   reference using ANTs (``antsRegistration`` with a rigid transform).
   All coregistered images, including the reference, are averaged in
   the reference space.
-- **Output:** One synthesized NIfTI per (subject, session) or per
-  subject, with BIDS naming that drops ``run`` (and for subject-level
-  synthesis, ``ses``). The result is the single anatomical input to
-  the rest of the anatomical pipeline.
 
 
-2.2 Conform to template
+2.2 Conform to reference
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-- **Purpose:** Align the brain to template space (orientation and
+- **Purpose:** Align the brain to reference space (orientation and
   grid) so that subsequent registrations and resamplings are
   well-defined.
-- **Method (summary):**
+- **Method:**
 
   1. Skull-strip the input with ``nhp_skullstrip_nn`` (UNet) or use
      an existing brain mask when skull stripping is disabled.
@@ -77,14 +73,10 @@ Brainana can synthesize a single anatomical reference.
      the template.
   4. Use AFNI ``3dresample`` to ensure template and input share a
      consistent grid.
-  5. Apply the FLIRT transform back to the full-head anatomical with
-     ``flirt -applyxfm``.
-
-- **Outputs:** Conformed anatomical image(s) and transforms relating
-  scanner space to template space.
+  5. Apply the FLIRT transform back to the full-head anatomical.
 
 
-2.3 Skull stripping and segmentation
+2.3 Skullstripping and segmentation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Purpose:** Provide brain mask and atlas/tissue segmentation for
@@ -94,48 +86,33 @@ Brainana can synthesize a single anatomical reference.
   is fine-tuned on macaque anatomical MRI with CHARM and SARM level 2
   atlases (ARM2 parcellation). The network produces an atlas-labelled
   segmentation, from which a brain mask and optional hemisphere masks
-  are derived. FSL ``fslmaths -mul`` applies the mask to the
-  anatomical to obtain a skull-stripped image.
-- **Outputs:** Segmentation volume, brain mask, skull-stripped image,
-  and optional hemisphere mask and LUT. These feed T1w+T2w combined
-  processing (when enabled) and surface reconstruction.
+  are derived.
 
 
-2.4 Bias field correction (anatomical)
+2.4 Bias field correction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Purpose:** Correct intensity non-uniformity (INU) in anatomical
   images.
 - **Method:** N4 bias field correction (ANTs
   ``N4BiasFieldCorrection``) is run on the anatomical image, with the
-  brain mask from segmentation optionally provided as ``-x`` to
+  brain mask from segmentation optionally provided to
   restrict correction to brain tissue.
-- **Outputs:** Bias-corrected full-head anatomical and
-  bias-corrected brain images (e.g.
-  ``desc-biascorrect_T1w.nii.gz``,
-  ``desc-biascorrect_T1w_brain.nii.gz``). The bias-corrected brain is
-  used for registration.
 
 
-2.5 Registration to template (anatomical)
+2.5 Registration to template
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Purpose:** Map anatomical data to a standard template space (for
   example, NMT2Sym).
-- **Method:** Multi-stage ANTs registration in
-  ``src/nhp_mri_prep/operations/registration.py``:
+- **Method:** Multi-stage ANTs registration:
 
   - Translation → rigid → affine → optional SyN.
   - Metrics (e.g. mutual information, cross-correlation, Mattes),
     gradient steps, shrink factors, convergence criteria, and
     smoothing schedules are configurable.
   - When GPU resources and FireANTs are available, the SyN stage can
-    be run with FireANTs; otherwise CPU ``antsRegistration`` is used.
-
-- **Outputs:** Template-space anatomical image(s) and composite
-  forward and inverse transforms. Downstream T2w and functional
-  workflows reuse these transforms to move data between native
-  anatomical and template spaces.
+    be run with FireANTs.
 
 
 2.6 T2w to T1w coregistration
@@ -144,11 +121,7 @@ Brainana can synthesize a single anatomical reference.
 When T2w data are present, Brainana can coregister T2w to the
 preprocessed T1w:
 
-- **Method:** ANTs rigid registration from T2w to preprocessed T1w,
-  followed by ``antsApplyTransforms`` to resample T2w into T1w space
-  with a configurable interpolation (e.g. BSpline).
-- **Usage:** T2w in T1w space can be used for combined T1w+T2w
-  processing and surface reconstruction.
+- **Method:** ANTs rigid registration from T2w to preprocessed T1w.
 
 
 2.7 Surface reconstruction
@@ -156,24 +129,16 @@ preprocessed T1w:
 
 Surface reconstruction is an optional and resource-intensive step.
 
-- **Purpose:** Build cortical surfaces and derived measures (e.g.
-  thickness, area, curvature) from the anatomical segmentation.
-- **Inputs:** Preprocessed anatomical, segmentation (from
-  ``fastsurfer_nn``), and optionally a combined T1w+T2w image.
+- **Purpose:** Build cortical surfaces and morphological measures (e.g.
+  thickness, area, curvature).
+- **Inputs:** Preprocessed anatomical, segmentation and brain mask. 
 - **Method:** ``fastsurfer_surfrecon`` is a modified version of
   FastSurfer's ``recon_surf`` pipeline. It orchestrates FreeSurfer
   volume stages (bias correction, Talairach transform, normalization,
   WM segmentation) and surface stages (tessellation, smoothing,
-  inflation, topology fixing, atlas parcellation, morphometry). The
-  pipeline calls FreeSurfer tools such as ``mri_convert``,
-  ``mri_mask``, ``mri_pretess``, ``mri_fill``, ``mris_smooth``,
-  ``mris_inflate``, ``mris_fix_topology``, ``mris_place_surface``,
-  ``mris_register``, ``mris_ca_label``, and
-  ``mris_anatomical_stats``.
+  inflation, topology fixing, atlas parcellation, morphometry).
 - **Requirements:** A valid FreeSurfer license is required when this
   step is enabled.
-- **Outputs:** Cortical surface meshes and derived measures written
-  in BIDS derivatives layout where applicable.
 
 
 3. Functional processing
@@ -187,20 +152,20 @@ Surface reconstruction is an optional and resource-intensive step.
 |
 
 
-The functional branch preprocesses BOLD data and produces
+The functional branch preprocesses fMRI data and produces
 motion-corrected, optionally slice-time-corrected, despiked,
-bias-corrected, and skull-stripped BOLD in native or template space,
+bias-corrected, and skullstripped fMRI in native or template space,
 with associated transforms and QC outputs.
 
 The workflow is conceptually split into:
 
 - **Time-series steps:** Slice timing (if available) →
-  motion correction and temporal mean → despiking → optional
+  motion correction and temporal mean → 
   within-session coregistration and session-averaged temporal mean.
 - **Compute on temporal mean:** Bias correction → conform → brain mask
   (UNet) → registration to anatomical or template.
 - **Apply to 4D:** Apply conform and registration transforms to the
-  4D BOLD and brain mask.
+  4D fMRI and brain mask.
 
 
 3.1 Slice timing correction
@@ -224,11 +189,11 @@ applies slice timing correction.
 3.2 Motion correction
 ~~~~~~~~~~~~~~~~~~~~~
 
-- **Purpose:** Realign BOLD volumes to correct for subject motion.
+- **Purpose:** Realign fMRI volumes to correct for subject motion.
 - **Method:** FSL ``mcflirt`` performs volume realignment with 6 DOF.
   The reference volume is either a user-specified timepoint, the
   middle volume, or a temporal mean (via ``fslmaths -Tmean`` or
-  ``fslroi``). Outputs include motion-corrected 4D BOLD, motion
+  ``fslroi``). Outputs include motion-corrected 4D fMRI, motion
   matrices, and motion parameters (TSV).
 - **Short runs:** For very short runs (e.g. fewer than 15 volumes),
   motion correction can be skipped, and pass-through outputs
@@ -236,21 +201,10 @@ applies slice timing correction.
   generated.
 
 
-3.3 Despiking
-~~~~~~~~~~~~~
-
-- **Purpose:** Reduce the impact of extreme timepoints ("spikes") in
-  the BOLD signal.
-- **Method:** AFNI ``3dDespike`` is applied to the motion-corrected
-  BOLD time series with configurable parameters (e.g. ``-cut`` and
-  optional ``-localedit``). The step is skipped for runs of 15 or
-  fewer volumes.
-
-
-3.4 Within-session coregistration
+3.3 Within-session coregistration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When multiple BOLD runs exist per session, an optional within-session
+When multiple fMRI runs exist per session, an optional within-session
 coregistration step can align runs to a common reference and produce
 a session-averaged temporal mean.
 
@@ -258,19 +212,21 @@ a session-averaged temporal mean.
   bias correction, conform, and registration.
 - **Method:** Rigid registration from each run's temporal mean to a
   reference run's temporal mean, using ANTs or FSL FLIRT as
-  configured, followed by applying the transform to the 4D BOLD and
+  configured, followed by applying the transform to the 4D fMRI and
   mask.
 
 
 3.6 Bias correction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+- **Purpose:** Improve downstream registration by correcting low frequency 
+  intensity inhomogeneity in the reference temporal mean fMRI image only. 
+  Bias correction is not applied to the full 4D timeseries, preserving 
+  the original temporal signal for subsequent analyses.
 - **Method:** N4 bias field correction (ANTs
   ``N4BiasFieldCorrection``) is applied to the temporal mean of the
-  motion-corrected/despiked BOLD. An optional mask can be used, and
+  motion-corrected fMRI. An optional mask can be used, and
   intensities may be rescaled (e.g. to mean 100) depending on config.
-- **Usage:** The estimated bias field can be applied to the full 4D
-  BOLD in a separate step.
 
 
 3.7 Conform and skull stripping
@@ -284,8 +240,7 @@ a session-averaged temporal mean.
 - **Skull stripping:** A UNet-based functional skull-stripping model
   (``nhp_skullstrip_nn`` EPI model, derived from
   NHP-BrainExtraction/DeepBet) is run on the temporal mean to obtain
-  a brain mask, which is then applied to the 4D BOLD with
-  ``fslmaths -mas``.
+  a brain mask, which is then applied to the 4D fMRI.
 
 
 3.8 Registration
@@ -294,9 +249,9 @@ a session-averaged temporal mean.
 - **Method:** ANTs registration (rigid, affine, or SyN as configured)
   from the mean functional image to the preprocessed anatomical or
   directly to the template. Composite transforms are applied to the
-  4D BOLD and brain mask with ``antsApplyTransforms`` (e.g. BSpline
-  interpolation for BOLD).
-- **Outputs:** Preprocessed BOLD and mask in anatomical or template
+  4D fMRI and brain mask with ``antsApplyTransforms`` (e.g. BSpline
+  interpolation for fMRI).
+- **Outputs:** Preprocessed fMRI and mask in anatomical or template
   space, plus motion and other confounds for downstream analysis.
 
 
@@ -339,9 +294,6 @@ a session-averaged temporal mean.
    * - Functional
      - Motion correction
      - FSL mcflirt
-   * - Functional
-     - Despiking
-     - AFNI 3dDespike
    * - Functional
      - Within-session coreg
      - ANTs or FLIRT

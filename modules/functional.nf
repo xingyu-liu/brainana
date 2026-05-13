@@ -1926,6 +1926,7 @@ process FUNC_TSNR_SESSION_AVERAGE {
 from pathlib import Path
 
 import json
+import re
 
 from nhp_mri_prep.steps.tsnr import compute_tsnr_session_avg
 from nhp_mri_prep.utils.nextflow import save_metadata
@@ -1958,10 +1959,13 @@ if run_tsnr_filename.endswith('.nii.gz'):
 else:
     session_avg_stem = first_existing_run_tsnr_path.stem
 
-# 4. Session-level map: remove the run key once (e.g. "_task-movie_run-1") so the output is not run-specific.
+# 4. Parse run_identifier entities and remove each "_key-value" token from the stem.
+#    This avoids fragile full-substring matching when entity order differs.
 run_key_fragment = (run_identifier or '').strip()
 if run_key_fragment:
-    session_avg_stem = session_avg_stem.replace(f'_{run_key_fragment}', '', 1)
+    entity_keys = re.findall(r'([a-zA-Z]+)-[a-zA-Z0-9-]+', run_key_fragment)
+    for key in entity_keys:
+        session_avg_stem = re.sub(rf'_{re.escape(key)}-[^_]+', '', session_avg_stem)
 
 # 5. Write the averaged map under the session-level BIDS basename.
 out_name = session_avg_stem + '.nii.gz'

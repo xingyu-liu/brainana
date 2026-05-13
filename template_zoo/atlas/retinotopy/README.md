@@ -23,4 +23,3 @@ The data are 4D (x, y, z, functional maps) and include the following sub-briks:
 
 ## References
 - Arcaro MJ & Livingstone MS (2017). Retinotopic organization of scene areas in the macaque inferior temporal cortex. Journal of Neuroscience. [PubMed](https://pubmed.ncbi.nlm.nih.gov/28674177/).
-- AFNI NMT Templates: [NMT v2.0](https://afni.nimh.nih.gov/pub/dist/doc/htmldoc/nonhuman/macaque_tempatl/template_nmtv2.html), [NMT v1.3](https://afni.nimh.nih.gov/pub/dist/doc/htmldoc/nonhuman/macaque_tempatl/template_nmtv1.html).

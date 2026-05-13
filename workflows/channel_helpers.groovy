@@ -121,10 +121,10 @@ def passThroughFunc = { sub, ses, run_identifier, file, bids_name ->
 /**
  * Extract run_identifier from BIDS filename (all non-sub/ses entities)
  * 
- * Returns sorted string like "acq-RevPol_task-rest_run-1" or "rec-realigned_task-rest_run-1"
+ * Returns string in original filename order like "task-rest_run-1_acq-RevPol"
  * 
  * @param bids_filename Full BIDS filename or path
- * @return Sorted string of all BIDS entities except sub and ses, joined with underscores
+ * @return String of all BIDS entities except sub and ses, joined with underscores
  */
 def extractRunIdentifier = { bids_filename ->
     // Extract just the filename if a full path was provided
@@ -151,10 +151,22 @@ def extractRunIdentifier = { bids_filename ->
     entities.remove('sub')
     entities.remove('ses')
     
-    // Sort by entity name and create identifier string
-    def sortedEntities = entities.sort { it.key }
-    def identifierParts = sortedEntities.collect { "${it.key}-${it.value}" }
-    
+    // Preserve original entity order from the filename to keep
+    // run_identifier compatible with downstream filename stems.
+    def identifierParts = []
+    def orderedMatcher = pattern.matcher(filename)
+    while (orderedMatcher.find()) {
+        def key = orderedMatcher.group(1)
+        if (key == 'sub' || key == 'ses') {
+            continue
+        }
+        def value = entities[key]
+        if (value != null) {
+            identifierParts << "${key}-${value}"
+            entities.remove(key)
+        }
+    }
+
     return identifierParts.join('_')
 }
 

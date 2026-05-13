@@ -3,7 +3,12 @@ Brainana
 
 About
 ^^^^^
+.. image:: _static/pipeline_details/brainana_unified_framework.png
+   :alt: Brainana pipeline overview schematic
+   :align: center
+   :width: 100%
 
+|
 **Brainana** is a preprocessing and registration pipeline for non-human primate (NHP) neuroimaging data. It provides anatomical, functional processing, and surface reconstruction.
 
 .. image:: _static/pipeline_details/pipeline_overview.png

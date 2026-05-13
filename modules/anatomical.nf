@@ -1583,7 +1583,7 @@ process ANAT_PUBLISH_PHASE1 {
     
     output:
     tuple val(subject_id), val(session_id), path("*desc-preproc_T*w.nii.gz"), val(bids_name), emit: output
-    tuple val(subject_id), val(session_id), path("*desc-preproc_brain.nii.gz", optional: true), emit: brain
+    tuple val(subject_id), val(session_id), path("*desc-preproc_*_brain.nii.gz", optional: true), emit: brain
     path "*.json", emit: metadata
     
     script:
@@ -1600,12 +1600,25 @@ brain_file = Path('${brain_file}')
 
 # Function to replace desc-{stepname} with desc-preproc in filename
 def replace_desc_with_preproc(filename):
-    # Use regex to replace desc-{anything} with desc-preproc
-    # Pattern matches: desc- followed by any word characters, followed by underscore
-    pattern = r'desc-\\w+_'
+    # [^_]+ stops at the first underscore so the modality token (e.g., _T1w, _T2w)
+    # is preserved. Using \\w+ would greedily consume past the underscore and drop modality.
+    pattern = r'desc-[^_]+_'
     replacement = 'desc-preproc_'
     result = re.sub(pattern, replacement, str(filename))
     return Path(result)
+
+_VALID_PREPROC_SUFFIXES = (
+    '_T1w.nii.gz', '_T2w.nii.gz',
+    '_T1w_brain.nii.gz', '_T2w_brain.nii.gz',
+)
+
+def validate_preproc_modality(name, source):
+    name_str = str(name)
+    if not any(name_str.endswith(s) for s in _VALID_PREPROC_SUFFIXES):
+        raise ValueError(
+            f"Published name '{name_str}' (from {source}) missing modality token; "
+            f"expected suffix in {_VALID_PREPROC_SUFFIXES}"
+        )
 
 # Track created files for output declaration
 created_files = []
@@ -1613,6 +1626,7 @@ created_files = []
 # Process anat_file (full head) if not dummy
 if '.dummy' not in str(anat_file):
     anat_preproc_filename = replace_desc_with_preproc(anat_file.name)
+    validate_preproc_modality(anat_preproc_filename, anat_file)
     create_output_link(anat_file, anat_preproc_filename)
     # Verify the symlink was created and is accessible
     if not Path(anat_preproc_filename).exists():
@@ -1624,6 +1638,7 @@ if '.dummy' not in str(anat_file):
 # Process brain_file if not dummy
 if '.dummy' not in str(brain_file):
     brain_preproc_filename = replace_desc_with_preproc(brain_file.name)
+    validate_preproc_modality(brain_preproc_filename, brain_file)
     create_output_link(brain_file, brain_preproc_filename)
     # Verify the symlink was created and is accessible
     if not Path(brain_preproc_filename).exists():
