@@ -427,7 +427,7 @@ def anat_backproject_atlases(
 
     additional_files: Dict[str, Path] = {}
     for atlas_name, atlas_path in atlases:
-        output_name = f"atlas-{atlas_name}_{output_stem}.nii.gz"
+        output_name = f"atlas-{atlas_name}_space-T1w_{output_stem}.nii.gz"
         shape = get_image_shape(str(atlas_path), logger=logger)
         moving_type = shape_to_ants_input_type(shape)
 
@@ -480,10 +480,16 @@ def anat_reproject_atlases_to_scanner(
 
     additional_files: Dict[str, Path] = {}
     for atlas_path in atlas_files:
-        atlas_name = atlas_path.name
+        # Input: atlas-{name}_space-T1w_{stem}.nii.gz -> scanner: atlas-{name}_space-scanner_{stem}.nii.gz
+        in_name = atlas_path.name
+        if "_space-T1w_" in in_name:
+            out_name = in_name.replace("_space-T1w_", "_space-scanner_", 1)
+        else:
+            stem = in_name.replace(".nii.gz", "")
+            out_name = f"{stem}_space-scanner.nii.gz"
         result = flirt_apply_transforms(
             movingf=str(atlas_path),
-            outputf_name=atlas_name,
+            outputf_name=out_name,
             reff=str(scanner_reference),
             working_dir=str(atlas_dir),
             transformf=str(conform_inverse_xfm),
@@ -492,7 +498,7 @@ def anat_reproject_atlases_to_scanner(
             generate_tmean=False,
         )
         out_path = Path(result["imagef_registered"])
-        additional_files[atlas_name] = out_path
+        additional_files[out_name] = out_path
 
     return StepOutput(
         output_file=atlas_dir,

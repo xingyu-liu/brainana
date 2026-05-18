@@ -6,11 +6,12 @@ including embedded snapshots, processing parameters, and quality metrics.
 """
 
 import os
+import json
 import logging
 import html
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Union, List, Optional
+from typing import Dict, Any, Union, List, Optional, Iterator
 import re
 
 from ..utils.bids import parse_bids_entities, BIDS_ENTITY_ORDER
@@ -163,6 +164,49 @@ def _cited_references(methods_body: str) -> List[str]:
     return sorted(refs)
 
 
+def _iter_leaf_snapshots(data: Dict[str, Any]) -> Iterator[Dict[str, Any]]:
+    """Yield leaf dicts in a nested snapshot hierarchy (each has a ``path`` key)."""
+    for value in data.values():
+        if isinstance(value, dict):
+            if "path" in value:
+                yield value
+            else:
+                yield from _iter_leaf_snapshots(value)
+
+
+def _anat_suffix(filename: str, entities: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    """Return ``'T1w'``, ``'T2w'``, or ``None`` from filename ending and BIDS entities."""
+    ent = entities or {}
+    if filename.endswith("_T2w.png") or ent.get("suffix") == "T2w":
+        return "T2w"
+    if filename.endswith("_T1w.png") or ent.get("suffix") == "T1w":
+        return "T1w"
+    return None
+
+
+def _snapshot_sort_key(snapshot: Dict[str, Any]) -> tuple:
+    """Sort key: QC figure order, then T1w before T2w, then filename."""
+    base_order = SNAPSHOT_ORDER_INDEX.get(snapshot.get("snapshot_type", ""), 999)
+    filename = snapshot.get("filename", "")
+    suf = _anat_suffix(filename, snapshot.get("entities", {}))
+    modality_order = 1 if suf == "T2w" else 0
+    return (base_order, modality_order, filename)
+
+
+def _snapshot_sort_key_hierarchy_item(item: tuple) -> tuple:
+    """Like ``_snapshot_sort_key`` but third component is the hierarchy dict key (stable ordering)."""
+    name, snapshot_info = item
+    filename = Path(snapshot_info["path"]).name
+    b, m, _ = _snapshot_sort_key(
+        {
+            "snapshot_type": snapshot_info.get("snapshot_type", ""),
+            "entities": snapshot_info.get("entities", {}),
+            "filename": filename,
+        }
+    )
+    return (b, m, name)
+
+
 class BidsEntityProcessor:
     """Handles all BIDS entity processing operations."""
     
@@ -199,7 +243,7 @@ class BidsEntityProcessor:
                 else:
                     parts.append(f'{entity} <span class="bids-entity">{entities[entity]}</span>')
         
-        return f"{', '.join(parts)}" if parts else None
+        return ", ".join(parts)
     
     @staticmethod
     def clean_header_id(text: str) -> str:
@@ -286,12 +330,13 @@ class SnapshotProcessor:
                 key_parts.append(f"{entity_key}-{entities[entity_key]}")
         
         # Add modality suffix to avoid key collisions between T1w/T2w
-        if filename.endswith('_T1w.png'):
-            key_parts.append('T1w')
-        elif filename.endswith('_T2w.png'):
-            key_parts.append('T2w')
-        elif filename.endswith('_bold.png') or filename.endswith('_boldref.png'):
-            key_parts.append('bold')
+        suf = _anat_suffix(filename, entities)
+        if suf == "T1w":
+            key_parts.append("T1w")
+        elif suf == "T2w":
+            key_parts.append("T2w")
+        elif filename.endswith("_bold.png") or filename.endswith("_boldref.png"):
+            key_parts.append("bold")
         
         return "_".join(key_parts)
     
@@ -419,35 +464,18 @@ class SnapshotProcessor:
             if isinstance(value, dict) and 'path' not in value:
                 if any(isinstance(v, dict) and 'snapshot_type' in v for v in value.values()):
                     # Sort by snapshot order, with special handling for T1w/T2w modality order
-                    def sort_key(item):
-                        name, snapshot_info = item
-                        base_order = SNAPSHOT_ORDER_INDEX.get(snapshot_info.get('snapshot_type', ''), 999)
-                        
-                        # For anatomical snapshots, ensure T1w comes before T2w
-                        # Also ensure that within the same snapshot type, T1w comes before T2w
-                        modality_order = 0
-                        # Use more specific logic - check file ending for modality
-                        if name.endswith('_T1w.png') or (snapshot_info.get('entities', {}).get('suffix') == 'T1w'):
-                            modality_order = 0  # T1w first
-                        elif name.endswith('_T2w.png') or (snapshot_info.get('entities', {}).get('suffix') == 'T2w'):
-                            modality_order = 1  # T2w second
-                        
-                        return (base_order, modality_order, name)
-                    
-                    sorted_items = sorted(value.items(), key=sort_key)
+                    sorted_items = sorted(value.items(), key=_snapshot_sort_key_hierarchy_item)
                 else:
                     # For non-snapshot items, ensure T1w comes before T2w
-                    def sort_key(item):
+                    def _nonsnap_sort_key(item):
                         name, _ = item
-                        # Use more specific logic - check file ending for modality
                         if name.endswith('_T1w.png') or '_T1w' in name:
                             return (0, name)
-                        elif name.endswith('_T2w.png') or '_T2w' in name:
+                        if name.endswith('_T2w.png') or '_T2w' in name:
                             return (1, name)
-                        else:
-                            return (2, name)
-                    
-                    sorted_items = sorted(value.items(), key=sort_key)
+                        return (2, name)
+
+                    sorted_items = sorted(value.items(), key=_nonsnap_sort_key)
                     
                 data[key] = dict(sorted_items)
                 SnapshotProcessor._sort_hierarchy(data[key])
@@ -502,32 +530,35 @@ class HtmlGenerator:
         subject_id = report_data["metadata"]["subject_id"]
         organized = report_data["organized_snapshots"]
 
-        # Use original counts from dataset_context if available; otherwise derive from snapshots
         dataset_context = report_data.get("dataset_context", {})
         if "subject_file_counts" in dataset_context:
-            # Use detailed subject counts if available (preferred)
-            t1w_count = dataset_context["subject_file_counts"].get("t1w", 0)
-            t2w_count = dataset_context["subject_file_counts"].get("t2w", 0)
-            func_count = dataset_context["subject_file_counts"]["functional"]
+            subject_file_counts = dict(dataset_context["subject_file_counts"])
         elif "job_file_counts" in dataset_context:
-            # Fall back to job counts (no T1w/T2w breakdown available)
             t1w_count = dataset_context["job_file_counts"]["anatomical"]
-            t2w_count = 0  # Cannot determine T2w count from legacy data
             func_count = dataset_context["job_file_counts"]["functional"]
+            subject_file_counts = {
+                "t1w": t1w_count,
+                "t2w": 0,
+                "t1w_processed": t1w_count,
+                "t2w_processed": 0,
+                "functional": func_count,
+            }
         else:
-            # Derive counts from organized snapshots (what actually has QC in this report)
             anat_counts = HtmlGenerator._count_anatomical_by_modality(organized["anatomical"])
-            t1w_count = anat_counts["t1w"]
-            t2w_count = anat_counts["t2w"]
             func_count = HtmlGenerator._count_unique_images(organized["functional"])
+            subject_file_counts = {
+                "t1w": anat_counts["t1w"],
+                "t2w": anat_counts["t2w"],
+                "t1w_processed": anat_counts["t1w"],
+                "t2w_processed": anat_counts["t2w"],
+                "functional": func_count,
+            }
 
-        # Build structural images description: always show both T1w and T2w
-        if t1w_count == "N/A" or t2w_count == "N/A":
-            structural_text = "N/A"
-        else:
-            t1w = int(t1w_count) if t1w_count is not None else 0
-            t2w = int(t2w_count) if t2w_count is not None else 0
-            structural_text = f"{t1w} T1w, {t2w} T2w"
+        subject_file_counts.setdefault("t1w_processed", subject_file_counts.get("t1w", 0))
+        subject_file_counts.setdefault("t2w_processed", subject_file_counts.get("t2w", 0))
+
+        structural_li = HtmlGenerator._structural_images_summary_li(subject_file_counts)
+        func_count = subject_file_counts.get("functional", 0)
 
         # Standard output space: template.output_space (e.g. "NMT2Sym:res-05") -> display template name
         output_space_raw = (
@@ -547,7 +578,7 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
 </div>
 <ul class="elem-desc">
 <li>Subject ID: {subject_id}</li>
-<li>Structural images: {structural_text}</li>
+{structural_li}
 <li>Functional images: {func_count}</li>
 <li>Output spaces: {output_space_display}</li>
 <li>Surface reconstruction: {freesurfer_text}</li>
@@ -617,35 +648,19 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
         """Group snapshots by BIDS entities. For anatomical (section_prefix=='anatomical'),
         returns two-level Dict[ses/run_key, Dict[modality, list]]; otherwise flat Dict[group_key, list]."""
         all_snapshots = []
-        
-        def collect_snapshots(level_data: Dict[str, Any]) -> None:
-            for value in level_data.values():
-                if isinstance(value, dict):
-                    if 'path' in value:
-                        filename = Path(value['path']).name
-                        entities = parse_bids_entities(filename)
-                        all_snapshots.append({
-                            'filename': filename,
-                            'path': value['path'],
-                            'entities': entities,
-                            'description': value.get('description', ''),
-                            'snapshot_type': value.get('snapshot_type', ''),
-                            'figure_description': value.get('figure_description', ''),
-                        })
-                    else:
-                        collect_snapshots(value)
-        
-        collect_snapshots(data)
-        
-        def snapshot_sort_key(snapshot: Dict[str, Any]):
-            base_order = SNAPSHOT_ORDER_INDEX.get(snapshot.get('snapshot_type', ''), 999)
-            filename = snapshot.get('filename', '')
-            modality_order = 0
-            if filename.endswith('_T1w.png') or (snapshot.get('entities', {}).get('suffix') == 'T1w'):
-                modality_order = 0
-            elif filename.endswith('_T2w.png') or (snapshot.get('entities', {}).get('suffix') == 'T2w'):
-                modality_order = 1
-            return (base_order, modality_order, filename)
+        for value in _iter_leaf_snapshots(data):
+            filename = Path(value["path"]).name
+            entities = parse_bids_entities(filename)
+            all_snapshots.append(
+                {
+                    "filename": filename,
+                    "path": value["path"],
+                    "entities": entities,
+                    "description": value.get("description", ""),
+                    "snapshot_type": value.get("snapshot_type", ""),
+                    "figure_description": value.get("figure_description", ""),
+                }
+            )
         
         # Anatomical: two-level grouping (ses/run -> T1w/T2w -> snapshots)
         if section_prefix == "anatomical":
@@ -654,17 +669,13 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
                 entities = snapshot['entities']
                 entities_no_suffix = {k: v for k, v in entities.items() if k not in ['sub', 'desc', 'space', 'suffix']}
                 base_group_key = BidsEntityProcessor.create_display_text(entities_no_suffix) or 'sub-level'
-                filename = snapshot.get('filename', '')
-                suffix = entities.get('suffix', '')
+                filename = snapshot.get("filename", "")
                 # T1wT2wCombined comparison is shown under T2w (between T2w2T1w and T2w2template)
-                if snapshot.get('snapshot_type') == 't1wt2w_combined_comparison':
-                    modality = 'T2w'
-                elif suffix == 'T1w' or (suffix != 'T2w' and filename.endswith('_T1w.png')):
-                    modality = 'T1w'
-                elif suffix == 'T2w' or filename.endswith('_T2w.png'):
-                    modality = 'T2w'
+                if snapshot.get("snapshot_type") == "t1wt2w_combined_comparison":
+                    modality = "T2w"
                 else:
-                    modality = 'T1w'
+                    suf = _anat_suffix(filename, entities)
+                    modality = suf if suf is not None else "T1w"
                 if base_group_key not in groups:
                     groups[base_group_key] = {}
                 if modality not in groups[base_group_key]:
@@ -672,7 +683,7 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
                 groups[base_group_key][modality].append(snapshot)
             for base_key in groups:
                 for mod in groups[base_key]:
-                    groups[base_key][mod].sort(key=snapshot_sort_key)
+                    groups[base_key][mod].sort(key=_snapshot_sort_key)
             # Sort top-level by session
             def anat_group_sort(item):
                 group_name, modality_dict = item
@@ -692,20 +703,22 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
             filename = snapshot.get('filename', '')
             ent = snapshot.get('entities', {})
             # T1wT2wCombined comparison is shown under T2w
-            if snapshot.get('snapshot_type') == 't1wt2w_combined_comparison':
-                group_key = "T2w" if base_group_key == 'sub-level' else f"{base_group_key} T2w"
-            elif ent.get('suffix') == 'T1w' or (ent.get('suffix') != 'T2w' and filename.endswith('_T1w.png')):
-                group_key = "T1w" if base_group_key == 'sub-level' else f"{base_group_key} T1w"
-            elif ent.get('suffix') == 'T2w' or filename.endswith('_T2w.png'):
-                group_key = "T2w" if base_group_key == 'sub-level' else f"{base_group_key} T2w"
+            if snapshot.get("snapshot_type") == "t1wt2w_combined_comparison":
+                group_key = "T2w" if base_group_key == "sub-level" else f"{base_group_key} T2w"
             else:
-                group_key = base_group_key
+                suf = _anat_suffix(filename, ent)
+                if suf == "T1w":
+                    group_key = "T1w" if base_group_key == "sub-level" else f"{base_group_key} T1w"
+                elif suf == "T2w":
+                    group_key = "T2w" if base_group_key == "sub-level" else f"{base_group_key} T2w"
+                else:
+                    group_key = base_group_key
             if group_key not in groups:
                 groups[group_key] = []
             groups[group_key].append(snapshot)
         
         for group_key in groups:
-            groups[group_key].sort(key=snapshot_sort_key)
+            groups[group_key].sort(key=_snapshot_sort_key)
         
         def group_sort_key(group_item):
             group_name, snapshots = group_item
@@ -737,24 +750,22 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
             return 0
         
         unique_images = set()
-        _exclude_from_func_identity = frozenset({'desc', 'sub', 'space'})
-        
-        def collect_unique_entities(level_data: Dict[str, Any]) -> None:
-            for value in level_data.values():
-                if isinstance(value, dict):
-                    if 'path' in value and 'entities' in value:
-                        if value.get('snapshot_type') == 'func_coreg_overlay':
-                            continue
-                        entities = value['entities']
-                        image_id = tuple(sorted(
-                            (k, v) for k, v in entities.items()
-                            if k not in _exclude_from_func_identity
-                        ))
-                        unique_images.add(image_id)
-                    else:
-                        collect_unique_entities(value)
-        
-        collect_unique_entities(data)
+        _exclude_from_func_identity = frozenset({"desc", "sub", "space"})
+
+        for value in _iter_leaf_snapshots(data):
+            if "entities" not in value:
+                continue
+            if value.get("snapshot_type") == "func_coreg_overlay":
+                continue
+            entities = value["entities"]
+            image_id = tuple(
+                sorted(
+                    (k, v)
+                    for k, v in entities.items()
+                    if k not in _exclude_from_func_identity
+                )
+            )
+            unique_images.add(image_id)
         return len(unique_images)
 
     @staticmethod
@@ -763,29 +774,71 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
         t1w_ids: set = set()
         t2w_ids: set = set()
 
-        def collect(level_data: Dict[str, Any]) -> None:
-            for value in level_data.values():
-                if isinstance(value, dict):
-                    if 'path' in value and 'entities' in value:
-                        entities = value['entities']
-                        image_id = tuple(sorted(
-                            (k, v) for k, v in entities.items()
-                            if k not in ['desc', 'sub']
-                        ))
-                        # BIDS suffix (T1w/T2w) is often not in entities for PNG filenames;
-                        # parse_bids_entities only extracts key-value pairs. Use filename.
-                        filename = Path(value['path']).name
-                        if filename.endswith('_T2w.png'):
-                            t2w_ids.add(image_id)
-                        else:
-                            # T1w or unspecified anatomical (_T1w.png or other)
-                            t1w_ids.add(image_id)
-                    else:
-                        collect(value)
-
         if data:
-            collect(data)
+            for value in _iter_leaf_snapshots(data):
+                if "entities" not in value:
+                    continue
+                entities = value["entities"]
+                image_id = tuple(
+                    sorted(
+                        (k, v)
+                        for k, v in entities.items()
+                        if k not in ["desc", "sub"]
+                    )
+                )
+                filename = Path(value["path"]).name
+                if _anat_suffix(filename, entities) == "T2w":
+                    t2w_ids.add(image_id)
+                else:
+                    # T1w or unspecified anatomical (_T1w.png or other)
+                    t1w_ids.add(image_id)
         return {"t1w": len(t1w_ids), "t2w": len(t2w_ids)}
+
+    @staticmethod
+    def _structural_images_summary_li(subject_file_counts: Dict[str, Any]) -> str:
+        """Return one <li> for Summary: compact line or structured block (acquired vs after synthesis)."""
+        t1a = subject_file_counts.get("t1w")
+        t2a = subject_file_counts.get("t2w")
+        if t1a == "N/A" or t2a == "N/A":
+            return "<li>Structural images: N/A</li>"
+
+        t1a_i = int(t1a) if t1a is not None else 0
+        t2a_i = int(t2a) if t2a is not None else 0
+        t1p_i = int(subject_file_counts.get("t1w_processed", t1a_i) or 0)
+        t2p_i = int(subject_file_counts.get("t2w_processed", t2a_i) or 0)
+
+        if (t1a_i == t1p_i) and (t2a_i == t2p_i):
+            return f"<li>Structural images: {t1a_i} T1w, {t2a_i} T2w</li>"
+
+        def _modality_row(label: str, acquired: int, processed: int) -> str:
+            """One table row; shared column widths keep counts aligned (incl. multi-digit)."""
+            label_e = html.escape(label)
+            acq_e = html.escape(str(acquired))
+            lead = (
+                f"<tr><td class=\"qc-struct-lab\">{label_e}:</td>"
+                f"<td class=\"qc-struct-k\">Acquired</td>"
+                f'<td class="qc-struct-n">{acq_e}</td>'
+            )
+            if acquired != processed:
+                proc_e = html.escape(str(processed))
+                return (
+                    f"{lead}<td class=\"qc-struct-pipe\" aria-hidden=\"true\">|</td>"
+                    f'<td class="qc-struct-k">After synthesis</td>'
+                    f'<td class="qc-struct-n">{proc_e}</td></tr>'
+                )
+            return f"{lead}<td></td><td></td><td></td></tr>"
+
+        t1_row = _modality_row("T1w", t1a_i, t1p_i)
+        t2_row = _modality_row("T2w", t2a_i, t2p_i)
+        return (
+            "<li>Structural images"
+            '<div class="qc-structural-block">'
+            '<table class="qc-struct-summary"><tbody>'
+            f"{t1_row}{t2_row}"
+            "</tbody></table>"
+            "</div>"
+            "</li>"
+        )
 
     @staticmethod
     def _has_surface_recon_snapshots(data: Dict[str, Any]) -> bool:
@@ -793,19 +846,13 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
         if not data:
             return False
 
-        def collect(level_data: Dict[str, Any]) -> bool:
-            for value in level_data.values():
-                if isinstance(value, dict):
-                    if 'path' in value and 'snapshot_type' in value:
-                        st = (value.get('snapshot_type') or '').lower()
-                        if 'surf' in st or 'cortical' in st:
-                            return True
-                    else:
-                        if collect(value):
-                            return True
-            return False
-
-        return collect(data)
+        for value in _iter_leaf_snapshots(data):
+            if "snapshot_type" not in value:
+                continue
+            st = (value.get("snapshot_type") or "").lower()
+            if "surf" in st or "cortical" in st:
+                return True
+        return False
     
     @staticmethod
     def create_about_section(report_data: Dict[str, Any]) -> str:
@@ -993,7 +1040,10 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
         # Detect whether T2w data was actually processed for this subject
         dataset_context = report_data.get("dataset_context", {})
         if "subject_file_counts" in dataset_context:
-            has_t2w = int(dataset_context["subject_file_counts"].get("t2w", 0) or 0) > 0
+            sfc = dataset_context["subject_file_counts"]
+            has_t2w = (
+                max(int(sfc.get("t2w", 0) or 0), int(sfc.get("t2w_processed", 0) or 0)) > 0
+            )
         else:
             anat_counts = HtmlGenerator._count_anatomical_by_modality(
                 report_data.get("organized_snapshots", {}).get("anatomical", {})
@@ -1040,6 +1090,43 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
         content = "<div class=\"boiler-html methods-structured\">\n" + "\n".join(parts) + "\n</div>"
         return HtmlGenerator.create_section("Methods", "Methods", content)
 
+
+def _resolve_nextflow_reports_dir(snapshot_dir: Path, report_path: Path) -> Optional[Path]:
+    """Return nextflow_reports/ if anatomical_jobs.json exists (Brainana output root)."""
+    candidates: List[Path] = []
+    snap = snapshot_dir.resolve()
+    if snap.name == "figures" and snap.parent.name.startswith("sub-"):
+        candidates.append(snap.parent.parent / "nextflow_reports")
+    candidates.append(report_path.parent.resolve() / "nextflow_reports")
+    seen: set = set()
+    for c in candidates:
+        key = str(c)
+        if key in seen:
+            continue
+        seen.add(key)
+        if (c / "anatomical_jobs.json").is_file():
+            return c
+    return None
+
+
+def _count_anat_inputs_from_jobs(jobs: List[Dict[str, Any]], subject_id: str, suffix: str) -> int:
+    """Count original anatomical NIfTI inputs for a subject from discovery job list."""
+    n = 0
+    for job in jobs:
+        if job.get("subject_id") != subject_id or job.get("suffix") != suffix:
+            continue
+        fps = job.get("file_paths")
+        if isinstance(fps, list) and fps:
+            n += len(fps)
+        elif job.get("file_path"):
+            n += 1
+    return n
+
+
+def _subject_has_anatomical_job(jobs: List[Dict[str, Any]], subject_id: str) -> bool:
+    return any(j.get("subject_id") == subject_id for j in jobs)
+
+
 def generate_qc_report(
     snapshot_dir: Union[str, Path],
     report_path: Union[str, Path],
@@ -1068,6 +1155,46 @@ def generate_qc_report(
         subject_id_match = re.search(r'sub-(\w+)', report_path.name)
         subject_id = subject_id_match.group(1) if subject_id_match else None
         
+        anat_proc = HtmlGenerator._count_anatomical_by_modality(organized_snapshots["anatomical"])
+        func_snap = HtmlGenerator._count_unique_images(organized_snapshots["functional"])
+        subject_file_counts: Dict[str, Any] = {
+            "t1w": anat_proc["t1w"],
+            "t2w": anat_proc["t2w"],
+            "t1w_processed": anat_proc["t1w"],
+            "t2w_processed": anat_proc["t2w"],
+            "functional": func_snap,
+        }
+
+        nfr = _resolve_nextflow_reports_dir(snapshot_dir, report_path)
+        if subject_id and nfr is not None:
+            jobs_path = nfr / "anatomical_jobs.json"
+            try:
+                with open(jobs_path, encoding="utf-8") as jf:
+                    anat_jobs: List[Dict[str, Any]] = json.load(jf)
+                if _subject_has_anatomical_job(anat_jobs, subject_id):
+                    subject_file_counts["t1w"] = _count_anat_inputs_from_jobs(
+                        anat_jobs, subject_id, "T1w"
+                    )
+                    subject_file_counts["t2w"] = _count_anat_inputs_from_jobs(
+                        anat_jobs, subject_id, "T2w"
+                    )
+                    logger.info(
+                        "QC: using anatomical input counts from discovery for subject %s (%s)",
+                        subject_id,
+                        jobs_path,
+                    )
+            except (OSError, json.JSONDecodeError) as e:
+                logger.warning("QC: could not read %s for report summary counts: %s", jobs_path, e)
+
+        merged_context = dict(dataset_context or {})
+        user_sfc = merged_context.pop("subject_file_counts", None)
+        if user_sfc:
+            subject_file_counts.update(user_sfc)
+        subject_file_counts.setdefault("t1w_processed", anat_proc["t1w"])
+        subject_file_counts.setdefault("t2w_processed", anat_proc["t2w"])
+        subject_file_counts.setdefault("functional", func_snap)
+        merged_context["subject_file_counts"] = subject_file_counts
+
         from nhp_mri_prep.version import get_version
         report_data = {
             "metadata": {
@@ -1079,7 +1206,7 @@ def generate_qc_report(
             },
             "configuration": config,
             "organized_snapshots": organized_snapshots,
-            "dataset_context": dataset_context or {},
+            "dataset_context": merged_context,
             "available_entities": snapshot_data['available_entities']
         }
         
@@ -1230,6 +1357,38 @@ div#boilerplate pre {{
 .dropdown-menu {{
     max-height: 70vh;
     overflow-y: auto;
+}}
+
+.qc-structural-block {{
+    margin: 0;
+    padding-left: 1.25rem;
+}}
+table.qc-struct-summary {{
+    border-collapse: collapse;
+    border-spacing: 0;
+    margin: 0;
+    padding: 0;
+    font-weight: normal;
+}}
+table.qc-struct-summary td {{
+    padding: 0 0.5em 0 0;
+    vertical-align: baseline;
+    white-space: nowrap;
+}}
+table.qc-struct-summary td:last-child {{
+    padding-right: 0;
+}}
+table.qc-struct-summary .qc-struct-lab {{
+    padding-right: 0.35em;
+}}
+table.qc-struct-summary .qc-struct-pipe {{
+    padding-left: 0.15em;
+    padding-right: 0.35em;
+    text-align: center;
+}}
+table.qc-struct-summary .qc-struct-n {{
+    text-align: end;
+    font-variant-numeric: tabular-nums;
 }}
 </style>
 </head>

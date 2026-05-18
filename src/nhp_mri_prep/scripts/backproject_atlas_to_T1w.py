@@ -40,9 +40,15 @@ def iter_subject_dirs(site_dir: Path):
     return sorted(p for p in site_dir.glob("sub-*") if p.is_dir())
 
 
-def _is_space_agnostic_preproc_t1w(path: Path) -> bool:
+def _is_t1w_preproc_in_t1w_space(path: Path) -> bool:
     name = path.name
-    return name.endswith("desc-preproc_T1w.nii.gz") and "space-" not in name
+    if not name.endswith("desc-preproc_T1w.nii.gz"):
+        return False
+    # Current pipeline: space-T1w_desc-preproc_T1w
+    if "_space-T1w_desc-preproc_" in name:
+        return True
+    # Legacy outputs without space entity
+    return "space-" not in name
 
 
 def find_required_inputs_for_subject(subject_dir: Path, site_name: str):
@@ -71,7 +77,7 @@ def find_required_inputs_for_subject(subject_dir: Path, site_name: str):
     t1w_candidates = []
     for anat_dir in anat_dirs:
         t1w_candidates.extend(
-            p for p in anat_dir.glob("*desc-preproc_T1w.nii.gz") if _is_space_agnostic_preproc_t1w(p)
+            p for p in anat_dir.glob("*desc-preproc_T1w.nii.gz") if _is_t1w_preproc_in_t1w_space(p)
         )
     t1w_candidates = sorted(t1w_candidates)
     if len(t1w_candidates) == 0:
@@ -103,7 +109,10 @@ def find_required_inputs_for_subject(subject_dir: Path, site_name: str):
         return record
 
     # Keep preproc image as spatial reference, but remove desc-preproc from atlas filename template.
-    bids_name_no_preproc = t1w_path.name.replace("_desc-preproc_T1w.nii.gz", "_T1w.nii.gz")
+    bids_name_no_preproc = (
+        t1w_path.name.replace("_space-T1w_desc-preproc_T1w.nii.gz", "_T1w.nii.gz")
+        .replace("_desc-preproc_T1w.nii.gz", "_T1w.nii.gz")
+    )
     record["bids_name"] = Path(bids_name_no_preproc)
     record["t1w_reference"] = t1w_path
     record["inverse_reg_xfm"] = inverse_candidates[0]

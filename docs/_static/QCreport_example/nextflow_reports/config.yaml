@@ -1,4 +1,4 @@
-_description: Default configuration for Brainana preprocessing pipeline
+_description: Default configuration for brainana preprocessing pipeline
 general:
   verbose: 2
   anat_only: false
@@ -14,7 +14,6 @@ anat:
   synthesis_level: subject
   conform:
     enabled: true
-    padding_percentage: 0.1
   skullstripping_segmentation:
     enabled: true
     method: fastSurferCNN
@@ -36,6 +35,8 @@ anat:
     use_t1wt2wcombined: false
 func:
   coreg_runs_within_session: true
+  conform:
+    enabled: true
   slice_timing_correction:
     enabled: true
     repetition_time: null
@@ -63,9 +64,6 @@ func:
     shrink_factor: 2
     bspline_fitting: '[ 100 ]'
     rescale_mean_to_100: true
-  conform:
-    enabled: true
-    padding_percentage: 0.1
   skullstripping:
     enabled: true
 registration:
@@ -73,4 +71,5 @@ registration:
   func2anat_xfm_type: syn
   func2template_xfm_type: syn
   interpolation: BSpline
+  enable_fireants: true
   keep_func_resolution: true

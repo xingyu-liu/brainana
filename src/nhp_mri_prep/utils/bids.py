@@ -7,7 +7,7 @@ file names and directory structures.
 
 import re
 from pathlib import Path
-from typing import Dict, Optional, Union, Any, List
+from typing import Dict, Optional, Union, Any
 from dataclasses import dataclass
 import json
 
@@ -35,25 +35,55 @@ _BIDS_MODALITY_SUFFIXES: tuple[str, ...] = tuple(
 )
 
 # BIDS ``space`` key-value segments in filename stems (``_space-<value>``).
-_BIDS_SPACE_ENTITY_IN_STEM = re.compile(r'_space-[a-zA-Z0-9-]+')
+_BIDS_SPACE_RE = re.compile(r'_space-[a-zA-Z0-9-]+')
 
 
-def _strip_bids_space_entities_from_stem(stem: str) -> str:
+def _strip_space_entities(stem: str) -> str:
     """Remove every ``_space-<value>`` segment from a filename stem."""
-    return _BIDS_SPACE_ENTITY_IN_STEM.sub('', stem)
+    return _BIDS_SPACE_RE.sub('', stem)
 
 
-def _suffix_introduces_space_entity(suffix: str) -> bool:
-    """True if *suffix* adds a BIDS ``space`` token (``space-...`` or ``_space-...``)."""
-    return suffix.startswith('space-') or '_space-' in suffix
-
-
-def _strip_trailing_bids_modality_suffix(stem: str) -> str:
+def _strip_modality_suffix(stem: str) -> str:
     """Remove one trailing recognized BIDS MRI modality suffix from a filename stem."""
     for suffix in _BIDS_MODALITY_SUFFIXES:
         if stem.endswith(suffix):
             return stem[: -len(suffix)]
     return stem
+
+
+def _suffix_has_space_entity(suffix: str) -> bool:
+    """True if *suffix* adds a BIDS ``space`` token (``space-...`` or ``_space-...``)."""
+    return suffix.startswith('space-') or '_space-' in suffix
+
+
+def replace_bids_space(stem: str, new_space: str) -> str:
+    """Replace (or insert) the ``space-{}`` entity in a BIDS filename stem.
+
+    Removes any existing ``_space-*`` segments, then inserts
+    ``_space-{new_space}`` at the canonical BIDS position (highest priority
+    anchor wins):
+
+    1. Before ``_desc-``  — e.g. ``sub-01_desc-brain_mask``
+                           → ``sub-01_space-T1w_desc-brain_mask``
+    2. Before the trailing modality suffix (``_boldref``, ``_bold``,
+       ``_T1w``, ``_T2w``) — e.g. ``sub-01_T2w``
+                           → ``sub-01_space-scanner_T2w``
+    3. Appended           — no recognised anchor present.
+    """
+    clean = _strip_space_entities(stem)
+    space_tag = f'_space-{new_space}'
+
+    # 1. Insert before _desc- (space precedes desc in BIDS entity order)
+    if '_desc-' in clean:
+        return clean.replace('_desc-', f'{space_tag}_desc-', 1)
+
+    # 2. Insert before the trailing modality suffix
+    base = _strip_modality_suffix(clean)
+    if base != clean:
+        return f'{base}{space_tag}{clean[len(base):]}'
+
+    # 3. No known anchor — append
+    return f'{clean}{space_tag}'
 
 
 def get_filename_stem(file_path: Union[str, Path]) -> str:
@@ -110,10 +140,8 @@ def parse_bids_entities(filename: str) -> Dict[str, str]:
         >>> parse_bids_entities("sub-032097_ses-001_run-1_desc-brain_T1w.nii.gz")
         {'sub': '032097', 'ses': '001', 'run': '1', 'desc': 'brain'}
     """
-    # Extract just the filename if a full path was provided
-    if '/' in filename or '\\' in filename:
-        filename = Path(filename).name
-    
+    filename = Path(filename).name
+
     entities = {}
     
     # This captures ALL key-value pairs, not just predefined ones
@@ -162,12 +190,6 @@ def create_bids_filename(
         elif entity in entities:
             components.append(f"{entity}-{entities[entity]}")
 
-    # If 'others' is not in the order, append any leftover custom entities at the end
-    if 'others' not in BIDS_ENTITY_ORDER:
-        remaining = sorted(set(entities.keys()) - set(BIDS_ENTITY_ORDER))
-        for entity in remaining:
-            components.append(f"{entity}-{entities[entity]}")
-    
     # Join components and add suffix and extension
     filename = "_".join(components)
     if filename:
@@ -229,25 +251,16 @@ def create_bids_output_filename(
     # This matches the old behavior: bids_prefix_wo_modality = bids_prefix.replace(f"_{modality}", "")
     bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
     
-    # If the replacement didn't work (modality not found), try to extract it differently
-    # This handles cases where the modality might be part of a compound suffix
+    # If the replacement didn't work (modality not found), try boldref fallback
     if bids_prefix_wo_modality == original_stem:
-        # Try to find and remove the modality from the end
-        if original_stem.endswith(f"_{modality}"):
-            bids_prefix_wo_modality = original_stem[:-len(f"_{modality}")]
-        else:
-            # Special case: if modality is 'boldref' but original has '_bold', remove '_bold' instead
-            # This handles the case where we're converting from bold timeseries to boldref (tmean)
-            if modality == 'boldref' and '_bold' in original_stem:
-                bids_prefix_wo_modality = original_stem.replace('_bold', '')
-            else:
-                # If we can't find it, just use the original stem (fallback)
-                bids_prefix_wo_modality = original_stem
+        if modality == 'boldref' and '_bold' in original_stem:
+            bids_prefix_wo_modality = original_stem.replace('_bold', '')
+        # else: fallback — use original_stem as-is
 
     # Avoid ``..._space-A_space-B_...``: when this step's suffix introduces a new
     # ``space`` entity, drop any existing ``_space-*`` from the prefix first.
-    if _suffix_introduces_space_entity(suffix):
-        bids_prefix_wo_modality = _strip_bids_space_entities_from_stem(bids_prefix_wo_modality)
+    if _suffix_has_space_entity(suffix):
+        bids_prefix_wo_modality = _strip_space_entities(bids_prefix_wo_modality)
     
     # Create the new filename: prefix + suffix + modality + extension
     # This matches: f"{bids_prefix_wo_modality}_desc-preproc_{modality}.nii.gz"
@@ -265,20 +278,22 @@ def create_synthesized_bids_filename(
     """
     Basename and downstream path for outputs of the anatomical synthesis step.
 
-    The returned **basename** (first element) always includes ``space-scanner``
-    (BIDS ``space`` entity, value ``scanner``) so the linked output file matches
-    BIDS derivative naming.
+    The returned **basename** (first element) always includes a ``space`` entity so
+    the linked output file matches BIDS derivative naming:
+
+    - **T1w:** ``space-scanner`` (native T1w acquisition space)
+    - **T2w:** ``space-T2wScanner`` (native T2w acquisition space)
 
     The **downstream path** (second element) uses the same directory layout but a
-    basename **without** ``_space-scanner``, so later steps can key off the same
+    basename **without** the space entity, so later steps can key off the same
     template stem as pre-synthesis inputs.
 
     - **Synthesized:** Only ``sub`` and optional ``ses`` (omitted when subject-level);
       run/acq/etc. are dropped. Intended for merged images.
     - **Passthrough:** Uses :func:`create_bids_output_filename` so the stem (minus
       modality) is preserved verbatim (run, acq, entity order, non-standard keys).
-      Inserts ``space-scanner`` before the modality. When subject-level, the
-      ``_ses-<value>`` segment is removed from the stem first.
+      Inserts the modality-appropriate space before the modality. When subject-level,
+      the ``_ses-<value>`` segment is removed from the stem first.
 
     Args:
         original_file: Template input path (typically the first input)
@@ -290,7 +305,12 @@ def create_synthesized_bids_filename(
         ``(bids_filename_with_space_scanner, bids_path_for_downstream_wo_space)``
     """
     parsed = parse_bids_entities(original_file.name)
-    _space_scanner = 'space-scanner'
+    if modality == 'T2w':
+        space_suffix = 'space-T2wScanner'
+        space_entity_value = 'T2wScanner'
+    else:
+        space_suffix = 'space-scanner'
+        space_entity_value = 'scanner'
 
     if synthesized:
         out_entities: Dict[str, str] = {
@@ -298,7 +318,7 @@ def create_synthesized_bids_filename(
         }
         if not is_subject_level and 'ses' in parsed:
             out_entities['ses'] = parsed['ses']
-        out_entities['space'] = 'scanner'
+        out_entities['space'] = space_entity_value
         bids_filename = create_bids_filename(
             entities=out_entities,
             suffix=modality,
@@ -311,13 +331,13 @@ def create_synthesized_bids_filename(
         synthetic = Path(stem + '.nii.gz')
         bids_filename = create_bids_output_filename(
             synthetic,
-            suffix=_space_scanner,
+            suffix=space_suffix,
             modality=modality,
             extension='.nii.gz',
         )
 
     downstream_basename = (
-        _strip_bids_space_entities_from_stem(get_filename_stem(bids_filename))
+        _strip_space_entities(get_filename_stem(bids_filename))
         + '.nii.gz'
     )
     
@@ -389,7 +409,7 @@ def get_bids_prefix(
     else:
         # Run-level: preserve all entities from original template
         original_stem = get_filename_stem(bids_name)
-        return _strip_trailing_bids_modality_suffix(original_stem)
+        return _strip_modality_suffix(original_stem)
 
 
 def find_bids_metadata(nifti_path: Union[str, Path], dataset_dir: Union[str, Path]) -> Optional[Dict[str, Any]]:
@@ -418,7 +438,13 @@ def find_bids_metadata(nifti_path: Union[str, Path], dataset_dir: Union[str, Pat
     
     # Extract BIDS entities from filename
     entities = parse_bids_entities(nifti_path.name)
-    
+
+    general_name = (
+        nifti_path.name.split('_')[-1]
+        .replace('.nii.gz', '.json')
+        .replace('.nii', '.json')
+    )
+
     # Generate potential JSON filenames at different hierarchy levels
     json_candidates = []
     
@@ -438,11 +464,8 @@ def find_bids_metadata(nifti_path: Union[str, Path], dataset_dir: Union[str, Pat
             if ses_task_json.exists():
                 json_candidates.append(ses_task_json)
         
-        # General modality JSON at session level
+        # General modality JSON at session level (e.g. T1w.json, bold.json)
         if nifti_path.parent.name in ['func', 'anat', 'dwi', 'fmap']:
-            ses_modality_json = ses_dir / nifti_path.parent.name / f"{nifti_path.suffix.replace('.nii.gz', '.json').replace('.nii', '.json')}"
-            # This is for files like T1w.json, bold.json at session level
-            general_name = nifti_path.name.split('_')[-1].replace('.nii.gz', '.json').replace('.nii', '.json')
             ses_general_json = ses_dir / nifti_path.parent.name / general_name
             if ses_general_json.exists():
                 json_candidates.append(ses_general_json)
@@ -458,7 +481,6 @@ def find_bids_metadata(nifti_path: Union[str, Path], dataset_dir: Union[str, Pat
     
     # General modality JSON at subject level
     if nifti_path.parent.name in ['func', 'anat', 'dwi', 'fmap']:
-        general_name = nifti_path.name.split('_')[-1].replace('.nii.gz', '.json').replace('.nii', '.json')
         sub_general_json = sub_dir / nifti_path.parent.name / general_name
         if sub_general_json.exists():
             json_candidates.append(sub_general_json)
@@ -471,7 +493,6 @@ def find_bids_metadata(nifti_path: Union[str, Path], dataset_dir: Union[str, Pat
             json_candidates.append(dataset_task_json)
     
     # General modality JSON at dataset level
-    general_name = nifti_path.name.split('_')[-1].replace('.nii.gz', '.json').replace('.nii', '.json')
     dataset_general_json = dataset_dir / general_name
     if dataset_general_json.exists():
         json_candidates.append(dataset_general_json)

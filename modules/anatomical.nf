@@ -459,18 +459,18 @@ create_output_link(result.output_file, bids_output_brain)
 atlas_name = result.metadata.get('atlas_name')
 
 if "brain_mask" in result.additional_files:
-    bids_additional_name = f"{bids_prefix_wo_modality}_desc-brain_mask.nii.gz"
+    bids_additional_name = f"{bids_prefix_wo_modality}_space-T1w_desc-brain_mask.nii.gz"
     create_output_link(result.additional_files["brain_mask"], bids_additional_name)
 
 if "segmentation" in result.additional_files:
     if atlas_name:
-        bids_additional_name = f"{bids_prefix_wo_modality}_desc-brain_atlas{atlas_name}.nii.gz"
+        bids_additional_name = f"{bids_prefix_wo_modality}_space-T1w_desc-brain_atlas{atlas_name}.nii.gz"
     else:
-        bids_additional_name = f"{bids_prefix_wo_modality}_desc-brain_segmentation.nii.gz"
+        bids_additional_name = f"{bids_prefix_wo_modality}_space-T1w_desc-brain_segmentation.nii.gz"
     create_output_link(result.additional_files["segmentation"], bids_additional_name)
 
 if "hemimask" in result.additional_files:
-    bids_additional_name = f"{bids_prefix_wo_modality}_desc-brain_hemimask.nii.gz"
+    bids_additional_name = f"{bids_prefix_wo_modality}_space-T1w_desc-brain_hemimask.nii.gz"
     create_output_link(result.additional_files["hemimask"], bids_additional_name)
 
 if "input_cropped" in result.additional_files:
@@ -480,9 +480,9 @@ if "input_cropped" in result.additional_files:
 if "atlas_lut" in result.additional_files:
     # LUT same base as segmentation: desc-brain_atlas{atlas_name}.tsv
     if atlas_name:
-        bids_additional_name = f"{bids_prefix_wo_modality}_desc-brain_atlas{atlas_name}.tsv"
+        bids_additional_name = f"{bids_prefix_wo_modality}_space-T1w_desc-brain_atlas{atlas_name}.tsv"
     else:
-        bids_additional_name = f"{bids_prefix_wo_modality}_desc-brain_segmentation.tsv"
+        bids_additional_name = f"{bids_prefix_wo_modality}_space-T1w_desc-brain_segmentation.tsv"
     create_output_link(result.additional_files["atlas_lut"], bids_additional_name)
 
 # Save metadata
@@ -899,7 +899,7 @@ process ANAT_T2W_TO_T1W_REGISTRATION {
     tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_name), emit: output
     // Transforms: [sub, ses, forward_transform, inverse_transform]
     // Note: T1w is in scanner (pre-conformed) space at registration time
-    tuple val(subject_id), val(session_id), path("*from-T2w_to-T1wScanner_mode-image_xfm*"), path("*from-T1wScanner_to-T2w_mode-image_xfm*"), emit: transforms
+    tuple val(subject_id), val(session_id), path("*from-T2wScanner_to-scanner_mode-image_xfm*"), path("*from-scanner_to-T2wScanner_mode-image_xfm*"), emit: transforms
     path "*.json", emit: metadata
     
     script:
@@ -948,13 +948,13 @@ input_obj = StepInput(
 # Run step
 result = anat_t2w_to_t1w_registration(input_obj, t1w_reference=t1w_reference)
 
-# Generate BIDS-compliant output filename with space-T1wScanner entity
-# Format: space-T1wScanner_T2w.nii.gz (after T2w→T1w registration)
+# Generate BIDS-compliant output filename with space-scanner entity
+# Format: space-scanner_T2w.nii.gz (after T2w→T1w registration)
 # Note: T2w is registered to T1w in scanner (pre-conformed) space; same sense as from-scanner_to-T1w
 # Only after applying conform transform is T2w in the preprocessed T1w space (space-T1w)
 bids_output_filename = create_bids_output_filename(
     original_file_path=bids_name,
-    suffix='space-T1wScanner',
+    suffix='space-scanner',
     modality=modality
 )
 
@@ -971,11 +971,11 @@ def _xfm_ext(p):
     return ''.join(r.suffixes) if r.suffixes else r.suffix
 if "forward_transform" in result.additional_files:
     ext = _xfm_ext(result.additional_files["forward_transform"])
-    bids_transform_name = f"{bids_prefix_wo_modality}_from-T2w_to-T1wScanner_mode-image_xfm{ext}"
+    bids_transform_name = f"{bids_prefix_wo_modality}_from-T2wScanner_to-scanner_mode-image_xfm{ext}"
     create_output_link(result.additional_files["forward_transform"], bids_transform_name)
 if "inverse_transform" in result.additional_files:
     ext = _xfm_ext(result.additional_files["inverse_transform"])
-    bids_transform_name = f"{bids_prefix_wo_modality}_from-T1wScanner_to-T2w_mode-image_xfm{ext}"
+    bids_transform_name = f"{bids_prefix_wo_modality}_from-scanner_to-T2wScanner_mode-image_xfm{ext}"
     create_output_link(result.additional_files["inverse_transform"], bids_transform_name)
 
 # Save metadata
@@ -1499,7 +1499,7 @@ process ANAT_APPLY_TRANSFORM_MASK {
     """
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.operations.registration import ants_apply_transforms
-from nhp_mri_prep.utils.bids import get_filename_stem
+from nhp_mri_prep.utils.bids import get_filename_stem, replace_bids_space
 from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, load_config
 from pathlib import Path
 import re
@@ -1539,13 +1539,9 @@ mask_result = ants_apply_transforms(
 if not mask_result.get("imagef_registered"):
     raise FileNotFoundError("Failed to apply registration transform to mask")
 
-# Keep input mask filename and insert space entity (no rebuild = no entity reordering)
+# Replace space entity on mask stem (strip any existing space-* first)
 mask_stem = get_filename_stem(mask_file)
-if '_desc-' in mask_stem:
-    stem_with_space = mask_stem.replace('_desc-', f'_space-{template_name}_desc-', 1)
-else:
-    stem_with_space = f"{mask_stem}_space-{template_name}"
-bids_output_filename = f"{stem_with_space}.nii.gz"
+bids_output_filename = f"{replace_bids_space(mask_stem, template_name)}.nii.gz"
 
 # Create symlink
 create_output_link(Path(mask_result["imagef_registered"]), bids_output_filename)
@@ -1603,13 +1599,15 @@ def replace_desc_with_preproc(filename):
     # [^_]+ stops at the first underscore so the modality token (e.g., _T1w, _T2w)
     # is preserved. Using \\w+ would greedily consume past the underscore and drop modality.
     pattern = r'desc-[^_]+_'
-    replacement = 'desc-preproc_'
+    replacement = 'space-T1w_desc-preproc_'
     result = re.sub(pattern, replacement, str(filename))
     return Path(result)
 
 _VALID_PREPROC_SUFFIXES = (
     '_T1w.nii.gz', '_T2w.nii.gz',
     '_T1w_brain.nii.gz', '_T2w_brain.nii.gz',
+    '_space-T1w_desc-preproc_T1w.nii.gz',
+    '_space-T1w_desc-preproc_T1w_brain.nii.gz',
 )
 
 def validate_preproc_modality(name, source):
@@ -1687,8 +1685,6 @@ process ANAT_T1WT2W_COMBINED {
 from pathlib import Path
 from nhp_mri_prep.steps.anatomical import anat_t1wt2wcombined
 from nhp_mri_prep.utils.nextflow import save_metadata, create_output_link
-from nhp_mri_prep.utils.bids import get_filename_stem
-
 # Get input files
 t1w_file = Path('${t1w_file}')
 t2w_file = Path('${t2w_file}')
@@ -1696,11 +1692,13 @@ segmentation_file = Path('${segmentation_file}')
 segmentation_lut_file = Path('${segmentation_lut}')
 t1w_bids_name = Path('${t1w_bids_name}')
 
-# Generate output filename: replace "_T1w.nii.gz" with "_T1wT2wCombined.nii.gz"
-# Use the actual t1w_file name (which includes desc-preproc) instead of t1w_bids_name template
-# This preserves all BIDS entities (including desc-preproc) from the actual input filename
-t1w_name_str = t1w_file.name
-output_filename = t1w_name_str.replace('_T1w.nii.gz', '_T1wT2wCombined.nii.gz')
+# t1w_file is Phase 1 preproc (*_space-T1w_desc-preproc_T1w.nii.gz); only change modality suffix
+t1w_preproc_name = t1w_file.name
+if not t1w_preproc_name.endswith('_T1w.nii.gz'):
+    raise ValueError(
+        f"Expected Phase 1 preproc T1w filename, got: {t1w_preproc_name}"
+    )
+output_filename = t1w_preproc_name.replace('_T1w.nii.gz', '_T1wT2wCombined.nii.gz')
 
 # Call the step function
 result = anat_t1wt2wcombined(

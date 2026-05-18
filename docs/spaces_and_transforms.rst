@@ -14,17 +14,26 @@ and BOLD modalities.
 
 |
 
+- **Scanner space** (T1w and BOLD native acquisition) uses the BIDS
+  entity ``space-scanner``.  T1w synthesis outputs and atlas backprojection
+  to native grid use this label.
 - **T1w** is conformed to the template grid (``from-scanner_to-T1w``),
   then registered to template space (``from-T1w_to-<template>``).
-  ``desc-preproc_T1w.nii.gz`` carries no ``space-`` entity; template
-  outputs carry ``space-<template>``.
-- **T2w** is first coregistered to T1w in scanner space
-  (``from-T2w_to-T1wScanner``), then brought to T1w (conformed) space
-  by reusing the T1w conformation transform.  Outputs in T1w space
-  carry ``space-T1w``.
+  Preprocessed T1w in conformed space is published as
+  ``space-T1w_desc-preproc_T1w.nii.gz``; template outputs carry
+  ``space-<template>``.
+- **T2w** uses ``space-T2wScanner`` for native T2w synthesis, then is
+  coregistered to T1w scanner space (``from-T2wScanner_to-scanner``,
+  published as ``space-scanner``), then brought to T1w (conformed)
+  space by reusing the T1w conformation transform
+  (``space-T1w_desc-preproc_T2w``).
 - **BOLD** has its own conformation transform (``from-scanner_to-bold``).
-  How BOLD reaches template space depends on whether a T1w anatomical
-  is available for the session:
+  Within-session coregistration (when enabled) stays in scanner space
+  (``space-scanner_desc-coreg_boldref``).  After conform, the BOLD
+  reference in bold space is published as ``space-bold_boldref`` (session-
+  level when coreg is enabled).  Preprocessed 4D BOLD uses
+  ``space-bold_desc-preproc_bold`` (per run).  How BOLD reaches template
+  space depends on whether a T1w anatomical is available for the session:
 
   - *With associated T1w* — template resampling is performed by
     composing ``from-bold_to-T1w`` with the T1w registration transform
@@ -34,8 +43,7 @@ and BOLD modalities.
     template, producing dedicated ``from-bold_to-<template>`` and
     ``from-<template>_to-bold`` transforms.
 
-  ``desc-preproc_bold.nii.gz`` carries no ``space-`` entity; T1w and
-  template outputs carry ``space-T1w`` and ``space-<template>``
+  T1w and template BOLD outputs carry ``space-T1w`` and ``space-<template>``
   respectively.
 - **Fastsurfer** space is reached from T1w (conformed) space by
   resampling only — no transform file is produced.
@@ -69,10 +77,10 @@ files are composite registration transforms (affine ± SyN).
      - ``from-<template>_to-T1w_mode-image_xfm.h5``
      - Template → T1w
    * - T2w
-     - ``from-T2w_to-T1wScanner_mode-image_xfm.h5``
+     - ``from-T2wScanner_to-scanner_mode-image_xfm.h5``
      - T2w scanner → T1w scanner
    * - T2w
-     - ``from-T1wScanner_to-T2w_mode-image_xfm.h5``
+     - ``from-scanner_to-T2wScanner_mode-image_xfm.h5``
      - T1w scanner → T2w scanner
    * - BOLD
      - ``from-scanner_to-bold_mode-image_xfm.mat``
@@ -232,7 +240,7 @@ Demo: command to apply a transform
 
      // space- entity suffix written into the output filename.
      var outSuffix = {
-       'scanner-T1w':  'T1wScanner',
+       'scanner-T1w':  'scanner',
        'T1w':          'T1w',
        'template':     'template',
        'scanner-T2w':  'T2wScanner',
@@ -244,13 +252,13 @@ Demo: command to apply a transform
 
      // Representative reference image for each target space.
      var spaceRef = {
-       'scanner-T1w':  '<prefix>_T1w.nii.gz',
-       'T1w':          '<prefix>_desc-preproc_T1w.nii.gz',
+       'scanner-T1w':  '<prefix>_space-scanner_T1w.nii.gz',
+       'T1w':          '<prefix>_space-T1w_desc-preproc_T1w.nii.gz',
        'template':     'tpl-<template>_res-<res>_T1w.nii.gz',
-       'scanner-T2w':  '<prefix>_T2w.nii.gz',
+       'scanner-T2w':  '<prefix>_space-T2wScanner_T2w.nii.gz',
        'scanner-bold': '<prefix>_bold.nii.gz',
-       'bold-withT1w': '<prefix>_desc-preproc_bold.nii.gz',
-       'bold-noT1w':   '<prefix>_desc-preproc_bold.nii.gz',
+       'bold-withT1w': '<prefix>_space-bold_desc-preproc_bold.nii.gz',
+       'bold-noT1w':   '<prefix>_space-bold_desc-preproc_bold.nii.gz',
        'fastsurfer':   '<fastsurfer_subject_dir>/mri/T1.mgz'
      };
 
@@ -271,7 +279,7 @@ Demo: command to apply a transform
      var graph = {
        'scanner-T1w': {
          'T1w':         { tool: 'flirt', xfm: 'from-scanner_to-T1w_mode-image_xfm.mat' },
-         'scanner-T2w': { tool: 'ants',  xfm: 'from-T1wScanner_to-T2w_mode-image_xfm.h5' }
+         'scanner-T2w': { tool: 'ants',  xfm: 'from-scanner_to-T2wScanner_mode-image_xfm.h5' }
        },
        'T1w': {
          'scanner-T1w':  { tool: 'flirt', xfm: 'from-T1w_to-scanner_mode-image_xfm.mat' },
@@ -286,7 +294,7 @@ Demo: command to apply a transform
                          note: 'Only available when bold was registered directly to template (w/o associated T1w).' }
        },
        'scanner-T2w': {
-         'scanner-T1w': { tool: 'ants', xfm: 'from-T2w_to-T1wScanner_mode-image_xfm.h5' }
+         'scanner-T1w': { tool: 'ants', xfm: 'from-T2wScanner_to-scanner_mode-image_xfm.h5' }
        },
        'scanner-bold': {
          'bold-withT1w': { tool: 'flirt', xfm: 'from-scanner_to-bold_mode-image_xfm.mat',

@@ -6,115 +6,137 @@ Brainana writes all results under the **output directory** you specify (e.g. ``/
 Directory layout
 ----------------
 
-.. code-block:: text
+.. image:: _static/pipeline_details/output_data_structure.png
+   :alt: Brainana output directory layout
+   :align: center
+   :width: 100%
 
-   output_dir/
-   ├── sub-<id>/
-   │   ├── [ses-<id>/]
-   │   │   ├── anat/        # anatomical derivatives
-   │   │   └── func/        # functional derivatives
-   │   └── figures/         # QC figures (per subject)
-   ├── fastsurfer/          # surface reconstruction outputs (when enabled)
-   ├── nextflow_reports/    # Nextflow execution logs and trace
-   └── sub-<id>_report.html # browsable QC report (per subject)
+|
+
+The diagram above is the canonical layout. 
+
+Subject directory (``sub-<id>/``)
+---------------------------------
+
+Session directory (``ses-<id>/``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Anatomical outputs (``anat/``)
-------------------------------
+""""""""""""""""""""""""""""""
 
-Files are named using BIDS derivative conventions. ``<prefix>`` includes subject, session, and run entities
-(e.g. ``sub-001_ses-01_run-1``).
+*Scanner-space synthesis*
 
-For files using the ``space-<space>`` entity (for example, ``space-scanner`` or
-``space-NMT2Sym``), refer to :doc:`spaces_and_transforms` for space definitions
-and transform direction conventions.
+- ``<ses_prefix>_space-scanner_T1w.nii.gz`` — T1w in scanner space (synthesized when multiple runs exist).
+- ``<ses_prefix>_space-T2wScanner_T2w.nii.gz`` — T2w in native T2w scanner space (synthesized when multiple runs exist).
 
-*Preprocessed images — T1w space*
+*T2w in T1w scanner space* (when T2w data are present)
 
-- ``<prefix>_desc-preproc_T1w.nii.gz`` — Preprocessed T1w in T1w space.
-- ``<prefix>_desc-preproc_T1w_brain.nii.gz`` — Preprocessed T1w, skullstripped.
-- ``<prefix>_desc-brain_mask.nii.gz`` — Binary brain mask.
-- ``<prefix>_desc-brain_hemimask.nii.gz`` — Hemisphere mask.
-- ``<prefix>_desc-brain_atlasARM2.nii.gz`` — ARM2 atlas segmentation.
-- ``<prefix>_desc-brain_atlasARM2.tsv`` — Color LUT for the atlas segmentation.
+- ``<ses_prefix>_space-scanner_T2w.nii.gz`` — T2w registered to T1w scanner space.
 
-*Atlas backprojection*
+*Preprocessed structural images — T1w space*
 
-When registration is enabled, atlas volumes are backprojected from template space to two spaces:
+- ``<ses_prefix>_space-T1w_desc-preproc_T1w.nii.gz`` — Preprocessed T1w in T1w space.
+- ``<ses_prefix>_space-T1w_desc-preproc_T1w_brain.nii.gz`` — Skull-stripped T1w in T1w space.
+- ``<ses_prefix>_space-T1w_desc-preproc_T2w.nii.gz`` — Preprocessed T2w in T1w space.
+- ``<ses_prefix>_space-T1w_desc-preproc_T2w_brain.nii.gz`` — Skull-stripped T2w in T1w space.
+- ``<ses_prefix>_space-T1w_desc-preproc_T1wT2wCombined.nii.gz`` — T1w/T2w combined image (T2w-enhanced contrast; when T2w is available).
 
-- T1w space (``atlas_space-T1w/``)
-- Scanner space (``atlas_space-scanner/``)
+*Segmentation and masks — T1w space*
 
-*T2w outputs (when T2w data are present)*
+- ``<ses_prefix>_space-T1w_desc-brain_mask.nii.gz`` — Binary brain mask.
+- ``<ses_prefix>_space-T1w_desc-brain_hemimask.nii.gz`` — Hemisphere mask.
+- ``<ses_prefix>_space-T1w_desc-brain_atlasARM2.nii.gz`` — ARM2 atlas segmentation.
+- ``<ses_prefix>_space-T1w_desc-brain_atlasARM2.tsv`` — Color LUT for the atlas segmentation.
 
-- ``<prefix>_desc-preproc_T2w.nii.gz`` — Preprocessed T2w.
-- ``<prefix>_space-T1w_desc-preproc_T2w.nii.gz`` — T2w co-registered to T1w space.
-- ``<prefix>_desc-preproc_T1wT2wCombined.nii.gz`` — T1w/T2w combined image (T2w-enhanced contrast, T1w space).
+*Template-space structural images*
 
-*Template-space images*
-
-- ``<prefix>_space-<template>_desc-preproc_T1w.nii.gz`` — T1w registered to template space.
-- ``<prefix>_space-<template>_desc-preproc_T2w.nii.gz`` — T2w registered to template space.
-- ``<prefix>_space-<template>_desc-brain_mask.nii.gz`` — Brain mask in template space.
+- ``<ses_prefix>_space-<template>_desc-preproc_T1w.nii.gz`` — T1w registered to template space.
+- ``<ses_prefix>_space-<template>_desc-preproc_T2w.nii.gz`` — T2w registered to template space.
+- ``<ses_prefix>_space-<template>_desc-brain_mask.nii.gz`` — Brain mask in template space.
 
 *Transform files*
 
-- ``<prefix>_from-scanner_to-T1w_mode-image_xfm.mat`` — Scanner-to-T1w conformation transform (FSL ``.mat``).
-- ``<prefix>_from-T1w_to-scanner_mode-image_xfm.mat`` — Inverse conformation transform.
-- ``<prefix>_from-T1w_to-<template>_mode-image_xfm.<ext>`` — T1w-to-template registration (ANTs ``.h5`` or fireANTS ``.nii.gz``).
-- ``<prefix>_from-<template>_to-T1w_mode-image_xfm.<ext>`` — Template-to-T1w inverse registration.
-- ``<prefix>_from-T2w_to-T1wScanner_mode-image_xfm.<ext>`` — T2w-to-T1wScanner registration transform.
-- ``<prefix>_from-T1wScanner_to-T2w_mode-image_xfm.<ext>`` — T1wScanner-to-T2w registration transform.
+- ``<ses_prefix>_from-scanner_to-T1w_mode-image_xfm.mat`` — Scanner-to-T1w conformation (FSL ``.mat``).
+- ``<ses_prefix>_from-T1w_to-scanner_mode-image_xfm.mat`` — Inverse conformation.
+- ``<ses_prefix>_from-T1w_to-<template>_mode-image_xfm.<ext>`` — T1w-to-template registration (ANTs ``.h5`` or fireANTS ``.nii.gz``).
+- ``<ses_prefix>_from-<template>_to-T1w_mode-image_xfm.<ext>`` — Template-to-T1w inverse registration.
+- ``<ses_prefix>_from-T2wScanner_to-scanner_mode-image_xfm.<ext>`` — T2wScanner-to-scanner(T1w) registration.
+- ``<ses_prefix>_from-scanner_to-T2wScanner_mode-image_xfm.<ext>`` — Scanner(T1w)-to-T2wScanner registration.
+
+*Atlas backprojection* (when registration is enabled)
+
+Atlases are backprojected from template space into two subfolders:
+
+- ``atlas_space-T1w/`` — ``atlas-<name>_space-T1w_<ses_prefix>.nii.gz``
+- ``atlas_space-scanner/`` — ``atlas-<name>_space-scanner_<ses_prefix>.nii.gz``
 
 Functional outputs (``func/``)
--------------------------------
+""""""""""""""""""""""""""""""
 
-Session-level files (no task/run entity) are shared across all runs in the session; per-run files include
-task and run entities (e.g. ``sub-001_ses-01_task-resting_run-1``).
-**Session-level files are produced only when within-session coregistration is enabled** (``func.coreg_runs_within_session``).
-When it is disabled, the brain mask, BOLD reference, and transform files below are produced **per-run** (same names but with ``<run_prefix>``).
+Session-level files omit task and run entities. Per-run files include them (see ``<run_prefix>`` above).
 
-*Session-level files* (when coreg enabled)
+**Session-level files are produced only when within-session coregistration is enabled** (``func.coreg_runs_within_session``). When it is disabled, the session-level BOLD reference, brain mask, coreg reference, transforms, and session tSNR below are produced **per-run** instead (same naming patterns with ``<run_prefix>``).
 
-- ``<ses_prefix>_desc-brain_mask.nii.gz`` — Brain mask for functional data (BOLD space).
-- ``<ses_prefix>_desc-coreg_boldref.nii.gz`` — BOLD reference image used for func-to-anat coregistration.
+*Session-level images* (when coreg enabled)
 
-*Transform files* (session-level when coreg enabled; per-run when coreg disabled)
+- ``<ses_prefix>_space-scanner_desc-coreg_boldref.nii.gz`` — Session-averaged BOLD reference after within-session coregistration (scanner space).
+- ``<ses_prefix>_space-bold_boldref.nii.gz`` — BOLD reference in bold (conformed) space.
+- ``<ses_prefix>_space-bold_desc-brain_mask.nii.gz`` — Brain mask in bold space.
+- ``<ses_prefix>_space-T1w_desc-preproc_stat-tsnr_boldmap.nii.gz`` — Session-level temporal SNR map (T1w space; when tSNR is enabled).
 
-- ``<prefix>_from-bold_to-T1w_mode-image_xfm.<ext>`` — BOLD-to-T1w coregistration transform (ANTs ``.h5`` or fireANTS ``.nii.gz``).
-- ``<prefix>_from-T1w_to-bold_mode-image_xfm.<ext>`` — T1w-to-BOLD transform.
-- ``<prefix>_from-scanner_to-bold_mode-image_xfm.mat`` — Scanner-to-BOLD conformation transform.
-- ``<prefix>_from-bold_to-scanner_mode-image_xfm.mat`` — Inverse conformation transform.
+*Session-level transforms* (when coreg enabled; per-run when coreg disabled)
 
-*Per-run files — BOLD space*
+- ``<ses_prefix>_from-bold_to-T1w_mode-image_xfm.<ext>`` — BOLD-to-T1w coregistration.
+- ``<ses_prefix>_from-T1w_to-bold_mode-image_xfm.<ext>`` — T1w-to-BOLD transform.
+- ``<ses_prefix>_from-scanner_to-bold_mode-image_xfm.mat`` — Scanner-to-BOLD conformation.
+- ``<ses_prefix>_from-bold_to-scanner_mode-image_xfm.mat`` — Inverse conformation.
 
-- ``<run_prefix>_desc-preproc_bold.nii.gz`` — Preprocessed BOLD in BOLD space.
-- ``<run_prefix>_desc-preproc_boldref.nii.gz`` — BOLD reference in BOLD space.
+*Per-run images — bold space*
 
-*Per-run files — T1w space*
+- ``<run_prefix>_space-bold_desc-preproc_bold.nii.gz`` — Preprocessed BOLD in bold (conformed) space.
+- ``<run_prefix>_space-bold_desc-preproc_boldref.nii.gz`` — BOLD reference in bold space.
 
-- ``<run_prefix>_space-T1w_desc-preproc_bold.nii.gz`` — Preprocessed BOLD registered to T1w space.
+*Per-run images — T1w space*
+
+- ``<run_prefix>_space-T1w_desc-preproc_bold.nii.gz`` — Preprocessed BOLD in T1w space.
 - ``<run_prefix>_space-T1w_desc-preproc_boldref.nii.gz`` — BOLD reference in T1w space.
 - ``<run_prefix>_space-T1w_desc-brain_mask.nii.gz`` — Brain mask in T1w space.
+- ``<run_prefix>_space-T1w_desc-preproc_stat-tsnr_boldmap.nii.gz`` — Run-level temporal SNR map (when tSNR is enabled).
 
-*Per-run files — template space*
+*Per-run images — template space*
 
-- ``<run_prefix>_space-<template>_desc-preproc_bold.nii.gz`` — Preprocessed BOLD registered to template space.
+- ``<run_prefix>_space-<template>_desc-preproc_bold.nii.gz`` — Preprocessed BOLD in template space.
 - ``<run_prefix>_space-<template>_desc-preproc_boldref.nii.gz`` — BOLD reference in template space.
 - ``<run_prefix>_space-<template>_desc-brain_mask.nii.gz`` — Brain mask in template space.
 
-*Per-run files — Confounds*
+*Per-run confounds*
 
 - ``<run_prefix>_desc-confounds_timeseries.tsv`` — Motion/confound table with columns:
   ``rot_x``, ``rot_y``, ``rot_z`` (radians), ``trans_x``, ``trans_y``, ``trans_z`` (mm), and ``enorm``.
   ``enorm`` is the L2 norm of backward frame-to-frame differences.
 
-Surface reconstruction outputs (``fastsurfer/``)
--------------------------------------------------
+QC figures (``figures/``)
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
-When surface reconstruction is enabled, FreeSurfer-compatible outputs are written under ``fastsurfer/<subject_id>/``. 
-This includes cortical surface meshes, parcellations, and morphometric files (thickness, area, curvature).
+- ``sub-<id>/figures/*.png`` — QC snapshot images for the subject.
 
-Quality control reports
-------------------------
+Quality control report
+----------------------
 
-- ``sub-<id>_report.html`` — Brainana outputs a browsable HTML report with summaries, all QC snapshots, and methods. View a `sample report for sub-example <_static/QCreport_example/sub-example.html>`_.
+- ``sub-<id>.html`` — Browsable HTML report at the **output directory root** (alongside ``sub-<id>/``, not inside it), with summaries, QC snapshots, and methods. View a `sample report for sub-example <_static/QCreport_example/sub-example.html>`_.
+
+Surface reconstruction (``fastsurfer/``)
+----------------------------------------
+
+When surface reconstruction is enabled, FreeSurfer-compatible outputs are written under ``fastsurfer/sub-<id>/`` (or ``fastsurfer/sub-<id>_ses-<id>/`` when multiple sessions are reconstructed separately). This includes ``label/``, ``mri/``, ``surf/``, and ``stats/`` (meshes, parcellations, and morphometric maps).
+
+Pipeline reports (``nextflow_reports/``)
+----------------------------------------
+
+- ``nextflow_report_*.html`` — Nextflow execution report.
+- ``nextflow_timeline_*.html`` — Nextflow timeline.
+- ``nextflow_trace.txt`` — Task trace log.
+- ``nextflow_dag.svg`` — Workflow DAG.
+- ``anatomical_jobs.json`` — Discovered anatomical jobs and metadata.
+- ``functional_jobs.json`` — Discovered functional jobs and metadata.
+- ``config.yaml`` — Effective pipeline configuration used for the run.

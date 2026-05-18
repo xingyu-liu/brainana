@@ -532,6 +532,10 @@ process FUNC_COMPUTE_CONFORM {
         mode: 'copy',
         pattern: '*.{mat}',
         saveAs: { filename -> filename == 'template_resampled.nii.gz' ? null : filename }
+
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
+        mode: 'copy',
+        pattern: '*_space-bold_boldref.nii.gz'
     
     input:
     // Input: [sub, ses, run_identifier, tmean_file, bids_template]
@@ -542,6 +546,8 @@ process FUNC_COMPUTE_CONFORM {
     output:
     // Output: [sub, ses, run_identifier, conformed_tmean, bids_template]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_boldref.nii.gz"), val(bids_name), emit: output
+    // Published BOLD reference in bold (conformed) space
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*_space-bold_boldref.nii.gz"), val(bids_name), emit: bold_space_reference
     // Transforms: [sub, ses, run_identifier, forward_transform, inverse_transform]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*from-scanner_to-bold_mode-image_xfm.mat"), path("*from-bold_to-scanner_mode-image_xfm.mat"), emit: transforms
     // Reference: [sub, ses, run_identifier, reference]
@@ -609,10 +615,12 @@ process FUNC_COMPUTE_CONFORM {
     
     # Create BIDS-compliant symlink for conformed tmean
     create_output_link(result.output_file, bids_output_filename_tmean)
+
+    # Published alias: BOLD reference in bold (conformed) space (session- or run-level prefix)
+    bids_bold_space_name = f"{bids_prefix}_space-bold_boldref.nii.gz"
+    create_output_link(result.output_file, bids_bold_space_name)
     
     # Copy transform files with BIDS-compliant names
-    # Use get_bids_prefix helper to determine session-level vs run-level naming
-    bids_prefix = get_bids_prefix(bids_name, run_identifier)
     
     conform_forward_transform_path = None
     conform_inverse_transform_path = None
@@ -729,13 +737,13 @@ process FUNC_APPLY_CONFORM {
     # Generate BIDS-compliant output filename for Phase 1 preproc (published output)
     bids_preproc_filename_bold = create_bids_output_filename(
         original_file_path=bids_name,
-        suffix='desc-preproc',
+        suffix='space-bold_desc-preproc',
         modality='bold'
     )
     
     bids_preproc_filename_boldref = create_bids_output_filename(
         original_file_path=bids_name,
-        suffix='desc-preproc',
+        suffix='space-bold_desc-preproc',
         modality='boldref'
     )
     
@@ -903,7 +911,7 @@ process FUNC_COMPUTE_BRAIN_MASK {
     # Generate BIDS-compliant output filename for mask
     # Use get_bids_prefix helper to determine session-level vs run-level naming
     bids_prefix_wobold = get_bids_prefix(bids_name, run_identifier)
-    bids_additional_name = f"{bids_prefix_wobold}_desc-brain_mask.nii.gz"
+    bids_additional_name = f"{bids_prefix_wobold}_space-bold_desc-brain_mask.nii.gz"
     
     # Create symlink for mask with BIDS-compliant name
     if "brain_mask" in result.additional_files:
@@ -911,7 +919,7 @@ process FUNC_COMPUTE_BRAIN_MASK {
     
     # Create symlink for brain file (masked tmean)
     if result.output_file.exists():
-        bids_brain_name = f"{bids_prefix_wobold}_boldref_brain.nii.gz"
+        bids_brain_name = f"{bids_prefix_wobold}_space-bold_boldref_brain.nii.gz"
         create_output_link(result.output_file, bids_brain_name)
     
     # Save metadata
@@ -1834,6 +1842,7 @@ if 'ses' in parsed:
     filtered_entities['ses'] = parsed['ses']
 # Add desc entity for coregistration
 filtered_entities['desc'] = 'coreg'
+filtered_entities['space'] = 'scanner'
 # Rebuild filename with suffix 'boldref'
 bids_output_filename = create_bids_filename(filtered_entities, 'boldref', extension='.nii.gz')
 
