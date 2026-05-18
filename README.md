@@ -1,22 +1,20 @@
 <p align="center">
-  <img src="docs/_static/brainana_logo_side.png" alt="brainana logo" width="500">
+  <img src="docs/_static/brainana_logo_side.png" alt="Brainana logo" width="500">
 </p>
+
+# Brainana: a unified preprocessing framework for macaque MRI
 
 <p align="center">
   <img src="docs/_static/pipeline_details/brainana_unified_framework.png" alt="Brainana pipeline overview schematic" width="100%">
 </p>
 
-# Brainana: a unified preprocessing framework for macaque MRI
-
 **Brainana** provides anatomical and functional processing, image registration, and surface reconstruction for macaque neuroimaging data in a reproducible workflow (FSL, ANTs, AFNI, FreeSurfer, Nextflow).
 
-> **Status:** Research software, alpha stage – interfaces and defaults may still change.
+> **Status:** Research software, beta stage – feature-complete for main workflows; bugs and edge cases are still possible.
 
 ## Documentation
 
-Installation, usage, processing details, outputs, and troubleshooting are maintained on Read the Docs and are the canonical reference:
-
-**[https://brainana.readthedocs.io](https://brainana.readthedocs.io)**
+Installation, usage, processing details, outputs, and troubleshooting are documented on **[Read the Docs](https://brainana.readthedocs.io/en/latest/)**.
 
 Start with [Installation](https://brainana.readthedocs.io/en/latest/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/latest/usage_notes.html).
 
