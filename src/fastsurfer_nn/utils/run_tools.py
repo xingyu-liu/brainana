@@ -34,7 +34,7 @@ class MessageBuffer:
     out: bytes = b""
     err: bytes = b""
     retcode: int | None = None
-    runtime: float = 0.
+    runtime: float = 0.0
 
     def __add__(self, other: "MessageBuffer") -> "MessageBuffer":
         if not isinstance(other, MessageBuffer):
@@ -70,6 +70,7 @@ class Popen(subprocess.Popen):
     """
     Extension of subprocess.Popen for convenience.
     """
+
     _starttime: datetime | None = None
 
     def __init__(self, *args, **kwargs):
@@ -234,6 +235,4 @@ class PyPopen(Popen):
         }
         flags = "".join(k for k, v in all_flags.items() if getattr(sys.flags, v) == 1)
         flags = [] if len(flags) == 0 else ["-" + flags]
-        super().__init__(
-            [sys.executable] + flags + list(args), *_args, **kwargs
-        )
+        super().__init__([sys.executable] + flags + list(args), *_args, **kwargs)

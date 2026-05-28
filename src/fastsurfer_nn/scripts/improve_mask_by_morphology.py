@@ -18,7 +18,6 @@ from pathlib import Path
 import sys
 import nibabel as nib
 import numpy as np
-from scipy import ndimage as ndi
 
 # Add src/ to path for fastsurfer_nn imports (scripts/ -> fastsurfer_nn -> src)
 _src_dir = Path(__file__).resolve().parent.parent.parent
@@ -36,15 +35,13 @@ from fastsurfer_nn.utils.constants import (
 # ============================================================================
 
 # Directory containing input mask volumes
-root_dir = Path(
-    "/home/star/github/brainana/template_zoo/template/D99"
-)
+root_dir = Path("/home/star/github/brainana/template_zoo/template/D99")
 
 # If set to a relative path (starting with '/'), only that file will be processed,
 # using the *same* morphological parameters as the fastsurfer_nn `create_mask` pipeline.
 # Example (relative to root_dir): "/site-arcaro_sub-baby1_ses-120916_task-vision_run-09_EPI_brainmask_manual.nii.gz"
 # If set to None, all *.nii.gz files under root_dir will be processed.
-input_f = 'mask.nii.gz' 
+input_f = "mask.nii.gz"
 output_suffix = "_improved"
 
 # If False, existing improved masks are not overwritten
@@ -57,7 +54,7 @@ overwrite = True
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(message)s",
-    datefmt='%Y-%m-%d %H:%M:%S'
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
@@ -65,7 +62,9 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # CORE FUNCTIONS
 # ============================================================================
-def _improve_mask(mask_data: np.ndarray, zooms: tuple[float, float, float]) -> np.ndarray:
+def _improve_mask(
+    mask_data: np.ndarray, zooms: tuple[float, float, float]
+) -> np.ndarray:
     """Apply the same morphological pipeline as `create_mask` with its parameters.
 
     We compute the dilation/erosion/rounds exactly as in `fastsurfer_nn.inference.api.segmentation`,
@@ -74,7 +73,7 @@ def _improve_mask(mask_data: np.ndarray, zooms: tuple[float, float, float]) -> n
     # Compute voxel-wise dilation/erosion parameters exactly like in the main API
     resolution = float(np.mean(zooms[:3]))
     dnum = int(MASK_DILATION_SIZE_MM / resolution)
-    enum = max(0, dnum) 
+    enum = max(0, dnum)
 
     if dnum <= 0 and enum <= 0:
         # Degenerate case: just binarize

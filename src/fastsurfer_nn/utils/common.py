@@ -107,7 +107,9 @@ def find_device(
 
     if device.type == "cuda" and min_memory > 0:
         dev_num = torch.cuda.current_device() if device.index is None else device.index
-        total_gpu_memory = torch.cuda.get_device_properties(dev_num).__getattribute__("total_memory")
+        total_gpu_memory = torch.cuda.get_device_properties(dev_num).__getattribute__(
+            "total_memory"
+        )
         if total_gpu_memory < min_memory:
             giga = 1024**3
             logger.warning(
@@ -179,7 +181,7 @@ def handle_cuda_memory_exception(exception: BaseException) -> bool:
             "Note: View Aggregation on the GPU is particularly memory-hungry at "
             "approx. 5 GB for standard 256x256x256 images."
         )
-        memory_message = message[message.find("(") + 1:message.find(")")]
+        memory_message = message[message.find("(") + 1 : message.find(")")]
         LOGGER.info(f"Using {memory_message}.")
         return True
     else:
@@ -235,7 +237,9 @@ def pipeline(
 
 
 def iterate(
-    pool: Executor, func: Callable[[_Ti], _T], iterable: Iterable[_Ti],
+    pool: Executor,
+    func: Callable[[_Ti], _T],
+    iterable: Iterable[_Ti],
 ) -> Iterator[tuple[_Ti, _T]]:
     """
     Iterate over iterable, yield pairs of elements and func(element).
@@ -298,7 +302,9 @@ class SubjectDirectory:
         self._subject_dir = Path.cwd() if subject_dir is None else Path(subject_dir)
         for k, v in kwargs.items():
             if subject_dir is None and not Path(v).is_absolute() and not k == "id":
-                raise ValueError(f"subject/out directory not defined, but {k} ('{v}') is relative!")
+                raise ValueError(
+                    f"subject/out directory not defined, but {k} ('{v}') is relative!"
+                )
             setattr(self, "_" + k, v)
 
     def filename_in_subject_folder(self, filepath: str | Path) -> Path:
@@ -689,10 +695,10 @@ class SubjectList:
     DEFAULT_FLAGS = {k: v(dict) for k, v in parser_defaults.ALL_FLAGS.items()}
 
     def __init__(
-            self,
-            args: SubjectDirectoryConfig,
-            flags: dict[str, dict] | None = None,
-            **assign,
+        self,
+        args: SubjectDirectoryConfig,
+        flags: dict[str, dict] | None = None,
+        **assign,
     ):
         """
         Create an iterate-able list of subjects from the arguments passed.
@@ -819,8 +825,7 @@ class SubjectList:
                     )
                 base = Path(args.in_dir)
                 self._subjects = [
-                    base / d if not d.is_absolute() else d
-                    for d in self._subjects
+                    base / d if not d.is_absolute() else d for d in self._subjects
                 ]
             self._num_subjects = len(self._subjects)
             LOGGER.info(
@@ -983,7 +988,9 @@ class SubjectList:
         Try to create the subject directory.
         """
         if self._out_dir is None:
-            LOGGER.info("No Subjects directory found, absolute paths for filenames are required.")
+            LOGGER.info(
+                "No Subjects directory found, absolute paths for filenames are required."
+            )
             return
 
         LOGGER.info(f"Output will be stored in Subjects Directory: {self._out_dir}")
@@ -1011,12 +1018,18 @@ class SubjectList:
         """
         if isinstance(item, int):
             if item < 0 or item >= self._num_subjects:
-                raise IndexError(f"The index {item} is out of bounds for the subject list.")
+                raise IndexError(
+                    f"The index {item} is out of bounds for the subject list."
+                )
 
             # subject is always an absolute path (or relative to the working directory)
             # ... of the input file
             subject = self._subjects[item]
-            sid = Path(str(subject).removesuffix(self._remove_suffix)).name if self._sid is None else self._sid
+            sid = (
+                Path(str(subject).removesuffix(self._remove_suffix)).name
+                if self._sid is None
+                else self._sid
+            )
         elif isinstance(item, str):
             subject = Path(item)
             sid = item
@@ -1025,7 +1038,11 @@ class SubjectList:
 
         # Set subject and load orig
         special_rules = ["orig_name"]
-        subject_parameters = {v: getattr(self, f"_{v}_") for v in self.__attr_assign.keys() if v not in special_rules}
+        subject_parameters = {
+            v: getattr(self, f"_{v}_")
+            for v in self.__attr_assign.keys()
+            if v not in special_rules
+        }
         orig_name = subject if subject.is_file() else subject / self._orig_name_
         return SubjectDirectory(
             subject_dir=self._out_dir,
@@ -1066,6 +1083,7 @@ class SubjectList:
 
         def is_file(p: Path):
             return p.is_file()
+
         with ThreadPoolExecutor(len(self._subjects)) as pool:
             return all(pool.map(is_file, self._subjects))
 

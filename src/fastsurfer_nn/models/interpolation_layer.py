@@ -91,7 +91,9 @@ class _ZoomNd(nn.Module):
         """
         Validate and set the target_shape.
         """
-        tup_target_shape = tuple(target_shape) if isinstance(target_shape, _T.Iterable) else tuple()
+        tup_target_shape = (
+            tuple(target_shape) if isinstance(target_shape, _T.Iterable) else tuple()
+        )
         if tup_target_shape != self._target_shape:
             LOGGER.debug(
                 f"Changing the target_shape of {type(self).__name__} to {tup_target_shape} from {self._target_shape}."
@@ -159,7 +161,10 @@ class _ZoomNd(nn.Module):
             )
 
         scales_chunks = list(
-            zip(*self._fix_scale_factors(scale_factors, input_tensor.shape[0]), strict=False)
+            zip(
+                *self._fix_scale_factors(scale_factors, input_tensor.shape[0]),
+                strict=False,
+            )
         )
         if len(scales_chunks) == 0:
             raise ValueError(
@@ -250,7 +255,9 @@ class _ZoomNd(nn.Module):
                             f"scale factors, but only 1 or {self._N} are valid: {sf}."
                         )
 
-                if last_sf is not None and any(ln != t for ln, t in zip(last_sf, sf, strict=False)):
+                if last_sf is not None and any(
+                    ln != t for ln, t in zip(last_sf, sf, strict=False)
+                ):
                     yield last_sf, num
                     # reset the counter
                     num = 0
@@ -417,7 +424,7 @@ class Zoom2d(_ZoomNd):
         Parameters
         ----------
         crop_position : str
-            The crop position key from 'top_left', 'bottom_left', top_right', 
+            The crop position key from 'top_left', 'bottom_left', top_right',
             'bottom_right', 'center'.
         """
         if crop_position not in [
@@ -428,8 +435,8 @@ class Zoom2d(_ZoomNd):
             "center",
         ]:
             raise ValueError(f"invalid crop_position, got {crop_position}")
-        self._crop_position = crop_position        
-    
+        self._crop_position = crop_position
+
     def _interpolate(
         self,
         data: Tensor,
@@ -569,7 +576,7 @@ class Zoom3d(_ZoomNd):
         ]:
             raise ValueError(f"invalid crop_position, got {crop_position}")
         self._crop_position = crop_position
-    
+
     def _interpolate(
         self, data: Tensor, scale_factor: Tensor | np.ndarray | _T.Sequence[int]
     ):

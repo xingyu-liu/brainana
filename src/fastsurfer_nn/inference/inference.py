@@ -139,17 +139,19 @@ class Inference:
             "axial": cfg.MULTIVIEW.PLANE_WEIGHTS.AXIAL,
             "sagittal": cfg.MULTIVIEW.PLANE_WEIGHTS.SAGITTAL,
         }
-        
+
         # Compute permute_order dynamically based on orientation
         # This allows the model to work with any orientation (LIA, RAS, etc.)
-        orientation = getattr(cfg.DATA.PREPROCESSING, 'ORIENTATION', 'lia')
+        orientation = getattr(cfg.DATA.PREPROCESSING, "ORIENTATION", "lia")
         self.orientation = orientation
         self.permute_order = {
             "axial": get_permute_order_for_plane("axial", orientation),
             "coronal": get_permute_order_for_plane("coronal", orientation),
             "sagittal": get_permute_order_for_plane("sagittal", orientation),
         }
-        logger.debug(f"Inference: using orientation '{orientation}', permute_order={self.permute_order}")
+        logger.debug(
+            f"Inference: using orientation '{orientation}', permute_order={self.permute_order}"
+        )
         self.lut = lut
 
         # Initial checkpoint loading
@@ -174,7 +176,9 @@ class Inference:
             device = self.default_device
 
         # Set up model
-        self._model_not_init = build_model(self.cfg)  # ~ model = fastsurfer_nn(params_network)
+        self._model_not_init = build_model(
+            self.cfg
+        )  # ~ model = fastsurfer_nn(params_network)
         self._model_not_init.to(device)
         self.device = None
 
@@ -199,7 +203,9 @@ class Inference:
             The desired device of the parameters and buffers in this module (Default value = None).
         """
         if self.model_parallel:
-            raise RuntimeError("Moving the model to other devices is not supported for multi-device models.")
+            raise RuntimeError(
+                "Moving the model to other devices is not supported for multi-device models."
+            )
         _device = self.default_device if device is None else device
         self.device = _device
         self.model.to(device=_device)
@@ -207,7 +213,7 @@ class Inference:
     def load_checkpoint(self, ckpt: str | os.PathLike):
         """
         Load the checkpoint and set device and model.
-        
+
         This method now also extracts atlas metadata from the checkpoint,
         which is critical for correctly mapping model outputs to label IDs.
 
@@ -215,7 +221,7 @@ class Inference:
         ----------
         ckpt : Union[str, os.PathLike]
             String or os.PathLike object containing the name to the checkpoint file.
-            
+
         Returns
         -------
         dict, None
@@ -244,19 +250,25 @@ class Inference:
         atlas_metadata = None
         try:
             atlas_metadata = extract_atlas_metadata(ckpt)
-            
+
             if atlas_metadata:
-                logger.info(f"Checkpoint: loaded with atlas={atlas_metadata['atlas_name']}, "
-                           f"classes={atlas_metadata['num_classes']}, plane={atlas_metadata['plane']}")
-                if 'source' in atlas_metadata:
-                    logger.info(f"Checkpoint: atlas metadata source={atlas_metadata['source']}")
-                
+                logger.info(
+                    f"Checkpoint: loaded with atlas={atlas_metadata['atlas_name']}, "
+                    f"classes={atlas_metadata['num_classes']}, plane={atlas_metadata['plane']}"
+                )
+                if "source" in atlas_metadata:
+                    logger.info(
+                        f"Checkpoint: atlas metadata source={atlas_metadata['source']}"
+                    )
+
                 # Store atlas metadata for later use
                 self.atlas_metadata = atlas_metadata
             else:
-                logger.warning("Checkpoint: could not extract atlas metadata, will need manual specification")
+                logger.warning(
+                    "Checkpoint: could not extract atlas metadata, will need manual specification"
+                )
                 self.atlas_metadata = None
-        except Exception as e:
+        except Exception:
             logger.warning(f"Checkpoint: No atlas metadata found in {ckpt}")
             self.atlas_metadata = None
 
@@ -266,7 +278,7 @@ class Inference:
 
         if self.model_parallel:
             self.model = torch.nn.DataParallel(self.model)
-        
+
         return atlas_metadata
 
     def get_modelname(self) -> str:
@@ -367,7 +379,7 @@ class Inference:
     def get_atlas_metadata(self) -> dict | None:
         """
         Return the atlas metadata extracted from the checkpoint.
-        
+
         Returns
         -------
         dict, None
@@ -379,7 +391,7 @@ class Inference:
             - source: str
             Returns None if no metadata is available.
         """
-        return getattr(self, 'atlas_metadata', None)
+        return getattr(self, "atlas_metadata", None)
 
     @torch.no_grad()
     def eval(
@@ -421,28 +433,36 @@ class Inference:
         # init_pred has shape matching the conformed image (e.g., 96×96×Z×num_classes)
         # Model processes images at conformed size (no resize, no padding)
         # Predictions should match conformed dimensions directly
-        
+
         # Setup for aggregating predictions into output tensor
         plane = self.cfg.DATA.PLANE
         # For mixed mode, plane is temporarily set to current plane in run() method
         if plane == "mixed":
             # This shouldn't happen in eval() - plane should be set to specific plane by run()
-            raise ValueError("eval() called with PLANE='mixed'. This should be handled by run() method.")
-        
+            raise ValueError(
+                "eval() called with PLANE='mixed'. This should be handled by run() method."
+            )
+
         index_of_current_plane = self.permute_order[plane].index(0)
-        output_slice_indices = [slice(None) for _ in range(4)]  # Will be filled per batch
+        output_slice_indices = [
+            slice(None) for _ in range(4)
+        ]  # Will be filled per batch
 
         if out is None:
             out = init_pred.detach().clone()
-        
+
         start_index = 0
         log_batch_idx = None
         with logging_redirect_tqdm():
             try:
-                for batch_idx, batch in tqdm(enumerate(val_loader), total=len(val_loader), unit="batch"):
+                for batch_idx, batch in tqdm(
+                    enumerate(val_loader), total=len(val_loader), unit="batch"
+                ):
                     log_batch_idx = batch_idx
                     # move data to the model device
-                    images, scale_factors = batch["image"].to(self.device), batch["scale_factor"].to(self.device)
+                    images, scale_factors = batch["image"].to(self.device), batch[
+                        "scale_factor"
+                    ].to(self.device)
 
                     # predict the current batch, outputs logits
                     # Model processes images at conformed size (no resize, no padding)
@@ -457,40 +477,53 @@ class Inference:
                     if current_plane == "sagittal":
                         # Determine atlas name from config or environment
                         atlas_name = None
-                        if hasattr(self.cfg.DATA, 'CLASS_OPTIONS') and self.cfg.DATA.CLASS_OPTIONS:
+                        if (
+                            hasattr(self.cfg.DATA, "CLASS_OPTIONS")
+                            and self.cfg.DATA.CLASS_OPTIONS
+                        ):
                             # Extract atlas name from class options (e.g., ["arm2"] -> "ARM2")
                             atlas_name = self.cfg.DATA.CLASS_OPTIONS[0].upper()
-                        
+
                         pred = map_prediction_sagittal2full(
-                            pred, 
-                            num_classes=self.get_num_classes(), 
-                            atlas_name=atlas_name
+                            pred,
+                            num_classes=self.get_num_classes(),
+                            atlas_name=atlas_name,
                         )
 
                     # permute the prediction into the out slice order
-                    pred = pred.permute(*self.permute_order[plane]).to(out.device)  # the to-operation is implicit
+                    pred = pred.permute(*self.permute_order[plane]).to(
+                        out.device
+                    )  # the to-operation is implicit
 
                     # ========================================================================
                     # Predictions are already at conformed image size (no cropping needed)
                     # ========================================================================
                     # Model processes images at conformed size, so predictions match directly
                     # add prediction logits into the output (same as multiplying probabilities)
-                    output_slice_indices[index_of_current_plane] = slice(start_index, end_index)
+                    output_slice_indices[index_of_current_plane] = slice(
+                        start_index, end_index
+                    )
                     out[tuple(output_slice_indices)].add_(pred, alpha=self.alpha[plane])
                     start_index = end_index
-                    
+
                     # Explicitly delete intermediate tensors to free GPU memory
                     del images, scale_factors, pred
                     if self.device.type == "cuda":
                         torch.cuda.empty_cache()
 
             except:
-                batch_num = log_batch_idx + 1 if log_batch_idx is not None else "unknown"
-                logger.exception(f"Exception in batch {batch_num} of {plane} inference.")
+                batch_num = (
+                    log_batch_idx + 1 if log_batch_idx is not None else "unknown"
+                )
+                logger.exception(
+                    f"Exception in batch {batch_num} of {plane} inference."
+                )
                 raise
             else:
                 batch_num = log_batch_idx + 1 if log_batch_idx is not None else 0
-                logger.info(f"Inference: completed {batch_num} batches for {plane} plane")
+                logger.info(
+                    f"Inference: completed {batch_num} batches for {plane} plane"
+                )
 
         return out
 
@@ -534,12 +567,12 @@ class Inference:
             Prediction probability tensor.
         """
         plane = self.cfg.DATA.PLANE
-        
+
         # Apply edge padding if enabled (inference only)
-        padding_percent = getattr(self.cfg.TEST, 'EDGE_PADDING_PERCENT', 0.0)
+        padding_percent = getattr(self.cfg.TEST, "EDGE_PADDING_PERCENT", 0.0)
         pad_width = ((0, 0), (0, 0), (0, 0))
         orig_data_padded = orig_data
-        
+
         # Disable padding for large images to avoid OOM
         max_dim = max(orig_data.shape)
         if padding_percent > 0.0 and max_dim > LARGE_IMAGE_THRESHOLD:
@@ -548,37 +581,49 @@ class Inference:
                 f"This saves significant GPU memory. Edge predictions may be slightly less accurate."
             )
             padding_percent = 0.0
-         
+
         if padding_percent > 0.0:
-            logger.info(f"Inference: Applying {padding_percent*100:.1f}% edge padding to help recognize brain tissue near boundaries")
-            orig_data_padded, pad_width = pad_volume_edges_percent(orig_data, padding_percent, mode='edge')
-            
+            logger.info(
+                f"Inference: Applying {padding_percent*100:.1f}% edge padding to help recognize brain tissue near boundaries"
+            )
+            orig_data_padded, pad_width = pad_volume_edges_percent(
+                orig_data, padding_percent, mode="edge"
+            )
+
             # Create padded prediction tensor matching padded data dimensions
-            padded_shape = orig_data_padded.shape + (init_pred.shape[3],)  # (H, W, D, num_classes)
-            
+            padded_shape = orig_data_padded.shape + (
+                init_pred.shape[3],
+            )  # (H, W, D, num_classes)
+
             # Calculate memory requirements for padded tensor
-            padded_size_gb = np.prod(padded_shape) * init_pred.element_size() / (1024**3)
-            
+            padded_size_gb = (
+                np.prod(padded_shape) * init_pred.element_size() / (1024**3)
+            )
+
             # Warn if padding creates an extremely large tensor
             if padded_size_gb > 20.0:
                 logger.warning(
                     f"Inference: Padding will create a very large tensor (~{padded_size_gb:.2f} GB). "
                     f"This may cause memory issues. Consider reducing EDGE_PADDING_PERCENT or disabling padding."
                 )
-            
+
             if out is not None and out.shape[:3] == orig_data.shape:
                 # Pad the provided out tensor to match padded dimensions
                 pad_h, pad_w, pad_d = pad_width[0][0], pad_width[1][0], pad_width[2][0]
-                
+
                 # Check GPU memory before padding
                 if out.device.type == "cuda":
                     device_idx = out.device.index if out.device.index is not None else 0
-                    free_memory = torch.cuda.get_device_properties(device_idx).total_memory - torch.cuda.memory_allocated(device_idx)
+                    free_memory = torch.cuda.get_device_properties(
+                        device_idx
+                    ).total_memory - torch.cuda.memory_allocated(device_idx)
                     free_memory_gb = free_memory / (1024**3)
-                    
-                    logger.info(f"Inference: Padding requires ~{padded_size_gb:.2f} GB, "
-                              f"available GPU memory: {free_memory_gb:.2f} GB")
-                    
+
+                    logger.info(
+                        f"Inference: Padding requires ~{padded_size_gb:.2f} GB, "
+                        f"available GPU memory: {free_memory_gb:.2f} GB"
+                    )
+
                     if free_memory_gb < padded_size_gb * 1.2:  # Need 20% buffer
                         logger.warning(
                             f"Inference: Insufficient GPU memory for padding ({padded_size_gb:.2f} GB required, "
@@ -594,37 +639,47 @@ class Inference:
                         out_cpu = torch.nn.functional.pad(
                             out_cpu,
                             (0, 0, pad_d, pad_d, pad_w, pad_w, pad_h, pad_h),
-                            mode='constant',
-                            value=0
+                            mode="constant",
+                            value=0,
                         )
                         out = out_cpu.to(target_device)  # Move back to original device
-                        logger.info("Inference: Padding completed on CPU and moved back to GPU")
+                        logger.info(
+                            "Inference: Padding completed on CPU and moved back to GPU"
+                        )
                     else:
                         # Enough memory, pad on GPU
                         out = torch.nn.functional.pad(
                             out,
                             (0, 0, pad_d, pad_d, pad_w, pad_w, pad_h, pad_h),
-                            mode='constant',
-                            value=0
+                            mode="constant",
+                            value=0,
                         )
                 else:
                     # CPU device, pad directly
                     out = torch.nn.functional.pad(
                         out,
                         (0, 0, pad_d, pad_d, pad_w, pad_w, pad_h, pad_h),
-                        mode='constant',
-                        value=0
+                        mode="constant",
+                        value=0,
                     )
             else:
                 # Create new padded tensor - check memory first
                 if init_pred.device.type == "cuda":
-                    device_idx = init_pred.device.index if init_pred.device.index is not None else 0
-                    free_memory = torch.cuda.get_device_properties(device_idx).total_memory - torch.cuda.memory_allocated(device_idx)
+                    device_idx = (
+                        init_pred.device.index
+                        if init_pred.device.index is not None
+                        else 0
+                    )
+                    free_memory = torch.cuda.get_device_properties(
+                        device_idx
+                    ).total_memory - torch.cuda.memory_allocated(device_idx)
                     free_memory_gb = free_memory / (1024**3)
-                    
-                    logger.info(f"Inference: Creating padded tensor requires ~{padded_size_gb:.2f} GB, "
-                              f"available GPU memory: {free_memory_gb:.2f} GB")
-                    
+
+                    logger.info(
+                        f"Inference: Creating padded tensor requires ~{padded_size_gb:.2f} GB, "
+                        f"available GPU memory: {free_memory_gb:.2f} GB"
+                    )
+
                     if free_memory_gb < padded_size_gb * 1.2:  # Need 20% buffer
                         logger.warning(
                             f"Inference: Insufficient GPU memory for padded tensor ({padded_size_gb:.2f} GB required, "
@@ -634,18 +689,20 @@ class Inference:
                         out = torch.zeros(
                             padded_shape,
                             dtype=init_pred.dtype,
-                            device='cpu',
-                            requires_grad=False
+                            device="cpu",
+                            requires_grad=False,
                         )
                         out = out.to(init_pred.device)
-                        logger.info("Inference: Padded tensor created on CPU and moved to GPU")
+                        logger.info(
+                            "Inference: Padded tensor created on CPU and moved to GPU"
+                        )
                     else:
                         # Enough memory, create on GPU
                         out = torch.zeros(
                             padded_shape,
                             dtype=init_pred.dtype,
                             device=init_pred.device,
-                            requires_grad=False
+                            requires_grad=False,
                         )
                 else:
                     # CPU device, create directly
@@ -653,26 +710,28 @@ class Inference:
                         padded_shape,
                         dtype=init_pred.dtype,
                         device=init_pred.device,
-                        requires_grad=False
+                        requires_grad=False,
                     )
-        
+
         # Ensure out is set (for no-padding case)
         if out is None:
             out = init_pred.detach().clone()
-        
+
         # Handle mixed-plane mode: process all 3 planes and aggregate
         if plane == "mixed":
-            logger.info(f"Inference: Mixed-plane mode - processing all 3 planes (axial, coronal, sagittal)")
+            logger.info(
+                "Inference: Mixed-plane mode - processing all 3 planes (axial, coronal, sagittal)"
+            )
             planes_to_process = ["axial", "coronal", "sagittal"]
-            
+
             start = time.time()
             for current_plane in planes_to_process:
                 logger.info(f"Inference: Processing {current_plane} plane...")
-                
+
                 # Temporarily set plane in config for this iteration
                 original_plane = self.cfg.DATA.PLANE
                 self.cfg.DATA.PLANE = current_plane
-                
+
                 try:
                     # Set up DataLoader for this plane
                     rescale = self.cfg.DATA.PREPROCESSING.RESCALE
@@ -680,37 +739,37 @@ class Inference:
                         orig_data_padded,
                         orig_zoom,
                         self.cfg,
-                        transforms=transforms.Compose([
-                            ToTensorTest(rescale=rescale)
-                        ]),
+                        transforms=transforms.Compose([ToTensorTest(rescale=rescale)]),
                     )
 
                     test_data_loader = DataLoader(
                         dataset=test_dataset,
                         shuffle=False,
-                        batch_size=self.cfg.TEST.BATCH_SIZE if batch_size is None else batch_size,
+                        batch_size=self.cfg.TEST.BATCH_SIZE
+                        if batch_size is None
+                        else batch_size,
                     )
 
                     # Run evaluation for this plane (aggregates into out)
                     self.eval(init_pred, test_data_loader, out=out, out_scale=out_res)
-                    
+
                 finally:
                     # Restore original plane setting
                     self.cfg.DATA.PLANE = original_plane
-            
+
             time_delta = time.time() - start
             logger.info(
                 f"Inference: Mixed-plane mode on {img_filename} completed in {time_delta:.4f}s "
                 f"(processed all 3 planes)"
             )
-            
+
             # Depad output if padding was applied
             if padding_percent > 0.0:
                 logger.info("Inference: Removing edge padding from predictions")
                 out = depad_volume(out, pad_width)
-            
+
             return out
-        
+
         # Single-plane mode (original behavior)
         # Set up DataLoader
         rescale = self.cfg.DATA.PREPROCESSING.RESCALE
@@ -718,9 +777,7 @@ class Inference:
             orig_data_padded,
             orig_zoom,
             self.cfg,
-            transforms=transforms.Compose([
-                ToTensorTest(rescale=rescale)
-            ]),
+            transforms=transforms.Compose([ToTensorTest(rescale=rescale)]),
         )
 
         test_data_loader = DataLoader(
@@ -736,7 +793,7 @@ class Inference:
         logger.info(
             f"Inference: {plane} plane on {img_filename} completed in {time_delta:.4f}s"
         )
-        
+
         # Depad output if padding was applied (unified for both modes)
         if padding_percent > 0.0:
             logger.info("Inference: Removing edge padding from predictions")

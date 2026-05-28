@@ -50,7 +50,9 @@ def main() -> int:
     parser.add_argument(
         "--dataset-root",
         type=Path,
-        default=Path("/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana"),
+        default=Path(
+            "/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana"
+        ),
         help="Root directory containing site-* folders (default: PRIME-DE_brainana path).",
     )
     parser.add_argument(
@@ -62,7 +64,9 @@ def main() -> int:
 
     dataset_root = args.dataset_root.expanduser().resolve()
     if not dataset_root.is_dir():
-        print(f"ERROR: dataset root does not exist or is not a directory: {dataset_root}")
+        print(
+            f"ERROR: dataset root does not exist or is not a directory: {dataset_root}"
+        )
         return 2
 
     result = ScanResult()

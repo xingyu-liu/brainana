@@ -47,10 +47,14 @@ from fastsurfer_nn.utils.parser_defaults import add_arguments
 from fastsurfer_nn.utils.threads import get_num_threads
 
 # Constants
-USAGE = ("python segstats.py (-norm|-pv) <input_norm> -i <input_seg> "
-         "-o <output_seg_stats> [optional arguments] [{measures,mri_segstats} ...]")
-DESCRIPTION = ("Script to calculate partial volumes and other segmentation statistics "
-               "of a segmentation file.")
+USAGE = (
+    "python segstats.py (-norm|-pv) <input_norm> -i <input_seg> "
+    "-o <output_seg_stats> [optional arguments] [{measures,mri_segstats} ...]"
+)
+DESCRIPTION = (
+    "Script to calculate partial volumes and other segmentation statistics "
+    "of a segmentation file."
+)
 VERSION = "1.1"
 HELPTEXT = f"""
 Dependencies:
@@ -73,8 +77,18 @@ Modified: Dec-07-2023
 Revision: {VERSION}
 """
 FILTER_SIZES = (3, 15)
-COLUMNS = ["Index", "SegId", "NVoxels", "Volume_mm3", "StructName", "Mean", "StdDev",
-           "Min", "Max", "Range"]
+COLUMNS = [
+    "Index",
+    "SegId",
+    "NVoxels",
+    "Volume_mm3",
+    "StructName",
+    "Mean",
+    "StdDev",
+    "Min",
+    "Max",
+    "Range",
+]
 
 # Type definitions
 _NumberType = TypeVar("_NumberType", bound=Number)
@@ -84,8 +98,16 @@ _ArrayType = TypeVar("_ArrayType", bound=np.ndarray)
 SlicingTuple = tuple[slice, ...]
 SlicingSequence = Sequence[slice]
 VirtualLabel = dict[int, Sequence[int]]
-_GlobalStats = tuple[int, int, _NumberType | None, _NumberType | None,
-                     float | None, float | None, float, npt.NDArray[bool]]
+_GlobalStats = tuple[
+    int,
+    int,
+    _NumberType | None,
+    _NumberType | None,
+    float | None,
+    float | None,
+    float,
+    npt.NDArray[bool],
+]
 SubparserCallback = type[argparse.ArgumentParser.add_subparsers]
 
 
@@ -106,6 +128,7 @@ class _OptionalPVStats(TypedDict, total=False):
 
 class PVStats(_RequiredPVStats, _OptionalPVStats):
     """Dictionary of volume statistics for partial volume evaluation and global stats"""
+
     pass
 
 
@@ -147,9 +170,13 @@ class HelpFormatter(argparse.HelpFormatter):
             The formatted text with line breaks.
         """
         cond_len, texts = self._itemized_lines(text)
-        lines = (super(HelpFormatter, self)._fill_text(t[p:], width, indent + " " * p)
-                 for t, (c, p) in zip(texts, cond_len, strict=False))
-        return "\n".join("- " + t[p:] if c else t for t, (c, p) in zip(lines, cond_len, strict=False))
+        lines = (
+            super(HelpFormatter, self)._fill_text(t[p:], width, indent + " " * p)
+            for t, (c, p) in zip(texts, cond_len, strict=False)
+        )
+        return "\n".join(
+            "- " + t[p:] if c else t for t, (c, p) in zip(lines, cond_len, strict=False)
+        )
 
     def _itemized_lines(self, text):
         texts = text.split(self._linebreak_sub())
@@ -175,14 +202,21 @@ class HelpFormatter(argparse.HelpFormatter):
         list[str]
             The list of lines.
         """
+
         def indent_list(items: list[str]) -> list[str]:
             return ["- " + items[0]] + ["  " + ln for ln in items[1:]]
 
         cond_len, texts = self._itemized_lines(text)
         from itertools import chain
-        lines = (super(HelpFormatter, self)._split_lines(tex, width - p)
-                 for tex, (c, p) in zip(texts, cond_len, strict=False))
-        lines = ((indent_list(lst) if c[0] else lst) for lst, c in zip(lines, cond_len, strict=False))
+
+        lines = (
+            super(HelpFormatter, self)._split_lines(tex, width - p)
+            for tex, (c, p) in zip(texts, cond_len, strict=False)
+        )
+        lines = (
+            (indent_list(lst) if c[0] else lst)
+            for lst, c in zip(lines, cond_len, strict=False)
+        )
         return list(chain.from_iterable(lines))
 
 
@@ -196,6 +230,7 @@ def make_arguments(helpformatter: bool = False) -> argparse.ArgumentParser:
         The configured argument parser.
     """
     import sys
+
     if helpformatter:
         kwargs = {
             "epilog": HELPTEXT.replace("\n", "<br>"),
@@ -216,8 +251,8 @@ def make_arguments(helpformatter: bool = False) -> argparse.ArgumentParser:
         type=Path,
         dest="pvfile",
         help="Path to image used to compute the partial volume effects (default: the "
-             "file passed as normfile). This file is required, either directly or "
-             "indirectly via normfile.",
+        "file passed as normfile). This file is required, either directly or "
+        "indirectly via normfile.",
     )
     parser.add_argument(
         "-norm",
@@ -225,9 +260,9 @@ def make_arguments(helpformatter: bool = False) -> argparse.ArgumentParser:
         type=Path,
         dest="normfile",
         help="Path to biasfield-corrected image (the same image space as "
-             "segmentation). This file is used to calculate intensity values. Also, if "
-             "no pvfile is defined, it is used as pvfile. One of normfile or pvfile is "
-             "required.",
+        "segmentation). This file is used to calculate intensity values. Also, if "
+        "no pvfile is defined, it is used as pvfile. One of normfile or pvfile is "
+        "required.",
     )
     parser.add_argument(
         "-i",
@@ -252,14 +287,14 @@ def make_arguments(helpformatter: bool = False) -> argparse.ArgumentParser:
         nargs="*",
         default=[],
         help="List of segmentation ids (integers) to exclude in analysis, "
-             "e.g. `--excludeid 0 1 10` (default: None).",
+        "e.g. `--excludeid 0 1 10` (default: None).",
     )
     parser.add_argument(
         "--ids",
         type=id_type,
         nargs="*",
         help="List of exclusive segmentation ids (integers) to use "
-             "(default: all ids in --lut or all ids in image).",
+        "(default: all ids in --lut or all ids in image).",
     )
     parser.add_argument(
         "--merged_label",
@@ -269,8 +304,8 @@ def make_arguments(helpformatter: bool = False) -> argparse.ArgumentParser:
         default=[],
         action="append",
         help="Add a 'virtual' label (first value) that is the combination of all "
-             "following values, e.g. `--merged_label 100 3 4 8` will compute the "
-             "statistics for label 100 by aggregating labels 3, 4 and 8.",
+        "following values, e.g. `--merged_label 100 3 4 8` will compute the "
+        "statistics for label 100 by aggregating labels 3, 4 and 8.",
     )
     parser.add_argument(
         "--robust",
@@ -278,16 +313,16 @@ def make_arguments(helpformatter: bool = False) -> argparse.ArgumentParser:
         dest="robust",
         default=None,
         help="Whether to calculate robust segmentation metrics. This parameter "
-             "expects the fraction of values to keep, e.g. `--robust 0.95` will "
-             "ignore the 2.5%% smallest and the 2.5%% largest values in the "
-             "segmentation when calculating the statistics (default: no robust "
-             "statistics == `--robust 1.0`).",
+        "expects the fraction of values to keep, e.g. `--robust 0.95` will "
+        "ignore the 2.5%% smallest and the 2.5%% largest values in the "
+        "segmentation when calculating the statistics (default: no robust "
+        "statistics == `--robust 1.0`).",
     )
     parser.add_argument(
         "--measure_only",
         action="store_true",
         dest="measure_only",
-        help="Only calculate the Measures in the header, no PV table."
+        help="Only calculate the Measures in the header, no PV table.",
     )
     subparsers = parser.add_subparsers(title="Suboptions", dest="subparser")
     add_measure_parser(subparsers.add_parser)
@@ -300,7 +335,7 @@ def make_arguments(helpformatter: bool = False) -> argparse.ArgumentParser:
         default=get_num_threads(),
         type=int,
         help=f"Number of threads to use (defaults to number of hardware threads: "
-             f"{get_num_threads()})",
+        f"{get_num_threads()})",
     )
     advanced.add_argument(
         "--patch_size",
@@ -314,7 +349,7 @@ def make_arguments(helpformatter: bool = False) -> argparse.ArgumentParser:
         action="store_true",
         dest="empty",
         help="Keep ids for the table that do not exist in the segmentation "
-             "(default: drop).",
+        "(default: drop).",
     )
     advanced = add_arguments(advanced, ["device", "sid", "sd"])
     advanced.add_argument(
@@ -329,13 +364,13 @@ def make_arguments(helpformatter: bool = False) -> argparse.ArgumentParser:
         action="store_true",
         dest="legacy_freesurfer",
         help="Reproduce FreeSurfer mri_segstats numbers (default: off). \n"
-             "Please note, that exact agreement of numbers cannot be guaranteed, "
-             "because the condition number of FreeSurfers algorithm (mri_segstats) "
-             "combined with the fact that mri_segstats uses 'float' to measure the "
-             "partial volume corrected volume. This yields differences of more than "
-             "60mm3 or 0.1%% in large structures. This uniquely impacts highres images "
-             "with more voxels (on the boundary) and smaller voxel sizes (volume per "
-             "voxel).",
+        "Please note, that exact agreement of numbers cannot be guaranteed, "
+        "because the condition number of FreeSurfers algorithm (mri_segstats) "
+        "combined with the fact that mri_segstats uses 'float' to measure the "
+        "partial volume corrected volume. This yields differences of more than "
+        "60mm3 or 0.1%% in large structures. This uniquely impacts highres images "
+        "with more voxels (on the boundary) and smaller voxel sizes (volume per "
+        "voxel).",
     )
     # Additional info:
     # Changing the data type in mri_segstats to double can reduce this difference to
@@ -388,21 +423,21 @@ def make_arguments(helpformatter: bool = False) -> argparse.ArgumentParser:
         dest="volume_precision",
         default=3,
         help="Number of digits after dot in summary stats file (default: 3). Use 1 for "
-             "maximum FreeSurfer compatibility).",
+        "maximum FreeSurfer compatibility).",
     )
     advanced.add_argument(
         "--norm_name",
         type=str,
         dest="norm_name",
         default="norm",
-        help="Option to change the name of the in volume (default: norm)."
+        help="Option to change the name of the in volume (default: norm).",
     )
     advanced.add_argument(
         "--norm_unit",
         type=str,
         dest="norm_unit",
         default="MR",
-        help="Option to change the unit of the in volume (default: MR)."
+        help="Option to change the unit of the in volume (default: MR).",
     )
     return parser
 
@@ -431,6 +466,7 @@ def add_measure_parser(subparser_callback: SubparserCallback) -> None:
 
     def __add_computed_measure(x: str) -> tuple[bool, str]:
         return False, x
+
     measure_parser.add_argument(
         "--compute",
         type=__add_computed_measure,
@@ -439,30 +475,31 @@ def add_measure_parser(subparser_callback: SubparserCallback) -> None:
         default=[],
         dest="measures",
         help="Additional Measures to compute based on imported/computed measures:<br>"
-             "Cortex, CerebralWhiteMatter, SubCortGray, TotalGray, "
-             "BrainSegVol-to-eTIV, MaskVol-to-eTIV, SurfaceHoles, "
-             "EstimatedTotalIntraCranialVol",
+        "Cortex, CerebralWhiteMatter, SubCortGray, TotalGray, "
+        "BrainSegVol-to-eTIV, MaskVol-to-eTIV, SurfaceHoles, "
+        "EstimatedTotalIntraCranialVol",
     )
 
     def __add_imported_measure(x: str) -> tuple[bool, str]:
         return True, x
+
     measure_parser.add_argument(
-        '--import',
+        "--import",
         type=__add_imported_measure,
         nargs="+",
         action="extend",
         default=[],
         dest="measures",
         help="Additional Measures to import from the measurefile.<br>"
-             "Example measures ('all' to import all measures in the measurefile):<br>"
-             "BrainSeg, BrainSegNotVent, SupraTentorial, SupraTentorialNotVent, "
-             "SubCortGray, lhCortex, rhCortex, Cortex, TotalGray, "
-             "lhCerebralWhiteMatter, rhCerebralWhiteMatter, CerebralWhiteMatter, Mask, "
-             "SupraTentorialNotVentVox, BrainSegNotVentSurf, VentricleChoroidVol, "
-             "BrainSegVol-to-eTIV, MaskVol-to-eTIV, lhSurfaceHoles, rhSurfaceHoles, "
-             "SurfaceHoles, EstimatedTotalIntraCranialVol<br>"
-             "Note, 'all' will always be overwritten by any explicitly mentioned "
-             "measures.",
+        "Example measures ('all' to import all measures in the measurefile):<br>"
+        "BrainSeg, BrainSegNotVent, SupraTentorial, SupraTentorialNotVent, "
+        "SubCortGray, lhCortex, rhCortex, Cortex, TotalGray, "
+        "lhCerebralWhiteMatter, rhCerebralWhiteMatter, CerebralWhiteMatter, Mask, "
+        "SupraTentorialNotVentVox, BrainSegNotVentSurf, VentricleChoroidVol, "
+        "BrainSegVol-to-eTIV, MaskVol-to-eTIV, lhSurfaceHoles, rhSurfaceHoles, "
+        "SurfaceHoles, EstimatedTotalIntraCranialVol<br>"
+        "Note, 'all' will always be overwritten by any explicitly mentioned "
+        "measures.",
     )
     measure_parser.add_argument(
         "--file",
@@ -470,8 +507,8 @@ def add_measure_parser(subparser_callback: SubparserCallback) -> None:
         dest="measurefile",
         default="brainvol.stats",
         help="Default file to read measures (--import ...) from. If the path is "
-             "relative, it is interpreted as relative to subjects_dir/subject_id from"
-             "--sd and --subject_id.",
+        "relative, it is interpreted as relative to subjects_dir/subject_id from"
+        "--sd and --subject_id.",
     )
     measure_parser.add_argument(
         "--from_seg",
@@ -479,8 +516,8 @@ def add_measure_parser(subparser_callback: SubparserCallback) -> None:
         dest="aseg_replace",
         default=None,
         help="Replace the default segfile to compute measures from by -i/--segfile. "
-             "This will default to 'mri/aseg.mgz' for --legacy_freesurfer and to the "
-             "value of -i/--segfile otherwise."
+        "This will default to 'mri/aseg.mgz' for --legacy_freesurfer and to the "
+        "value of -i/--segfile otherwise.",
     )
 
 
@@ -494,15 +531,20 @@ def add_two_help_messages(parser: argparse.ArgumentParser) -> None:
     parser : argparse.ArgumentParser
         Parser to add the flags to.
     """
+
     def this_msg(msg: str, flag: str) -> str:
         import sys
+
         return f"{msg} (this message)" if flag in sys.argv else msg
+
     parser.add_argument(
-        "-h", action="help",
-        help=this_msg("show a short help message and exit", "-h"))
+        "-h", action="help", help=this_msg("show a short help message and exit", "-h")
+    )
     parser.add_argument(
-        "--help", action="help",
-        help=this_msg("show a long, detailed help message and exit", "--help"))
+        "--help",
+        action="help",
+        help=this_msg("show a long, detailed help message and exit", "--help"),
+    )
 
 
 def _check_arg_path(
@@ -776,8 +818,10 @@ def main(args: argparse.Namespace) -> Literal[0] | str:
             require_pvfile=not legacy_freesurfer,
         )
         if legacy_freesurfer and not measure_only and pvfile is None:
-            return ("No files are defined via -pv/--pvfile or -norm/--normfile: "
-                    "This is only supported for header only in legacy mode.")
+            return (
+                "No files are defined via -pv/--pvfile or -norm/--normfile: "
+                "This is only supported for header only in legacy mode."
+            )
         if measurefile:
             manager_kwargs["measurefile"] = measurefile
     except ValueError as e:
@@ -821,7 +865,9 @@ def main(args: argparse.Namespace) -> Literal[0] | str:
 
                 if not empty(pvfile_preproc := getattr(args, "pvfile_preproc", None)):
                     pv_preproc_future = compute_threads.submit(
-                        preproc_image, pvfile_preproc, pv_data,
+                        preproc_image,
+                        pvfile_preproc,
+                        pv_data,
                     )
 
                 check_shape_affine(seg, pv_img, "segmentation", "pv_guide")
@@ -899,7 +945,9 @@ def main(args: argparse.Namespace) -> Literal[0] | str:
         if pv_preproc_future is not None:
             # wait for preprocessing options on pvfile
             pv_data = pv_preproc_future.result()
-        out = pv_calc(seg_data, pv_data, norm_data, labels, return_maps=save_maps, **kwargs)
+        out = pv_calc(
+            seg_data, pv_data, norm_data, labels, return_maps=save_maps, **kwargs
+        )
     else:
         out = None
 
@@ -975,8 +1023,10 @@ def main(args: argparse.Namespace) -> Literal[0] | str:
         extra_header=lines,
         **write_kwargs,
     )
-    print(f"Partial volume stats for {dataframe.shape[0]} labels written to "
-          f"{segstatsfile}.")
+    print(
+        f"Partial volume stats for {dataframe.shape[0]} labels written to "
+        f"{segstatsfile}."
+    )
     duration = (perf_counter_ns() - start) / 1e9
     print(f"Calculation took {duration:.2f} seconds using up to {threads} threads.")
 
@@ -988,10 +1038,10 @@ def main(args: argparse.Namespace) -> Literal[0] | str:
 
 
 def infer_merged_labels(
-        manager: "Manager",
-        used_labels: Iterable[int],
-        merged_labels: Sequence[Sequence[int]] = (),
-        merge_labels_start: int = 0,
+    manager: "Manager",
+    used_labels: Iterable[int],
+    merged_labels: Sequence[Sequence[int]] = (),
+    merge_labels_start: int = 0,
 ) -> tuple[dict[int, Sequence[int]], dict[int, Sequence[int]]]:
     """
 
@@ -1026,9 +1076,9 @@ def infer_merged_labels(
 
 
 def table_to_dataframe(
-        table: list[PVStats],
-        report_empty: bool = True,
-        must_keep_ids: Container[int] | None = None,
+    table: list[PVStats],
+    report_empty: bool = True,
+    must_keep_ids: Container[int] | None = None,
 ) -> pd.DataFrame:
     """
     Convert the list of PVStats dictionaries into a dataframe.
@@ -1082,21 +1132,35 @@ def dataframe_to_table(dataframe: pd.DataFrame) -> list[PVStats]:
     """
     # Step 1: make sure the required columns exist
     required_cols = tuple(PVStats.__required_keys__)
-    missing_cols = [required_col for required_col in required_cols if required_col not in dataframe.columns]
+    missing_cols = [
+        required_col
+        for required_col in required_cols
+        if required_col not in dataframe.columns
+    ]
     if bool(missing_cols):
         raise ValueError("Dataframe is missing columns", missing_cols)
 
     # Step 2: Find optional columns
-    possible_cols = (prefix + opt_col for opt_col, prefix in product(PVStats.__optional_keys__, ("", "norm")))
-    optional_cols = tuple(optional_col for optional_col in possible_cols if optional_col in dataframe.columns)
+    possible_cols = (
+        prefix + opt_col
+        for opt_col, prefix in product(PVStats.__optional_keys__, ("", "norm"))
+    )
+    optional_cols = tuple(
+        optional_col
+        for optional_col in possible_cols
+        if optional_col in dataframe.columns
+    )
 
-    return [{c: row[c] for c in required_cols + optional_cols} for _, row in dataframe.iterrows()]
+    return [
+        {c: row[c] for c in required_cols + optional_cols}
+        for _, row in dataframe.iterrows()
+    ]
 
 
 def update_structnames(
     table: list[PVStats],
     lut: pd.DataFrame,
-    merged_labels: dict[_IntType, Sequence[_IntType]] | None = None
+    merged_labels: dict[_IntType, Sequence[_IntType]] | None = None,
 ) -> None:
     """
     Update StructNames from `lut` and `merged_labels` in `table`.
@@ -1208,12 +1272,13 @@ def write_statsfile(
         import sys
 
         from fastsurfer_nn.version import read_and_close_version
+
         file.write(
             "# generating_program segstats.py\n"
             "# FastSurfer_version " + read_and_close_version() + "\n"
             "# cmdline " + " ".join(sys.argv) + "\n"
         )
-        if os.name == 'posix':
+        if os.name == "posix":
             file.write(
                 f"# sysname  {os.uname().sysname}\n"
                 f"# hostname {os.uname().nodename}\n"
@@ -1221,10 +1286,8 @@ def write_statsfile(
             )
         else:
             from socket import gethostname
-            file.write(
-                f"# platform {sys.platform}\n"
-                f"# hostname {gethostname()}\n"
-            )
+
+            file.write(f"# platform {sys.platform}\n" f"# hostname {gethostname()}\n")
         from getpass import getuser
 
         try:
@@ -1250,7 +1313,8 @@ def write_statsfile(
 
                 warn_msg_sent or warn(
                     f"extra_header[{i}] includes embedded newline characters. "
-                    "Replacing all newline characters with <space>.", stacklevel=2
+                    "Replacing all newline characters with <space>.",
+                    stacklevel=2,
                 )
                 warn_msg_sent = True
             file.write(f"# {line}\n")
@@ -1281,14 +1345,17 @@ def write_statsfile(
             exclude_str = list(filter(lambda x: isinstance(x, str), _exclude))
             exclude_int = list(filter(lambda x: isinstance(x, int), _exclude))
             if len(exclude_str) > 0:
-                excl_names = ', '.join(exclude_str)
+                excl_names = ", ".join(exclude_str)
                 file.write(f"# Excluding {excl_names}\n")
             if len(exclude_int) > 0:
                 file.write(f"# ExcludeSegId {' '.join(map(str, exclude_int))}\n")
         if _lut is not None and not _report_empty:
             file.write("# Only reporting non-empty segmentations\n")
-        file.write("# compatibility with freesurfer's mri_segstats: " +
-                   ("legacy" if _leg_freesurfer else "fixed") + "\n")
+        file.write(
+            "# compatibility with freesurfer's mri_segstats: "
+            + ("legacy" if _leg_freesurfer else "fixed")
+            + "\n"
+        )
         file.write(f"# VoxelVolume_mm3 {_voxvol}\n")
 
     def _is_norm_column(name: str) -> bool:
@@ -1312,8 +1379,11 @@ def write_statsfile(
         if _is_norm_column(name):
             return f"Intensity {_column_name(name)}"
         return {
-            "Index": "Index", "SegId": "Segmentation Id", "NVoxels": "Number of Voxels",
-            "Volume_mm3": "Volume", "StructName": "Structure Name"
+            "Index": "Index",
+            "SegId": "Segmentation Id",
+            "NVoxels": "Number of Voxels",
+            "Volume_mm3": "Volume",
+            "StructName": "Structure Name",
         }.get(name, "Unknown Column")
 
     def _column_format(name: str) -> str:
@@ -1331,11 +1401,14 @@ def write_statsfile(
         """Write the comments of the table header to a file."""
         columns = [col for col in COLUMNS if col in _dataframe.columns]
         for i, col in enumerate(columns):
-            file.write(f"# TableCol {i + 1: >2d} ColHeader {_column_name(col)}\n"
-                       f"# TableCol {i + 1: >2d} FieldName {_column_description(col)}\n"
-                       f"# TableCol {i + 1: >2d} Units     {_column_unit(col)}\n")
-        file.write(f"# NRows {len(_dataframe): >2d}\n"
-                   f"# NTableCols {len(columns): >2d}\n")
+            file.write(
+                f"# TableCol {i + 1: >2d} ColHeader {_column_name(col)}\n"
+                f"# TableCol {i + 1: >2d} FieldName {_column_description(col)}\n"
+                f"# TableCol {i + 1: >2d} Units     {_column_unit(col)}\n"
+            )
+        file.write(
+            f"# NRows {len(_dataframe): >2d}\n" f"# NTableCols {len(columns): >2d}\n"
+        )
         file.write("# ColHeaders  " + " ".join(map(_column_name, columns)) + "\n")
 
     def _table_body(file: IO, _dataframe: pd.DataFrame) -> None:
@@ -1400,6 +1473,7 @@ def read_statsfile(path: Path) -> tuple[dict[str, MeasureTuple | str], pd.DataFr
     measures = read_measure_file(path)
     annotations = {}
     from re import compile
+
     split_pattern = compile("\\s+")
     table_header = {"index": [], "key": [], "value": []}
     with open(path) as fp:
@@ -1407,7 +1481,9 @@ def read_statsfile(path: Path) -> tuple[dict[str, MeasureTuple | str], pd.DataFr
             if line.startswith("#") and line[1:].lstrip():
                 if line.startswith("# TableCol"):
                     _, *vals = split_pattern.split(line[1:].strip(), 3)
-                    for k, t, v in zip(("index", "key", "value"), (int, str, str), vals, strict=False):
+                    for k, t, v in zip(
+                        ("index", "key", "value"), (int, str, str), vals, strict=False
+                    ):
                         table_header[k].append(t(v))
                 elif not line.startswith("# Measure"):
                     key, value = line[1:].strip().split(" ", 1)
@@ -1416,8 +1492,12 @@ def read_statsfile(path: Path) -> tuple[dict[str, MeasureTuple | str], pd.DataFr
     columns = []
     if table_header["index"]:
         table_info_as_dataframe = pd.DataFrame.from_dict(table_header)
-        pivot = table_info_as_dataframe.pivot_table(values="value", index="index", columns="key", aggfunc=lambda x: x)
-        columns: list[dict[str, str]] = [row.to_dict() for _, row in pivot.sort_index().iterrows()]
+        pivot = table_info_as_dataframe.pivot_table(
+            values="value", index="index", columns="key", aggfunc=lambda x: x
+        )
+        columns: list[dict[str, str]] = [
+            row.to_dict() for _, row in pivot.sort_index().iterrows()
+        ]
         annotations["Column_Info"] = columns
 
     if columns:
@@ -1426,14 +1506,13 @@ def read_statsfile(path: Path) -> tuple[dict[str, MeasureTuple | str], pd.DataFr
         try:
             kwargs = {"names": list(annotations.pop("ColHeaders").strip().split(" "))}
         except IndexError:
-            kwargs = {"header": 'infer'}
+            kwargs = {"header": "infer"}
     dataframe = pd.read_csv(path, sep="\\s+", comment="#", **kwargs)
     return annotations, dataframe
 
 
 def preproc_image(
-        ops: Sequence[str],
-        data: npt.NDArray[_NumberType]
+    ops: Sequence[str], data: npt.NDArray[_NumberType]
 ) -> npt.NDArray[_NumberType]:
     """
     Apply preprocessing operations to data. Performs, --mul, --abs, --sqr, --sqrt
@@ -1504,7 +1583,7 @@ def seg_borders(
             laplace_data = out
         return laplace_data
     else:
-        zeros = np.asarray(0., dtype=cmp_dtype)
+        zeros = np.asarray(0.0, dtype=cmp_dtype)
         # laplace
         laplace_data = laplace(bin_array.astype(cmp_dtype))
         return np.not_equal(laplace_data, zeros, out=out)
@@ -1577,11 +1656,14 @@ def borders(
     padded = np.pad(_array, 1)
 
     if six_connected:
+
         def indexer(axis: int, is_mid: bool) -> tuple[SlicingTuple, SlicingTuple]:
             full_slice = (slice(1, -1),) if is_mid else (slice(None),)
             more_axes = dim - axis - 1
-            return ((full_slice * axis + (slice(0, -1),) + full_slice * more_axes),
-                    (full_slice * axis + (slice(1, None),) + full_slice * more_axes))
+            return (
+                (full_slice * axis + (slice(0, -1),) + full_slice * more_axes),
+                (full_slice * axis + (slice(1, None),) + full_slice * more_axes),
+            )
 
         # compare the [padded] image/array in all directions, x, y, z...
         # ([0], 0, 2, 2, 2, [0]) ==> (False, True, False, False, True)  for each dim
@@ -1593,8 +1675,11 @@ def borders(
         # ((False, True), (True, False), (False, False), (False, True))  for each dim
         # is_mid=False: padded values already dropped
         indexes = (indexer(i, is_mid=False) for i in range(dim))
-        nbr_same = [(nbr_[i], nbr_[j]) for (i, j), nbr_ in zip(indexes, nbr_same, strict=False)]
+        nbr_same = [
+            (nbr_[i], nbr_[j]) for (i, j), nbr_ in zip(indexes, nbr_same, strict=False)
+        ]
         from itertools import chain
+
         nbr_same = list(chain.from_iterable(nbr_same))
     else:
         # all indexes of the neighbors: ((0, 0, 0), (0, 0, 1) ... (2, 2, 2))
@@ -1610,7 +1695,9 @@ def borders(
 
         # compare the array (center point) with all neighboring voxels
         # neighbor samples the neighboring voxel in the padded array
-        nbr_same = [cmp(_array, nbr_i(padded, i)) for i in range(3**dim) if i != 2**dim]
+        nbr_same = [
+            cmp(_array, nbr_i(padded, i)) for i in range(3**dim) if i != 2**dim
+        ]
 
     # reduce the per-direction/per-neighbor binary arrays into one array
     return np.logical_or.reduce(nbr_same, out=out)
@@ -1652,16 +1739,21 @@ def pad_slicer(
     def _slice(start_end: npt.NDArray[int]) -> slice:
         _start, _end = start_end
         return slice(_start.item(), None if _end.item() == 0 else _end.item())
+
     # make grown patch and grown patch to patch
-    padded_slicer = tuple(slice(s.item(), e.item()) for s, e in zip(_start, _stop, strict=False))
-    unpadded_slicer = tuple(map(_slice, zip(start - _start, stop - _stop, strict=False)))
+    padded_slicer = tuple(
+        slice(s.item(), e.item()) for s, e in zip(_start, _stop, strict=False)
+    )
+    unpadded_slicer = tuple(
+        map(_slice, zip(start - _start, stop - _stop, strict=False))
+    )
     return padded_slicer, unpadded_slicer
 
 
 def uniform_filter(
     data: _ArrayType,
     filter_size: int,
-    fillval: float = 0.,
+    fillval: float = 0.0,
     slicer_patch: SlicingTuple | None = None,
 ) -> _ArrayType:
     """
@@ -1807,8 +1899,9 @@ def pv_calc(
         "norm": (norm, np.number),
     }
     for name, (img, _type) in input_checker.items():
-        if (img is not None and
-                not (isinstance(img, np.ndarray) and np.issubdtype(img.dtype, _type))):
+        if img is not None and not (
+            isinstance(img, np.ndarray) and np.issubdtype(img.dtype, _type)
+        ):
             raise TypeError(f"The {name} object is not a numpy.ndarray of {_type}.")
     _labels = np.asarray(labels)
     if not isinstance(labels, Sequence):
@@ -1846,8 +1939,7 @@ def pv_calc(
         # crop global_crop to the data (plus one extra voxel)
         not_background = cast(npt.NDArray[bool], seg != 0)
         any_in_global, global_crop = crop_patch_to_mask(
-            not_background,
-            sub_patch=global_crop
+            not_background, sub_patch=global_crop
         )
         # grow global_crop by one, so all border voxels are included
         global_crop = pad_slicer(global_crop, 1, seg.shape)[0]
@@ -1876,6 +1968,7 @@ def pv_calc(
 
     if return_maps:
         from concurrent.futures import ProcessPoolExecutor
+
         if isinstance(executor, ProcessPoolExecutor):
             raise NotImplementedError(
                 "The ProcessPoolExecutor is not compatible with return_maps=True!"
@@ -1897,7 +1990,10 @@ def pv_calc(
     # un_global_crop border here
     any_border = np.any(list(borders.values()), axis=0)
     pad_width = np.asarray(
-        [(slc.start, shp - slc.stop) for slc, shp in zip(global_crop, seg.shape, strict=False)],
+        [
+            (slc.start, shp - slc.stop)
+            for slc, shp in zip(global_crop, seg.shape, strict=False)
+        ],
         dtype=int,
     )
     any_border = np.pad(any_border, pad_width)
@@ -1909,8 +2005,9 @@ def pv_calc(
     # 4 chunks per core
     num_valid_labels = len(voxel_counts)
     map_kwargs["chunksize"] = np.ceil(num_valid_labels / nthreads / 4).item()
-    patch_filter_func = partial(patch_filter, mask=any_border,
-                                global_crop=global_crop, patch_size=patch_size)
+    patch_filter_func = partial(
+        patch_filter, mask=any_border, global_crop=global_crop, patch_size=patch_size
+    )
     _patches = executor.map(patch_filter_func, product(*patch_iters), **map_kwargs)
     patches = (patch for has_pv_vox, patch in _patches if has_pv_vox)
 
@@ -1936,17 +2033,19 @@ def pv_calc(
     # ColHeaders: Index SegId NVoxels Volume_mm3 StructName Mean StdDev Min Max Range
     def prep_dict(lab: int):
         nvox = voxel_counts.get(lab, 0)
-        vol = volumes.get(lab, 0.)
+        vol = volumes.get(lab, 0.0)
         return {"SegId": lab, "NVoxels": nvox, "Volume_mm3": vol}
 
     table = list(map(prep_dict, labels))
     if has_norm:
         robust_vc_it = robust_voxel_counts.items()
-        means = {lab: sums.get(lab, 0.) / cnt for lab, cnt in robust_vc_it if cnt > eps}
+        means = {
+            lab: sums.get(lab, 0.0) / cnt for lab, cnt in robust_vc_it if cnt > eps
+        }
 
         def get_std(lab: _IntType, nvox: int) -> float:
             # *std = sqrt((sum * (*mean) - 2 * (*mean) * sum + sum2) / (nvoxels - 1));
-            return np.sqrt((sums_2[lab] - means[lab] * sums[lab]) / max(1,(nvox - 1)))
+            return np.sqrt((sums_2[lab] - means[lab] * sums[lab]) / max(1, (nvox - 1)))
 
         stds = {lab: get_std(lab, nvox) for lab, nvox in robust_vc_it if nvox > eps}
 
@@ -1976,15 +2075,15 @@ def pv_calc(
 
 
 def calculate_merged_labels(
-        merged_labels: VirtualLabel,
-        voxel_counts: dict[_IntType, int],
-        robust_voxel_counts: dict[_IntType, int],
-        volumes: dict[_IntType, float],
-        mins: dict[_IntType, float] | None = None,
-        maxes: dict[_IntType, float] | None = None,
-        sums: dict[_IntType, float] | None = None,
-        sums_of_squares: dict[_IntType, float] | None = None,
-        eps: float = 1e-6,
+    merged_labels: VirtualLabel,
+    voxel_counts: dict[_IntType, int],
+    robust_voxel_counts: dict[_IntType, int],
+    volumes: dict[_IntType, float],
+    mins: dict[_IntType, float] | None = None,
+    maxes: dict[_IntType, float] | None = None,
+    sums: dict[_IntType, float] | None = None,
+    sums_of_squares: dict[_IntType, float] | None = None,
+    eps: float = 1e-6,
 ) -> Iterator[PVStats]:
     """
     Calculate the statistics for meta-labels, i.e. labels based on other labels
@@ -2016,18 +2115,24 @@ def calculate_merged_labels(
     PVStats
         A dictionary per entry in `merged_labels`.
     """
+
     def num_robust_voxels(lab):
         return robust_voxel_counts.get(lab, 0)
 
     def aggregate(source, merge_labels, f: Callable[..., np.ndarray] = np.sum):
         """aggregate labels `merge_labels` from `source` with function `f`"""
-        _data = [source.get(lb, 0) for lb in merge_labels if num_robust_voxels(lb) > eps]
+        _data = [
+            source.get(lb, 0) for lb in merge_labels if num_robust_voxels(lb) > eps
+        ]
         return f(_data).item()
 
     def aggregate_std(sums, sums2, merge_labels, nvox):
         """aggregate std of labels `merge_labels` from `source`"""
-        s2 = [(s := sums.get(lb, 0)) * s / r for lb in group
-              if (r := num_robust_voxels(lb)) > eps]
+        s2 = [
+            (s := sums.get(lb, 0)) * s / r
+            for lb in group
+            if (r := num_robust_voxels(lb)) > eps
+        ]
         return np.sqrt((aggregate(sums2, merge_labels) - np.sum(s2)) / nvox).item()
 
     for lab, group in merged_labels.items():
@@ -2040,11 +2145,11 @@ def calculate_merged_labels(
             stats.update(NVoxels=0, Volume_mm3=0.0)
             for k, v in {"Min": mins, "Max": maxes, "Mean": sums}.items():
                 if v is not None:
-                    stats[k] = 0.
+                    stats[k] = 0.0
             if all(v is not None for v in (mins, maxes)):
-                stats["Range"] = 0.
+                stats["Range"] = 0.0
             if all(v is not None for v in (sums, sums_of_squares)):
-                stats["StdDev"] = 0.
+                stats["StdDev"] = 0.0
         else:
             num_voxels = aggregate(voxel_counts, group)
             stats.update(NVoxels=num_voxels, Volume_mm3=aggregate(volumes, group))
@@ -2101,6 +2206,7 @@ def global_stats(
         sum_of_intensity_squares, and border with respect to the label.
 
     """
+
     def __compute_borders(out: np.ndarray | None) -> np.ndarray:
         # compute/update the border
         if out is None:
@@ -2113,14 +2219,14 @@ def global_stats(
     if norm is None:
         nvoxels = int(label_mask.sum())
         out = __compute_borders(out)
-        return lab, (nvoxels, nvoxels, None, None, None, None, 0., out)
+        return lab, (nvoxels, nvoxels, None, None, None, None, 0.0, out)
 
     data_dtype = int if np.issubdtype(norm.dtype, np.integer) else float
     data = norm[label_mask].astype(data_dtype)
     nvoxels: int = data.shape[0]
     # if lab is not in the image at all
     if nvoxels == 0:
-        return lab, (0, 0, None, None, None, None, 0., out)
+        return lab, (0, 0, None, None, None, None, 0.0, out)
     out = __compute_borders(out)
 
     if robust_percentage is not None:
@@ -2175,7 +2281,10 @@ def patch_filter(
         return slice(patch_start, min(patch_start + _patch_size, image_stop))
 
     # create slices for current patch context (constrained by the global_crop)
-    patch = [_slice(pc, patch_size, s.stop) for pc, s in zip(patch_corner, global_crop, strict=False)]
+    patch = [
+        _slice(pc, patch_size, s.stop)
+        for pc, s in zip(patch_corner, global_crop, strict=False)
+    ]
     # crop patch context to the image content
     return crop_patch_to_mask(mask, sub_patch=patch)
 
@@ -2239,8 +2348,10 @@ def crop_patch_to_mask(
     def _move_slice(the_slice: slice, offset: int) -> slice:
         return slice(the_slice.start + offset, the_slice.stop + offset)
 
-    target_slicer = [_move_slice(ts, sc.start) for ts, sc in zip(_target_slicer,
-                                                                 slicer_context, strict=False)]
+    target_slicer = [
+        _move_slice(ts, sc.start)
+        for ts, sc in zip(_target_slicer, slicer_context, strict=False)
+    ]
     return _target_slicer[0].start != _target_slicer[0].stop, target_slicer
 
 
@@ -2312,20 +2423,22 @@ def pv_calc_patch(
     log_eps = -int(np.log10(eps))
 
     slicer_patch = tuple(slicer_patch)
-    slicer_small_patch, slicer_small_to_patch = pad_slicer(slicer_patch,
-                                                           (FILTER_SIZES[0] - 1) // 2,
-                                                           seg.shape)
-    slicer_large_patch, slicer_large_to_patch = pad_slicer(slicer_patch,
-                                                           (FILTER_SIZES[1] - 1) // 2,
-                                                           seg.shape)
+    slicer_small_patch, slicer_small_to_patch = pad_slicer(
+        slicer_patch, (FILTER_SIZES[0] - 1) // 2, seg.shape
+    )
+    slicer_large_patch, slicer_large_to_patch = pad_slicer(
+        slicer_patch, (FILTER_SIZES[1] - 1) // 2, seg.shape
+    )
     slicer_large_to_small = tuple(
-        slice(l2p.start - s2p.start,
-              None if l2p.stop == s2p.stop else l2p.stop - s2p.stop)
-        for s2p, l2p in zip(slicer_small_to_patch, slicer_large_to_patch, strict=False))
+        slice(
+            l2p.start - s2p.start, None if l2p.stop == s2p.stop else l2p.stop - s2p.stop
+        )
+        for s2p, l2p in zip(slicer_small_to_patch, slicer_large_to_patch, strict=False)
+    )
     patch_in_gc = tuple(
-        slice(p.start - gc.start,
-              p.stop - gc.start)
-        for p, gc in zip(slicer_patch, global_crop, strict=False))
+        slice(p.start - gc.start, p.stop - gc.start)
+        for p, gc in zip(slicer_patch, global_crop, strict=False)
+    )
 
     label_lookup = np.unique(seg[slicer_small_patch])
     maxlabels = label_lookup[-1] + 1
@@ -2553,13 +2666,14 @@ def patch_neighbors(
                 same_label_large_patch,
                 FILTER_SIZES[1],
                 fillvalue_binary_label,
-                slicer_patch=slicer_large_to_patch
+                slicer_patch=slicer_large_to_patch,
             )
             pat_large_filter_pv = pv_guide[slicer_large_patch] * same_label_large_patch
             pat_label_sums[i] = uniform_filter(
                 pat_large_filter_pv,
                 FILTER_SIZES[1],
-                fillval=0, slicer_patch=slicer_large_to_patch
+                fillval=0,
+                slicer_patch=slicer_large_to_patch,
             )
         # else: lab is not present in the patch
     return pat_is_border, pat_is_nbr, pat_label_counts, pat_label_sums

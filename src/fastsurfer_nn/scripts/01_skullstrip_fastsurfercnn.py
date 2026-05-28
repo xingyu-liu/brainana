@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 
 # %%
 # Edit these values before running this cell.
-input_file = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032310_nofixV1/others/T1w.nii.gz")
+input_file = Path(
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032310_nofixV1/others/T1w.nii.gz"
+)
 modality = "anat"  # "anat" | "func"
 config_file = None
 
@@ -35,7 +37,7 @@ session_id = ""  # Set "" if no session is used.
 fix_V1_WM = False
 
 # %%
-working_dir = input_file.parent / 'work'
+working_dir = input_file.parent / "work"
 working_dir.mkdir(parents=True, exist_ok=True)
 output_name = "brain.nii.gz"
 
@@ -78,4 +80,3 @@ if result.additional_files:
         logger.info("additional_file[%s]=%s", key, value)
 else:
     logger.info("additional_files=None")
-

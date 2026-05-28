@@ -20,18 +20,24 @@ def _template_paths(config, hemi: str):
     Choice A (single path): config.registration_template is path to template subject dir.
     Choice A (convention): fsaverage uses aparc.annot; custom template uses aparc.{atlas.name}atlas.mapped.annot.
     """
-    template_dir = getattr(config, "registration_template", None) and config.registration_template
+    template_dir = (
+        getattr(config, "registration_template", None) and config.registration_template
+    )
     if template_dir:
         sphere = template_dir / "surf" / f"{hemi}.sphere"
-        annot = template_dir / "label" / f"{hemi}.aparc.{config.atlas.name}atlas.mapped.annot"
+        annot = (
+            template_dir
+            / "label"
+            / f"{hemi}.aparc.{config.atlas.name}atlas.mapped.annot"
+        )
         folding_atlas = template_dir / "atlas" / f"{hemi}.folding.atlas.tif"
         return sphere, annot, folding_atlas, True  # use_custom_template
-    
-    fs_home = get_fs_home()
-    sphere = None # fs_home / "subjects" / "fsaverage" / "surf" / f"{hemi}.sphere"
-    annot = None # fs_home / "subjects" / "fsaverage" / "label" / f"{hemi}.aparc.annot"
-    folding_atlas = None # fs_home / "average" / f"{hemi}.folding.atlas.acfb40.noaparc.i12.2016-08-02.tif"
-    
+
+    get_fs_home()
+    sphere = None  # fs_home / "subjects" / "fsaverage" / "surf" / f"{hemi}.sphere"
+    annot = None  # fs_home / "subjects" / "fsaverage" / "label" / f"{hemi}.aparc.annot"
+    folding_atlas = None  # fs_home / "average" / f"{hemi}.folding.atlas.acfb40.noaparc.i12.2016-08-02.tif"
+
     return sphere, annot, folding_atlas, False
 
 
@@ -65,17 +71,24 @@ class Registration(HemisphereStage):
                 subjects_dir=self.config.subjects_dir,
             )
 
-        template_sphere, template_aparc, folding_atlas, use_custom_template = _template_paths(
-            self.config, self.hemi
-        )
+        (
+            template_sphere,
+            template_aparc,
+            folding_atlas,
+            use_custom_template,
+        ) = _template_paths(self.config, self.hemi)
         if use_custom_template:
-            logger.info(f"Using registration template: {self.config.registration_template}")
+            logger.info(
+                f"Using registration template: {self.config.registration_template}"
+            )
 
         # Compute rotation angles
         angles_file = self.hemi_path("angles.txt")
         if not angles_file.exists():
             logger.info(f"Computing rotation angles for {self.hemi}...")
-            aparc_mapped = self.hemi_label(f"aparc.{self.config.atlas.name}atlas.mapped.annot")
+            aparc_mapped = self.hemi_label(
+                f"aparc.{self.config.atlas.name}atlas.mapped.annot"
+            )
             compute_sphere_rotation(
                 src_sphere_path=sphere,
                 src_aparc_path=aparc_mapped,
@@ -107,7 +120,11 @@ class Registration(HemisphereStage):
             aparc_fs = self.hemi_label("aparc.annot")
             if not aparc_fs.exists():
                 logger.info(f"Creating FS aparc for {self.hemi}...")
-                cp_atlas = fs_home / "average" / f"{self.hemi}.DKaparc.atlas.acfb40.noaparc.i12.2016-08-02.gcs"
+                cp_atlas = (
+                    fs_home
+                    / "average"
+                    / f"{self.hemi}.DKaparc.atlas.acfb40.noaparc.i12.2016-08-02.gcs"
+                )
                 mris_ca_label(
                     subject=self.config.subject_id,
                     hemi=self.hemi,
@@ -134,12 +151,11 @@ class Registration(HemisphereStage):
             log_file=self.config.log_file,
             subjects_dir=self.config.subjects_dir,
         )
-    
+
     def is_disabled(self) -> bool:
         """Check if registration is disabled."""
         return not (self.config.processing.fsaparc or self.config.processing.fssurfreg)
-    
+
     def should_skip(self) -> bool:
         """Skip if sphere.reg exists."""
         return self.hemi_path("sphere.reg").exists()
-

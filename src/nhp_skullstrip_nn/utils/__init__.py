@@ -18,27 +18,27 @@ from .morphology import (
 )
 
 __all__ = [
-    'load_nifti',
-    'save_nifti',
-    'load_pickle',
-    'save_pickle',
-    'get_device',
-    'setup_device',
-    'resolve_device',
-    'plot_slice',
-    'plot_volume',
+    "load_nifti",
+    "save_nifti",
+    "load_pickle",
+    "save_pickle",
+    "get_device",
+    "setup_device",
+    "resolve_device",
+    "plot_slice",
+    "plot_volume",
     # Logging utilities
-    'setup_logging',
-    'get_logger',
-    'MacacaLogger',
+    "setup_logging",
+    "get_logger",
+    "MacacaLogger",
     # Morphology functions
-    'extract_largest_component',
-    'fill_label_holes',
-    'morphological_erosion_dilation',
-    'get_bounding_box',
-    'crop_to_label',
+    "extract_largest_component",
+    "fill_label_holes",
+    "morphological_erosion_dilation",
+    "get_bounding_box",
+    "crop_to_label",
     # Legacy names
-    'extract_large_comp',
-    'fill_holes',
-    'erosion_dilation'
+    "extract_large_comp",
+    "fill_holes",
+    "erosion_dilation",
 ]

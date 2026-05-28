@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 class Parcellation(HemisphereStage):
     """Map volume labels to surface."""
-    
+
     name = "parcellation"
     description = "Surface parcellation mapping"
-    
+
     def _run(self) -> None:
         """Map parcellation to surface."""
         # Create cortex label
@@ -40,7 +40,7 @@ class Parcellation(HemisphereStage):
                 log_file=self.config.log_file,
                 subjects_dir=self.config.subjects_dir,
             )
-        
+
         # Create inflated and curvHK surfaces
         inflated = self.hemi_path("inflated")
         curv = self.hemi_path("curv")
@@ -58,25 +58,29 @@ class Parcellation(HemisphereStage):
                 log_file=self.config.log_file,
                 subjects_dir=self.config.subjects_dir,
             )
-        
+
         # Map parcellation
-        aparc_mapped = self.hemi_label(f"aparc.{self.config.atlas.name}atlas.mapped.annot")
+        aparc_mapped = self.hemi_label(
+            f"aparc.{self.config.atlas.name}atlas.mapped.annot"
+        )
         logger.info(f"Mapping parcellation to {self.hemi} surface...")
-        
+
         # Get lookup tables
         seg_lut = self.config.atlas.get_hemi_lut(self.hemi)
         surf_lut = self.config.atlas.get_lut()
-        
+
         # Load surface once for reuse
         white_preaparc_path = self.hemi_path("white.preaparc")
         logger.info(f"Loading surface: {white_preaparc_path}")
         surface_data = fs.read_geometry(white_preaparc_path, read_metadata=True)
         surface = (surface_data[0], surface_data[1])
-        
+
         # Sample parcellation
-        aparc_prefix = self.hemi_label(f"aparc.{self.config.atlas.name}atlas.mapped.prefix.annot")
+        aparc_prefix = self.hemi_label(
+            f"aparc.{self.config.atlas.name}atlas.mapped.prefix.annot"
+        )
         aseg_orig = self.sd.mri(f"aparc.{self.config.atlas.name}atlas+aseg.orig.mgz")
-        
+
         sample_parcellation(
             surface_path=white_preaparc_path,
             segmentation_path=aseg_orig,
@@ -88,7 +92,7 @@ class Parcellation(HemisphereStage):
             search_radius=2.0,
             surface=surface,
         )
-        
+
         # Smooth parcellation (reuse the same surface)
         smooth_aparc_files(
             insurf=white_preaparc_path,
@@ -97,9 +101,9 @@ class Parcellation(HemisphereStage):
             outaparc=aparc_mapped,
             surface=surface,
         )
-        
+
         # Optional: Apply additional smoothing and inflation adjustments for visualization
-        # 
+        #
         # This section allows fine-tuning of smoothwm and inflated surfaces for non-human
         # data (e.g., monkey data) where different smoothing/inflation parameters may be
         # needed for optimal visualization. This is applied AFTER the initial smooth2/inflate2
@@ -114,14 +118,20 @@ class Parcellation(HemisphereStage):
         # Only apply if inflate2_iterations is explicitly set (not None), indicating
         # that custom visualization parameters are desired.
         if self.config.processing.inflate2_iterations is not None:
-            logger.info(f"Applying post-processing adjustments for {self.hemi} (visualization smoothing/inflation)...")
-            
+            logger.info(
+                f"Applying post-processing adjustments for {self.hemi} (visualization smoothing/inflation)..."
+            )
+
             smoothwm = self.hemi_path("smoothwm")
             inflated = self.hemi_path("inflated")
             white_preaparc = self.hemi_path("white.preaparc")
-            
+
             # Verify all required surfaces exist before proceeding
-            if not smoothwm.exists() or not inflated.exists() or not white_preaparc.exists():
+            if (
+                not smoothwm.exists()
+                or not inflated.exists()
+                or not white_preaparc.exists()
+            ):
                 logger.warning(
                     f"Cannot apply post-processing adjustments: missing surfaces. "
                     f"smoothwm exists: {smoothwm.exists()}, "
@@ -132,8 +142,10 @@ class Parcellation(HemisphereStage):
                 # Re-smooth smoothwm with configured iterations (smooth2 for visualization)
                 # This creates a visualization-optimized smoothwm surface with custom
                 # smoothing iterations (typically 3 for monkey data vs default ~10)
-                logger.info(f"Re-smoothing {self.hemi}.smoothwm with {self.config.processing.smooth2_iterations} iterations (visualization smoothing)...")
-                
+                logger.info(
+                    f"Re-smoothing {self.hemi}.smoothwm with {self.config.processing.smooth2_iterations} iterations (visualization smoothing)..."
+                )
+
                 # Create temporary smoothed version to avoid corrupting original if process fails
                 smoothwm_adjusted = self.hemi_path("smoothwm.adjusted")
                 mris_smooth(
@@ -145,20 +157,24 @@ class Parcellation(HemisphereStage):
                     log_file=self.config.log_file,
                     subject_dir=self.sd.subject_dir,
                 )
-                
+
                 # Atomically replace original with adjusted version
                 # Using replace() ensures atomic operation (rename on Unix, copy+delete on Windows)
                 smoothwm_adjusted.replace(smoothwm)
-                logger.info(f"Replaced {self.hemi}.smoothwm with adjusted version ({self.config.processing.smooth2_iterations} iterations)")
-                
+                logger.info(
+                    f"Replaced {self.hemi}.smoothwm with adjusted version ({self.config.processing.smooth2_iterations} iterations)"
+                )
+
                 # Update smoothwm path reference for inflation step
                 smoothwm = self.hemi_path("smoothwm")
-                
+
                 # Optional extra smooth only for inflation input (smoothwm unchanged)
                 # When set, smooth smoothwm -> smoothwm.forinflate, inflate from that, then remove forinflate.
                 n_smooth = self.config.processing.inflate2_smooth_iterations
                 if n_smooth and n_smooth > 0:
-                    logger.info(f"Re-smoothing {self.hemi}.smoothwm with {n_smooth} iterations (inflation input only)...")
+                    logger.info(
+                        f"Re-smoothing {self.hemi}.smoothwm with {n_smooth} iterations (inflation input only)..."
+                    )
                     smoothwm_forinflate = self.hemi_path("smoothwm.forinflate")
                     mris_smooth(
                         input_surf=smoothwm,
@@ -172,9 +188,11 @@ class Parcellation(HemisphereStage):
                     inflate_input = smoothwm_forinflate
                 else:
                     inflate_input = smoothwm
-                
+
                 # Re-inflate inflated with configured iterations (inflate2 for visualization)
-                logger.info(f"Re-inflating {self.hemi}.inflated with {self.config.processing.inflate2_iterations} iterations (visualization inflation)...")
+                logger.info(
+                    f"Re-inflating {self.hemi}.inflated with {self.config.processing.inflate2_iterations} iterations (visualization inflation)..."
+                )
                 inflated_adjusted = self.hemi_path("inflated.adjusted")
                 mris_inflate(
                     input_surf=inflate_input,
@@ -184,20 +202,25 @@ class Parcellation(HemisphereStage):
                     log_file=self.config.log_file,
                     subject_dir=self.sd.subject_dir,
                 )
-                
+
                 # Atomically replace original with adjusted version
                 inflated_adjusted.replace(inflated)
-                logger.info(f"Replaced {self.hemi}.inflated with adjusted version ({self.config.processing.inflate2_iterations} iterations)")
-                
+                logger.info(
+                    f"Replaced {self.hemi}.inflated with adjusted version ({self.config.processing.inflate2_iterations} iterations)"
+                )
+
                 # Remove temporary smoothwm.forinflate (used only for inflation)
                 if n_smooth and n_smooth > 0:
                     smoothwm_forinflate = self.hemi_path("smoothwm.forinflate")
                     if smoothwm_forinflate.exists():
                         smoothwm_forinflate.unlink()
-                        logger.debug(f"Removed temporary {self.hemi}.smoothwm.forinflate")
-    
+                        logger.debug(
+                            f"Removed temporary {self.hemi}.smoothwm.forinflate"
+                        )
+
     def should_skip(self) -> bool:
         """Skip if mapped parcellation exists."""
-        aparc_mapped = self.hemi_label(f"aparc.{self.config.atlas.name}atlas.mapped.annot")
+        aparc_mapped = self.hemi_label(
+            f"aparc.{self.config.atlas.name}atlas.mapped.annot"
+        )
         return aparc_mapped.exists()
-

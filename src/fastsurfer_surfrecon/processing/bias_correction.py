@@ -13,7 +13,6 @@ Based on original N4_bias_correct.py from FastSurfer.
 from pathlib import Path
 from typing import cast
 import logging
-import os
 
 import numpy as np
 import numpy.typing as npt
@@ -123,7 +122,7 @@ def normalize_intensity(
         # Ensure normalized image is > 0 where mask is true
         correction_mask = cast(sitk.Image, (normalized < 1) & mask)
         return normalized + sitk.Cast(correction_mask, normalized.GetPixelID())
-    
+
     return normalized
 
 
@@ -164,7 +163,7 @@ def normalize_wm_from_aseg(
     # Left and Right White Matter labels
     wm_mask = (aseg_array == 2) | (aseg_array == 41)
     source_wm = np.mean(img_array[wm_mask]).item()
-    
+
     # Background from 1st percentile
     source_bg = np.percentile(img_array.flat[::100], 1)
 
@@ -172,7 +171,8 @@ def normalize_wm_from_aseg(
     logger.info(f"Source BG intensity: {source_bg:.2f}")
 
     return normalize_intensity(
-        image, mask,
+        image,
+        mask,
         (source_bg, source_wm),
         (target_bg, target_wm),
     )
@@ -240,7 +240,8 @@ def normalize_wm_from_centroid(
     logger.info(f"Source BG intensity (1st pct): {source_bg:.2f}")
 
     return normalize_intensity(
-        image, mask,
+        image,
+        mask,
         (source_bg, source_wm),
         (target_bg, target_wm),
     )
@@ -264,10 +265,10 @@ def get_brain_centroid(mask: sitk.Image) -> np.ndarray:
     label_stats.Execute(mask)
     centroid_world = label_stats.GetCentroid(1)
     centroid_voxel = mask.TransformPhysicalPointToIndex(centroid_world)
-    
+
     logger.debug(f"Brain centroid (world): {centroid_world}")
     logger.debug(f"Brain centroid (voxel): {centroid_voxel}")
-    
+
     return np.array(centroid_voxel)
 
 
@@ -297,7 +298,7 @@ def read_talairach_xfm(filename: Path | str) -> np.ndarray:
         # Find the linear transform header
         transform_iter = iter(lines)
         _ = next(ln for ln in transform_iter if ln.lower().startswith("linear_"))
-        
+
         # Read the next 3 lines as the transform matrix
         transform_lines = [next(transform_iter) for _ in range(3)]
         tal_str = [ln.replace(";", " ") for ln in transform_lines]
@@ -335,10 +336,10 @@ def get_talairach_origin_voxel(
     tal_inv = np.linalg.inv(talairach)
     tal_origin = np.array(tal_inv[0:3, 3]).ravel()
     vox_origin = image.TransformPhysicalPointToIndex(tal_origin)
-    
+
     logger.debug(f"Talairach origin (physical): {tal_origin}")
     logger.debug(f"Talairach origin (voxel): {vox_origin}")
-    
+
     return np.array(vox_origin)
 
 
@@ -382,11 +383,12 @@ def bias_correct_and_normalize(
     """
     # Set threads via SimpleITK API
     sitk.ProcessObject.SetGlobalDefaultNumberOfThreads(threads)
-    
+
     # Also set environment variables to ensure ITK/OpenMP respects the thread limit
     # This is critical because ITK may check environment variables before API settings
     # and some operations may spawn subprocesses that don't inherit API settings
     from ..utils.threading import set_numerical_threads
+
     set_numerical_threads(threads, include_itk=True)
 
     # Read input
@@ -403,7 +405,8 @@ def bias_correct_and_normalize(
     # Run N4 correction
     logger.info("Running N4 bias correction...")
     corrected = n4_bias_correction(
-        image, mask,
+        image,
+        mask,
         shrink_factor=shrink_factor,
         num_levels=num_levels,
         num_iterations=num_iterations,
@@ -447,4 +450,3 @@ __all__ = [
     "get_talairach_origin_voxel",
     "bias_correct_and_normalize",
 ]
-

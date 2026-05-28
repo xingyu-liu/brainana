@@ -25,4 +25,3 @@ __all__ = [
     "mri_brainvol_stats",
     "quick_qc",
 ]
-

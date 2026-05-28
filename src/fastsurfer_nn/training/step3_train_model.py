@@ -59,7 +59,7 @@ def make_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--plane-weight-axial",
-        dest="plane_weight_axial", 
+        dest="plane_weight_axial",
         type=float,
         help="Weight for axial plane in multi-view prediction (default: 0.4)",
         default=None,

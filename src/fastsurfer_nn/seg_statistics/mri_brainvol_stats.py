@@ -21,25 +21,29 @@ from os import environ as env
 from pathlib import Path
 
 from brainana.src.fastsurfer_nn.seg_statistics.mri_segstats import print_and_exit
-from brainana.src.fastsurfer_nn.seg_statistics.segstats import VERSION, HelpFormatter, main
+from brainana.src.fastsurfer_nn.seg_statistics.segstats import (
+    VERSION,
+    HelpFormatter,
+    main,
+)
 
 DEFAULT_MEASURES_STRINGS = [
-   (False, "BrainSeg"),
-   (False, "BrainSegNotVent"),
-   (False, "SupraTentorial"),
-   (False, "SupraTentorialNotVent"),
-   (False, "SubCortGray"),
-   (False, "lhCortex"),
-   (False, "rhCortex"),
-   (False, "Cortex"),
-   (False, "TotalGray"),
-   (False, "lhCerebralWhiteMatter"),
-   (False, "rhCerebralWhiteMatter"),
-   (False, "CerebralWhiteMatter"),
-   (False, "Mask"),
-   (False, "SupraTentorialNotVentVox"),
-   (False, "BrainSegNotVentSurf"),
-   (False, "VentricleChoroidVol"),
+    (False, "BrainSeg"),
+    (False, "BrainSegNotVent"),
+    (False, "SupraTentorial"),
+    (False, "SupraTentorialNotVent"),
+    (False, "SubCortGray"),
+    (False, "lhCortex"),
+    (False, "rhCortex"),
+    (False, "Cortex"),
+    (False, "TotalGray"),
+    (False, "lhCerebralWhiteMatter"),
+    (False, "rhCerebralWhiteMatter"),
+    (False, "CerebralWhiteMatter"),
+    (False, "Mask"),
+    (False, "SupraTentorialNotVentVox"),
+    (False, "BrainSegNotVentSurf"),
+    (False, "VentricleChoroidVol"),
 ]
 DEFAULT_MEASURES = list((False, m) for m in DEFAULT_MEASURES_STRINGS)
 
@@ -87,25 +91,30 @@ def make_arguments() -> argparse.ArgumentParser:
     default_sd = Path(env["SUBJECTS_DIR"]) if "SUBJECTS_DIR" in env else None
     parser.add_argument(
         "--sd",
-        dest="out_dir", metavar="subjects_dir", type=Path,
+        dest="out_dir",
+        metavar="subjects_dir",
+        type=Path,
         default=default_sd,
         required=not bool(default_sd),
         help="set SUBJECTS_DIR, defaults to environment SUBJECTS_DIR, required to find "
-             "several files used by measures, e.g. surfaces.")
+        "several files used by measures, e.g. surfaces.",
+    )
     parser.add_argument(
         "-s",
         "--subject",
         "--sid",
-        dest="sid", metavar="subject_id",
+        dest="sid",
+        metavar="subject_id",
         help="set subject_id, required to find several files used by measures, e.g. "
-             "surfaces.")
+        "surfaces.",
+    )
     parser.add_argument(
         "-o",
         "--segstatsfile",
         dest="segstatsfile",
         default=Path("stats/brainvol.stats"),
         help="Where to save the brainvol.stats, if relative path, this will be "
-             "relative to the subject directory."
+        "relative to the subject directory.",
     )
     fs_home = "FREESURFER_HOME"
     default_lut = Path(env[fs_home]) / "ASegStatsLUT.txt" if fs_home in env else None
@@ -130,7 +139,7 @@ def make_arguments() -> argparse.ArgumentParser:
         type=Path,
         dest="pvfile",
         help="Path to image used to compute the partial volume effects. This file is "
-             "only used in the FastSurfer algorithms (--no_legacy).",
+        "only used in the FastSurfer algorithms (--no_legacy).",
     )
     return parser
 

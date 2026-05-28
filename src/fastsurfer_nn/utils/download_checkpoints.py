@@ -24,6 +24,7 @@ from fastsurfer_nn.utils.checkpoint import (
     get_paths_from_yaml,
 )
 
+
 class ConfigCache:
     def vinn_url(self):
         return get_paths_from_yaml("url", filename=VINN_YAML)
@@ -72,30 +73,32 @@ def make_parser():
         type=str,
         default=None,
         help=f"Specify you own base URL. This is applied to all models. \n"
-             f"Default for VINN: {defaults.vinn_url()} \n"
-             f"Default for CerebNet: {defaults.cerebnet_url()} \n"
-             f"Default for HypVINN: {defaults.hypvinn_url()}",
+        f"Default for VINN: {defaults.vinn_url()} \n"
+        f"Default for CerebNet: {defaults.cerebnet_url()} \n"
+        f"Default for HypVINN: {defaults.hypvinn_url()}",
     )
     parser.add_argument(
         "files",
         nargs="*",
         help="Checkpoint file paths to download, e.g. "
-             "checkpoints/aparc_vinn_axial_v2.0.0.pkl ...",
+        "checkpoints/aparc_vinn_axial_v2.0.0.pkl ...",
     )
     return parser
 
 
 def main(
-        vinn: bool,
-        cerebnet: bool,
-        hypvinn: bool,
-        all: bool,
-        files: list[str],
-        url: str | None = None,
+    vinn: bool,
+    cerebnet: bool,
+    hypvinn: bool,
+    all: bool,
+    files: list[str],
+    url: str | None = None,
 ) -> int | str:
     if not vinn and not files and not cerebnet and not hypvinn and not all:
-        return ("Specify either files to download or --vinn, --cerebnet, "
-                "--hypvinn, or --all, see help -h.")
+        return (
+            "Specify either files to download or --vinn, --cerebnet, "
+            "--hypvinn, or --all, see help -h."
+        )
 
     try:
         # FastSurferVINN checkpoints
@@ -106,7 +109,7 @@ def main(
             )
             get_checkpoints(
                 *(vinn_config[plane] for plane in PLANES),
-                urls=defaults.vinn_url() if url is None else [url]
+                urls=defaults.vinn_url() if url is None else [url],
             )
         for fname in files:
             check_and_download_ckpts(
@@ -115,6 +118,7 @@ def main(
             )
     except Exception as e:
         from traceback import print_exception
+
         print_exception(e)
         return e.args[0]
     return 0

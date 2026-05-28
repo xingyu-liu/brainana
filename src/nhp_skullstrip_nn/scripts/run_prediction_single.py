@@ -4,7 +4,7 @@ Single file prediction script for processing one NIfTI file.
 """
 
 # %%
-import os
+import logging
 import sys
 from pathlib import Path
 
@@ -20,25 +20,23 @@ from nhp_skullstrip_nn.model import ModelLoader
 
 # %%
 # anat
-input_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_pet_noss/preprocessed/sub-NM745/ses-112days/func/sub-NM745_ses-112days_acq-FDG_desc-preproc_boldref.nii.gz'
-model_f = '/home/star/github/brainana/src/nhp_skullstrip_nn/pretrained_model/T1w_brainmask.pth'
+input_f = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_pet_noss/preprocessed/sub-NM745/ses-112days/func/sub-NM745_ses-112days_acq-FDG_desc-preproc_boldref.nii.gz"
+model_f = "/home/star/github/brainana/src/nhp_skullstrip_nn/pretrained_model/T1w_brainmask.pth"
 
 # # func
 # model_f = '/home/star/github/brainana/src/nhp_skullstrip_nn/pretrained_model/EPI_brainmask.pth'
 # input_f = '/mnt/DataDrive3/xliu/prep_test/brainana_test/surf_recon/sub-032_ses-02weeks_reuse/mri/func.nii.gz'
 
 # Output: replace .nii.gz with _mask.nii.gz
-output_f = input_f.replace('.nii.gz', '_mask.nii.gz')
+output_f = input_f.replace(".nii.gz", "_mask.nii.gz")
 
 # %%
 # Setup logging
-logger = setup_logging('nhp_skullstrip_nn.single_prediction')
+logger = setup_logging("nhp_skullstrip_nn.single_prediction")
 
 # Remove logger name from output format
-import logging
 formatter = logging.Formatter(
-    '%(asctime)s | %(levelname)s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    "%(asctime)s | %(levelname)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
 for handler in logger.handlers:
     handler.setFormatter(formatter)
@@ -48,7 +46,7 @@ device = get_device()
 logger.info(f"Using device: {device}")
 
 # Convert device to device_id format for ModelLoader
-if device.type == 'cuda':
+if device.type == "cuda":
     device_id = device.index if device.index is not None else 0
 else:
     device_id = -1
@@ -56,10 +54,7 @@ else:
 # Load model
 logger.info(f"Loading model from: {model_f}")
 model = ModelLoader.load_model_from_file(
-    model_path=model_f,
-    device_id=device_id,
-    config=None,
-    logger=logger
+    model_path=model_f, device_id=device_id, config=None, logger=logger
 )
 logger.info("✓ Model loaded successfully")
 
@@ -81,7 +76,7 @@ try:
         output_path=str(output_file),
         plot_QC_snaps=True,
         save_prob_map=False,
-        verbose=True
+        verbose=True,
     )
     logger.info(f"✓ Successfully processed: {input_file.name}")
     logger.info(f"  Output saved to: {output_file}")
@@ -89,6 +84,7 @@ try:
 except Exception as e:
     logger.error(f"✗ Failed to process {input_file.name}: {e}")
     import traceback
+
     logger.error(traceback.format_exc())
 
 logger.info("Prediction completed!")

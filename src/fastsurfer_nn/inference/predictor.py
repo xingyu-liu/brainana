@@ -26,8 +26,8 @@ import nibabel as nib
 import numpy as np
 import torch
 import yaml
+import yacs.config
 
-from fastsurfer_nn.atlas.atlas_manager import AtlasManager
 from fastsurfer_nn.data_loader import data_utils
 from fastsurfer_nn.data_loader.conform import (
     conform,
@@ -50,17 +50,17 @@ LOGGER = logging.getLogger(__name__)
 class RunModelOnData:
     """
     Generic predictor for running multi-view segmentation on brain images.
-    
+
     This class provides a generic interface for brain segmentation that works with
     any image format, not tied to FreeSurfer directory structures.
-    
+
     **Key Feature: Automatic Input Space → Model Space → Input Space Workflow**
-    
+
     The predictor automatically handles space transformations:
     1. Input images are conformed to model space for inference
     2. Predictions are computed in model space
     3. Outputs are automatically resampled back to match the original input space
-    
+
     This provides a seamless UX: users feed images and get outputs in the same
     space as their inputs, without manual resampling.
 
@@ -220,9 +220,7 @@ class RunModelOnData:
         # expands it back to the full label space
         # Filter out None configs when calculating num_classes
         valid_configs = [
-            view["cfg"]
-            for view in self.view_ops.values()
-            if view["cfg"] is not None
+            view["cfg"] for view in self.view_ops.values() if view["cfg"] is not None
         ]
         if not valid_configs:
             raise RuntimeError(
@@ -230,13 +228,15 @@ class RunModelOnData:
                 "At least one checkpoint must be provided."
             )
         self.num_classes = max(cfg.MODEL.NUM_CLASSES for cfg in valid_configs)
-        self.is_binary = (self.num_classes == 2)
+        self.is_binary = self.num_classes == 2
         self.atlas_name = atlas_name  # Store for later use (e.g., FreeSurfer detection)
-        
+
         # Initialize atlas and LUT based on mode
         if self.is_binary:
             # Binary brain mask mode - no atlas needed
-            LOGGER.info(f"Binary segmentation mode detected (NUM_CLASSES={self.num_classes})")
+            LOGGER.info(
+                f"Binary segmentation mode detected (NUM_CLASSES={self.num_classes})"
+            )
             LOGGER.info("No atlas mapping required for brain mask task")
             self.labels = None
             self.torch_labels = None
@@ -249,8 +249,10 @@ class RunModelOnData:
                     "Multi-class mode requires atlas_name. "
                     "For binary brain mask (NUM_CLASSES=2), use NUM_CLASSES=2 in checkpoint."
                 )
-            
-            LOGGER.info(f"Multi-class segmentation mode (NUM_CLASSES={self.num_classes})")
+
+            LOGGER.info(
+                f"Multi-class segmentation mode (NUM_CLASSES={self.num_classes})"
+            )
             LOGGER.info(f"Initializing with atlas: {atlas_name}")
 
             fastsurfercnn_dir = Path(__file__).resolve().parent.parent
@@ -269,13 +271,16 @@ class RunModelOnData:
 
             # Use the EXACT same dense-to-sparse mapping as training
             # Require atlas_metadata from checkpoint (no fallbacks)
-            if not atlas_metadata or atlas_metadata.get("dense_to_sparse_mapping") is None:
+            if (
+                not atlas_metadata
+                or atlas_metadata.get("dense_to_sparse_mapping") is None
+            ):
                 raise RuntimeError(
                     f"Multi-class mode requires atlas metadata with dense_to_sparse_mapping. "
                     f"Checkpoint for atlas '{atlas_name}' is missing required metadata. "
                     f"Please ensure the checkpoint was saved with atlas_metadata."
                 )
-            
+
             # Use the exact mapping from checkpoint
             self.labels = atlas_metadata["dense_to_sparse_mapping"]
             self.torch_labels = torch.from_numpy(self.labels)
@@ -290,12 +295,12 @@ class RunModelOnData:
             and ckpt_sag is not None
             and ckpt_ax == ckpt_cor == ckpt_sag
         )
-        
+
         # LAZY LOADING: Don't load models upfront to save GPU memory (~24 GB → ~8 GB peak)
         # Models are loaded one at a time during get_prediction() and unloaded after use.
         # This trades inference speed for memory efficiency.
         self._all_ckpts_same = all_ckpts_same  # Store for lazy loading
-        
+
         # Prepare configs for each plane (but don't load models yet)
         self._prepared_configs = {}
         for plane, view in self.view_ops.items():
@@ -308,27 +313,31 @@ class RunModelOnData:
                 else:
                     # Prepare config with plane weights
                     cfg = view["cfg"]
-                    
+
                     # For mixed-plane models: override DATA.PLANE to the specific plane
                     if all_ckpts_same and cfg.DATA.PLANE == "mixed":
                         LOGGER.info(
                             f"Mixed-plane model detected: setting {plane} config plane to '{plane}'"
                         )
                         cfg.DATA.PLANE = plane
-                    
+
                     # Apply plane weights
                     if self.plane_weights["coronal"] is not None:
-                        cfg.MULTIVIEW.PLANE_WEIGHTS.CORONAL = self.plane_weights["coronal"]
+                        cfg.MULTIVIEW.PLANE_WEIGHTS.CORONAL = self.plane_weights[
+                            "coronal"
+                        ]
                     if self.plane_weights["axial"] is not None:
                         cfg.MULTIVIEW.PLANE_WEIGHTS.AXIAL = self.plane_weights["axial"]
                     if self.plane_weights["sagittal"] is not None:
-                        cfg.MULTIVIEW.PLANE_WEIGHTS.SAGITTAL = self.plane_weights["sagittal"]
+                        cfg.MULTIVIEW.PLANE_WEIGHTS.SAGITTAL = self.plane_weights[
+                            "sagittal"
+                        ]
 
                     self._prepared_configs[plane] = {
                         "cfg": cfg,
                         "ckpt": view["ckpt"],
                     }
-                    
+
         LOGGER.info(
             f"Lazy loading enabled: {len(self._prepared_configs)} plane(s) will be loaded on-demand "
             f"(saves ~16 GB GPU memory vs loading all at once)"
@@ -341,7 +350,7 @@ class RunModelOnData:
                 "No checkpoints with non-zero weight found. "
                 "At least one checkpoint must have a non-zero plane weight."
             )
-        
+
         # Extract preprocessing parameters from all checkpoints that will be used
         all_preprocess_params = {}
         for plane, plane_config in self._prepared_configs.items():
@@ -353,19 +362,19 @@ class RunModelOnData:
                 LOGGER.warning(
                     f"Could not extract preprocessing parameters from {plane} checkpoint: {ckpt_path}"
                 )
-        
+
         if not all_preprocess_params:
             raise RuntimeError(
                 "Preprocessing parameters not found in any checkpoint metadata. "
                 "Please ensure your checkpoint files contain preprocessing configuration "
                 "in DATA.PREPROCESSING section."
             )
-        
+
         # Validate that all checkpoints have the same preprocessing parameters
         # (they should, since all planes use the same preprocessing during training)
         first_plane = list(all_preprocess_params.keys())[0]
         reference_params = all_preprocess_params[first_plane]
-        
+
         for plane_name, params in all_preprocess_params.items():
             if plane_name == first_plane:
                 continue
@@ -378,7 +387,7 @@ class RunModelOnData:
                         f"  {plane_name} checkpoint: {key}={params.get(key)}\n"
                         f"All checkpoints with non-zero weight must have identical preprocessing parameters."
                     )
-        
+
         # Use validated preprocessing parameters (same across all checkpoints)
         preprocess_from_ckpt = reference_params
 
@@ -448,9 +457,7 @@ class RunModelOnData:
                 f"({', '.join(validated_planes)}) - all parameters match"
             )
         else:
-            LOGGER.info(
-                f"  Preprocessing: from {validated_planes[0]} checkpoint"
-            )
+            LOGGER.info(f"  Preprocessing: from {validated_planes[0]} checkpoint")
         LOGGER.info(
             f"  Preprocessing parameters: vox_size={self.vox_size}, "
             f"orientation={self.orientation}, img_size={self.image_size}"
@@ -491,20 +498,15 @@ class RunModelOnData:
             config_dict = yaml.safe_load(config_str)
 
             # Extract preprocessing parameters
-            if (
-                "DATA" in config_dict
-                and "PREPROCESSING" in config_dict["DATA"]
-            ):
+            if "DATA" in config_dict and "PREPROCESSING" in config_dict["DATA"]:
                 return config_dict["DATA"]["PREPROCESSING"]
 
             return None
 
         except Exception as e:
-            LOGGER.warning(
-                f"Could not load preprocessing params from checkpoint: {e}"
-            )
+            LOGGER.warning(f"Could not load preprocessing params from checkpoint: {e}")
             return None
-    
+
     def _should_resample(self) -> bool:
         """
         Check if resampling to native space is needed.
@@ -527,7 +529,7 @@ class RunModelOnData:
     ) -> np.ndarray:
         """
         Resample data array from conformed space to native space using pure Python.
-        
+
         Uses scipy.ndimage affine_transform for in-memory resampling. Supports both
         MGH and NIfTI formats.
 
@@ -553,39 +555,45 @@ class RunModelOnData:
                 "Cannot resample: native image context not available. "
                 "Call get_prediction() first to establish resampling context."
             )
-        
+
         # DEBUG: Log affine information for diagnosis (always log to help diagnose brain shifting)
         conf_center_vox = np.array(self._conformed_img.shape[:3], dtype=float) / 2.0
-        conf_center_world = (self._conformed_img.affine @ np.hstack((conf_center_vox, [1.0])))[:3]
-        native_center_vox = np.array(self._input_native_img.shape[:3], dtype=float) / 2.0
-        native_center_world = (self._input_native_img.affine @ np.hstack((native_center_vox, [1.0])))[:3]
-        
+        conf_center_world = (
+            self._conformed_img.affine @ np.hstack((conf_center_vox, [1.0]))
+        )[:3]
+        native_center_vox = (
+            np.array(self._input_native_img.shape[:3], dtype=float) / 2.0
+        )
+        native_center_world = (
+            self._input_native_img.affine @ np.hstack((native_center_vox, [1.0]))
+        )[:3]
+
         LOGGER.debug("=" * 80)
         LOGGER.debug("RESAMPLING DEBUG: Affine Information")
         LOGGER.debug("=" * 80)
-        LOGGER.debug(f"Conformed image:")
+        LOGGER.debug("Conformed image:")
         LOGGER.debug(f"  Shape: {self._conformed_img.shape[:3]}")
         LOGGER.debug(f"  Affine translation: {self._conformed_img.affine[:3, 3]}")
         LOGGER.debug(f"  Center (voxel): {conf_center_vox}")
         LOGGER.debug(f"  Center (world): {conf_center_world}")
-        LOGGER.debug(f"Native image:")
+        LOGGER.debug("Native image:")
         LOGGER.debug(f"  Shape: {self._input_native_img.shape[:3]}")
         LOGGER.debug(f"  Affine translation: {self._input_native_img.affine[:3, 3]}")
         LOGGER.debug(f"  Center (voxel): {native_center_vox}")
         LOGGER.debug(f"  Center (world): {native_center_world}")
         LOGGER.debug(f"Center shift (world): {conf_center_world - native_center_world}")
-        
+
         # Compute vox2vox transformation
-        vox2vox = np.linalg.inv(self._input_native_img.affine) @ self._conformed_img.affine
-        LOGGER.debug(f"Vox2vox transformation:")
+        vox2vox = (
+            np.linalg.inv(self._input_native_img.affine) @ self._conformed_img.affine
+        )
+        LOGGER.debug("Vox2vox transformation:")
         LOGGER.debug(f"  Translation: {vox2vox[:3, 3]}")
         LOGGER.debug("=" * 80)
-        
+
         conformed_data_img = nib.nifti1.Nifti1Image(
-                data,
-                self._conformed_img.affine,
-                self._conformed_img.header
-            )
+            data, self._conformed_img.affine, self._conformed_img.header
+        )
 
         # Map from conformed space to native space
         order = 0 if interpolation == "nearest" else 1
@@ -650,7 +658,7 @@ class RunModelOnData:
         # Conform image if needed
         if not is_conform(img, **conform_kwargs, verbose=True):
             LOGGER.info("Conforming image to standard space...")
-            
+
             # Debug: Log original image properties
             if self.save_debug_intermediates:
                 orig_shape = img.shape[:3]
@@ -658,8 +666,10 @@ class RunModelOnData:
                 orig_affine = img.affine
                 orig_orientation = "".join(nib.orientations.aff2axcodes(orig_affine))
                 orig_center_vox = np.array(orig_shape, dtype=float) / 2.0
-                orig_center_world = (orig_affine @ np.hstack((orig_center_vox, [1.0])))[:3]
-                
+                orig_center_world = (orig_affine @ np.hstack((orig_center_vox, [1.0])))[
+                    :3
+                ]
+
                 LOGGER.info("=" * 80)
                 LOGGER.info("CONFORMING DEBUG: Original Image Properties")
                 LOGGER.info("=" * 80)
@@ -668,11 +678,13 @@ class RunModelOnData:
                 LOGGER.info(f"  Orientation: {orig_orientation}")
                 LOGGER.info(f"  Center (voxel space): {orig_center_vox}")
                 LOGGER.info(f"  Center (world space): {orig_center_world}")
-                LOGGER.info(f"  Target parameters: vox_size={self.vox_size}, orientation={self.orientation}, img_size={self.image_size}")
+                LOGGER.info(
+                    f"  Target parameters: vox_size={self.vox_size}, orientation={self.orientation}, img_size={self.image_size}"
+                )
                 LOGGER.info("=" * 80)
-            
+
             img = conform(img, **conform_kwargs)
-            
+
             # Debug: Log conformed image properties
             if self.save_debug_intermediates:
                 conf_shape = img.shape[:3]
@@ -680,8 +692,10 @@ class RunModelOnData:
                 conf_affine = img.affine
                 conf_orientation = "".join(nib.orientations.aff2axcodes(conf_affine))
                 conf_center_vox = np.array(conf_shape, dtype=float) / 2.0
-                conf_center_world = (conf_affine @ np.hstack((conf_center_vox, [1.0])))[:3]
-                
+                conf_center_world = (conf_affine @ np.hstack((conf_center_vox, [1.0])))[
+                    :3
+                ]
+
                 LOGGER.info("=" * 80)
                 LOGGER.info("CONFORMING DEBUG: Conformed Image Properties")
                 LOGGER.info("=" * 80)
@@ -690,19 +704,23 @@ class RunModelOnData:
                 LOGGER.info(f"  Orientation: {conf_orientation}")
                 LOGGER.info(f"  Center (voxel space): {conf_center_vox}")
                 LOGGER.info(f"  Center (world space): {conf_center_world}")
-                LOGGER.info(f"  Center shift (world space): {conf_center_world - orig_center_world}")
+                LOGGER.info(
+                    f"  Center shift (world space): {conf_center_world - orig_center_world}"
+                )
                 LOGGER.info("=" * 80)
         else:
             LOGGER.info("Image is already conformed")
 
         # Store conformed image
         self._conformed_img = img
-        
+
         # Save conformed image for debugging
         if self.save_debug_intermediates and self.debug_dir is not None:
             # Default to nifti format for debug files
             debug_conformed_path = self.debug_dir / "conformed_image.nii.gz"
-            LOGGER.info(f"Saving conformed image (after conforming) to {debug_conformed_path.name}")
+            LOGGER.info(
+                f"Saving conformed image (after conforming) to {debug_conformed_path.name}"
+            )
             data_utils.save_image(
                 img.header,
                 img.affine,
@@ -739,38 +757,48 @@ class RunModelOnData:
         for plane, plane_config in self._prepared_configs.items():
             LOGGER.info(f"Run {plane} prediction (lazy loading model)")
             self.set_model(plane)
-            
+
             # Load model for this plane
             cfg = plane_config["cfg"]
             ckpt = plane_config["ckpt"]
-            
+
             if self.device.type == "cuda":
                 torch.cuda.empty_cache()
                 if self.device.index is not None:
-                    mem_before = torch.cuda.memory_allocated(self.device.index) / (1024**3)
-                    LOGGER.info(f"  GPU memory before {plane} load: {mem_before:.2f} GB")
-            
+                    mem_before = torch.cuda.memory_allocated(self.device.index) / (
+                        1024**3
+                    )
+                    LOGGER.info(
+                        f"  GPU memory before {plane} load: {mem_before:.2f} GB"
+                    )
+
             LOGGER.info(f"  Loading {plane} checkpoint: {ckpt}")
             model = Inference(cfg, ckpt=ckpt, device=self.device, lut=self.lut)
-            
+
             if self.device.type == "cuda" and self.device.index is not None:
-                mem_after_load = torch.cuda.memory_allocated(self.device.index) / (1024**3)
+                mem_after_load = torch.cuda.memory_allocated(self.device.index) / (
+                    1024**3
+                )
                 LOGGER.info(f"  GPU memory after {plane} load: {mem_after_load:.2f} GB")
-            
+
             # Run inference (pred_prob is updated inplace to conserve memory)
-            pred_prob = model.run(
-                pred_prob, image_f, orig_data, _zoom, out=pred_prob
-            )
-            
+            pred_prob = model.run(pred_prob, image_f, orig_data, _zoom, out=pred_prob)
+
             # Save prediction after this plane (before aggregation) for debugging
             if self.save_debug_intermediates and self.debug_dir is not None:
-                debug_pred_path = self.debug_dir / f"prediction_{plane}_before_aggregation.nii.gz"
-                LOGGER.info(f"Saving {plane} prediction (before aggregation) to {debug_pred_path.name}")
+                debug_pred_path = (
+                    self.debug_dir / f"prediction_{plane}_before_aggregation.nii.gz"
+                )
+                LOGGER.info(
+                    f"Saving {plane} prediction (before aggregation) to {debug_pred_path.name}"
+                )
                 # Get hard predictions for this plane
                 pred_plane = torch.argmax(pred_prob, 3)
                 # Map to label space if needed
                 if not self.is_binary and self.labels is not None:
-                    pred_plane = data_utils.map_label2aparc_aseg(pred_plane, self.labels)
+                    pred_plane = data_utils.map_label2aparc_aseg(
+                        pred_plane, self.labels
+                    )
                 # Convert to numpy
                 pred_plane_np = pred_plane.cpu().numpy()
                 # Save
@@ -782,15 +810,19 @@ class RunModelOnData:
                     dtype=np.int16,
                 )
                 del pred_plane, pred_plane_np
-            
+
             # Unload model to free GPU memory before loading next plane
             LOGGER.info(f"  Unloading {plane} model to free GPU memory")
             del model
             if self.device.type == "cuda":
                 torch.cuda.empty_cache()
                 if self.device.index is not None:
-                    mem_after_unload = torch.cuda.memory_allocated(self.device.index) / (1024**3)
-                    LOGGER.info(f"  GPU memory after {plane} unload: {mem_after_unload:.2f} GB")
+                    mem_after_unload = torch.cuda.memory_allocated(
+                        self.device.index
+                    ) / (1024**3)
+                    LOGGER.info(
+                        f"  GPU memory after {plane} unload: {mem_after_unload:.2f} GB"
+                    )
 
         # Get hard predictions
         pred_classes = torch.argmax(pred_prob, 3)
@@ -800,9 +832,7 @@ class RunModelOnData:
 
         # Map to FreeSurfer label space (skip for binary models - output is already 0/1)
         if not self.is_binary and self.labels is not None:
-            pred_classes = data_utils.map_label2aparc_aseg(
-                pred_classes, self.labels
-            )
+            pred_classes = data_utils.map_label2aparc_aseg(pred_classes, self.labels)
 
         # Move to CPU and convert to numpy, then delete GPU tensor
         pred_classes_cpu = pred_classes.cpu()
@@ -812,16 +842,13 @@ class RunModelOnData:
         pred_classes = pred_classes_cpu.numpy()
         del pred_classes_cpu
 
-
         # Apply WM island fixing (generic post-processing, enabled by default)
         if self.fix_wm_islands:
             LOGGER.info(
                 "Applying WM island correction "
                 "(flipping mislabeled disconnected WM regions)..."
             )
-            pred_classes = flip_wm_islands_auto(
-                pred_classes, lut_path=self.lut_path
-            )
+            pred_classes = flip_wm_islands_auto(pred_classes, lut_path=self.lut_path)
         else:
             LOGGER.info("Skipping WM island correction")
 
@@ -830,8 +857,8 @@ class RunModelOnData:
     def set_up_model_params(
         self,
         plane: Plane,
-        cfg: "yacs.config.CfgNode",
-        ckpt: "torch.Tensor",
+        cfg: yacs.config.CfgNode,
+        ckpt: torch.Tensor,
     ) -> None:
         """
         Set up the model parameters from the configuration and checkpoint.
@@ -858,4 +885,3 @@ class RunModelOnData:
             The number of classes.
         """
         return self.num_classes
-

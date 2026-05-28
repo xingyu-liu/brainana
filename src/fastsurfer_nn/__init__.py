@@ -78,7 +78,7 @@ from .training import step3_train_model as run_model
 __all__ = [
     # New module structure
     "training",
-    "inference", 
+    "inference",
     "postprocessing",
     "seg_statistics",
     "models",

@@ -40,60 +40,63 @@ _T = TypeVar("_T")
 
 @overload
 def field(
-        *,
-        default: _T,
-        help: str = "",
-        flags: tuple[str] = (),
-        init: bool = True,
-        repr: bool = True,
-        hash: bool | None = None,
-        compare: bool = True,
-        metadata: Mapping[Any, Any] | None = None,
-        kw_only: bool = ...,
-) -> _T: ...
+    *,
+    default: _T,
+    help: str = "",
+    flags: tuple[str] = (),
+    init: bool = True,
+    repr: bool = True,
+    hash: bool | None = None,
+    compare: bool = True,
+    metadata: Mapping[Any, Any] | None = None,
+    kw_only: bool = ...,
+) -> _T:
+    ...
 
 
 @overload
 def field(
-        *,
-        default_factory: Callable[[], _T],
-        help: str = "",
-        flags: tuple[str] = (),
-        init: bool = True,
-        repr: bool = True,
-        hash: bool | None = None,
-        compare: bool = True,
-        metadata: Mapping[Any, Any] | None = None,
-        kw_only: bool = ...,
-) -> _T: ...
+    *,
+    default_factory: Callable[[], _T],
+    help: str = "",
+    flags: tuple[str] = (),
+    init: bool = True,
+    repr: bool = True,
+    hash: bool | None = None,
+    compare: bool = True,
+    metadata: Mapping[Any, Any] | None = None,
+    kw_only: bool = ...,
+) -> _T:
+    ...
 
 
 @overload
 def field(
-        *,
-        help: str = "",
-        flags: tuple[str] = (),
-        init: bool = True,
-        repr: bool = True,
-        hash: bool | None = None,
-        compare: bool = True,
-        metadata: Mapping[Any, Any] | None = None,
-        kw_only: bool = ...,
-) -> Any: ...
+    *,
+    help: str = "",
+    flags: tuple[str] = (),
+    init: bool = True,
+    repr: bool = True,
+    hash: bool | None = None,
+    compare: bool = True,
+    metadata: Mapping[Any, Any] | None = None,
+    kw_only: bool = ...,
+) -> Any:
+    ...
 
 
 def field(
-        *,
-        default: _T = MISSING,
-        default_factory: Callable[[], _T] = MISSING,
-        help: str = "",
-        flags: tuple[str] = (),
-        init: bool = True,
-        repr: bool = True,
-        hash: bool | None = None,
-        compare: bool = True,
-        metadata: Mapping[Any, Any] | None = None,
-        kw_only: bool = False,
+    *,
+    default: _T = MISSING,
+    default_factory: Callable[[], _T] = MISSING,
+    help: str = "",
+    flags: tuple[str] = (),
+    init: bool = True,
+    repr: bool = True,
+    hash: bool | None = None,
+    compare: bool = True,
+    metadata: Mapping[Any, Any] | None = None,
+    kw_only: bool = False,
 ) -> _T:
     """
     Extends :py:`dataclasses.field` to adds `help` and `flags` to the metadata.

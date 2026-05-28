@@ -125,6 +125,7 @@ class DiceScore:
         if already set `torch.cuda.set_device(local_rank)`. By default, if a distributed process group is
         initialized and available, the device is set to `cuda`.
     """
+
     def __init__(
         self,
         num_classes,
@@ -146,7 +147,9 @@ class DiceScore:
         self.one_hot = one_hot
         # Create tensors on the correct device from the start
         self.union = torch.zeros(self.n_classes, self.n_classes, device=self._device)
-        self.intersection = torch.zeros(self.n_classes, self.n_classes, device=self._device)
+        self.intersection = torch.zeros(
+            self.n_classes, self.n_classes, device=self._device
+        )
 
     def reset(self):
         """
@@ -154,7 +157,9 @@ class DiceScore:
         """
         # Create tensors on the correct device (use stored device)
         self.union = torch.zeros(self.n_classes, self.n_classes, device=self._device)
-        self.intersection = torch.zeros(self.n_classes, self.n_classes, device=self._device)
+        self.intersection = torch.zeros(
+            self.n_classes, self.n_classes, device=self._device
+        )
 
     def _check_output_type(self, output):
         """
@@ -187,39 +192,51 @@ class DiceScore:
         if self.union.device != batch_output.device:
             self.union = self.union.to(batch_output.device)
             self.intersection = self.intersection.to(batch_output.device)
-        
+
         # Convert labels_batch to tensor if it's numpy array
         if isinstance(labels_batch, np.ndarray):
             labels_batch = torch.from_numpy(labels_batch).to(batch_output.device)
-        
+
         batch_size = batch_output.shape[0]
         num_classes = len(self.class_ids)
         device = batch_output.device
-        
+
         # Flatten spatial dimensions: (batch_size, height*width)
         batch_output_flat = batch_output.view(batch_size, -1)
         labels_batch_flat = labels_batch.view(batch_size, -1)
-        
+
         # Create one-hot encodings for all classes at once
         # Shape: (batch_size, height*width, num_classes)
-        pred_onehot = torch.zeros(batch_size, batch_output_flat.shape[1], num_classes, device=device, dtype=torch.float32)
-        gt_onehot = torch.zeros(batch_size, labels_batch_flat.shape[1], num_classes, device=device, dtype=torch.float32)
-        
+        pred_onehot = torch.zeros(
+            batch_size,
+            batch_output_flat.shape[1],
+            num_classes,
+            device=device,
+            dtype=torch.float32,
+        )
+        gt_onehot = torch.zeros(
+            batch_size,
+            labels_batch_flat.shape[1],
+            num_classes,
+            device=device,
+            dtype=torch.float32,
+        )
+
         for i, class_id in enumerate(self.class_ids):
             pred_onehot[:, :, i] = (batch_output_flat == class_id).float()
             gt_onehot[:, :, i] = (labels_batch_flat == class_id).float()
-        
+
         # Vectorized computation using einsum for efficiency
         # Intersection: sum over batch and spatial dims for each class pair
         # Shape: (num_classes, num_classes)
-        intersection = torch.einsum('bsc,bst->ct', gt_onehot, pred_onehot)
-        
+        intersection = torch.einsum("bsc,bst->ct", gt_onehot, pred_onehot)
+
         # Union: sum of gt + sum of pred for each class pair
         # Shape: (num_classes, num_classes)
         gt_sums = torch.sum(gt_onehot, dim=(0, 1))  # (num_classes,)
         pred_sums = torch.sum(pred_onehot, dim=(0, 1))  # (num_classes,)
         union = gt_sums.unsqueeze(1) + pred_sums.unsqueeze(0)  # Broadcasting
-        
+
         # Update accumulated values
         self.intersection += intersection
         self.union += union
@@ -255,7 +272,7 @@ class DiceScore:
     def compute(self, per_class=False, class_idxs=None, exclude_background=False):
         """
         Compute the Dice score (GPU-only version).
-        
+
         Parameters
         ----------
         per_class : bool
@@ -265,7 +282,7 @@ class DiceScore:
         exclude_background : bool
             If True, exclude background class (class 0) from mean calculation.
             Default is False (include all valid classes).
-        
+
         Returns
         -------
         If per_class=False: (dice_score, dice_cm_mat) tuple
@@ -273,13 +290,13 @@ class DiceScore:
         """
         dice_cm_mat = self._dice_confusion_matrix_gpu(class_idxs)
         dice_score_per_class = dice_cm_mat.diagonal()
-        
+
         # Only average over classes that have non-zero union (actually present in data)
         # This avoids artificially deflating the score with classes that don't exist
         dice_union = self.union
         if class_idxs is not None:
             dice_union = dice_union[class_idxs[:, None], class_idxs]
-        
+
         # Determine which classes to include in mean
         if exclude_background and self.n_classes > 1:
             # Exclude background (class 0), only consider classes with non-zero union
@@ -289,12 +306,12 @@ class DiceScore:
             # Include all classes with non-zero union
             region_dice = dice_score_per_class
             valid_classes = dice_union.diagonal() > 0
-        
+
         if valid_classes.any():
             dice_score = region_dice[valid_classes].mean()
         else:
             dice_score = torch.tensor(0.0, device=self.union.device)
-            
+
         if per_class:
             return dice_score_per_class, dice_cm_mat
         else:
@@ -309,10 +326,14 @@ class DiceScore:
         if class_idxs is not None:
             dice_union = dice_union[class_idxs[:, None], class_idxs]
             dice_intersection = dice_intersection[class_idxs[:, None], class_idxs]
-        
+
         # Avoid NaN by setting dice to 0 where union is 0 (class not present in GT or prediction)
         # This is standard practice: if a class isn't present, it doesn't contribute to the mean
-        dice_cnf_matrix = torch.where(dice_union > 0, 2 * dice_intersection / dice_union, torch.tensor(0.0, device=dice_union.device))
+        dice_cnf_matrix = torch.where(
+            dice_union > 0,
+            2 * dice_intersection / dice_union,
+            torch.tensor(0.0, device=dice_union.device),
+        )
         return dice_cnf_matrix
 
     def _dice_confusion_matrix(self, class_idxs):
@@ -328,7 +349,9 @@ class DiceScore:
         #     logger.info("Union of some classes are all zero")
         # Avoid NaN by setting dice to 0 where union is 0 (class not present in GT or prediction)
         # This is standard practice: if a class isn't present, it doesn't contribute to the mean
-        dice_cnf_matrix = np.where(dice_union > 0, 2 * dice_intersection / dice_union, 0.0)
+        dice_cnf_matrix = np.where(
+            dice_union > 0, 2 * dice_intersection / dice_union, 0.0
+        )
         return dice_cnf_matrix
 
 

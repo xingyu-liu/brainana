@@ -24,15 +24,21 @@ ImageSizeOption = int | Literal["fov", "cube"]
 __axcode = ("rl", "ap", "si")
 __orders = tuple(permutations(range(3)))
 __flips = ((0, 1),) * 3
-ORIENTATIONS = ["".join(__axcode[ii[i]][j] for i, j in enumerate(k)) for ii, k in product(__orders, product(*__flips))]
-VALID_ORIENTATIONS = ["native", *map(lambda x: "soft-" + x, ORIENTATIONS), *ORIENTATIONS]
+ORIENTATIONS = [
+    "".join(__axcode[ii[i]][j] for i, j in enumerate(k))
+    for ii, k in product(__orders, product(*__flips))
+]
+VALID_ORIENTATIONS = [
+    "native",
+    *map(lambda x: "soft-" + x, ORIENTATIONS),
+    *ORIENTATIONS,
+]
 
 StrictOrientationType = str
 OrientationType = str
 # future better typing, requires Python 3.11 (Syntax Error before that)
 # OrientationType = Literal[*VALID_ORIENTATIONS]
 # StrictOrientationType = Literal[*ORIENTATIONS]
-
 
 
 def orientation(a: str) -> OrientationType:
@@ -59,7 +65,9 @@ def orientation(a: str) -> OrientationType:
     if r in VALID_ORIENTATIONS:
         return cast(OrientationType, r)
     valid_orientations_short = "'native', 'soft-<orientation>', or '<orientation>'"
-    raise ValueError(f"'{a}' is not a valid orientation from {valid_orientations_short}.") from None
+    raise ValueError(
+        f"'{a}' is not a valid orientation from {valid_orientations_short}."
+    ) from None
 
 
 def string_to_bool(a: str) -> bool:
@@ -79,6 +87,7 @@ def string_to_bool(a: str) -> bool:
     if not isinstance(a, str):
         return bool(a)
     return a.lower() in ("on", "true", "yes", "y", "1")
+
 
 def vox_size(a: str | float | None) -> VoxSizeOption | None:
     """
@@ -110,6 +119,7 @@ def vox_size(a: str | float | None) -> VoxSizeOption | None:
     except ValueError as e:
         raise ValueError(e.args[0] + " Additionally, vox_size may be 'min'.") from None
 
+
 def img_size(a: str) -> ImageSizeOption | None:
     """
     Convert the img_size argument to 'fov', 'cube' or int as a valid image size.
@@ -138,7 +148,9 @@ def img_size(a: str) -> ImageSizeOption | None:
     try:
         return int_gt_zero(a)
     except ValueError as e:
-        raise ValueError(e.args[0] + " Additionally, img_size may be 'fov' or 'cube'.") from None
+        raise ValueError(
+            e.args[0] + " Additionally, img_size may be 'fov' or 'cube'."
+        ) from None
 
 
 def float_gt_zero_and_le_one(a: str | float) -> float | None:

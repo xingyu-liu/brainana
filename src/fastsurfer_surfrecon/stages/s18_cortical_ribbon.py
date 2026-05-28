@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 class CorticalRibbon(PipelineStage):
     """Create cortical ribbon volume."""
-    
+
     name = "cortical_ribbon"
     description = "Cortical ribbon creation"
-    
+
     def _run(self) -> None:
         """Create cortical ribbon."""
         logger.info("Creating cortical ribbon...")
@@ -32,7 +32,7 @@ class CorticalRibbon(PipelineStage):
             log_file=self.config.log_file,
             subjects_dir=self.config.subjects_dir,
         )
-    
+
     # def should_skip(self) -> bool:
     #     """Skip if ribbon files exist."""
     #     return (
@@ -42,7 +42,5 @@ class CorticalRibbon(PipelineStage):
     #     )
 
     def should_skip(self) -> bool:
-        """Skip if """
-        return (
-            False
-        )
+        """Skip if"""
+        return False

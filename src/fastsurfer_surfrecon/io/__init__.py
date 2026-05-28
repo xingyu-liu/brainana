@@ -22,4 +22,3 @@ __all__ = [
     # Surface I/O
     "convert_fs_surface_to_gifti",
 ]
-

@@ -11,4 +11,3 @@ __all__ = [
     "run_parallel_hemis",
     "set_numerical_threads",
 ]
-

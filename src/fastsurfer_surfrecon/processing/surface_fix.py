@@ -58,10 +58,10 @@ def fix_mc_surface_header(
     # IMPORTANT: Only modify if filename is missing, to avoid changing file format unnecessarily
     pretess_str = str(pretess_path)
     current_filename = metadata.get("filename", "") if metadata else ""
-    
+
     needs_fix = False
     if not current_filename:
-        logger.info(f"Filename missing in metadata, fixing header from pretess volume")
+        logger.info("Filename missing in metadata, fixing header from pretess volume")
         needs_fix = True
         vol = nib.load(pretess_path)
         if metadata is None:
@@ -70,14 +70,14 @@ def fix_mc_surface_header(
         metadata["volume"] = vol.header.get_data_shape()
     else:
         logger.debug(f"Surface already has filename in metadata: {current_filename}")
-    
+
     # Only write if we actually made changes (to preserve original file format)
     if needs_fix:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         fs.write_geometry(output_path, vertices, faces, volume_info=metadata)
         logger.info(f"Fixed and saved: {output_path}")
     else:
-        logger.debug(f"No changes needed, file already has correct metadata")
+        logger.debug("No changes needed, file already has correct metadata")
 
 
 def fix_surface_orientation(
@@ -105,6 +105,7 @@ def fix_surface_orientation(
     # Ensure getpass works (needed by nibabel)
     try:
         import getpass
+
         getpass.getuser()
     except Exception:
         os.environ.setdefault("USERNAME", "UNKNOWN")
@@ -115,7 +116,7 @@ def fix_surface_orientation(
 
     if not mesh.is_oriented():
         logger.warning("Surface is not properly oriented, fixing...")
-        
+
         if backup_path is not None:
             logger.info(f"Creating backup: {backup_path}")
             backup_path.parent.mkdir(parents=True, exist_ok=True)
@@ -125,6 +126,7 @@ def fix_surface_orientation(
 
         # Fix for lapy <= 1.0.1 bug
         from packaging.version import Version
+
         if Version(lapy.__version__) <= Version("1.0.1"):
             mesh.fsinfo = fsinfo
 
@@ -155,7 +157,7 @@ def verify_surface_ras(surface_path: Path) -> bool:
     ValueError
         If vertex locs is not surfaceRAS
     """
-    from subprocess import run, PIPE
+    from subprocess import run
 
     result = run(
         ["mris_info", str(surface_path)],
@@ -236,4 +238,3 @@ __all__ = [
     "verify_surface_ras",
     "validate_surface",
 ]
-

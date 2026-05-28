@@ -33,12 +33,15 @@ MASK_DILATION_SIZE_MM = 2.0  # Dilation size in millimeters for mask creation
 ROUNDS_OF_MORPHOLOGICAL_OPERATIONS = 3  # Number of rounds for morphological operations
 
 # Two-pass refinement parameters
-TWO_PASS_BRAIN_RATIO_THRESHOLD = 1/8  # Trigger refinement if brain occupies < 12.5% of FOV
+TWO_PASS_BRAIN_RATIO_THRESHOLD = (
+    1 / 8
+)  # Trigger refinement if brain occupies < 12.5% of FOV
 TWO_PASS_CROP_MARGIN = 0.08  # 8% margin around brain bounding box
 
 # Large image threshold for memory optimization
 LARGE_IMAGE_THRESHOLD = 384  # Disable padding for images larger than this to avoid OOM
 
 # Maximum image dimension for conforming (prevents CUDA OOM errors)
-MAX_IMG_DIMENSION = 512  # Cap conformed image dimensions to this size to prevent memory issues
-
+MAX_IMG_DIMENSION = (
+    512  # Cap conformed image dimensions to this size to prevent memory issues
+)

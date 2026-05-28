@@ -16,7 +16,6 @@
 import os
 from itertools import product
 
-import os
 
 import matplotlib.figure
 import matplotlib.pyplot as plt
@@ -58,14 +57,14 @@ def plot_predictions(
     f = plt.figure(figsize=(20, 10))
     n, c, h, w = images_batch.shape
     mid_slice = c // 2
-    
+
     # Extract middle slice for display (don't overwrite original)
     display_images = torch.unsqueeze(images_batch[:, mid_slice, :, :], 1)
     img_grid = utils.make_grid(display_images.cpu(), nrow=4)
 
     # Build dense-to-sparse mapping on-the-fly from current atlas
     # Use atlas_manager to get the exact same label list used during HDF5 creation
-    atlas_name = os.environ.get('ATLAS_NAME', 'ARM2')
+    atlas_name = os.environ.get("ATLAS_NAME", "ARM2")
     atlas_manager = AtlasManager(atlas_name)
     dense_to_sparse = np.array(atlas_manager.get_labels(), dtype=np.int32)
 
@@ -74,7 +73,7 @@ def plot_predictions(
     grid_np = grid.numpy().astype(np.int32)
     # Convert dense indices to sparse labels
     grid_np = dense_to_sparse[grid_np]
-    
+
     color_grid = color.label2rgb(grid_np, bg_label=0)
     plt.imshow(img_grid.numpy().transpose((1, 2, 0)))
     plt.imshow(color_grid, alpha=0.5)
@@ -85,7 +84,7 @@ def plot_predictions(
     grid_np = grid.numpy().astype(np.int32)
     # Convert dense indices to sparse labels
     grid_np = dense_to_sparse[grid_np]
-    
+
     color_grid = color.label2rgb(grid_np, bg_label=0)
     plt.imshow(img_grid.numpy().transpose((1, 2, 0)))
     plt.imshow(color_grid, alpha=0.5)
@@ -128,11 +127,11 @@ def plot_confusion_matrix(
         Matplotlib Figure object with the confusion matrix plot.
     """
     # Convert CUDA tensor to numpy array if needed
-    if hasattr(cm, 'cpu'):
+    if hasattr(cm, "cpu"):
         cm = cm.cpu().numpy()
-    elif hasattr(cm, 'numpy'):
+    elif hasattr(cm, "numpy"):
         cm = cm.numpy()
-    
+
     n_classes = len(classes)
 
     fig, ax = plt.subplots()

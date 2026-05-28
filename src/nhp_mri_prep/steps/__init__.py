@@ -8,9 +8,8 @@ from Nextflow processes, enabling maximum parallelization.
 from .types import StepInput, StepOutput, AnatomicalState, FunctionalState
 
 __all__ = [
-    'StepInput',
-    'StepOutput',
-    'AnatomicalState',
-    'FunctionalState',
+    "StepInput",
+    "StepOutput",
+    "AnatomicalState",
+    "FunctionalState",
 ]
-

@@ -33,8 +33,10 @@ from fastsurfer_nn.utils.constants import REPO_ROOT
 if TYPE_CHECKING:
     from torch.optim import lr_scheduler as Scheduler
 else:
+
     class Scheduler:
         ...
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -55,7 +57,7 @@ CheckpointConfigFields = Literal["checkpoint", "config", "url"]
 def load_paths_yaml(filename: Path | str = YAML_DEFAULT) -> CheckpointConfigDict:
     """
     Load checkpoint paths configuration from YAML file.
-    
+
     This function reads a YAML file that contains checkpoint file paths,
     config file paths, and download URLs for different model planes.
 
@@ -83,7 +85,7 @@ def load_paths_yaml(filename: Path | str = YAML_DEFAULT) -> CheckpointConfigDict
         missing = tuple(k for k, c in zip(required_fields, checks, strict=False) if c)
         message = f"The file {filename} is not valid, missing key(s): {missing}"
         raise OSError(message)
-    
+
     # Make "url" optional - default to empty list if not provided
     if "url" not in data:
         data["url"] = []
@@ -99,25 +101,28 @@ def load_paths_yaml(filename: Path | str = YAML_DEFAULT) -> CheckpointConfigDict
 
 @overload
 def get_paths_from_yaml(
-        filetype: Literal["checkpoint", "config"],
-        filename: str | Path = YAML_DEFAULT,
-) -> dict[Plane, Path]: ...
+    filetype: Literal["checkpoint", "config"],
+    filename: str | Path = YAML_DEFAULT,
+) -> dict[Plane, Path]:
+    ...
 
 
 @overload
 def get_paths_from_yaml(
-        configtype: Literal["url"],
-        filename: str | Path = YAML_DEFAULT,
-) -> list[str]: ...
+    configtype: Literal["url"],
+    filename: str | Path = YAML_DEFAULT,
+) -> list[str]:
+    ...
+
 
 @lru_cache
 def get_paths_from_yaml(
-        configtype: CheckpointConfigFields,
-        filename: str | Path = YAML_DEFAULT,
+    configtype: CheckpointConfigFields,
+    filename: str | Path = YAML_DEFAULT,
 ) -> dict[Plane, Path] | list[str]:
     """
     Extract specific field from checkpoint paths YAML file.
-    
+
     This function loads the YAML configuration file and returns
     a specific field (checkpoint paths, config paths, or URLs).
 
@@ -182,14 +187,12 @@ def get_checkpoint(ckpt_dir: str, epoch: int) -> str:
     checkpoint_dir
         Standardizes checkpoint name.
     """
-    checkpoint_dir = os.path.join(
-        ckpt_dir, f"Epoch_{epoch:05d}_training_state.pkl"
-    )
+    checkpoint_dir = os.path.join(ckpt_dir, f"Epoch_{epoch:05d}_training_state.pkl")
     return checkpoint_dir
 
 
 def get_checkpoint_path(
-        log_dir: Path | str, resume_experiment: str | int | None = None
+    log_dir: Path | str, resume_experiment: str | int | None = None
 ) -> MutableSequence[Path]:
     """
     Find the paths to checkpoints from the experiment directory.
@@ -218,16 +221,16 @@ def get_checkpoint_path(
 
 
 def restore_model_state_from_checkpoint(
-        checkpoint_path: str | Path,
-        model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer | None = None,
-        scheduler: Scheduler | None = None,
-        fine_tune: bool = False,
-        drop_classifier: bool = False,
+    checkpoint_path: str | Path,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer | None = None,
+    scheduler: Scheduler | None = None,
+    fine_tune: bool = False,
+    drop_classifier: bool = False,
 ):
     """
     Restore model, optimizer, and scheduler states from checkpoint.
-    
+
     This function loads a checkpoint and restores the model weights,
     and optionally the optimizer and scheduler states for resuming training.
 
@@ -273,15 +276,15 @@ def restore_model_state_from_checkpoint(
 
 
 def save_checkpoint(
-        checkpoint_dir: str | Path,
-        epoch: int,
-        best_metric,
-        num_gpus: int,
-        cfg: yacs.config.CfgNode,
-        model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
-        scheduler: Scheduler | None = None,
-        best: bool = False,
+    checkpoint_dir: str | Path,
+    epoch: int,
+    best_metric,
+    num_gpus: int,
+    cfg: yacs.config.CfgNode,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: Scheduler | None = None,
+    best: bool = False,
 ) -> None:
     """
     Save the state of training for resume or fine-tune.
@@ -321,15 +324,15 @@ def save_checkpoint(
     # This ensures the checkpoint is self-contained and doesn't rely on external LUT files
     try:
         num_classes = cfg.MODEL.NUM_CLASSES
-        is_binary = (num_classes == 2)
-        
+        is_binary = num_classes == 2
+
         # Binary brain mask mode - atlas_name is optional but can be provided (e.g., "brainmask")
         if is_binary:
             # Extract atlas name from config if available (e.g., CLASS_OPTIONS: ["brainmask"])
             atlas_name = None
-            if hasattr(cfg.DATA, 'CLASS_OPTIONS') and cfg.DATA.CLASS_OPTIONS:
+            if hasattr(cfg.DATA, "CLASS_OPTIONS") and cfg.DATA.CLASS_OPTIONS:
                 atlas_name = cfg.DATA.CLASS_OPTIONS[0]
-            
+
             checkpoint["atlas_metadata"] = {
                 "is_binary_task": True,
                 "num_classes": num_classes,
@@ -339,22 +342,26 @@ def save_checkpoint(
             # Save atlas_name if provided (for unified naming: {modality}_seg-{atlas}_{plane}.pkl)
             if atlas_name:
                 checkpoint["atlas_metadata"]["atlas_name"] = atlas_name
-                LOGGER.info(f"Saving checkpoint with binary task metadata ({num_classes} classes, atlas: {atlas_name})")
+                LOGGER.info(
+                    f"Saving checkpoint with binary task metadata ({num_classes} classes, atlas: {atlas_name})"
+                )
             else:
-                LOGGER.info(f"Saving checkpoint with binary task metadata ({num_classes} classes, no atlas)")
+                LOGGER.info(
+                    f"Saving checkpoint with binary task metadata ({num_classes} classes, no atlas)"
+                )
         else:
             # Multi-class mode - save atlas metadata
             # Extract atlas name from config
             atlas_name = None
-            if hasattr(cfg.DATA, 'CLASS_OPTIONS') and cfg.DATA.CLASS_OPTIONS:
+            if hasattr(cfg.DATA, "CLASS_OPTIONS") and cfg.DATA.CLASS_OPTIONS:
                 atlas_name = cfg.DATA.CLASS_OPTIONS[0]
-            
+
             if atlas_name:
                 # Initialize AtlasManager to get the dense_to_sparse mapping
                 # This is the CRITICAL mapping that converts model output indices to label IDs
                 atlas_manager = AtlasManager(atlas_name)
                 dense_to_sparse = atlas_manager.get_dense_to_sparse_mapping()
-                
+
                 checkpoint["atlas_metadata"] = {
                     "is_binary_task": False,
                     "atlas_name": atlas_name.upper(),
@@ -362,9 +369,13 @@ def save_checkpoint(
                     "plane": cfg.DATA.PLANE,
                     "dense_to_sparse_mapping": dense_to_sparse.tolist(),  # Convert numpy array to list for serialization
                 }
-                LOGGER.info(f"Saving checkpoint with atlas metadata: {atlas_name} ({num_classes} classes)")
+                LOGGER.info(
+                    f"Saving checkpoint with atlas metadata: {atlas_name} ({num_classes} classes)"
+                )
             else:
-                LOGGER.warning("Could not extract atlas name from config - checkpoint will not contain atlas metadata")
+                LOGGER.warning(
+                    "Could not extract atlas name from config - checkpoint will not contain atlas metadata"
+                )
     except Exception as e:
         LOGGER.warning(f"Failed to add metadata to checkpoint: {e}")
         # Continue saving without metadata (backward compatible)
@@ -382,14 +393,14 @@ def save_checkpoint(
 
 
 def save_best_checkpoint(
-        checkpoint_dir: str | Path,
-        epoch: int,
-        best_metric,
-        num_gpus: int,
-        cfg: yacs.config.CfgNode,
-        model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
-        scheduler: Scheduler | None = None,
+    checkpoint_dir: str | Path,
+    epoch: int,
+    best_metric,
+    num_gpus: int,
+    cfg: yacs.config.CfgNode,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: Scheduler | None = None,
 ) -> None:
     """
     Save only the best model checkpoint (overwrites previous best).
@@ -428,24 +439,28 @@ def save_best_checkpoint(
     try:
         # Extract atlas name from config
         atlas_name = None
-        if hasattr(cfg.DATA, 'CLASS_OPTIONS') and cfg.DATA.CLASS_OPTIONS:
+        if hasattr(cfg.DATA, "CLASS_OPTIONS") and cfg.DATA.CLASS_OPTIONS:
             atlas_name = cfg.DATA.CLASS_OPTIONS[0]
-        
+
         if atlas_name:
             # Initialize AtlasManager to get the dense_to_sparse mapping
             # This is the CRITICAL mapping that converts model output indices to label IDs
             atlas_manager = AtlasManager(atlas_name)
             dense_to_sparse = atlas_manager.get_dense_to_sparse_mapping()
-            
+
             checkpoint["atlas_metadata"] = {
                 "atlas_name": atlas_name.upper(),
                 "num_classes": cfg.MODEL.NUM_CLASSES,
                 "plane": cfg.DATA.PLANE,
                 "dense_to_sparse_mapping": dense_to_sparse.tolist(),  # Convert numpy array to list for serialization
             }
-            LOGGER.info(f"Saving best checkpoint with atlas metadata: {atlas_name} ({cfg.MODEL.NUM_CLASSES} classes)")
+            LOGGER.info(
+                f"Saving best checkpoint with atlas metadata: {atlas_name} ({cfg.MODEL.NUM_CLASSES} classes)"
+            )
         else:
-            LOGGER.warning("Could not extract atlas name from config - checkpoint will not contain atlas metadata")
+            LOGGER.warning(
+                "Could not extract atlas name from config - checkpoint will not contain atlas metadata"
+            )
     except Exception as e:
         LOGGER.warning(f"Failed to add atlas metadata to checkpoint: {e}")
         # Continue saving without metadata (backward compatible)
@@ -466,24 +481,24 @@ def read_checkpoint_file(
 ) -> dict[str, Any]:
     """
     Load checkpoint file as dictionary.
-    
+
     This is the centralized function for loading checkpoint files.
     All checkpoint loading should use this function.
-    
+
     Parameters
     ----------
     checkpoint_path : Path, str
         Path to checkpoint file
     map_location : str, torch.device, default="cpu"
-        Device to map tensors to when loading. Can be "cpu", "cuda", 
+        Device to map tensors to when loading. Can be "cpu", "cuda",
         torch.device object, etc.
-        
+
     Returns
     -------
     dict
-        Checkpoint dictionary with keys: model_state, optimizer_state, 
+        Checkpoint dictionary with keys: model_state, optimizer_state,
         config, atlas_metadata, epoch, best_metric, etc.
-        
+
     Raises
     ------
     FileNotFoundError
@@ -492,123 +507,129 @@ def read_checkpoint_file(
     checkpoint_path = Path(checkpoint_path)
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-    
+
     # WARNING: weights_only=False can cause unsafe code execution, but here the
     # checkpoint can be considered to be from a safe source
     return torch.load(checkpoint_path, map_location=map_location, weights_only=False)
 
 
-def _filter_config_to_defaults(config_dict: dict, defaults_cfg: yacs.config.CfgNode) -> dict:
+def _filter_config_to_defaults(
+    config_dict: dict, defaults_cfg: yacs.config.CfgNode
+) -> dict:
     """
     Recursively filter config_dict to only include keys that exist in defaults_cfg.
-    
+
     This ensures that only valid config keys are kept, automatically filtering out
     any training-specific or deprecated keys that don't exist in the defaults.
-    
+
     Parameters
     ----------
     config_dict : dict
         Configuration dictionary from checkpoint
     defaults_cfg : yacs.config.CfgNode
         Default configuration with all valid keys
-        
+
     Returns
     -------
     dict
         Filtered configuration dictionary with only valid keys
     """
     filtered = {}
-    
+
     for key, value in config_dict.items():
         # Check if key exists in defaults
         if hasattr(defaults_cfg, key):
             default_value = getattr(defaults_cfg, key)
-            
+
             # If both are dicts/CfgNodes, recursively filter
-            if isinstance(value, dict) and isinstance(default_value, yacs.config.CfgNode):
+            if isinstance(value, dict) and isinstance(
+                default_value, yacs.config.CfgNode
+            ):
                 # Recursively filter nested config
                 filtered[key] = _filter_config_to_defaults(value, default_value)
             else:
                 # Leaf value - keep it if key exists in defaults
                 filtered[key] = value
         # If key doesn't exist in defaults, skip it (training-only or deprecated)
-    
+
     return filtered
 
 
-def extract_training_config(checkpoint_path: Path | str, batch_size: int = 1) -> yacs.config.CfgNode:
+def extract_training_config(
+    checkpoint_path: Path | str, batch_size: int = 1
+) -> yacs.config.CfgNode:
     """
     Extract training configuration from checkpoint file.
-    
+
     Reads the checkpoint and extracts the training configuration (hyperparameters,
     data settings, etc.) that was used during training.
-    
+
     For inference, only model architecture, data preprocessing, and inference-relevant
     settings are needed. Training-specific paths (BASE_DIR, LOG_DIR, etc.) are automatically
     filtered out by only keeping keys that exist in the defaults config.
-    
+
     Parameters
     ----------
     checkpoint_path : Path, str
         Path to checkpoint file
     batch_size : int, default=1
         Batch size for testing/inference
-        
+
     Returns
     -------
     yacs.config.CfgNode
         Configuration object with training settings
-        
+
     Raises
     ------
     ValueError
         If checkpoint doesn't contain config
     """
     checkpoint = read_checkpoint_file(checkpoint_path)
-    
-    if 'config' not in checkpoint:
+
+    if "config" not in checkpoint:
         raise ValueError(f"Checkpoint {checkpoint_path} does not contain config!")
-    
+
     # Parse config from checkpoint (saved as YAML string)
-    config_str = checkpoint['config']
+    config_str = checkpoint["config"]
     config_dict = yaml.safe_load(config_str)
-    
+
     # Get defaults config to know which keys are valid
     cfg_defaults = get_cfg_defaults()
-    
+
     # Filter config_dict to only include keys that exist in defaults
     # This automatically removes training-only keys like BASE_DIR, etc.
     filtered_config_dict = _filter_config_to_defaults(config_dict, cfg_defaults)
-    
+
     # Convert back to CfgNode and merge
     cfg = get_cfg_defaults()
     cfg.merge_from_other_cfg(yacs.config.CfgNode(filtered_config_dict))
-    
+
     # Set up for inference
     cfg.OUT_LOG_NAME = "fastsurfer"
     cfg.TEST.BATCH_SIZE = batch_size
     cfg.MODEL.OUT_TENSOR_WIDTH = cfg.DATA.PADDED_SIZE
     cfg.MODEL.OUT_TENSOR_HEIGHT = cfg.DATA.PADDED_SIZE
-    
+
     return cfg
 
 
 def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
     """
     Extract atlas metadata from a checkpoint without loading the full model.
-    
+
     This function reads only the metadata from a checkpoint to determine:
     - Which atlas the model was trained on (or if it's a binary task)
     - The dense-to-sparse label mapping (for multi-class)
     - Number of classes and plane
-    
+
     Requires checkpoint to have atlas_metadata (no fallbacks).
-    
+
     Parameters
     ----------
     checkpoint_path : str, Path
         Path to the checkpoint file.
-    
+
     Returns
     -------
     dict, None
@@ -622,7 +643,7 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
         - dense_to_sparse_mapping: np.ndarray or None (None for binary)
         - source: str ("atlas_metadata" indicating metadata was extracted from checkpoint)
         Returns None if checkpoint has no atlas_metadata.
-    
+
     Examples
     --------
     >>> metadata = extract_atlas_metadata("checkpoint.pkl")
@@ -635,7 +656,7 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
     try:
         # Load checkpoint without loading model weights
         checkpoint = read_checkpoint_file(checkpoint_path)
-        
+
         # Require atlas_metadata (no fallbacks)
         if "atlas_metadata" not in checkpoint:
             LOGGER.warning(
@@ -644,22 +665,24 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
                 "Please retrain or use a checkpoint with metadata."
             )
             return None
-        
+
         metadata = checkpoint["atlas_metadata"]
-        
+
         # Handle binary vs multi-class
         is_binary = metadata.get("is_binary_task", False)
-        
+
         result = {
             "is_binary_task": is_binary,
             "num_classes": metadata["num_classes"],
             "plane": metadata["plane"],
             "source": "atlas_metadata",  # Indicates metadata was extracted from checkpoint's atlas_metadata
         }
-        
+
         if is_binary:
             # Binary task - atlas_name is optional but can be provided (e.g., "brainmask")
-            result["atlas_name"] = metadata.get("atlas_name")  # Can be None or a string like "brainmask"
+            result["atlas_name"] = metadata.get(
+                "atlas_name"
+            )  # Can be None or a string like "brainmask"
             result["dense_to_sparse_mapping"] = None
         else:
             # Multi-class task - require atlas and mapping
@@ -668,7 +691,7 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
                 LOGGER.warning(
                     f"Multi-class checkpoint missing atlas_name in metadata: {checkpoint_path}"
                 )
-            
+
             if "dense_to_sparse_mapping" in metadata:
                 result["dense_to_sparse_mapping"] = np.array(
                     metadata["dense_to_sparse_mapping"], dtype=np.int32
@@ -678,9 +701,9 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
                     f"Multi-class checkpoint missing dense_to_sparse_mapping: {checkpoint_path}"
                 )
                 result["dense_to_sparse_mapping"] = None
-        
+
         return result
-        
+
     except Exception as e:
         LOGGER.error(f"Failed to extract atlas metadata from {checkpoint_path}: {e}")
         return None
@@ -689,14 +712,14 @@ def extract_atlas_metadata(checkpoint_path: str | Path) -> dict | None:
 def is_binary_checkpoint(checkpoint_path: str | Path) -> tuple[bool | None, int | None]:
     """
     Determine if a checkpoint is binary (NUM_CLASSES=2) or multi-class.
-    
+
     Tries metadata first, then falls back to config extraction.
-    
+
     Parameters
     ----------
     checkpoint_path : str, Path
         Path to the checkpoint file.
-    
+
     Returns
     -------
     tuple[bool | None, int | None]
@@ -708,19 +731,21 @@ def is_binary_checkpoint(checkpoint_path: str | Path) -> tuple[bool | None, int 
     metadata = extract_atlas_metadata(checkpoint_path)
     if metadata:
         return metadata.get("is_binary_task", False), metadata.get("num_classes")
-    
+
     # Fallback: check NUM_CLASSES from config
     try:
         checkpoint = read_checkpoint_file(checkpoint_path)
-        if 'config' in checkpoint:
-            config_str = checkpoint['config']
+        if "config" in checkpoint:
+            config_str = checkpoint["config"]
             config_dict = yaml.safe_load(config_str)
             num_classes = config_dict.get("MODEL", {}).get("NUM_CLASSES")
             if num_classes is not None:
                 return num_classes == 2, num_classes
     except Exception as e:
-        LOGGER.debug(f"Could not extract NUM_CLASSES from checkpoint {checkpoint_path}: {e}")
-    
+        LOGGER.debug(
+            f"Could not extract NUM_CLASSES from checkpoint {checkpoint_path}: {e}"
+        )
+
     return None, None
 
 
@@ -740,9 +765,9 @@ def remove_ckpt(ckpt: str | Path):
 
 
 def download_checkpoint(
-        checkpoint_name: str,
-        checkpoint_path: str | Path,
-        urls: list[str],
+    checkpoint_name: str,
+    checkpoint_path: str | Path,
+    urls: list[str],
 ) -> None:
     """
     Download a checkpoint file.
@@ -777,7 +802,7 @@ def download_checkpoint(
                 LOGGER.warning(f"Response code: {e.response.status_code}")
 
     if response is None:
-        links = ', '.join(u.removeprefix('https://')[:22] + "..." for u in urls)
+        links = ", ".join(u.removeprefix("https://")[:22] + "..." for u in urls)
         raise requests.exceptions.RequestException(
             f"Failed downloading the checkpoint {checkpoint_name} from {links}."
         )

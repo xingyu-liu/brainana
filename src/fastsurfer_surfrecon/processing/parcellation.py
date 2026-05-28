@@ -34,6 +34,7 @@ SurfaceType = Tuple[npt.NDArray, npt.NDArray]  # (vertices, faces)
 # Mesh Adjacency and Graph Operations
 # =============================================================================
 
+
 def get_adjacency_matrix(faces: npt.NDArray, n_vertices: int) -> sparse.csr_matrix:
     """
     Create symmetric sparse adjacency matrix from triangle mesh.
@@ -77,11 +78,11 @@ def get_cluster_adjacency(faces: npt.NDArray, labels: npt.NDArray) -> sparse.csc
     t0, t1, t2 = faces[:, 0], faces[:, 1], faces[:, 2]
     i = np.column_stack((t0, t1, t1, t2, t2, t0)).ravel()
     j = np.column_stack((t1, t0, t2, t1, t0, t2)).ravel()
-    
+
     # Keep only edges where both vertices have the same label
     keep = labels[i] == labels[j]
     i, j = i[keep], j[keep]
-    
+
     data = np.ones(len(i))
     return sparse.csc_matrix((data, (i, j)), shape=(len(labels), len(labels)))
 
@@ -106,40 +107,41 @@ def find_label_islands(
         Indices of vertices in disconnected islands
     """
     vertices, faces = surface
-    
+
     # Adjacency without cross-label edges
     adj = get_cluster_adjacency(faces, labels)
-    
+
     # Find connected components
     n_components, component_labels = connected_components(
         csgraph=adj, directed=False, return_labels=True
     )
-    
+
     # For each label, find islands (not connected to main component)
     unique_labels = np.unique(labels)
     island_vertices = []
-    
+
     for label_id in unique_labels:
         label_mask = labels == label_id
         label_components = component_labels[label_mask]
         label_indices = np.where(label_mask)[0]
-        
+
         # Find the main component (most vertices)
         main_component = np.bincount(label_components).argmax()
-        
+
         # Vertices not in main component are islands
         island_mask = label_components != main_component
         if np.any(island_mask):
             island_verts = label_indices[island_mask]
             island_vertices.extend(island_verts)
             logger.debug(f"Label {label_id}: found {len(island_verts)} island vertices")
-    
+
     return np.array(island_vertices, dtype=np.int32)
 
 
 # =============================================================================
 # Mode Filter (Smoothing)
 # =============================================================================
+
 
 def mode_filter(
     adj: sparse.csr_matrix,
@@ -170,7 +172,7 @@ def mode_filter(
     """
     n = len(labels)
     labels_new = labels.copy()
-    
+
     # Which vertices to process
     if fill_label is not None:
         process_ids = np.where(labels == fill_label)[0]
@@ -178,25 +180,25 @@ def mode_filter(
             return labels_new
     else:
         process_ids = np.arange(n)
-    
+
     # Get neighbor labels for each vertex to process
     for vid in process_ids:
         # Get neighbors (including self if in adj)
         neighbors = adj[vid].indices
         neighbor_labels = labels[neighbors]
-        
+
         # Exclude no-vote labels
         if no_vote_labels is not None:
             valid = ~np.isin(neighbor_labels, no_vote_labels)
             neighbor_labels = neighbor_labels[valid]
-        
+
         if len(neighbor_labels) == 0:
             continue
-        
+
         # Most common label wins
         counts = np.bincount(neighbor_labels)
         labels_new[vid] = np.argmax(counts)
-    
+
     return labels_new
 
 
@@ -229,33 +231,34 @@ def smooth_aparc(
     """
     vertices, faces = surface
     n_vertices = len(vertices)
-    
+
     # Create adjacency with self-connections
     adj = get_adjacency_matrix(faces, n_vertices)
     adj = adj + sparse.eye(n_vertices, dtype=bool)
-    
+
     # Create cortex mask
     if cortex is not None:
         cortex_mask = np.zeros(n_vertices, dtype=bool)
         cortex_mask[cortex] = True
     else:
         cortex_mask = np.ones(n_vertices, dtype=bool)
-    
+
     labels_smooth = labels.copy()
-    
+
     # Iteratively smooth unknown (0) labels within cortex only.
     # mode_filter(fill_label=0) updates all vertices with label 0, so we must re-mask
     # after each iteration so labels do not bleed outside cortex.
     for i in range(iterations):
         unknown_in_cortex = (labels_smooth == 0) & cortex_mask
         n_unknown = np.sum(unknown_in_cortex)
-        
+
         if n_unknown == 0:
             break
-        
+
         # Apply mode filter to unknown vertices (may assign to non-cortex; we fix below)
         labels_smooth = mode_filter(
-            adj, labels_smooth,
+            adj,
+            labels_smooth,
             fill_label=0,
             no_vote_labels=[0],  # Don't vote for unknown
         )
@@ -264,7 +267,7 @@ def smooth_aparc(
             labels_smooth[~cortex_mask] = 0
 
         logger.debug(f"Smoothing iteration {i+1}: {n_unknown} unknown vertices")
-    
+
     # Final clamp so output never has labels outside cortex
     if cortex is not None:
         labels_smooth[~cortex_mask] = 0
@@ -275,6 +278,7 @@ def smooth_aparc(
 # =============================================================================
 # Volume to Surface Sampling
 # =============================================================================
+
 
 def sample_volume_to_surface(
     surface: SurfaceType,
@@ -306,44 +310,46 @@ def sample_volume_to_surface(
     """
     vertices, faces = surface
     n_vertices = len(vertices)
-    
+
     # Create cortex mask
     if cortex is not None:
         mask = np.zeros(n_vertices, dtype=bool)
         mask[cortex] = True
     else:
         mask = np.ones(n_vertices, dtype=bool)
-    
+
     data = np.asarray(image.dataobj)
-    
+
     # Compute vertex normals using LaPy
     T = TriaMesh(vertices, faces)
     if not T.is_oriented():
         logger.warning("Surface not oriented, flipping normals")
         T.orient_()
-    
+
     # Sample coordinates (with projection along normal)
     sample_coords = vertices + proj_mm * T.vertex_normals()
     sample_coords = sample_coords[mask]
-    
+
     # Transform to voxel space
     Torig = image.header.get_vox2ras_tkr()
     Tinv = np.linalg.inv(Torig)
     vox_coords = sample_coords @ Tinv[:3, :3].T + Tinv[:3, 3]
-    
+
     # Nearest neighbor sampling
     vox_nn = np.rint(vox_coords).astype(int)
     samples = data[vox_nn[:, 0], vox_nn[:, 1], vox_nn[:, 2]]
-    
+
     # Search for non-zero if requested
     if search_radius and np.any(samples == 0):
         zero_idx = np.where(samples == 0)[0]
-        logger.info(f"Searching {len(zero_idx)} zero samples within radius {search_radius}")
+        logger.info(
+            f"Searching {len(zero_idx)} zero samples within radius {search_radius}"
+        )
         for idx in zero_idx:
             samples[idx] = _search_nearest_nonzero(
                 data, vox_nn[idx], search_radius, image.header.get_zooms()[0]
             )
-    
+
     # Create full result array
     result = np.zeros(n_vertices, dtype=samples.dtype)
     result[mask] = samples
@@ -358,7 +364,7 @@ def _search_nearest_nonzero(
 ) -> int:
     """Search for nearest non-zero value within radius."""
     r_vox = int(np.ceil(radius / voxel_size))
-    
+
     # Search in expanding shells
     for r in range(1, r_vox + 1):
         for dx in range(-r, r + 1):
@@ -366,7 +372,11 @@ def _search_nearest_nonzero(
                 for dz in range(-r, r + 1):
                     if abs(dx) == r or abs(dy) == r or abs(dz) == r:
                         x, y, z = center + np.array([dx, dy, dz])
-                        if 0 <= x < data.shape[0] and 0 <= y < data.shape[1] and 0 <= z < data.shape[2]:
+                        if (
+                            0 <= x < data.shape[0]
+                            and 0 <= y < data.shape[1]
+                            and 0 <= z < data.shape[2]
+                        ):
                             val = data[x, y, z]
                             if val != 0:
                                 return val
@@ -376,6 +386,7 @@ def _search_nearest_nonzero(
 # =============================================================================
 # Label Translation
 # =============================================================================
+
 
 def translate_labels(
     labels: npt.NDArray,
@@ -408,19 +419,19 @@ def translate_labels(
     surf_ids = surf_data[:, 0]
     surf_ctab = surf_data[:, 1:5]
     surf_names = np.loadtxt(surface_lut, usecols=(1,), dtype=str)
-    
+
     vol_data = np.loadtxt(volume_lut, usecols=(0, 2, 3, 4, 5), dtype=int)
     vol_ids = vol_data[:, 0]
     vol_names = np.loadtxt(volume_lut, usecols=(1,), dtype=str)
-    
+
     # Verify names match
     if not np.all(vol_names == surf_names):
         raise ValueError("LUT label names do not match")
-    
+
     # Create translation lookup dictionary (handles negative indices)
     # Use dictionary to support both positive and negative label IDs
     lut_dict = dict(zip(vol_ids, surf_ids))
-    
+
     # Translate labels using dictionary lookup
     # Unknown labels (not in LUT) are set to 0 (background)
     surface_labels = np.zeros_like(labels, dtype=labels.dtype)
@@ -429,13 +440,14 @@ def translate_labels(
         if vol_id in lut_dict:
             surface_labels[labels == vol_id] = lut_dict[vol_id]
         # Labels not in LUT remain 0 (background)
-    
+
     return surface_labels, surf_ctab, surf_names
 
 
 # =============================================================================
 # High-Level Functions
 # =============================================================================
+
 
 def sample_parcellation(
     surface_path: Path,
@@ -477,32 +489,30 @@ def sample_parcellation(
         surface_data = fs.read_geometry(surface_path, read_metadata=True)
         # Extract only vertices and faces (ignore metadata)
         surface = (surface_data[0], surface_data[1])
-    
+
     logger.info(f"Loading segmentation: {segmentation_path}")
     seg = nib.load(segmentation_path)
-    
+
     logger.info(f"Loading cortex label: {cortex_path}")
     cortex = fs.read_label(cortex_path)
-    
+
     # Sample volume
     logger.info("Sampling volume to surface...")
-    vol_labels = sample_volume_to_surface(
-        surface, seg, cortex, proj_mm, search_radius
-    )
-    
+    vol_labels = sample_volume_to_surface(surface, seg, cortex, proj_mm, search_radius)
+
     # Translate labels
     logger.info("Translating labels...")
     surf_labels, ctab, names = translate_labels(vol_labels, volume_lut, surface_lut)
-    
+
     # Find and remove islands
     logger.info("Finding label islands...")
     islands = find_label_islands(surface, surf_labels)
     surf_labels[islands] = 0
-    
+
     # Smooth
     logger.info("Smoothing parcellation...")
     surf_labels = smooth_aparc(surface, surf_labels, cortex)
-    
+
     # Ensure no labels outside cortex (safeguard before save)
     n_vertices = len(surf_labels)
     cortex_mask = np.zeros(n_vertices, dtype=bool)
@@ -525,9 +535,9 @@ def smooth_aparc_files(
 ) -> None:
     """
     Smooth surface parcellation from files.
-    
+
     Wrapper around smooth_aparc() that handles file I/O.
-    
+
     Parameters
     ----------
     insurf : Path
@@ -547,20 +557,20 @@ def smooth_aparc_files(
         logger.info(f"Loading surface: {insurf}")
         surface_data = fs.read_geometry(insurf, read_metadata=True)
         surface = (surface_data[0], surface_data[1])
-    
+
     logger.info(f"Loading annotation: {inaparc}")
     aparc = fs.read_annot(inaparc)
     labels = aparc[0]
     ctab = aparc[1]
     names = aparc[2]
-    
+
     logger.info(f"Loading cortex label: {incort}")
     cortex = fs.read_label(incort)
-    
+
     # Smooth
     logger.info("Smoothing parcellation...")
     smoothed_labels = smooth_aparc(surface, labels, cortex, iterations=iterations)
-    
+
     # Save
     outaparc.parent.mkdir(parents=True, exist_ok=True)
     fs.write_annot(outaparc, smoothed_labels, ctab=ctab, names=names)
@@ -582,4 +592,3 @@ __all__ = [
     "sample_parcellation",
     "smooth_aparc_files",
 ]
-

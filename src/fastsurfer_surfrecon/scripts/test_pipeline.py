@@ -5,7 +5,6 @@ Test script for FastSurfer surface reconstruction pipeline.
 Tests the pipeline with a real subject directory.
 """
 
-import os
 import sys
 import logging
 from pathlib import Path
@@ -15,7 +14,7 @@ _src = Path(__file__).resolve().parent.parent.parent
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
-from fastsurfer_surfrecon.config import ReconSurfConfig, AtlasConfig, ProcessingConfig
+from fastsurfer_surfrecon.config import ReconSurfConfig
 from fastsurfer_surfrecon.pipeline import ReconSurfPipeline
 from fastsurfer_surfrecon.utils.logging import setup_logging
 from nhp_mri_prep.quality_control.snapshots import (
@@ -25,7 +24,9 @@ from nhp_mri_prep.quality_control.snapshots import (
 
 # %%
 # Test subject
-result_dir = Path("/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032215_noarm6")
+result_dir = Path(
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032215_noarm6"
+)
 
 subjects_dir = result_dir.parent
 subject_id = result_dir.name
@@ -97,6 +98,6 @@ except Exception as e:
     print(f"Pipeline Test Failed: {e}")
     print("=" * 80)
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
-

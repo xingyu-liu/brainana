@@ -19,16 +19,16 @@ logger = logging.getLogger(__name__)
 
 class Tessellation(HemisphereStage):
     """Create initial surface tessellation."""
-    
+
     name = "tessellation"
     description = "Surface tessellation (orig.nofix)"
-    
+
     def _run(self) -> None:
         """Create initial surface."""
         filled = self.sd.mri("filled.mgz")
         brain = self.sd.mri("brainmask.mgz")
         orig_nofix = self.hemi_path("orig.nofix")
-        
+
         if self.config.processing.fstess:
             # Use FreeSurfer tessellation
             logger.info(f"Using FreeSurfer tessellation for {self.hemi}")
@@ -58,7 +58,7 @@ class Tessellation(HemisphereStage):
                     log_file=self.config.log_file,
                     subject_dir=self.sd.subject_dir,
                 )
-            
+
             # Marching cubes
             logger.info(f"Using marching cubes for {self.hemi}")
             hires_suffix = ".predec" if self.config.hires else ""
@@ -70,7 +70,7 @@ class Tessellation(HemisphereStage):
                 log_file=self.config.log_file,
                 subject_dir=self.sd.subject_dir,
             )
-            
+
             # Fix surface header (scannerRAS -> surfaceRAS)
             logger.info(f"Fixing surface header for {self.hemi}")
             fix_mc_surface_header(
@@ -78,9 +78,13 @@ class Tessellation(HemisphereStage):
                 pretess_path=pretess,
                 output_path=orig_nofix,
             )
-            
+
             # Verify surfaceRAS header
-            info = mris_info(orig_nofix, log_file=self.config.log_file, subject_dir=self.sd.subject_dir)
+            info = mris_info(
+                orig_nofix,
+                log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
+            )
             # Check for surfaceRAS with flexible whitespace (mris_info uses variable spacing)
             if not re.search(r"vertex\s+locs\s*:\s*surfaceRAS", info):
                 logger.error(f"mris_info full output:\n{info}")
@@ -88,7 +92,7 @@ class Tessellation(HemisphereStage):
                     f"Incorrect header in {orig_nofix}: "
                     "vertex locs is not set to surfaceRAS"
                 )
-            
+
             # Extract main component
             logger.info(f"Extracting main component for {self.hemi}")
             mris_extract_main_component(
@@ -97,7 +101,7 @@ class Tessellation(HemisphereStage):
                 log_file=self.config.log_file,
                 subject_dir=self.sd.subject_dir,
             )
-            
+
             # Re-fix header after extraction (mris_extract_main_component may reset it)
             logger.info(f"Re-fixing surface header after extraction for {self.hemi}")
             fix_mc_surface_header(
@@ -105,9 +109,13 @@ class Tessellation(HemisphereStage):
                 pretess_path=pretess,
                 output_path=orig_nofix,
             )
-            
+
             # Verify surfaceRAS header again after extraction
-            info = mris_info(orig_nofix, log_file=self.config.log_file, subject_dir=self.sd.subject_dir)
+            info = mris_info(
+                orig_nofix,
+                log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
+            )
             # Check for surfaceRAS with flexible whitespace (mris_info uses variable spacing)
             if not re.search(r"vertex\s+locs\s*:\s*surfaceRAS", info):
                 logger.error(f"mris_info full output after extraction:\n{info}")
@@ -115,7 +123,7 @@ class Tessellation(HemisphereStage):
                     f"Incorrect header in {orig_nofix} after extraction: "
                     "vertex locs is not set to surfaceRAS"
                 )
-            
+
             # Decimate for hires (try less decimation first on "too small" errors)
             if self.config.hires:
                 orig_nofix_final = self.hemi_path("orig.nofix")
@@ -146,8 +154,7 @@ class Tessellation(HemisphereStage):
                 else:
                     if last_error is not None:
                         raise last_error
-    
+
     def should_skip(self) -> bool:
         """Skip if orig.nofix exists."""
         return self.hemi_path("orig.nofix").exists()
-

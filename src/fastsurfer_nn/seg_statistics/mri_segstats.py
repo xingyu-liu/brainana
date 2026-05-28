@@ -70,15 +70,16 @@ ETIV_FROM_TAL = "EstimatedTotalIntraCranialVol"
 
 class _ExtendConstAction(argparse.Action):
     """Helper class to allow action='extend_const' by action=_ExtendConstAction."""
+
     def __init__(
-            self,
-            option_strings: Sequence[str],
-            dest: str,
-            const: _T | None = None,
-            default: _T | str | None = None,
-            required: bool = False,
-            help: str | None = None,
-            metavar: str | tuple[str, ...] | None = None,
+        self,
+        option_strings: Sequence[str],
+        dest: str,
+        const: _T | None = None,
+        default: _T | str | None = None,
+        required: bool = False,
+        help: str | None = None,
+        metavar: str | tuple[str, ...] | None = None,
     ) -> None:
         super().__init__(
             option_strings=option_strings,
@@ -92,11 +93,11 @@ class _ExtendConstAction(argparse.Action):
         )
 
     def __call__(
-            self,
-            parser: argparse.ArgumentParser,
-            namespace: argparse.Namespace,
-            values: str | Sequence[Any],
-            option_string: str | None = None,
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any],
+        option_string: str | None = None,
     ) -> None:
         """
         Extend attribute `self.dest` of `namespace` with the values in `self.const`.
@@ -108,6 +109,7 @@ class _ExtendConstAction(argparse.Action):
             items = items[:]
         else:
             import copy
+
             items = copy.copy(items)
         items.extend(self.const)
         setattr(namespace, self.dest, items)
@@ -127,7 +129,6 @@ def make_arguments() -> argparse.ArgumentParser:
         measures: list[tuple[bool, str]] = getattr(args, "measures", [])
         measure_strings = list(map(lambda x: x[1], measures))
         if all(m in measure_strings for m in (ETIV_RATIO_KEY, ETIV_FROM_TAL)):
-
             measures = [m for m in measures if m[1] == ETIV_RATIO_KEY]
             for k, v in ETIV_RATIOS.items():
                 for _is_imported, m in measures:
@@ -166,17 +167,21 @@ def make_arguments() -> argparse.ArgumentParser:
 
     if "--help" in sys.argv:
         from fastsurfer_nn.utils.brainvolstats import Manager
+
         manager = Manager([])
 
         def help_text(keys: Iterable[str]) -> Iterable[str]:
             return (manager[k].help() for k in keys)
+
     else:
         help_text = None
 
     def help_add_measures(message: str, keys: list[str]) -> str:
         if help_text:
-            _keys = (k.split(' ')[0] for k in keys)
-            keys = [f"{k}: {text}" for k, text in zip(keys, help_text(_keys), strict=False)]
+            _keys = (k.split(" ")[0] for k in keys)
+            keys = [
+                f"{k}: {text}" for k, text in zip(keys, help_text(_keys), strict=False)
+            ]
         return "<br>- ".join([message] + list(keys))
 
     add_two_help_messages(parser)
@@ -240,14 +245,16 @@ def make_arguments() -> argparse.ArgumentParser:
         metavar="percent",
         dest="robust",
         help="Compute stats after excluding percent from high and and low values, e.g. "
-             "with --robust 2, min and max are the 2nd and the 98th percentiles.",
+        "with --robust 2, min and max are the 2nd and the 98th percentiles.",
     )
 
     def _add_invol_op(*flags: str, op: str, metavar: str | None = None) -> None:
         if metavar:
+
             def _optype(_a) -> str:
                 # test the argtype for float as well
                 return f"{flags[0].lstrip('-')}={float(_a)}"
+
             kwargs = {
                 "action": "append",
                 "type": _optype,
@@ -281,6 +288,7 @@ def make_arguments() -> argparse.ArgumentParser:
         help="load the Color Lookup Table.",
     )
     import os
+
     env = os.environ
     if "FREESURFER_HOME" in env:
         default_lut = Path(env["FREESURFER_HOME"]) / "FreeSurferColorLUT.txt"
@@ -297,7 +305,7 @@ def make_arguments() -> argparse.ArgumentParser:
         const=default_lut,
         action="store_const",
         help="load default Color Lookup Table (from FREESURFER_HOME or "
-             "FASTSURFER_HOME).",
+        "FASTSURFER_HOME).",
     )
     # --ctab-gca gcafile
     parser.add_argument(
@@ -448,37 +456,40 @@ def make_arguments() -> argparse.ArgumentParser:
     default_sd = Path(env["SUBJECTS_DIR"]) if "SUBJECTS_DIR" in env else None
     parser.add_argument(
         "--sd",
-        dest="out_dir", metavar="subjects_dir", type=Path,
+        dest="out_dir",
+        metavar="subjects_dir",
+        type=Path,
         default=default_sd,
         help="set SUBJECTS_DIR, defaults to environment SUBJECTS_DIR, required to find "
-             "several files used by measures, e.g. surfaces.")
+        "several files used by measures, e.g. surfaces.",
+    )
     parser.add_argument(
         "--subject",
-        dest="sid", metavar="subject_id",
+        dest="sid",
+        metavar="subject_id",
         help="set subject_id, required to find several files used by measures, e.g. "
-             "surfaces.")
-    parser.add_argument(
-        "--seed",
-        nargs=1, metavar="N", help="The seed has no effect")
+        "surfaces.",
+    )
+    parser.add_argument("--seed", nargs=1, metavar="N", help="The seed has no effect")
     parser.add_argument(
         "--in-intensity-name",
         type=str,
         dest="norm_name",
         default="",
-        help="name of the intensity image"
+        help="name of the intensity image",
     )
     parser.add_argument(
         "--in-intensity-units",
         type=str,
         dest="norm_unit",
         default="",
-        help="unit of the intensity image"
+        help="unit of the intensity image",
     )
     parser.add_argument(
         "--no_legacy",
         action="store_false",
         dest="legacy_freesurfer",
-        help="use fastsurfer algorithms instead of fastsurfer."
+        help="use fastsurfer algorithms instead of fastsurfer.",
     )
     return parser
 
@@ -487,6 +498,7 @@ def print_and_exit(args: object):
     """Print the commandline arguments of the segstats script to stdout and exit."""
     print(" ".join(format_cmdline_args(args)))
     import sys
+
     sys.exit(0)
 
 
@@ -527,10 +539,12 @@ def format_cmdline_args(args: object) -> list[str]:
         _flag = {True: "--import", False: "--compute"}
         blank_measure = (not measures[0][0], "")
         flag_measure_iter = ((_flag[i], m) for i, m in [blank_measure, *measures])
-        arglist.extend(chain(
-            (*((flag,) if flag != last_flag else ()), str(measure))
-            for (last_flag, _), (flag, measure) in pairwise(flag_measure_iter)
-        ))
+        arglist.extend(
+            chain(
+                (*((flag,) if flag != last_flag else ()), str(measure))
+                for (last_flag, _), (flag, measure) in pairwise(flag_measure_iter)
+            )
+        )
 
     return arglist
 

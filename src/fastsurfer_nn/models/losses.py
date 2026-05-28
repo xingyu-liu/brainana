@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-
 # IMPORTS
 from numbers import Real
 
@@ -116,7 +115,7 @@ class CrossEntropy2D(nn.Module):
 
         Parameters
         ----------
-        weight : Tensor, optional 
+        weight : Tensor, optional
             A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`. Defaults to None.
         reduction : str
             Specifies the reduction to apply to the output, as in nn.CrossEntropyLoss. Defaults to 'None'.

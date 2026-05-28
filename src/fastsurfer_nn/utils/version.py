@@ -26,6 +26,7 @@ class _RequiredVersionDict(TypedDict):
     """
     Dictionary with keys 'version_line', 'version', 'git_hash', 'git_branch'.
     """
+
     git_branch: str
     git_hash: str
     version: str
@@ -36,6 +37,7 @@ class _OptionalVersionDict(TypedDict, total=False):
     """
     Dictionary with optional keys 'checkpoints', 'git_status', and 'pypackages'.
     """
+
     content: str
     checkpoints: str
     git_status: str
@@ -49,6 +51,7 @@ class VersionDict(_RequiredVersionDict, _OptionalVersionDict):
     'checkpoints', 'git_status', and 'pypackages'. The last 3 are optional and may
     be missing depending on the content of the file.
     """
+
     pass
 
 
@@ -324,7 +327,9 @@ def main(
 
         if "+pip" in sections and not prefer_cache:
             pip_command = "-m pip list --verbose --no-cache-dir --no-color --disable-pip-version-check"
-            futures["pypackages"] = PyPopen(pip_command.split(" "), **kw_root).as_future(pool)
+            futures["pypackages"] = PyPopen(
+                pip_command.split(" "), **kw_root
+            ).as_future(pool)
 
     if build_cache_required and build_cache is not False:
         build_cache: VersionDict = futures.pop("build_cache").result()
@@ -339,7 +344,9 @@ def main(
         version = build_cache["version"]
 
     def __future_or_cache(
-        key: VersionDictKeys, futures: dict[str, Future[Any]], cache: VersionDict,
+        key: VersionDictKeys,
+        futures: dict[str, Future[Any]],
+        cache: VersionDict,
     ) -> str:
         future: None | Future[Any] = futures.get(key, None)
         if future is not None:
@@ -357,8 +364,10 @@ def main(
         else:
             add_msg = ""
             if key == "git_status":
-                add_msg += (" --sections all or --sections with +git require a build "
-                            "cache file or a FastSurfer git directory and git.")
+                add_msg += (
+                    " --sections all or --sections with +git require a build "
+                    "cache file or a FastSurfer git directory and git."
+                )
             if prefer_cache:
                 add_msg += " The cached build file seems to not contain this info?"
             # ERROR

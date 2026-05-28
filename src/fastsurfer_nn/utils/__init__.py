@@ -42,7 +42,7 @@ __all__ = [
     "REPO_ROOT",
 ]
 
-from typing import Literal, get_args
+from typing import Literal
 
 from fastsurfer_nn.utils.constants import REPO_ROOT
 
@@ -50,4 +50,8 @@ PlaneAxial = Literal["axial"]
 PlaneCoronal = Literal["coronal"]
 PlaneSagittal = Literal["sagittal"]
 Plane = PlaneAxial | PlaneCoronal | PlaneSagittal
-PLANES: tuple[PlaneAxial, PlaneCoronal, PlaneSagittal] = ("axial", "coronal", "sagittal")
+PLANES: tuple[PlaneAxial, PlaneCoronal, PlaneSagittal] = (
+    "axial",
+    "coronal",
+    "sagittal",
+)

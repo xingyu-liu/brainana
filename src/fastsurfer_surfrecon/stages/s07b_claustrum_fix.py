@@ -33,11 +33,18 @@ TARGET_MAX = 110
 # - Putamen (548/1548)
 # - Accumbens (552/1552)
 # - septum_diagonal_band (568/1568)
-ARM6_CLAUSTRUM = {504: 1, 1504: 2,
-                  546: 1, 1546: 2,
-                  548: 1, 1548: 2,
-                  552: 1, 1552: 2,
-                  568: 1, 1568: 2}
+ARM6_CLAUSTRUM = {
+    504: 1,
+    1504: 2,
+    546: 1,
+    1546: 2,
+    548: 1,
+    1548: 2,
+    552: 1,
+    1552: 2,
+    568: 1,
+    1568: 2,
+}
 
 # Primary-seg label IDs accepted when intersecting with ARM6 target regions:
 # - Claustrum (502/1502)
@@ -45,10 +52,8 @@ ARM6_CLAUSTRUM = {504: 1, 1504: 2,
 # - diagonal_subpallium (561/1561)
 # - preoptic_complex (569/1569)
 
-SEG_TARGET = {502: 1, 1502: 2, 
-              542: 1, 1542: 2,
-              561: 1, 1561: 2,
-              569: 1, 1569: 2}
+SEG_TARGET = {502: 1, 1502: 2, 542: 1, 1542: 2, 561: 1, 1561: 2, 569: 1, 1569: 2}
+
 
 class ClaustrumFix(PipelineStage):
     """
@@ -64,7 +69,9 @@ class ClaustrumFix(PipelineStage):
     """
 
     name = "claustrum_fix"
-    description = "Claustrum fix (fill claustrum with WM intensity in brain.finalsurfs.mgz)"
+    description = (
+        "Claustrum fix (fill claustrum with WM intensity in brain.finalsurfs.mgz)"
+    )
 
     # ------------------------------------------------------------------
     # Skip / disable logic
@@ -134,7 +141,9 @@ class ClaustrumFix(PipelineStage):
         for side in np.unique(arm6_mask):
             if side == 0:
                 continue
-            dilated = ndi.binary_dilation(arm6_mask == side, structure=structure, iterations=1)
+            dilated = ndi.binary_dilation(
+                arm6_mask == side, structure=structure, iterations=1
+            )
             arm6_mask_dilated[dilated] = side
         arm6_mask = arm6_mask_dilated
 
@@ -168,7 +177,9 @@ class ClaustrumFix(PipelineStage):
             side_mean = float(np.mean(side_values)) if side_values.size > 0 else np.nan
 
             if np.isfinite(side_mean):
-                target = float(np.clip(side_mean + TARGET_OFFSET, TARGET_MIN, TARGET_MAX))
+                target = float(
+                    np.clip(side_mean + TARGET_OFFSET, TARGET_MIN, TARGET_MAX)
+                )
             else:
                 target = float(TARGET_FALLBACK)
 

@@ -27,22 +27,22 @@ _src_dir = Path(__file__).resolve().parent.parent.parent
 if str(_src_dir) not in sys.path:
     sys.path.insert(0, str(_src_dir))
 
-from nhp_mri_prep.operations.preprocessing import (  # noqa: E402
+from nhp_mri_prep.operations.preprocessing import (
     DEFAULT_CONFORM_PADDING_PERCENTAGE,
     DEFAULT_DOWNSAMPLE_VOXEL_SIZE_THRESHOLD,
     apply_skullstripping,
 )
-from nhp_mri_prep.operations.registration import (  # noqa: E402
+from nhp_mri_prep.operations.registration import (
     flirt_apply_transforms,
     flirt_register,
 )
-from nhp_mri_prep.operations.validation import (  # noqa: E402
+from nhp_mri_prep.operations.validation import (
     ensure_working_directory,
     validate_input_file,
     validate_output_file,
 )
-from nhp_mri_prep.utils import run_command  # noqa: E402
-from nhp_mri_prep.utils.mri import pad_image  # noqa: E402
+from nhp_mri_prep.utils import run_command
+from nhp_mri_prep.utils.mri import pad_image
 
 # %%
 DEFAULT_TEST_DIR = Path(
@@ -92,7 +92,9 @@ def _antsai_options(config: dict[str, Any] | None = None) -> dict[str, Any]:
     return cfg["registration"]["antsai"]
 
 
-def _antsai_metric_string(fixed: str, moving: str, config: dict[str, Any] | None = None) -> str:
+def _antsai_metric_string(
+    fixed: str, moving: str, config: dict[str, Any] | None = None
+) -> str:
     ai = _antsai_options(config)
     return (
         f"{ai['metric']}[{fixed},{moving},{ai['number_of_bins']},"
@@ -189,7 +191,9 @@ def shared_preprocess(
     original_shape = np.array(data.shape[:3])
     pad_amounts = (original_shape * DEFAULT_CONFORM_PADDING_PERCENTAGE).astype(int)
     template_f_padded = work_dir / "template_padded.nii.gz"
-    pad_image(str(source_for_padding), str(template_f_padded), pad_amounts, logger=logger)
+    pad_image(
+        str(source_for_padding), str(template_f_padded), pad_amounts, logger=logger
+    )
     padded_img = nib.load(str(template_f_padded))
     padded_img.header.set_xyzt_units("mm", "sec")
     nib.save(padded_img, str(template_f_padded))
@@ -212,11 +216,13 @@ def shared_preprocess(
         should_downsample = True
         downsample_voxel_sizes = target_voxel_sizes.copy()
         if any(target_voxel_sizes < DEFAULT_DOWNSAMPLE_VOXEL_SIZE_THRESHOLD - 0.01):
-            downsample_voxel_sizes = np.full((3,), DEFAULT_DOWNSAMPLE_VOXEL_SIZE_THRESHOLD)
+            downsample_voxel_sizes = np.full(
+                (3,), DEFAULT_DOWNSAMPLE_VOXEL_SIZE_THRESHOLD
+            )
 
     if should_downsample:
-        template_f_downsampled = (
-            Path(str(template_f_padded).split(".nii.gz")[0] + "_downsampled.nii.gz")
+        template_f_downsampled = Path(
+            str(template_f_padded).split(".nii.gz")[0] + "_downsampled.nii.gz"
         )
         cmd = [
             "3dresample",
@@ -380,7 +386,9 @@ def run_antsai(
     )
 
 
-def _brain_mask(fixed: np.ndarray, moving: np.ndarray, percentile: float = 10.0) -> np.ndarray:
+def _brain_mask(
+    fixed: np.ndarray, moving: np.ndarray, percentile: float = 10.0
+) -> np.ndarray:
     """Voxels used for overlap metrics (positive intensities in both images)."""
     pos_fixed = fixed[fixed > 0]
     pos_moving = moving[moving > 0]
@@ -399,10 +407,16 @@ def _discretize_for_nmi(values: np.ndarray, n_bins: int = 64) -> np.ndarray:
     return np.digitize(values, bins).astype(np.int32)
 
 
-def compute_metrics(conformed_f: Path, template_f: Path, n_bins: int = 64) -> dict[str, float]:
+def compute_metrics(
+    conformed_f: Path, template_f: Path, n_bins: int = 64
+) -> dict[str, float]:
     """NMI and NCC between conformed image and template (same grid after apply)."""
-    fixed_data = np.ascontiguousarray(nib.load(template_f).get_fdata(), dtype=np.float64)
-    moving_data = np.ascontiguousarray(nib.load(conformed_f).get_fdata(), dtype=np.float64)
+    fixed_data = np.ascontiguousarray(
+        nib.load(template_f).get_fdata(), dtype=np.float64
+    )
+    moving_data = np.ascontiguousarray(
+        nib.load(conformed_f).get_fdata(), dtype=np.float64
+    )
     if fixed_data.shape != moving_data.shape:
         raise ValueError(
             f"Shape mismatch for metrics: template {fixed_data.shape} vs conformed {moving_data.shape}"
@@ -435,7 +449,9 @@ def _print_summary_table(rows: list[BenchmarkRow]) -> None:
         print("No results.")
         return
     headers = ["image", "method", "nmi", "ncc", "reg_time_s", "total_time_s"]
-    col_widths = [max(len(h), max(len(str(getattr(r, h))) for r in rows)) for h in headers]
+    col_widths = [
+        max(len(h), max(len(str(getattr(r, h))) for r in rows)) for h in headers
+    ]
     fmt = "  ".join(f"{{:{w}}}" for w in col_widths)
     print(fmt.format(*headers))
     print("-" * (sum(col_widths) + 2 * (len(headers) - 1)))
@@ -483,7 +499,9 @@ def run_benchmark_for_image(
     ):
         logger.info("--- Method: %s ---", method_name)
         method_result = runner(preprocess, method_dir)
-        metrics = compute_metrics(method_result.conformed_f, preprocess.template_for_xfm)
+        metrics = compute_metrics(
+            method_result.conformed_f, preprocess.template_for_xfm
+        )
         rows.append(
             BenchmarkRow(
                 image=stem,

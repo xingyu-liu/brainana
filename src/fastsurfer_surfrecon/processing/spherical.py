@@ -12,9 +12,7 @@ Based on original spherically_project.py and rotate_sphere.py from FastSurfer.
 # Licensed under the Apache License, Version 2.0
 
 from pathlib import Path
-import math
 import logging
-import os
 
 import nibabel.freesurfer.io as fs
 import numpy as np
@@ -90,7 +88,7 @@ def spherically_project(
 
     # Create spectral embedding
     evecs_scaled = np.column_stack([ev2, ev1, ev3])
-    
+
     # Apply mean curvature flow to smooth
     logger.info("Applying mean curvature flow...")
     sphere = TriaMesh(evecs_scaled, mesh.t)
@@ -98,7 +96,7 @@ def spherically_project(
 
     # Project to unit sphere
     logger.info("Projecting to unit sphere...")
-    norms = np.sqrt(np.sum(sphere_smooth.v ** 2, axis=1))
+    norms = np.sqrt(np.sum(sphere_smooth.v**2, axis=1))
     sphere_smooth.v = sphere_smooth.v / norms[:, np.newaxis]
 
     # Check for flipped triangles
@@ -185,7 +183,7 @@ def compute_rotation_angles(
 
     # Convert to Euler angles
     rot = Rotation.from_matrix(R)
-    angles = rot.as_euler('xyz', degrees=True)
+    angles = rot.as_euler("xyz", degrees=True)
 
     logger.info(f"Rotation angles: {angles}")
     return tuple(angles)
@@ -213,8 +211,9 @@ def spherically_project_surface(
     # This is critical because eigendecomposition can use all available CPU cores
     # by default, making the system unresponsive.
     from ..utils.threading import set_numerical_threads
+
     set_numerical_threads(threads)
-    
+
     logger.info(f"Loading surface: {input_path}")
     vertices, faces, metadata = fs.read_geometry(input_path, read_metadata=True)
     mesh = TriaMesh(vertices, faces)
@@ -222,8 +221,11 @@ def spherically_project_surface(
     # Check if scikit-sparse is available for cholmod
     try:
         import sksparse  # type: ignore[import-untyped]  # noqa: F401
+
         use_cholmod = True
-        logger.debug("Using CHOLMOD for faster eigendecomposition (scikit-sparse available)")
+        logger.debug(
+            "Using CHOLMOD for faster eigendecomposition (scikit-sparse available)"
+        )
     except ImportError:
         use_cholmod = False
         logger.warning(
@@ -273,7 +275,7 @@ def compute_sphere_rotation(
 
     # Save angles
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         f.write(f"{angles[0]:.6f} {angles[1]:.6f} {angles[2]:.6f}\n")
     logger.info(f"Saved angles to: {output_path}")
 
@@ -284,4 +286,3 @@ __all__ = [
     "spherically_project_surface",
     "compute_sphere_rotation",
 ]
-

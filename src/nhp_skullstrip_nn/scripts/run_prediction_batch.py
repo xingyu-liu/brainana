@@ -4,10 +4,9 @@ Batch prediction script for processing multiple NIfTI files.
 """
 
 # %%
-import os
+import logging
 from pathlib import Path
 from nhp_skullstrip_nn.inference.prediction import predict_volumes
-from nhp_skullstrip_nn.config import TrainingConfig
 from nhp_skullstrip_nn.utils.gpu import get_device
 from nhp_skullstrip_nn.utils.log import setup_logging
 from nhp_skullstrip_nn.model import ModelLoader
@@ -20,22 +19,22 @@ from nhp_skullstrip_nn.model import ModelLoader
 # model_name = 'v2'
 
 # func
-test_dir = '/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/test_func_ss'
-model_f = '/home/star/github/brainana/nhp_skullstrip_nn/pretrained_model/EPI_brainmask.pth'
+test_dir = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/test_func_ss"
+model_f = (
+    "/home/star/github/brainana/nhp_skullstrip_nn/pretrained_model/EPI_brainmask.pth"
+)
 # model_f = '/mnt/DataDrive3/xliu/monkey_training_groundtruth/nhp_skullstrip_nn_training/training_output/EPI_seg-brainmask_v1/checkpoints/best_model.pth'
-model_name = 'v1'
+model_name = "v1"
 
-output_dir = test_dir + f'/{model_name}'
+output_dir = test_dir + f"/{model_name}"
 
 # %%
 # Setup logging
-logger = setup_logging('nhp_skullstrip_nn.batch_prediction')
+logger = setup_logging("nhp_skullstrip_nn.batch_prediction")
 
 # Remove logger name from output format
-import logging
 formatter = logging.Formatter(
-    '%(asctime)s | %(levelname)s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    "%(asctime)s | %(levelname)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
 for handler in logger.handlers:
     handler.setFormatter(formatter)
@@ -45,7 +44,7 @@ device = get_device()
 logger.info(f"Using device: {device}")
 
 # Convert device to device_id format for ModelLoader
-if device.type == 'cuda':
+if device.type == "cuda":
     device_id = device.index if device.index is not None else 0
 else:
     device_id = -1
@@ -53,10 +52,7 @@ else:
 # Load model
 logger.info(f"Loading model from: {model_f}")
 model = ModelLoader.load_model_from_file(
-    model_path=model_f,
-    device_id=device_id,
-    config=None,
-    logger=logger
+    model_path=model_f, device_id=device_id, config=None, logger=logger
 )
 logger.info("✓ Model loaded successfully")
 
@@ -66,7 +62,7 @@ logger.info(f"Output directory: {output_dir}")
 
 # List all .nii.gz files in the test_dir
 test_path = Path(test_dir)
-nii_files = list(test_path.glob('*.nii.gz'))
+nii_files = list(test_path.glob("*.nii.gz"))
 logger.info(f"Found {len(nii_files)} NIfTI files to process")
 
 if len(nii_files) == 0:
@@ -77,10 +73,10 @@ else:
         print(f"\n{'='*60}")
         logger.info(f"Processing file {idx}/{len(nii_files)}: {input_file.name}")
         print(f"{'='*60}")
-        
+
         # Create output path (same name as input, in output_dir)
         output_file = Path(output_dir) / input_file.name
-        
+
         try:
             # Run prediction
             result = predict_volumes(
@@ -89,14 +85,15 @@ else:
                 output_path=str(output_file),
                 plot_QC_snaps=True,
                 save_prob_map=False,
-                verbose=True
+                verbose=True,
             )
             logger.info(f"✓ Successfully processed: {input_file.name}")
             logger.info(f"  Output saved to: {output_file}")
-            
+
         except Exception as e:
             logger.error(f"✗ Failed to process {input_file.name}: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             continue
 

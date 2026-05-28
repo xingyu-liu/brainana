@@ -14,19 +14,19 @@ LUT_DIR = Path(__file__).parent / "lut"
 def get_lut_path(atlas: str, hemi: Optional[str] = None) -> Path:
     """
     Get path to lookup table file.
-    
+
     Parameters
     ----------
     atlas : str
         Atlas name (e.g., 'ARM2', 'DKT')
     hemi : str, optional
         Hemisphere ('lh' or 'rh'). If None, returns general LUT.
-        
+
     Returns
     -------
     Path
         Path to LUT file
-        
+
     Raises
     ------
     FileNotFoundError
@@ -34,22 +34,22 @@ def get_lut_path(atlas: str, hemi: Optional[str] = None) -> Path:
     """
     atlas_upper = atlas.upper()
     atlas_dir = LUT_DIR / atlas_upper
-    
+
     if hemi:
         lut_file = atlas_dir / f"{hemi}.lookup.txt"
     else:
         lut_file = atlas_dir / "lookup.txt"
-    
+
     if not lut_file.exists():
         raise FileNotFoundError(f"LUT file not found: {lut_file}")
-    
+
     return lut_file
 
 
 def list_atlases() -> list[str]:
     """
     List available atlases.
-    
+
     Returns
     -------
     list[str]
@@ -57,7 +57,7 @@ def list_atlases() -> list[str]:
     """
     if not LUT_DIR.exists():
         return []
-    
+
     return [d.name for d in LUT_DIR.iterdir() if d.is_dir()]
 
 
@@ -66,4 +66,3 @@ __all__ = [
     "list_atlases",
     "LUT_DIR",
 ]
-
