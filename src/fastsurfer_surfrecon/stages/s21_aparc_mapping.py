@@ -4,7 +4,6 @@ Stage 21: Aparc Volume Mapping
 Maps surface parcellation to volume to create aparc+aseg.mapped.mgz.
 """
 
-from pathlib import Path
 import logging
 
 from .base import PipelineStage
@@ -15,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 class AparcMapping(PipelineStage):
     """Map surface parcellation to volume."""
-    
+
     name = "aparc_mapping"
     description = "Map surface parcellation to volume"
-    
+
     def _run(self) -> None:
         """Map aparc to volume."""
         aseg = self.sd.mri("aseg.mgz")
@@ -26,14 +25,18 @@ class AparcMapping(PipelineStage):
             raise FileNotFoundError(
                 "aseg.mgz not found. Run aseg_refinement stage first."
             )
-        
-        aparc_mapped = self.sd.mri(f"aparc.{self.config.atlas.name}atlas+aseg.mapped.mgz")
+
+        aparc_mapped = self.sd.mri(
+            f"aparc.{self.config.atlas.name}atlas+aseg.mapped.mgz"
+        )
         logger.info("Mapping surface parcellation to volume...")
         mri_surf2volseg(
             output_vol=aparc_mapped,
             input_aseg=aseg,
-            lh_annot=self.sd.label_dir / f"lh.aparc.{self.config.atlas.name}atlas.mapped.annot",
-            rh_annot=self.sd.label_dir / f"rh.aparc.{self.config.atlas.name}atlas.mapped.annot",
+            lh_annot=self.sd.label_dir
+            / f"lh.aparc.{self.config.atlas.name}atlas.mapped.annot",
+            rh_annot=self.sd.label_dir
+            / f"rh.aparc.{self.config.atlas.name}atlas.mapped.annot",
             lh_cortex_mask=self.sd.label_dir / "lh.cortex.label",
             rh_cortex_mask=self.sd.label_dir / "rh.cortex.label",
             lh_white=self.sd.surf_dir / "lh.white",
@@ -45,7 +48,7 @@ class AparcMapping(PipelineStage):
             log_file=self.config.log_file,
             subject_dir=self.sd.subject_dir,
         )
-        
+
         # Create or refresh symlinks for compatibility (redo: ensure they point to new .mapped.mgz)
         aparc_atlas = self.sd.mri(f"aparc.{self.config.atlas.name}atlas+aseg.mgz")
         aparc_generic = self.sd.mri("aparc+aseg.mgz")
@@ -53,14 +56,16 @@ class AparcMapping(PipelineStage):
             if link_path.exists():
                 link_path.unlink()
             link_path.symlink_to(aparc_mapped.name)
-        logger.info("Symlinks aparc.{}atlas+aseg.mgz, aparc+aseg.mgz -> {}".format(self.config.atlas.name, aparc_mapped.name))
-    
+        logger.info(
+            "Symlinks aparc.{}atlas+aseg.mgz, aparc+aseg.mgz -> {}".format(
+                self.config.atlas.name, aparc_mapped.name
+            )
+        )
+
     # def should_skip(self) -> bool:
     #     """Skip if aparc+aseg.mapped.mgz exists."""
     #     return self.sd.mri(f"aparc.{self.config.atlas.name}atlas+aseg.mapped.mgz").exists()
 
     def should_skip(self) -> bool:
-        """Skip if """
-        return (
-            False
-        )
+        """Skip if"""
+        return False

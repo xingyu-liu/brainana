@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 import logging
 
-from .base import run_fs_command, FreeSurferError, get_fs_home
+from .base import run_fs_command
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +40,12 @@ def talairach_avi(
     """
     cmd = [
         "talairach_avi",
-        "--i", str(input_vol),
-        "--xfm", str(output_xfm),
-        "--atlas", atlas,
+        "--i",
+        str(input_vol),
+        "--xfm",
+        str(output_xfm),
+        "--atlas",
+        atlas,
     ]
     run_fs_command(cmd, log_file=log_file)
     return output_xfm
@@ -84,16 +87,21 @@ def lta_convert(
     """
     cmd = [
         "lta_convert",
-        "--src", str(src_vol),
-        "--trg", str(trg_vol),
-        "--inxfm", str(input_xfm),
-        "--outlta", str(output_lta),
-        "--subject", subject,
+        "--src",
+        str(src_vol),
+        "--trg",
+        str(trg_vol),
+        "--inxfm",
+        str(input_xfm),
+        "--outlta",
+        str(output_lta),
+        "--subject",
+        subject,
     ]
-    
+
     if ltavox2vox:
         cmd.append("--ltavox2vox")
-    
+
     run_fs_command(cmd, log_file=log_file)
     return output_lta
 
@@ -116,10 +124,10 @@ def pctsurfcon(
         Log file path
     """
     cmd = ["pctsurfcon", "--s", subject]
-    
+
     if hemi:
         cmd.append(f"--{hemi}-only")
-    
+
     run_fs_command(cmd, log_file=log_file)
 
 
@@ -128,4 +136,3 @@ __all__ = [
     "lta_convert",
     "pctsurfcon",
 ]
-

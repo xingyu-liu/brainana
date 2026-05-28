@@ -33,12 +33,12 @@ from .bids_adapter import update_config_from_bids_metadata
 DEFAULT_CONFIG = get_default_config()
 
 __all__ = [
-    'Config',
-    'load_config',
-    'get_config',
-    'DEFAULT_CONFIG',
-    'validate_config',
-    'update_config_from_bids_metadata',
-    'validate_slice_timing_config',
-    'get_output_space',
+    "Config",
+    "load_config",
+    "get_config",
+    "DEFAULT_CONFIG",
+    "validate_config",
+    "update_config_from_bids_metadata",
+    "validate_slice_timing_config",
+    "get_output_space",
 ]

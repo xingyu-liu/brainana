@@ -4,7 +4,6 @@ Stage 04: Talairach Registration
 Computes Talairach transform (optional for non-human data).
 """
 
-from pathlib import Path
 import logging
 import shutil
 
@@ -17,23 +16,27 @@ logger = logging.getLogger(__name__)
 
 class Talairach(PipelineStage):
     """Compute Talairach registration."""
-    
+
     name = "talairach"
     description = "Talairach registration"
-    
+
     def _run(self) -> None:
         """Run Talairach registration."""
         if self.config.processing.no_talairach:
             logger.info("Skipping Talairach registration (--no-talairach flag set)")
-            logger.info("NOTE: eTIV (estimated total intracranial volume) will not be calculated.")
-            logger.info("      This does not affect surface reconstruction or morphometry.")
-            
+            logger.info(
+                "NOTE: eTIV (estimated total intracranial volume) will not be calculated."
+            )
+            logger.info(
+                "      This does not affect surface reconstruction or morphometry."
+            )
+
             # Just copy orig_nu.mgz to nu.mgz (without Talairach header)
             nu = self.sd.mri("nu.mgz")
             if not nu.exists():
                 logger.info("Copying orig_nu.mgz to nu.mgz (no Talairach transform)")
                 shutil.copy(self.sd.orig_nu, nu)
-            
+
             # Create dummy identity transform for tools that require it (e.g., mris_anatomical_stats)
             # Some FreeSurfer tools don't support -noxfm, so we create an identity transform
             talairach_xfm = self.sd.transform("talairach.xfm")
@@ -50,15 +53,19 @@ class Talairach(PipelineStage):
                     f.write("0.0 1.0 0.0 0.0\n")
                     f.write("0.0 0.0 1.0 0.0;\n")
             return
-        
+
         talairach_lta = self.sd.transform("talairach.lta")
         talairach_xfm = self.sd.transform("talairach.auto.xfm")
-        
+
         logger.info("Computing Talairach transform...")
-        
+
         # Determine atlas (3T vs 1.5T)
-        atlas = "3T18yoSchwartzReactN32_as_orig" if self.config.processing.atlas_3t else "1.5T18yoSchwartzReactN32_as_orig"
-        
+        atlas = (
+            "3T18yoSchwartzReactN32_as_orig"
+            if self.config.processing.atlas_3t
+            else "1.5T18yoSchwartzReactN32_as_orig"
+        )
+
         # Run talairach_avi
         talairach_avi(
             input_vol=self.sd.orig_nu,
@@ -66,7 +73,7 @@ class Talairach(PipelineStage):
             atlas=atlas,
             log_file=self.config.log_file,
         )
-        
+
         # Convert xfm to lta
         lta_convert(
             src_vol=self.sd.orig,
@@ -76,7 +83,7 @@ class Talairach(PipelineStage):
             subject=self.config.subject_id,
             log_file=self.config.log_file,
         )
-        
+
         # Add transform to nu.mgz header
         if not self.sd.mri("nu.mgz").exists():
             mri_add_xform_to_header(
@@ -86,16 +93,16 @@ class Talairach(PipelineStage):
                 log_file=self.config.log_file,
                 subject_dir=self.sd.subject_dir,
             )
-    
+
     def is_disabled(self) -> bool:
         """
         Check if Talairach registration is disabled.
-        
+
         Note: Even when disabled, we still need to run to create nu.mgz
         and the dummy talairach.xfm transform. So this returns False.
         """
         return False
-    
+
     def should_skip(self) -> bool:
         """Skip if transforms exist (or nu.mgz and talairach.xfm if disabled)."""
         if self.config.processing.no_talairach:

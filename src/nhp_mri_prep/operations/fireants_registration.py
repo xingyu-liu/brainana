@@ -34,9 +34,11 @@ try:
 except ImportError:
     loadmat = savemat = None
 
+
 @dataclass
 class FireANTsRegistrationParams:
     """FireANTs registration parameters (hardcoded defaults)."""
+
     scales: List[int] = field(default_factory=lambda: [4, 2, 1])
     iterations_affine: List[int] = field(default_factory=lambda: [200, 100, 50])
     iterations_deformable: List[int] = field(default_factory=lambda: [200, 100, 50])
@@ -164,11 +166,15 @@ def _get_output_paths(output_path_prefix: str, xfm_type: str) -> Dict[str, str]:
     paths = {"registered": str(output_dir / f"{base_name}_registered.nii.gz")}
     if xfm_type == "syn":
         paths["forward_transform"] = str(output_dir / f"{base_name}_warp.nii.gz")
-        paths["inverse_transform"] = str(output_dir / f"{base_name}_inverse_warp.nii.gz")
+        paths["inverse_transform"] = str(
+            output_dir / f"{base_name}_inverse_warp.nii.gz"
+        )
     else:
         suffix = "rigid" if xfm_type == "rigid" else "affine"
         paths["forward_transform"] = str(output_dir / f"{base_name}_{suffix}.mat")
-        paths["inverse_transform"] = str(output_dir / f"{base_name}_inverse_{suffix}.mat")
+        paths["inverse_transform"] = str(
+            output_dir / f"{base_name}_inverse_{suffix}.mat"
+        )
     return paths
 
 
@@ -179,9 +185,13 @@ def _invert_affine_mat(
 ) -> None:
     """Compute inverse of an ITK-style affine .mat and write to inverse_mat_path."""
     if loadmat is None or savemat is None:
-        raise RuntimeError("scipy is required to invert affine .mat (pip install scipy)")
+        raise RuntimeError(
+            "scipy is required to invert affine .mat (pip install scipy)"
+        )
     data = loadmat(str(affine_mat_path))
-    key = [k for k in data if k.startswith("AffineTransform_") and not k.startswith("__")]
+    key = [
+        k for k in data if k.startswith("AffineTransform_") and not k.startswith("__")
+    ]
     if not key:
         raise ValueError(f"No AffineTransform_* key found in {affine_mat_path}")
     key = key[0]
@@ -194,7 +204,7 @@ def _invert_affine_mat(
     elif total_params == 6:
         dims = 2
     else:
-        match = re.search(r'_(\d+)_\d+', key)
+        match = re.search(r"_(\d+)_\d+", key)
         if match:
             dims = int(match.group(1))
             expected_params = dims * dims + dims
@@ -227,15 +237,15 @@ def _invert_affine_mat(
     if "fixed" not in output_data:
         output_data["fixed"] = np.zeros((dims, 1), dtype=np.float32)
     saved = False
-    for fmt in ['4', '5']:
+    for fmt in ["4", "5"]:
         try:
-            savemat(str(inverse_mat_path), output_data, format=fmt, oned_as='column')
+            savemat(str(inverse_mat_path), output_data, format=fmt, oned_as="column")
             saved = True
             break
         except (ValueError, NotImplementedError):
             continue
     if not saved:
-        savemat(str(inverse_mat_path), output_data, oned_as='column')
+        savemat(str(inverse_mat_path), output_data, oned_as="column")
     logger.info(f"Wrote inverse affine: {inverse_mat_path}")
 
 
@@ -246,7 +256,7 @@ def fireants_registration(
     output_prefix: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
     logger: Optional[logging.Logger] = None,
-    xfm_type: Optional[str] = 'syn',
+    xfm_type: Optional[str] = "syn",
     compute_inverse: Optional[bool] = True,
 ) -> Dict[str, Optional[str]]:
     """Run FireANTs (GPU) registration with same output format as ants_cpu_register.
@@ -266,7 +276,9 @@ def fireants_registration(
     if logger is None:
         logger = logging.getLogger(__name__)
     if output_prefix is None:
-        output_prefix = os.path.basename(movingf).replace('.nii.gz', '').replace('.nii', '')
+        output_prefix = (
+            os.path.basename(movingf).replace(".nii.gz", "").replace(".nii", "")
+        )
     if xfm_type is None and config is not None:
         reg_config = config.get("registration", {})
         xfm_type = reg_config.get("xfm_type", "syn")
@@ -307,13 +319,17 @@ def fireants_registration(
     original_fixed_path = fixed_path
     original_moving_path = moving_path
 
-    padded_fixed_f = os.path.join(str(work_dir), '_padded_fixed.nii.gz')
-    fixed_pad_left = pad_image_to_min_size(fixed_path, MIN_IMG_SIZE, padded_fixed_f, logger)
+    padded_fixed_f = os.path.join(str(work_dir), "_padded_fixed.nii.gz")
+    fixed_pad_left = pad_image_to_min_size(
+        fixed_path, MIN_IMG_SIZE, padded_fixed_f, logger
+    )
     if fixed_pad_left is not None:
         fixed_path = Path(padded_fixed_f)
 
-    padded_moving_f = os.path.join(str(work_dir), '_padded_moving.nii.gz')
-    moving_pad_left = pad_image_to_min_size(moving_path, MIN_IMG_SIZE, padded_moving_f, logger)
+    padded_moving_f = os.path.join(str(work_dir), "_padded_moving.nii.gz")
+    moving_pad_left = pad_image_to_min_size(
+        moving_path, MIN_IMG_SIZE, padded_moving_f, logger
+    )
     if moving_pad_left is not None:
         moving_path = Path(padded_moving_f)
 
@@ -339,15 +355,23 @@ def fireants_registration(
     # MIN_IMG_SIZE * scale, causing downsample_fft to fail.
     fixed_shape = tuple(batch_fixed().shape[2:])
     moving_shape = tuple(batch_moving().shape[2:])
-    logger.info(f"FireANTs: fixed shape={list(fixed_shape)}, moving shape={list(moving_shape)}")
+    logger.info(
+        f"FireANTs: fixed shape={list(fixed_shape)}, moving shape={list(moving_shape)}"
+    )
 
     scales_affine, iters_affine = _compute_safe_scales(
-        fixed_shape, moving_shape,
-        params.scales, params.iterations_affine, logger,
+        fixed_shape,
+        moving_shape,
+        params.scales,
+        params.iterations_affine,
+        logger,
     )
     scales_deformable, iters_deformable = _compute_safe_scales(
-        fixed_shape, moving_shape,
-        params.scales, params.iterations_deformable, logger,
+        fixed_shape,
+        moving_shape,
+        params.scales,
+        params.iterations_deformable,
+        logger,
     )
 
     # Only syn is done with FireANTs; rigid/affine are delegated to ANTs earlier
@@ -380,7 +404,9 @@ def fireants_registration(
     logger.info(f"Saved forward warp: {forward_warp}")
 
     if compute_inverse:
-        logger.info("Running inverse registration (moving → fixed) with full pipeline (affine + warp)...")
+        logger.info(
+            "Running inverse registration (moving → fixed) with full pipeline (affine + warp)..."
+        )
         affine_inv = AffineRegistration(
             scales_affine,
             iters_affine,
@@ -407,7 +433,9 @@ def fireants_registration(
         inverse_warp = output_paths["inverse_transform"]
         reg_inv.save_as_ants_transforms(inverse_warp)
         logger.info(f"Saved inverse warp: {inverse_warp}")
-    _save_registered_image(reg, batch_fixed, batch_moving, output_paths["registered"], logger)
+    _save_registered_image(
+        reg, batch_fixed, batch_moving, output_paths["registered"], logger
+    )
 
     # ------------------------------------------------------------------
     # Crop outputs back to original input grids if padding was applied.
@@ -417,27 +445,41 @@ def fireants_registration(
     # independent).
     # ------------------------------------------------------------------
     if fixed_pad_left is not None:
-        for p in [output_paths.get("registered"), output_paths.get("forward_transform")]:
-            if p and p.endswith('.nii.gz') and os.path.exists(p):
-                crop_image_to_original(p, str(original_fixed_path), fixed_pad_left, p, logger)
+        for p in [
+            output_paths.get("registered"),
+            output_paths.get("forward_transform"),
+        ]:
+            if p and p.endswith(".nii.gz") and os.path.exists(p):
+                crop_image_to_original(
+                    p, str(original_fixed_path), fixed_pad_left, p, logger
+                )
     if moving_pad_left is not None and compute_inverse:
         p = output_paths.get("inverse_transform")
-        if p and p.endswith('.nii.gz') and os.path.exists(p):
-            crop_image_to_original(p, str(original_moving_path), moving_pad_left, p, logger)
+        if p and p.endswith(".nii.gz") and os.path.exists(p):
+            crop_image_to_original(
+                p, str(original_moving_path), moving_pad_left, p, logger
+            )
 
     # Clean up temporary padded files
     for tmp in [padded_fixed_f, padded_moving_f]:
         if os.path.exists(tmp):
             os.remove(tmp)
 
-    for key, path in [("imagef_registered", output_paths["registered"]),
-                      ("forward_transform", output_paths["forward_transform"]),
-                      ("inverse_transform", output_paths["inverse_transform"] if compute_inverse else None)]:
+    for key, path in [
+        ("imagef_registered", output_paths["registered"]),
+        ("forward_transform", output_paths["forward_transform"]),
+        (
+            "inverse_transform",
+            output_paths["inverse_transform"] if compute_inverse else None,
+        ),
+    ]:
         if path is not None and os.path.exists(path):
             outputs[key] = path
             logger.info(f"Output: {key} created - {path}")
         elif path is not None:
             logger.warning(f"Data: expected {key} not found - {path}")
 
-    logger.info(f"Step: registration completed with {len([k for k, v in outputs.items() if v is not None])} output files - {list(outputs.keys())}")
+    logger.info(
+        f"Step: registration completed with {len([k for k, v in outputs.items() if v is not None])} output files - {list(outputs.keys())}"
+    )
     return outputs

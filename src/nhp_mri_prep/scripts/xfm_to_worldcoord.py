@@ -1,15 +1,15 @@
-'''apply its own affine xfm on the image and save the result as a new image,
-to correct the tilted image to upright orientation'''
+"""apply its own affine xfm on the image and save the result as a new image,
+to correct the tilted image to upright orientation"""
 
-#%%
+# %%
 import os
 import numpy as np
 import nibabel as nib
 from scipy.ndimage import affine_transform
 
 # %%
-input_f = '/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_reorient_upright/sub-baby31/ses-240710/anat/sub-baby31_ses-240710_run-2_T1w_v2.nii.gz'
-output_f = input_f.replace('.nii.gz', '_v3.nii.gz')
+input_f = "/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_reorient_upright/sub-baby31/ses-240710/anat/sub-baby31_ses-240710_run-2_T1w_v2.nii.gz"
+output_f = input_f.replace(".nii.gz", "_v3.nii.gz")
 order = 3
 
 # %%
@@ -37,7 +37,9 @@ print(f"Original affine:\n{np.array2string(affine, precision=4, suppress_small=T
 # Extract voxel sizes from affine matrix (norms of column vectors)
 # This works correctly even when the image is tilted/rotated
 voxel_sizes = np.sqrt(np.sum(affine[:3, :3] ** 2, axis=0))
-print(f"Original voxel sizes: [{voxel_sizes[0]:.2f}, {voxel_sizes[1]:.2f}, {voxel_sizes[2]:.2f}] mm")
+print(
+    f"Original voxel sizes: [{voxel_sizes[0]:.2f}, {voxel_sizes[1]:.2f}, {voxel_sizes[2]:.2f}] mm"
+)
 
 # Resample to isotropic using minimum voxel size to ensure uniform resolution
 # This prevents loss of resolution in some areas and gain in others after rotation
@@ -56,8 +58,12 @@ upright_affine[:3, 3] = 0  # Will be adjusted after calculating bounding box
 # vox2vox transformation: from original voxel space to target voxel space
 vox2vox = np.linalg.inv(upright_affine) @ affine
 
-print(f"Target upright affine:\n{np.array2string(upright_affine, precision=4, suppress_small=True)}")
-print(f"Voxel-to-voxel transformation:\n{np.array2string(vox2vox, precision=4, suppress_small=True)}")
+print(
+    f"Target upright affine:\n{np.array2string(upright_affine, precision=4, suppress_small=True)}"
+)
+print(
+    f"Voxel-to-voxel transformation:\n{np.array2string(vox2vox, precision=4, suppress_small=True)}"
+)
 
 # %%
 # Calculate target shape based on the bounding box of the original image
@@ -66,16 +72,18 @@ print(f"Voxel-to-voxel transformation:\n{np.array2string(vox2vox, precision=4, s
 shape = data.shape[:3]
 
 # Get all 8 corners of the original image in voxel space (homogeneous coordinates)
-corners_vox = np.array([
-    [0, 0, 0, 1],
-    [shape[0], 0, 0, 1],
-    [0, shape[1], 0, 1],
-    [0, 0, shape[2], 1],
-    [shape[0], shape[1], 0, 1],
-    [shape[0], 0, shape[2], 1],
-    [0, shape[1], shape[2], 1],
-    [shape[0], shape[1], shape[2], 1],
-]).T
+corners_vox = np.array(
+    [
+        [0, 0, 0, 1],
+        [shape[0], 0, 0, 1],
+        [0, shape[1], 0, 1],
+        [0, 0, shape[2], 1],
+        [shape[0], shape[1], 0, 1],
+        [shape[0], 0, shape[2], 1],
+        [0, shape[1], shape[2], 1],
+        [shape[0], shape[1], shape[2], 1],
+    ]
+).T
 
 # Transform corners to world space, then to target voxel space
 corners_world = affine @ corners_vox
@@ -97,7 +105,9 @@ max_corner = max_corner + voxel_padding
 target_shape = np.ceil(max_corner - min_corner).astype(int)
 print(f"Target shape: {target_shape} (original: {shape})")
 size_change = target_shape / shape
-print(f"Size change: [{size_change[0]:.2f}, {size_change[1]:.2f}, {size_change[2]:.2f}]")
+print(
+    f"Size change: [{size_change[0]:.2f}, {size_change[1]:.2f}, {size_change[2]:.2f}]"
+)
 
 # Adjust affine translation to account for the new origin
 upright_affine[:3, 3] = upright_affine[:3, :3] @ min_corner
@@ -107,7 +117,7 @@ upright_affine[:3, 3] = upright_affine[:3, :3] @ min_corner
 # scipy.ndimage.affine_transform uses pull-back: for each output voxel,
 # it finds the corresponding input voxel using the inverse transformation
 # Formula: output[out_coords] = input[inverse_transform(out_coords)]
-# 
+#
 # Transformation: out_vox = vox2vox @ in_vox
 # For output array index out_idx: out_vox = out_idx + min_corner
 # So: in_vox = inv(vox2vox) @ (out_idx + min_corner)
@@ -117,7 +127,7 @@ transform_matrix = inv_vox2vox[:3, :3]
 # Offset = translation part + adjustment for min_corner
 offset = inv_vox2vox[:3, 3] + transform_matrix @ min_corner
 
-print(f"Resampling image...")
+print("Resampling image...")
 print(f"Transform matrix shape: {transform_matrix.shape}")
 print(f"Offset: [{offset[0]:.2f}, {offset[1]:.2f}, {offset[2]:.2f}]")
 
@@ -127,9 +137,9 @@ resampled_data = affine_transform(
     offset=offset,
     output_shape=target_shape,
     order=order,
-    mode='constant',
+    mode="constant",
     cval=0.0,
-    prefilter=True
+    prefilter=True,
 )
 
 print(f"Resampled shape: {resampled_data.shape}")
@@ -138,7 +148,7 @@ print(f"Resampled data range: [{resampled_data.min():.2f}, {resampled_data.max()
 # %%
 # Create new image with corrected affine
 new_img = nib.Nifti1Image(resampled_data.astype(data.dtype), upright_affine, header)
-new_img.header.set_xyzt_units('mm', 'sec')
+new_img.header.set_xyzt_units("mm", "sec")
 
 # Save the result
 print(f"Saving corrected image: {output_f}")

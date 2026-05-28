@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 # White Matter Segmentation
 # =============================================================================
 
+
 def load_wm_lut(lut_path: Path) -> Dict[int, int]:
     """
     Load ColorLUT and create aseg_id → wm_id mapping.
@@ -54,10 +55,10 @@ def load_wm_lut(lut_path: Path) -> Dict[int, int]:
         raise FileNotFoundError(f"ColorLUT file not found: {lut_path}")
 
     # Load TSV file
-    lut_df = pd.read_csv(lut_path, sep='\t', comment='#', engine='python')
+    lut_df = pd.read_csv(lut_path, sep="\t", comment="#", engine="python")
 
     # Verify required columns
-    required_cols = ['aseg_id', 'wm_id']
+    required_cols = ["aseg_id", "wm_id"]
     missing_cols = [col for col in required_cols if col not in lut_df.columns]
     if missing_cols:
         raise ValueError(
@@ -66,18 +67,18 @@ def load_wm_lut(lut_path: Path) -> Dict[int, int]:
         )
 
     # Convert to numeric, coercing errors to NaN
-    lut_df['aseg_id'] = pd.to_numeric(lut_df['aseg_id'], errors='coerce')
-    lut_df['wm_id'] = pd.to_numeric(lut_df['wm_id'], errors='coerce')
+    lut_df["aseg_id"] = pd.to_numeric(lut_df["aseg_id"], errors="coerce")
+    lut_df["wm_id"] = pd.to_numeric(lut_df["wm_id"], errors="coerce")
 
     # Filter out rows with NaN values
-    lut_df = lut_df.dropna(subset=['aseg_id', 'wm_id'])
+    lut_df = lut_df.dropna(subset=["aseg_id", "wm_id"])
 
     # Get unique aseg_id rows
-    unique_aseg = lut_df.drop_duplicates(subset=['aseg_id'])
+    unique_aseg = lut_df.drop_duplicates(subset=["aseg_id"])
 
     aseg_to_wm = {}
     for _, row in unique_aseg.iterrows():
-        aseg_to_wm[int(row['aseg_id'])] = int(row['wm_id'])
+        aseg_to_wm[int(row["aseg_id"])] = int(row["wm_id"])
 
     return aseg_to_wm
 
@@ -130,9 +131,13 @@ def create_wm_segmentation(
         else:
             unmapped.append(aseg_id)
 
-    logger.info(f"WM segmentation: BG={stats[0]}, WM(110)={stats[110]}, Vent(250)={stats[250]}")
+    logger.info(
+        f"WM segmentation: BG={stats[0]}, WM(110)={stats[110]}, Vent(250)={stats[250]}"
+    )
     if unmapped:
-        logger.warning(f"Unmapped aseg labels: {unmapped[:10]}{'...' if len(unmapped) > 10 else ''}")
+        logger.warning(
+            f"Unmapped aseg labels: {unmapped[:10]}{'...' if len(unmapped) > 10 else ''}"
+        )
 
     return wm_seg
 
@@ -173,6 +178,7 @@ def create_wm_from_file(
 # =============================================================================
 # Corpus Callosum Painting
 # =============================================================================
+
 
 def paint_corpus_callosum(
     target_seg: npt.ArrayLike,
@@ -240,9 +246,11 @@ def paint_cc_from_pred(
     nib.save(output_img, output_path)
     logger.info(f"Saved: {output_path}")
 
+
 # =============================================================================
 # Aseg Processing
 # =============================================================================
+
 
 def reduce_to_aseg(
     aparc_aseg: npt.ArrayLike,
@@ -291,4 +299,3 @@ __all__ = [
     # Note: load_wm_lut is internal to create_wm_from_file
     # Note: paint_cc_from_pred is internal to paint_cc_from_pred
 ]
-

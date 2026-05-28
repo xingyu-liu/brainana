@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
-import sys
-from os.path import join, split, splitext
-from pathlib import Path
 
 import yacs.config
 
@@ -23,6 +20,7 @@ from fastsurfer_nn.config.defaults import get_cfg_defaults
 # Import path resolution utilities
 try:
     from fastsurfer_nn.utils.config_utils import get_paths_from_config
+
     HAS_PATH_UTILS = True
 except ImportError:
     HAS_PATH_UTILS = False
@@ -70,14 +68,14 @@ def get_config(args: argparse.Namespace) -> yacs.config.CfgNode:
 def _resolve_paths(cfg: yacs.config.CfgNode, cfg_file: str) -> yacs.config.CfgNode:
     """
     Resolve paths from configuration using direct paths format.
-    
+
     Parameters
     ----------
     cfg : yacs.config.CfgNode
         Configuration node.
     cfg_file : str
         Path to config file.
-        
+
     Returns
     -------
     yacs.config.CfgNode
@@ -85,50 +83,56 @@ def _resolve_paths(cfg: yacs.config.CfgNode, cfg_file: str) -> yacs.config.CfgNo
     """
     if not HAS_PATH_UTILS:
         return cfg
-    
+
     # Check if using direct path format
-    if not (hasattr(cfg, 'TRAINING_DATA_DIR') and hasattr(cfg, 'OUTPUT_DIR')):
+    if not (hasattr(cfg, "TRAINING_DATA_DIR") and hasattr(cfg, "OUTPUT_DIR")):
         # No path resolution needed - using explicit paths
         return cfg
-    
+
     if cfg.TRAINING_DATA_DIR == "" or cfg.OUTPUT_DIR == "":
         # Paths not specified, skip resolution
         return cfg
-    
+
     try:
         # Convert YACS config to dict for path resolution
         # Include PREPROCESSING section so orientation can be used for HDF5 file naming
         data_dict = {
-            'PLANE': cfg.DATA.PLANE,
-            'PATH_HDF5_TRAIN': cfg.DATA.PATH_HDF5_TRAIN if cfg.DATA.PATH_HDF5_TRAIN else "",
-            'PATH_HDF5_VAL': cfg.DATA.PATH_HDF5_VAL if cfg.DATA.PATH_HDF5_VAL else "",
-            'CLASS_OPTIONS': cfg.DATA.CLASS_OPTIONS if hasattr(cfg.DATA, 'CLASS_OPTIONS') else [],
+            "PLANE": cfg.DATA.PLANE,
+            "PATH_HDF5_TRAIN": cfg.DATA.PATH_HDF5_TRAIN
+            if cfg.DATA.PATH_HDF5_TRAIN
+            else "",
+            "PATH_HDF5_VAL": cfg.DATA.PATH_HDF5_VAL if cfg.DATA.PATH_HDF5_VAL else "",
+            "CLASS_OPTIONS": cfg.DATA.CLASS_OPTIONS
+            if hasattr(cfg.DATA, "CLASS_OPTIONS")
+            else [],
         }
-        
+
         # Add PREPROCESSING section if it exists (needed for orientation-based HDF5 file naming)
-        if hasattr(cfg.DATA, 'PREPROCESSING') and hasattr(cfg.DATA.PREPROCESSING, 'ORIENTATION'):
-            data_dict['PREPROCESSING'] = {
-                'ORIENTATION': cfg.DATA.PREPROCESSING.ORIENTATION,
+        if hasattr(cfg.DATA, "PREPROCESSING") and hasattr(
+            cfg.DATA.PREPROCESSING, "ORIENTATION"
+        ):
+            data_dict["PREPROCESSING"] = {
+                "ORIENTATION": cfg.DATA.PREPROCESSING.ORIENTATION,
             }
-        
+
         cfg_dict = {
-            'TRAINING_DATA_DIR': cfg.TRAINING_DATA_DIR,
-            'OUTPUT_DIR': cfg.OUTPUT_DIR,
-            'DATA': data_dict,
+            "TRAINING_DATA_DIR": cfg.TRAINING_DATA_DIR,
+            "OUTPUT_DIR": cfg.OUTPUT_DIR,
+            "DATA": data_dict,
         }
-        
+
         # Get resolved paths
         paths = get_paths_from_config(cfg_dict)
-        
+
         # Update config with resolved paths
-        cfg.DATA.PATH_HDF5_TRAIN = str(paths['train_hdf5'])
-        cfg.DATA.PATH_HDF5_VAL = str(paths['val_hdf5'])
-        cfg.LOG_DIR = str(paths['log_dir'])
-        
+        cfg.DATA.PATH_HDF5_TRAIN = str(paths["train_hdf5"])
+        cfg.DATA.PATH_HDF5_VAL = str(paths["val_hdf5"])
+        cfg.LOG_DIR = str(paths["log_dir"])
+
     except Exception as e:
         print(f"Warning: Failed to resolve paths from configuration: {e}")
         print("Falling back to explicit paths in config.")
-    
+
     return cfg
 
 
@@ -153,8 +157,8 @@ def load_config(cfg_file: str) -> yacs.config.CfgNode:
     cfg.CONFIG_LOG_PATH = ""
     # Overwrite with stored arguments
     cfg.merge_from_file(cfg_file)
-    
+
     # Resolve paths from configuration
     cfg = _resolve_paths(cfg, cfg_file)
-    
+
     return cfg

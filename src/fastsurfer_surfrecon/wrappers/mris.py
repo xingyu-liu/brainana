@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 import logging
 
-from .base import run_fs_command, FreeSurferError, to_relative_path
+from .base import run_fs_command, to_relative_path
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +39,11 @@ def mris_info(
     if subject_dir:
         subject_dir = Path(subject_dir).resolve()
         surface = to_relative_path(surface, subject_dir)
-    
+
     cmd = ["mris_info", str(surface)]
-    result = run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir, capture_output=True)
+    result = run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, capture_output=True
+    )
     return result.stdout
 
 
@@ -75,7 +77,7 @@ def mris_extract_main_component(
         subject_dir = Path(subject_dir).resolve()
         input_surf = to_relative_path(input_surf, subject_dir)
         output_surf = to_relative_path(output_surf, subject_dir)
-    
+
     cmd = [
         "mris_extract_main_component",
         str(input_surf),
@@ -124,9 +126,9 @@ def mris_remesh(
         subject_dir = Path(subject_dir).resolve()
         input_surf = to_relative_path(input_surf, subject_dir)
         output_surf = to_relative_path(output_surf, subject_dir)
-    
+
     cmd = ["mris_remesh"]
-    
+
     if remesh:
         if iters is None:
             raise ValueError("iters must be specified when remesh=True")
@@ -138,7 +140,7 @@ def mris_remesh(
         # Add --iters if provided (optional flagged argument)
         if iters is not None:
             cmd.extend(["--iters", str(iters)])
-    
+
     cmd.extend(["--input", str(input_surf), "--output", str(output_surf)])
     run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_surf
@@ -183,17 +185,18 @@ def mris_smooth(
         subject_dir = Path(subject_dir).resolve()
         input_surf = to_relative_path(input_surf, subject_dir)
         output_surf = to_relative_path(output_surf, subject_dir)
-    
+
     cmd = [
         "mris_smooth",
-        "-n", str(n_iterations),
+        "-n",
+        str(n_iterations),
     ]
-    
+
     if nw:
         cmd.append("-nw")
     if seed is not None:
         cmd.extend(["-seed", str(seed)])
-    
+
     cmd.extend([str(input_surf), str(output_surf)])
     run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_surf
@@ -236,15 +239,15 @@ def mris_inflate(
         subject_dir = Path(subject_dir).resolve()
         input_surf = to_relative_path(input_surf, subject_dir)
         output_surf = to_relative_path(output_surf, subject_dir)
-    
+
     cmd = ["mris_inflate"]
-    
+
     if no_save_sulc:
         cmd.append("-no-save-sulc")
-    
+
     if n_iterations is not None:
         cmd.extend(["-n", str(n_iterations)])
-    
+
     cmd.extend([str(input_surf), str(output_surf)])
     run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_surf
@@ -329,14 +332,14 @@ def mris_place_surface(
         aseg = to_relative_path(aseg, subject_dir)
         if adgws_in:
             adgws_in = to_relative_path(adgws_in, subject_dir)
-    
+
     # Derive subjects_dir from subject_dir if not provided
     if subjects_dir is None and subject_dir:
         # subject_dir is typically subjects_dir / subject_id, so parent is subjects_dir
         subjects_dir = subject_dir.parent
-    
+
     cmd = ["mris_place_surface"]
-    
+
     # Required arguments
     if adgws_in:
         cmd.extend(["--adgws-in", str(adgws_in)])
@@ -346,13 +349,13 @@ def mris_place_surface(
     cmd.extend(["--invol", str(invol)])
     cmd.append(f"--{hemi}")
     cmd.extend(["--o", str(output_surf)])
-    
+
     # Surface type
     if white:
         cmd.append("--white")
     if pial:
         cmd.append("--pial")
-    
+
     # Optional arguments from kwargs
     kwarg_map = {
         "rip_label": "--rip-label",
@@ -367,7 +370,7 @@ def mris_place_surface(
         "blend_surf": "--blend-surf",
         "i": "--i",
     }
-    
+
     for key, value in kwargs.items():
         if key in kwarg_map:
             flag = kwarg_map[key]
@@ -379,16 +382,16 @@ def mris_place_surface(
                     value = to_relative_path(value, subject_dir)
                 cmd.append(flag)
                 cmd.append(str(value))
-    
+
     # Input surface (if not in kwargs)
     if "--i" not in cmd:
         cmd.extend(["--i", str(input_surf)])
-    
+
     # Set SUBJECTS_DIR in environment if provided
     env = None
     if subjects_dir:
         env = {"SUBJECTS_DIR": str(subjects_dir)}
-    
+
     run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir, env=env)
     return output_surf
 
@@ -429,7 +432,7 @@ def mris_place_surface_curv_map(
         subject_dir = Path(subject_dir).resolve()
         surface = to_relative_path(surface, subject_dir)
         output_curv = to_relative_path(output_curv, subject_dir)
-    
+
     cmd = [
         "mris_place_surface",
         "--curv-map",
@@ -472,7 +475,7 @@ def mris_place_surface_area_map(
         subject_dir = Path(subject_dir).resolve()
         surface = to_relative_path(surface, subject_dir)
         output_area = to_relative_path(output_area, subject_dir)
-    
+
     cmd = [
         "mris_place_surface",
         "--area-map",
@@ -523,7 +526,7 @@ def mris_place_surface_thickness(
         white_surf = to_relative_path(white_surf, subject_dir)
         pial_surf = to_relative_path(pial_surf, subject_dir)
         output_thickness = to_relative_path(output_thickness, subject_dir)
-    
+
     cmd = [
         "mris_place_surface",
         "--thickness",
@@ -585,32 +588,33 @@ def mris_fix_topology(
         Output premesh surface path
     """
     cmd = ["mris_fix_topology"]
-    
+
     if mgz:
         cmd.append("-mgz")
-    
+
     # mris_fix_topology expects relative filenames (without hemisphere prefix)
     # when run from the subject's scripts directory
     if subjects_dir:
         subjects_dir = Path(subjects_dir).resolve()
+
         # Extract just the filename (remove hemisphere prefix if present)
         def get_rel_filename(path: Path) -> str:
             name = path.name
             # Remove hemisphere prefix if present (e.g., "lh.qsphere.nofix" -> "qsphere.nofix")
             if name.startswith(f"{hemi}."):
-                return name[len(hemi) + 1:]
+                return name[len(hemi) + 1 :]
             return name
-        
+
         sphere_name = get_rel_filename(sphere)
         inflated_name = get_rel_filename(inflated)
         orig_name = get_rel_filename(orig)
         output_name = get_rel_filename(output_premesh)
-        
+
         cmd.extend(["-sphere", sphere_name])
         cmd.extend(["-inflated", inflated_name])
         cmd.extend(["-orig", orig_name])
         cmd.extend(["-out", output_name])
-        
+
         # Run from subject's scripts directory
         subject_scripts_dir = subjects_dir / subject / "scripts"
         subject_scripts_dir.mkdir(parents=True, exist_ok=True)
@@ -623,17 +627,17 @@ def mris_fix_topology(
         cmd.extend(["-orig", str(orig)])
         cmd.extend(["-out", str(output_premesh)])
         subject_dir = None
-    
+
     if ga:
         cmd.append("-ga")
     cmd.extend(["-seed", str(seed)])
     cmd.extend([subject, hemi])
-    
+
     # Set SUBJECTS_DIR in environment if provided
     env = None
     if subjects_dir:
         env = {"SUBJECTS_DIR": str(subjects_dir)}
-    
+
     # Pass subject_dir (scripts directory) for both logging and execution
     run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir, env=env)
     return output_premesh
@@ -669,7 +673,7 @@ def mris_remove_intersection(
         subject_dir = Path(subject_dir).resolve()
         input_surf = to_relative_path(input_surf, subject_dir)
         output_surf = to_relative_path(output_surf, subject_dir)
-    
+
     cmd = [
         "mris_remove_intersection",
         str(input_surf),
@@ -709,10 +713,14 @@ def mris_autodet_gwstats(
     """
     cmd = [
         "mris_autodet_gwstats",
-        "--o", str(output_stats),
-        "--i", str(input_vol),
-        "--wm", str(wm_vol),
-        "--surf", str(surface),
+        "--o",
+        str(output_stats),
+        "--i",
+        str(input_vol),
+        "--wm",
+        str(wm_vol),
+        "--surf",
+        str(surface),
     ]
     run_fs_command(cmd, log_file=log_file)
     return output_stats
@@ -760,9 +768,9 @@ def mris_curvature_stats(
     """
     if curvatures is None:
         curvatures = ["curv", "sulc"]
-    
+
     cmd = ["mris_curvature_stats"]
-    
+
     if write_curvature_files:
         cmd.append("-m")
     if mgz:
@@ -771,12 +779,12 @@ def mris_curvature_stats(
     cmd.extend(["-o", str(output_stats)])
     cmd.extend(["-F", surface_name])
     cmd.extend([subject, hemi] + curvatures)
-    
+
     # Set SUBJECTS_DIR if provided
     env = None
     if subjects_dir:
         env = {"SUBJECTS_DIR": str(subjects_dir)}
-    
+
     run_fs_command(cmd, log_file=log_file, env=env)
     return output_stats
 
@@ -818,23 +826,28 @@ def mris_volmask(
     """
     cmd = [
         "mris_volmask",
-        "--aseg_name", aseg_name,
-        "--label_left_white", str(label_left_white),
-        "--label_left_ribbon", str(label_left_ribbon),
-        "--label_right_white", str(label_right_white),
-        "--label_right_ribbon", str(label_right_ribbon),
+        "--aseg_name",
+        aseg_name,
+        "--label_left_white",
+        str(label_left_white),
+        "--label_left_ribbon",
+        str(label_left_ribbon),
+        "--label_right_white",
+        str(label_right_white),
+        "--label_right_ribbon",
+        str(label_right_ribbon),
     ]
-    
+
     if save_ribbon:
         cmd.append("--save_ribbon")
-    
+
     cmd.append(subject)
-    
+
     # Set SUBJECTS_DIR if provided
     env = None
     if subjects_dir:
         env = {"SUBJECTS_DIR": str(subjects_dir)}
-    
+
     run_fs_command(cmd, log_file=log_file, env=env)
 
 
@@ -879,7 +892,7 @@ def mris_register(
         Output sphere path
     """
     cmd = ["mris_register"]
-    
+
     if curv:
         cmd.append("-curv")
     if norot:
@@ -890,13 +903,15 @@ def mris_register(
         cmd.extend(["-rotate", rotate])
     if threads > 1:
         cmd.extend(["-threads", str(threads)])
-    
-    cmd.extend([
-        str(input_sphere),
-        str(target_atlas),
-        str(output_sphere),
-    ])
-    
+
+    cmd.extend(
+        [
+            str(input_sphere),
+            str(target_atlas),
+            str(output_sphere),
+        ]
+    )
+
     run_fs_command(cmd, log_file=log_file)
     return output_sphere
 
@@ -946,22 +961,27 @@ def mris_ca_label(
     """
     cmd = [
         "mris_ca_label",
-        "-l", str(cortex_label),
-        "-aseg", str(aseg),
-        "-seed", str(seed),
+        "-l",
+        str(cortex_label),
+        "-aseg",
+        str(aseg),
+        "-seed",
+        str(seed),
     ]
-    
+
     if long_flag:
         cmd.extend(long_flag.split())
-    
-    cmd.extend([
-        subject,
-        hemi,
-        str(sphere_reg),
-        str(atlas),
-        str(output_annot),
-    ])
-    
+
+    cmd.extend(
+        [
+            subject,
+            hemi,
+            str(sphere_reg),
+            str(atlas),
+            str(output_annot),
+        ]
+    )
+
     run_fs_command(cmd, log_file=log_file)
     return output_annot
 
@@ -1007,7 +1027,7 @@ def mris_curvature(
     The output files are named {hemi}.{surface_name}.H and {hemi}.{surface_name}.K
     """
     cmd = ["mris_curvature"]
-    
+
     if weights:
         cmd.append("-w")
     if seed is not None:
@@ -1020,14 +1040,14 @@ def mris_curvature(
         cmd.extend(["-a", str(area)])
     if distances:
         cmd.extend(["-distances", str(distances[0]), str(distances[1])])
-    
+
     # Surface name (without path, FreeSurfer expects just the name)
     surface_name = surface.name
     if surface_name.startswith(f"{hemi}."):
-        surface_name = surface_name[len(f"{hemi}."):]
-    
+        surface_name = surface_name[len(f"{hemi}.") :]
+
     cmd.append(surface_name)
-    
+
     # Change to surface directory for execution (FreeSurfer expects to be in surf dir)
     surf_dir = surface.parent
     run_fs_command(cmd, log_file=log_file, cwd=str(surf_dir))
@@ -1080,7 +1100,7 @@ def mris_anatomical_stats(
         Output stats file path
     """
     cmd = ["mris_anatomical_stats"]
-    
+
     # Common flags
     if "-th3" not in kwargs and "th3" not in kwargs:
         cmd.append("-th3")
@@ -1088,11 +1108,11 @@ def mris_anatomical_stats(
         cmd.append("-mgz")
     if "-b" not in kwargs and "b" not in kwargs:
         cmd.append("-b")
-    
+
     cmd.extend(["-cortex", str(cortex_label)])
     cmd.extend(["-f", str(output_stats)])
     cmd.extend(["-a", str(annotation)])
-    
+
     if ctab:
         cmd.extend(["-c", str(ctab)])
     # Note: -noxfm flag support varies by FreeSurfer version
@@ -1100,13 +1120,13 @@ def mris_anatomical_stats(
     # don't support this flag. If the flag is not supported, the command will fail.
     # For compatibility, we skip the flag if it's not available in this version.
     # The statistics should still compute correctly without it.
-    # 
+    #
     # Future enhancement: Add FreeSurfer version detection to conditionally use -noxfm.
     # This would require parsing FreeSurfer's build-stamp.txt or running a version
     # check command. For now, we skip the flag to maintain compatibility across versions.
     # if noxfm:
     #     cmd.append("-noxfm")
-    
+
     # Add kwargs
     for key, value in kwargs.items():
         if key.startswith("-"):
@@ -1117,21 +1137,21 @@ def mris_anatomical_stats(
             cmd.append(f"-{key.replace('_', '-')}")
             if value is not True:
                 cmd.append(str(value))
-    
+
     # Extract surface name (e.g., "white" from "/path/to/surf/lh.white")
     # When SUBJECTS_DIR is set, mris_anatomical_stats constructs the path automatically
     surface_name = surface.name
     # Remove hemisphere prefix if present (e.g., "lh.white" -> "white")
     if surface_name.startswith(f"{hemi}."):
-        surface_name = surface_name[len(f"{hemi}."):]
-    
+        surface_name = surface_name[len(f"{hemi}.") :]
+
     cmd.extend([subject, hemi, surface_name])
-    
+
     # Set SUBJECTS_DIR if provided
     env = None
     if subjects_dir:
         env = {"SUBJECTS_DIR": str(subjects_dir)}
-    
+
     run_fs_command(cmd, log_file=log_file, env=env)
     return output_stats
 
@@ -1156,4 +1176,3 @@ __all__ = [
     "mris_ca_label",
     "mris_anatomical_stats",
 ]
-

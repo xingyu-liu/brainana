@@ -1,38 +1,22 @@
 # Changelog
 
-All notable changes to brainana will be documented in this file.
+All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Changed
-- **Project renamed**: Project renamed from nhp_mri_prep to brainana
-- **Architecture migration**: Migrated from CLI-based workflow to Nextflow-based pipeline for maximum parallelization
-- **Docker image**: Docker image name changed from `macacamriprep:latest` to `brainana:latest`
-- **Removed CLI**: Removed command-line interface (`nhp_mri_prep-preproc`); use Nextflow pipeline instead
-- **Step-based architecture**: Processing now uses individual step functions orchestrated by Nextflow modules
 
-### Added
-- **Nextflow pipeline**: Complete Nextflow implementation with per-step parallelization
-- **Nextflow modules**: Modular Nextflow components for BIDS discovery, anatomical, functional, and QC processing
-- **Step functions**: Individual processing step functions in `nhp_mri_prep/steps/` for use by Nextflow
-- **Nextflow wrapper script**: `run_nextflow.sh` for clean project directory management
-- **Automatic resumption**: Nextflow automatically handles resumption from any failed step
-- **Per-step parallelization**: Each processing step runs in parallel across all subjects/sessions/runs
+## [1.0.0] - 2026-05-28
 
-### Removed
-- **CLI command**: `nhp_mri_prep-preproc` command removed (use Nextflow instead)
-- **Workflow classes**: Old workflow classes (`BIDSDatasetProcessor`, `AnatomicalProcessor`, `FunctionalProcessor`) removed
-- **Pipeline management**: Old pipeline management system removed (Nextflow handles orchestration)
+First public release of **Brainana**, a unified preprocessing framework for macaque MRI: BIDS in, anatomical and functional preprocessing, optional cortical surface reconstruction, and HTML QC reports.
 
-## [1.0.0] - 2026-03-04
+- **Run via Docker** — `docker pull liuxingyu987/brainana:1.0.0` (see [Installation](https://brainana.readthedocs.io/en/stable/installation.html))
+- **Nextflow pipeline** — parallel processing across subjects/sessions/runs with resume on failure
+- **Anatomical** — synthesis, conform, skull strip/segmentation, bias correction, template registration, optional T2w coregistration and surface reconstruction
+- **Functional** — slice timing (when metadata allow), motion correction, registration to anatomy/template, tSNR
+- **QC** — per-step snapshots and a combined HTML report
+- **Docs** — [Read the Docs](https://brainana.readthedocs.io/en/stable/) (usage, outputs, templates/atlases, FAQ)
 
-### Added
-- Initial release of brainana (formerly nhp_mri_prep)
-- BIDS dataset processing support
-- Anatomical and functional preprocessing workflows
-- Template registration capabilities
-- Quality control reporting
-- Parallel processing support 
+Research software, beta stage — see README for license and citation.

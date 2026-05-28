@@ -47,7 +47,9 @@ def convert_fs_surface_to_gifti(
         gifti_img = nib.load(str(output_gii))
         vertices = gifti_img.darrays[0].data
 
-        _, _, header_info = nib.freesurfer.read_geometry(str(input_surf), read_metadata=True)
+        _, _, header_info = nib.freesurfer.read_geometry(
+            str(input_surf), read_metadata=True
+        )
         c_ras = header_info.get("cras")
         if c_ras is None:
             raise RuntimeError(f"Missing CRAS metadata in surface header: {input_surf}")

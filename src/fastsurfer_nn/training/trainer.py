@@ -75,11 +75,11 @@ class Trainer:
         # Create the checkpoint dir (flat structure, no EXPR_NUM subdirectory).
         self.checkpoint_dir = os.path.join(cfg.LOG_DIR, "checkpoints")
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        
+
         # Setup logging (flat structure)
         os.makedirs(os.path.join(cfg.LOG_DIR, "logs"), exist_ok=True)
         logging.setup_logging(os.path.join(cfg.LOG_DIR, "logs", "training.log"))
-        
+
         # Setup CSV metrics logging
         self.metrics_csv_path = os.path.join(cfg.LOG_DIR, "training_metrics.csv")
         self.metrics_file = None
@@ -88,13 +88,13 @@ class Trainer:
         self.device = get_device()
         self.model = build_model(cfg)
         self.loss_func = get_loss_func(cfg)
-        
+
         # Print training configuration summary
         self._print_config_summary(cfg)
 
         # Set up logger format
         self.num_classes = cfg.MODEL.NUM_CLASSES
-        
+
         # Binary brain mask mode - no atlas needed
         if self.num_classes == 2:
             self.class_names = ["background", "brain"]
@@ -103,13 +103,19 @@ class Trainer:
             # Multi-class mode - set up class names using AtlasManager
             # Determine atlas name: if CLASS_OPTIONS[0] is an atlas name (ARM2, ARM3), use it
             # Otherwise default to ARM2 for backward compatibility
-            potential_atlas = cfg.DATA.CLASS_OPTIONS[0] if cfg.DATA.CLASS_OPTIONS else 'ARM2'
-            atlas_name = potential_atlas if potential_atlas.upper() in ['ARM2', 'ARM3', 'FREESURFER'] else 'ARM2'
-            
+            potential_atlas = (
+                cfg.DATA.CLASS_OPTIONS[0] if cfg.DATA.CLASS_OPTIONS else "ARM2"
+            )
+            atlas_name = (
+                potential_atlas
+                if potential_atlas.upper() in ["ARM2", "ARM3", "FREESURFER"]
+                else "ARM2"
+            )
+
             # Get class names from AtlasManager
             atlas_manager = get_atlas_manager(atlas_name)
             class_dict = atlas_manager.get_class_dict()
-            
+
             # Extract class names based on plane and options
             # For mixed plane mode, use "not_sagittal" (coronal/axial) as default
             plane = cfg.DATA.PLANE
@@ -117,56 +123,62 @@ class Trainer:
                 plane_key = "not_sagittal"  # Mixed mode uses combined view
             else:
                 plane_key = "sagittal" if plane == "sagittal" else "not_sagittal"
-            
+
             self.class_names = []
             for opt in cfg.DATA.CLASS_OPTIONS:
-                if opt.upper() in ['ARM2', 'ARM3', 'FREESURFER']:
+                if opt.upper() in ["ARM2", "ARM3", "FREESURFER"]:
                     # If option is an atlas name, use the combined view
                     self.class_names.extend(class_dict[plane_key].get(opt, []))
                 else:
                     # Otherwise it's a class type (aseg, aparc)
                     self.class_names.extend(class_dict[plane_key].get(opt, []))
-        
+
         # Create format string with same number of placeholders as class names
         self.a = "{}\t" * (len(self.class_names) - 1) + "{}"
         self.plot_dir = os.path.join(cfg.LOG_DIR, "plots")
         os.makedirs(self.plot_dir, exist_ok=True)
 
         self.subepoch = False if self.cfg.TRAIN.BATCH_SIZE == 16 else True
-    
+
     def _print_config_summary(self, cfg):
         """Print a formatted summary of key training configuration parameters."""
         logger.info("")
         logger.info("=" * 80)
-        
+
         # Model info
         num_classes = cfg.MODEL.NUM_CLASSES
-        model_type = "Binary (Brain Mask)" if num_classes == 2 else f"Multi-class ({num_classes} classes)"
+        model_type = (
+            "Binary (Brain Mask)"
+            if num_classes == 2
+            else f"Multi-class ({num_classes} classes)"
+        )
         logger.info(f"Model Type:         {model_type}")
         logger.info(f"Model Name:         {cfg.MODEL.MODEL_NAME}")
         logger.info(f"Device:             {self.device}")
-        
+
         # Data info
         plane = cfg.DATA.PLANE
         if plane == "mixed":
-            logger.info(f"Plane:              {plane} (plane-agnostic: axial, coronal, sagittal)")
+            logger.info(
+                f"Plane:              {plane} (plane-agnostic: axial, coronal, sagittal)"
+            )
         else:
             logger.info(f"Plane:              {plane}")
         image_size = cfg.DATA.SIZES[0] if cfg.DATA.SIZES else cfg.MODEL.HEIGHT
         logger.info(f"Image Size:         {image_size}×{image_size}")
         logger.info(f"Padded Size:        {cfg.DATA.PADDED_SIZE}")
-        
+
         # Preprocessing info
         logger.info(f"Orientation:        {cfg.DATA.PREPROCESSING.ORIENTATION}")
         logger.info(f"Image Size Mode:    {cfg.DATA.PREPROCESSING.IMG_SIZE}")
         logger.info(f"Voxel Size:         {cfg.DATA.PREPROCESSING.VOX_SIZE}")
-        
+
         # Augmentation summary
         if not cfg.DATA.AUG or "None" in cfg.DATA.AUG:
             aug_summary = "None"
         else:
             aug_list = []
-            aug_probs = getattr(cfg.DATA, 'AUG_PROBABILITIES', None)
+            aug_probs = getattr(cfg.DATA, "AUG_PROBABILITIES", None)
             for aug in cfg.DATA.AUG:
                 if aug != "None":
                     if aug_probs and hasattr(aug_probs, aug):
@@ -176,40 +188,40 @@ class Trainer:
                         aug_list.append(aug)
             aug_summary = ", ".join(aug_list) if aug_list else "None"
         logger.info(f"Augmentations:      {aug_summary}")
-        
+
         # Training info
         logger.info(f"Batch Size:         {cfg.TRAIN.BATCH_SIZE}")
         logger.info(f"Epochs:             {cfg.TRAIN.NUM_EPOCHS}")
         logger.info(f"Learning Rate:      {cfg.OPTIMIZER.BASE_LR}")
         logger.info(f"Optimizer:          {cfg.OPTIMIZER.OPTIMIZING_METHOD}")
         logger.info(f"LR Scheduler:       {cfg.OPTIMIZER.LR_SCHEDULER}")
-        
+
         # Pretrained model
         if cfg.TRAIN.PRETRAINED_MODEL and cfg.TRAIN.FINE_TUNE:
             pretrained_name = os.path.basename(cfg.TRAIN.PRETRAINED_MODEL)
             logger.info(f"Pretrained Model:   {pretrained_name}")
         else:
-            logger.info(f"Pretrained Model:   None (training from scratch)")
-        
+            logger.info("Pretrained Model:   None (training from scratch)")
+
         # Output directory
         logger.info(f"Output Dir:         {cfg.LOG_DIR}")
-        
+
         logger.info("=" * 80)
         logger.info("")
-    
+
     def _init_csv_logging(self):
         """Initialize CSV file for logging training metrics."""
-        self.metrics_file = open(self.metrics_csv_path, 'w', newline='')
+        self.metrics_file = open(self.metrics_csv_path, "w", newline="")
         self.csv_writer = csv.writer(self.metrics_file)
-        self.csv_writer.writerow(['loss', 'dice', 'val_loss', 'val_dice'])
+        self.csv_writer.writerow(["loss", "dice", "val_loss", "val_dice"])
         self.metrics_file.flush()
-    
+
     def _log_metrics_to_csv(self, train_loss, train_dice, val_loss, val_dice):
         """Log metrics to CSV file."""
         if self.csv_writer is not None:
             self.csv_writer.writerow([train_loss, train_dice, val_loss, val_dice])
             self.metrics_file.flush()
-    
+
     def _close_csv_logging(self):
         """Close CSV file."""
         if self.metrics_file is not None:
@@ -241,7 +253,7 @@ class Trainer:
 
         """
         self.model.train()
-        epoch_start = time.time()
+        time.time()
         loss_batch = np.zeros(1)
 
         # Reset meter at the start of each training epoch to ensure fresh accumulation
@@ -249,11 +261,14 @@ class Trainer:
 
         # Start background dice tracking
         train_meter.start_background_tracking()
-        
+
         # Create progress bar with custom description
-        pbar = tqdm(enumerate(train_loader), total=len(train_loader), 
-                   desc=f"Epoch {epoch}/{self.cfg.TRAIN.NUM_EPOCHS}")
-        
+        pbar = tqdm(
+            enumerate(train_loader),
+            total=len(train_loader),
+            desc=f"Epoch {epoch}/{self.cfg.TRAIN.NUM_EPOCHS}",
+        )
+
         for curr_iter, batch in pbar:
             images, labels, weights, scale_factors = (
                 batch["image"].to(self.device),
@@ -274,9 +289,7 @@ class Trainer:
                 # Use get_last_lr() instead of deprecated get_lr()
                 # get_last_lr() returns a list of learning rates (one per parameter group)
                 current_lr = scheduler.get_last_lr()
-                train_meter.write_summary(
-                    loss_total, current_lr, loss_ce, loss_dice
-                )
+                train_meter.write_summary(loss_total, current_lr, loss_ce, loss_dice)
             else:
                 train_meter.write_summary(
                     loss_total, [self.cfg.OPTIMIZER.BASE_LR], loss_ce, loss_dice
@@ -292,11 +305,11 @@ class Trainer:
                     scheduler.step(epoch + curr_iter / len(train_loader))
 
             loss_batch += loss_total.item()
-            
+
             # Update progress bar with current metrics (non-blocking background computation)
             if curr_iter % 5 == 0:  # Update more frequently since it's non-blocking
                 current_dice = train_meter.get_latest_dice()
-                pbar.set_postfix({'Dice': f'{current_dice:.4f}'})
+                pbar.set_postfix({"Dice": f"{current_dice:.4f}"})
 
             # Plot sample predictions
             if curr_iter == len(train_loader) - 2:
@@ -307,23 +320,22 @@ class Trainer:
                 )
 
                 _, batch_output = torch.max(pred, dim=1)
-                
+
                 plot_predictions(
                     images, labels, batch_output, plt_title, file_save_name
                 )
 
         # Stop background tracking
         train_meter.stop_background_tracking()
-        
+
         train_meter.log_epoch(epoch)
-        
+
         # Get training metrics for CSV logging
         train_loss = np.array(train_meter.batch_losses).mean()
         # Use get_dice_without_background() to match progress bar display (excludes background class 0)
         train_dice = train_meter.get_dice_without_background()
-        train_dice = train_dice.item() if hasattr(train_dice, 'item') else train_dice
-        
-        
+        train_dice = train_dice.item() if hasattr(train_dice, "item") else train_dice
+
         # Store training metrics for CSV (will be logged after validation)
         self._current_train_loss = train_loss
         self._current_train_dice = train_dice
@@ -360,16 +372,19 @@ class Trainer:
         unis_ = np.zeros(self.num_classes - 1)
         per_cls_counts_gt = np.zeros(self.num_classes - 1)
         per_cls_counts_pred = np.zeros(self.num_classes - 1)
-        accs = np.zeros(self.num_classes - 1)  # -1 to exclude background (still included in val loss)
+        accs = np.zeros(
+            self.num_classes - 1
+        )  # -1 to exclude background (still included in val loss)
 
-        val_start = time.time()
+        time.time()
         # Start background dice tracking for validation
         val_meter.start_background_tracking()
-        
+
         # Create progress bar with custom description for validation
-        pbar = tqdm(enumerate(val_loader), total=len(val_loader), 
-                   desc=f"Val Epoch {epoch}")
-        
+        pbar = tqdm(
+            enumerate(val_loader), total=len(val_loader), desc=f"Val Epoch {epoch}"
+        )
+
         for curr_iter, batch in pbar:
             images, labels, weights, scale_factors = (
                 batch["image"].to(self.device),
@@ -412,30 +427,30 @@ class Trainer:
             val_meter.update_stats(pred, labels, loss_total)
             val_meter.write_summary(loss_total)
             val_meter.log_iter(curr_iter, epoch)
-            
+
             # Update progress bar with current metrics (non-blocking background computation)
             if curr_iter % 5 == 0:  # Update more frequently since it's non-blocking
                 current_dice = val_meter.get_latest_dice()
-                pbar.set_postfix({'Dice': f'{current_dice:.4f}'})
+                pbar.set_postfix({"Dice": f"{current_dice:.4f}"})
 
         # Stop background tracking
         val_meter.stop_background_tracking()
-        
+
         val_meter.log_epoch(epoch)
-        
+
         # Get validation metrics for CSV logging
         val_loss = np.array(val_meter.batch_losses).mean()
         # Use get_dice_without_background() to match progress bar display (excludes background class 0)
         val_dice = val_meter.get_dice_without_background()
-        val_dice = val_dice.item() if hasattr(val_dice, 'item') else val_dice
+        val_dice = val_dice.item() if hasattr(val_dice, "item") else val_dice
         self._current_val_loss = val_loss
         self._current_val_dice = val_dice
-        
+
         # Compute overall metrics
         ious = ints_ / (unis_ + 1e-8)  # Add small epsilon to avoid division by zero
         miou = np.mean(ious)
-        mean_recall = np.mean(accs / (per_cls_counts_gt + 1e-8))
-        mean_precision = np.mean(accs / (per_cls_counts_pred + 1e-8))
+        np.mean(accs / (per_cls_counts_gt + 1e-8))
+        np.mean(accs / (per_cls_counts_pred + 1e-8))
 
         # Log overall statistics
         logger.info(
@@ -470,21 +485,27 @@ class Trainer:
         if self.cfg.TRAIN.PRETRAINED_MODEL and self.cfg.TRAIN.FINE_TUNE:
             try:
                 # Check actual number of classes in the pretrained checkpoint
-                checkpoint = read_checkpoint_file(self.cfg.TRAIN.PRETRAINED_MODEL, map_location="cpu")
-                
+                checkpoint = read_checkpoint_file(
+                    self.cfg.TRAIN.PRETRAINED_MODEL, map_location="cpu"
+                )
+
                 # Find classifier weight to determine number of classes in checkpoint
                 classifier_key = None
                 for key in checkpoint["model_state"].keys():
                     if "classifier" in key and "weight" in key and "conv" in key:
                         classifier_key = key
                         break
-                
+
                 if classifier_key:
-                    pretrained_num_classes = checkpoint["model_state"][classifier_key].shape[0]
-                    drop_classifier = (self.cfg.MODEL.NUM_CLASSES != pretrained_num_classes)
+                    pretrained_num_classes = checkpoint["model_state"][
+                        classifier_key
+                    ].shape[0]
+                    drop_classifier = (
+                        self.cfg.MODEL.NUM_CLASSES != pretrained_num_classes
+                    )
                 else:
                     drop_classifier = True
-                
+
                 # Now load the checkpoint (re-loads it, but ensures correct drop_classifier logic)
                 checkpoint_epoch, best_metric = cp.restore_model_state_from_checkpoint(
                     self.cfg.TRAIN.PRETRAINED_MODEL,
@@ -496,12 +517,14 @@ class Trainer:
                 )
                 start_epoch = 0
                 best_dice = 0
-                best_val_loss = float('inf')
+                best_val_loss = float("inf")
             except Exception as e:
-                logger.warning(f"Transfer Learning: failed to load pretrained model: {e}")
+                logger.warning(
+                    f"Transfer Learning: failed to load pretrained model: {e}"
+                )
                 start_epoch = 0
                 best_dice = 0
-                best_val_loss = float('inf')
+                best_val_loss = float("inf")
         # Resume training from checkpoint
         elif self.cfg.TRAIN.RESUME:
             checkpoint_paths = cp.get_checkpoint_path(
@@ -510,7 +533,10 @@ class Trainer:
             if checkpoint_paths:
                 try:
                     checkpoint_path = checkpoint_paths.pop()
-                    checkpoint_epoch, best_metric = cp.restore_model_state_from_checkpoint(
+                    (
+                        checkpoint_epoch,
+                        best_metric,
+                    ) = cp.restore_model_state_from_checkpoint(
                         checkpoint_path,
                         self.model,
                         optimizer,
@@ -519,20 +545,22 @@ class Trainer:
                     )
                     start_epoch = checkpoint_epoch
                     best_dice = best_metric
-                    best_val_loss = float('inf')  # Reset when resuming
+                    best_val_loss = float("inf")  # Reset when resuming
                 except Exception as e:
-                    logger.warning(f"Checkpoint: no model to restore, resuming from epoch 0: {e}")
+                    logger.warning(
+                        f"Checkpoint: no model to restore, resuming from epoch 0: {e}"
+                    )
                     start_epoch = 0
                     best_dice = 0
-                    best_val_loss = float('inf')
+                    best_val_loss = float("inf")
             else:
                 start_epoch = 0
                 best_dice = 0
-                best_val_loss = float('inf')
+                best_val_loss = float("inf")
         else:
             start_epoch = 0
             best_dice = 0
-            best_val_loss = float('inf')
+            best_val_loss = float("inf")
 
         # Create tensorboard summary writer
 
@@ -560,31 +588,37 @@ class Trainer:
 
         # Initialize CSV logging
         self._init_csv_logging()
-        
+
         # Initialize early stopping if enabled
-        early_stopping_enabled = getattr(self.cfg.TRAIN, 'EARLY_STOPPING', False)
+        early_stopping_enabled = getattr(self.cfg.TRAIN, "EARLY_STOPPING", False)
         if early_stopping_enabled:
-            early_stopping_mode = getattr(self.cfg.TRAIN, 'EARLY_STOPPING_MODE', 'min')
-            early_stopping_patience = getattr(self.cfg.TRAIN, 'EARLY_STOPPING_PATIENCE', 10)
-            early_stopping_wait = getattr(self.cfg.TRAIN, 'EARLY_STOPPING_WAIT', 0)
-            early_stopping_delta = getattr(self.cfg.TRAIN, 'EARLY_STOPPING_DELTA', 0.0)
-            
+            early_stopping_mode = getattr(self.cfg.TRAIN, "EARLY_STOPPING_MODE", "min")
+            early_stopping_patience = getattr(
+                self.cfg.TRAIN, "EARLY_STOPPING_PATIENCE", 10
+            )
+            early_stopping_wait = getattr(self.cfg.TRAIN, "EARLY_STOPPING_WAIT", 0)
+            early_stopping_delta = getattr(self.cfg.TRAIN, "EARLY_STOPPING_DELTA", 0.0)
+
             # Initialize early stopping state
-            if early_stopping_mode == 'min':
-                best_metric = float('inf')
-                is_better = lambda current, best: current < best - early_stopping_delta
+            if early_stopping_mode == "min":
+                best_metric = float("inf")
+                def is_better(current, best):
+                    return current < best - early_stopping_delta
             else:  # mode == 'max'
-                best_metric = float('-inf')
-                is_better = lambda current, best: current > best + early_stopping_delta
-            
+                best_metric = float("-inf")
+                def is_better(current, best):
+                    return current > best + early_stopping_delta
+
             early_stopping_patience_count = 0
             best_metric_epoch = 0
-            
-            logger.info(f"Early stopping enabled: mode={early_stopping_mode}, patience={early_stopping_patience}, "
-                       f"wait={early_stopping_wait}, delta={early_stopping_delta}")
+
+            logger.info(
+                f"Early stopping enabled: mode={early_stopping_mode}, patience={early_stopping_patience}, "
+                f"wait={early_stopping_wait}, delta={early_stopping_delta}"
+            )
         else:
             logger.info("Early stopping disabled")
-        
+
         # Perform the training loop.
         logger.info("=" * 80)
         logger.info("Training: starting training loop")
@@ -599,18 +633,18 @@ class Trainer:
 
             if epoch % 10 == 0:
                 val_meter.enable_confusion_mat()
-                miou = self.eval(val_loader, val_meter, epoch=epoch)
+                self.eval(val_loader, val_meter, epoch=epoch)
                 val_meter.disable_confusion_mat()
 
             else:
-                miou = self.eval(val_loader, val_meter, epoch=epoch)
-            
+                self.eval(val_loader, val_meter, epoch=epoch)
+
             # Log metrics to CSV after each epoch
             self._log_metrics_to_csv(
                 self._current_train_loss,
                 self._current_train_dice,
                 self._current_val_loss,
-                self._current_val_dice
+                self._current_val_dice,
             )
 
             if (epoch + 1) % self.cfg.TRAIN.CHECKPOINT_PERIOD == 0:
@@ -627,9 +661,11 @@ class Trainer:
 
             # Handle NaN dice (can happen early in training when many classes aren't predicted yet)
             # Treat NaN as 0 for comparison purposes
-            current_dice = 0.0 if np.isnan(self._current_val_dice) else self._current_val_dice
+            current_dice = (
+                0.0 if np.isnan(self._current_val_dice) else self._current_val_dice
+            )
             current_val_loss = self._current_val_loss
-            
+
             # Determine if this is the best model
             # Priority 1: If Dice is improving and valid (not 0), use Dice
             # Priority 2: If both current and best Dice are 0 (i.e., both NaN), use validation loss
@@ -639,12 +675,18 @@ class Trainer:
                 best_dice = current_dice
                 best_val_loss = current_val_loss
                 save_best = True
-                logger.info(f"Checkpoint: best model at epoch={epoch+1}, dice={best_dice:.4f}")
-            elif current_dice == 0 and best_dice == 0 and current_val_loss < best_val_loss:
+                logger.info(
+                    f"Checkpoint: best model at epoch={epoch+1}, dice={best_dice:.4f}"
+                )
+            elif (
+                current_dice == 0
+                and best_dice == 0
+                and current_val_loss < best_val_loss
+            ):
                 # Dice is not yet useful (still NaN), use validation loss instead
                 best_val_loss = current_val_loss
                 save_best = True
-            
+
             if save_best:
                 # Save only the best model file (overwrites previous best)
                 cp.save_best_checkpoint(
@@ -657,15 +699,15 @@ class Trainer:
                     optimizer,
                     scheduler,
                 )
-            
+
             # Early stopping check
             if early_stopping_enabled:
                 # Determine which metric to monitor
-                if early_stopping_mode == 'min':
+                if early_stopping_mode == "min":
                     current_metric = current_val_loss
                 else:  # mode == 'max'
                     current_metric = current_dice
-                
+
                 # Always track the best metric, but only start patience counter after wait period
                 if is_better(current_metric, best_metric):
                     best_metric = current_metric
@@ -673,25 +715,33 @@ class Trainer:
                     # Reset patience counter only if we're past the wait period
                     if epoch > early_stopping_wait:
                         early_stopping_patience_count = 0
-                        logger.info(f"Early stopping: metric improved to {current_metric:.6f} at epoch {epoch}")
+                        logger.info(
+                            f"Early stopping: metric improved to {current_metric:.6f} at epoch {epoch}"
+                        )
                 else:
                     # Only start counting patience after wait period
                     if epoch > early_stopping_wait:
                         early_stopping_patience_count += 1
                         improvement_needed = early_stopping_delta
-                        logger.info(f"Early stopping: no improvement for {early_stopping_patience_count}/{early_stopping_patience} epochs "
-                                   f"(current: {current_metric:.6f}, best: {best_metric:.6f} at epoch {best_metric_epoch}, "
-                                   f"need improvement of {improvement_needed:.6f})")
-                        
+                        logger.info(
+                            f"Early stopping: no improvement for {early_stopping_patience_count}/{early_stopping_patience} epochs "
+                            f"(current: {current_metric:.6f}, best: {best_metric:.6f} at epoch {best_metric_epoch}, "
+                            f"need improvement of {improvement_needed:.6f})"
+                        )
+
                         # Check if we should stop
                         if early_stopping_patience_count >= early_stopping_patience:
                             logger.info("=" * 80)
                             logger.info(f"Early stopping triggered at epoch {epoch}")
-                            logger.info(f"Best metric: {best_metric:.6f} at epoch {best_metric_epoch}")
-                            logger.info(f"No improvement for {early_stopping_patience} consecutive epochs")
+                            logger.info(
+                                f"Best metric: {best_metric:.6f} at epoch {best_metric_epoch}"
+                            )
+                            logger.info(
+                                f"No improvement for {early_stopping_patience} consecutive epochs"
+                            )
                             logger.info("=" * 80)
                             break
-        
+
         # Close CSV logging when training completes
         self._close_csv_logging()
         logger.info("")

@@ -69,7 +69,7 @@ def options_parse():
     return options
 
 
-def check_volume(asegdkt_segfile:np.ndarray, voxvol: float, thres: float = None):
+def check_volume(asegdkt_segfile: np.ndarray, voxvol: float, thres: float = None):
     """
     Report segmentation volume statistics without judgment.
 
@@ -92,12 +92,11 @@ def check_volume(asegdkt_segfile:np.ndarray, voxvol: float, thres: float = None)
     total_voxels = np.sum(mask)
     total_vol_mm3 = total_voxels * voxvol
     total_vol_ml = total_vol_mm3 / 1000
-    
+
     print(f"  Voxel size: {voxvol:.4f} mm³")
     print(f"  Segmented voxels: {total_voxels:,}")
     print(f"  Total volume: {total_vol_ml:.2f} mL")
 
-    
     return True
 
 
@@ -129,8 +128,8 @@ def get_region_bg_intersection_mask(
     Notes
     -----
     VENT_LABELS is a dictionary containing labels for four regions related to the ventricles:
-    "Left-Lateral-Ventricle", "Right-Lateral-Ventricle", "Left-choroid-plexus", 
-    "Right-choroid-plexus" along with their corresponding integer label values 
+    "Left-Lateral-Ventricle", "Right-Lateral-Ventricle", "Left-choroid-plexus",
+    "Right-choroid-plexus" along with their corresponding integer label values
     (see also FreeSurferColorLUT.txt).
     """
     region_array = seg_array.copy()
@@ -188,7 +187,7 @@ if __name__ == "__main__":
     # Ventricle-BG intersection volume check:
     print("Estimating ventricle-background intersection volume...")
     print(
-        f"Ventricle-background intersection volume in mm3:" \
+        f"Ventricle-background intersection volume in mm3:"
         f" {get_ventricle_bg_intersection_volume(inseg_data, inseg_voxvol):.2f}"
     )
 

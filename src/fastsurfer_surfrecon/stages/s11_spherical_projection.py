@@ -8,7 +8,6 @@ import logging
 import shutil
 
 from .base import HemisphereStage
-from ..wrappers.base import run_recon_all
 from ..processing.spherical import spherically_project_surface
 
 logger = logging.getLogger(__name__)
@@ -16,16 +15,16 @@ logger = logging.getLogger(__name__)
 
 class SphericalProjection(HemisphereStage):
     """Project surface to sphere."""
-    
+
     name = "spherical_projection"
     description = "Spherical projection (qsphere)"
-    
+
     def _run(self) -> None:
         """Project to sphere."""
         sphere = self.hemi_path("sphere")
         smoothwm_nofix = self.hemi_path("smoothwm.nofix")
         qsphere_nofix = self.hemi_path("qsphere.nofix")
-        
+
         # if self.config.processing.fsqsphere:
         #     # Use FreeSurfer qsphere
         #     logger.info(f"Using FreeSurfer qsphere for {self.hemi}")
@@ -42,17 +41,16 @@ class SphericalProjection(HemisphereStage):
         #         subjects_dir=self.config.subjects_dir,
         #     )
         # else:
-        
+
         # Use spectral projection
         logger.info(f"Using spectral projection for {self.hemi}")
         # FastSurfer uses smoothwm.nofix as input for spherical projection
 
         if not smoothwm_nofix.exists():
             raise FileNotFoundError(
-                f"{smoothwm_nofix} not found. "
-                "Smoothing stage must run first."
+                f"{smoothwm_nofix} not found. " "Smoothing stage must run first."
             )
-        
+
         # FastSurfer creates qsphere.nofix directly, so we do the same
         # Also create sphere for consistency with FreeSurfer naming
         spherically_project_surface(
@@ -67,4 +65,3 @@ class SphericalProjection(HemisphereStage):
     def should_skip(self) -> bool:
         """Skip if sphere exists."""
         return self.hemi_path("sphere").exists()
-

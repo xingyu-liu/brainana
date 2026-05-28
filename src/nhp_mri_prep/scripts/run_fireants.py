@@ -24,15 +24,19 @@ from fireants.registration.affine import AffineRegistration
 from fireants.registration.greedy import GreedyRegistration
 
 # %%
-moving_f = Path('/home/star/github/brainana/template_zoo/template/D99/tpl-D99_res-05_T1w_brain.nii.gz')
-fixed_f = Path('/home/star/github/brainana/template_zoo/template/NMT2Sym/tpl-NMT2Sym_res-05_T1w_brain.nii.gz')
+moving_f = Path(
+    "/home/star/github/brainana/template_zoo/template/D99/tpl-D99_res-05_T1w_brain.nii.gz"
+)
+fixed_f = Path(
+    "/home/star/github/brainana/template_zoo/template/NMT2Sym/tpl-NMT2Sym_res-05_T1w_brain.nii.gz"
+)
 
-xfm_type = 'syn'  # 'rigid' | 'affine' | 'syn'
+xfm_type = "syn"  # 'rigid' | 'affine' | 'syn'
 
-output_dir = moving_f.parent / 'registration'
+output_dir = moving_f.parent / "registration"
 output_dir.mkdir(parents=True, exist_ok=True)
 
-base_name = moving_f.stem.replace('.nii', '')
+base_name = moving_f.stem.replace(".nii", "")
 output_prefix = output_dir / base_name
 
 
@@ -49,11 +53,15 @@ def _get_output_paths(prefix: Path, xfm: str) -> dict:
     return paths
 
 
-def _invert_affine_mat(affine_path: str, inverse_path: str, log: logging.Logger) -> None:
+def _invert_affine_mat(
+    affine_path: str, inverse_path: str, log: logging.Logger
+) -> None:
     if loadmat is None or savemat is None:
         raise RuntimeError("scipy required to invert affine .mat (pip install scipy)")
     data = loadmat(affine_path)
-    key = next(k for k in data if k.startswith("AffineTransform_") and not k.startswith("__"))
+    key = next(
+        k for k in data if k.startswith("AffineTransform_") and not k.startswith("__")
+    )
     params = data[key].flatten().astype(np.float64)
     total_params = params.size
     if total_params == 12:
@@ -61,7 +69,7 @@ def _invert_affine_mat(affine_path: str, inverse_path: str, log: logging.Logger)
     elif total_params == 6:
         dims = 2
     else:
-        m = re.search(r'_(\d+)_\d+', key)
+        m = re.search(r"_(\d+)_\d+", key)
         dims = int(m.group(1)) if m else None
         if dims is None or total_params != dims * dims + dims:
             raise ValueError(f"Cannot infer dims from {total_params} params")
@@ -76,22 +84,25 @@ def _invert_affine_mat(affine_path: str, inverse_path: str, log: logging.Logger)
     if "fixed" not in out:
         out["fixed"] = np.zeros((dims, 1), dtype=np.float32)
     saved = False
-    for fmt in ['4', '5']:
+    for fmt in ["4", "5"]:
         try:
-            savemat(inverse_path, out, format=fmt, oned_as='column')
+            savemat(inverse_path, out, format=fmt, oned_as="column")
             saved = True
             break
         except (ValueError, NotImplementedError):
             continue
     if not saved:
-        savemat(inverse_path, out, oned_as='column')
+        savemat(inverse_path, out, oned_as="column")
     log.info(f"Wrote inverse affine: {inverse_path}")
 
 
-def _save_registered(reg, batch_fixed, batch_moving, path: str, log: logging.Logger) -> None:
+def _save_registered(
+    reg, batch_fixed, batch_moving, path: str, log: logging.Logger
+) -> None:
     moved = reg.evaluate(batch_fixed, batch_moving)
     FakeBatchedImages(moved, batch_fixed).write_image(path)
     log.info(f"Registered image: {path}")
+
 
 # %%
 logging.basicConfig(level=logging.INFO)

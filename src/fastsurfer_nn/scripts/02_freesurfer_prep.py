@@ -11,13 +11,17 @@ _src_dir = Path(__file__).resolve().parent.parent.parent
 if str(_src_dir) not in sys.path:
     sys.path.insert(0, str(_src_dir))
 
-from fastsurfer_nn.postprocessing.prepping_for_surfrecon import postprocess_for_freesurfer
+from fastsurfer_nn.postprocessing.prepping_for_surfrecon import (
+    postprocess_for_freesurfer,
+)
 from fastsurfer_nn.utils.checkpoint import extract_atlas_metadata
 from fastsurfer_nn.utils.constants import REPO_ROOT
 
 # %%
 # Test paths
-result_dir = Path('/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032215_noarm6/others')
+result_dir = Path(
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032215_noarm6/others"
+)
 
 t1w_f = result_dir / "T1w.nii.gz"
 seg_f = result_dir / "segmentation.nii.gz"
@@ -25,7 +29,7 @@ mask_f = result_dir / "mask.nii.gz"
 arm6_f = result_dir / "atlas-ARM6.nii.gz"
 
 # Checkpoint to extract atlas name from
-ckpt_f = '/home/star/github/brainana/src/fastsurfer_nn/pretrained_model/T1w_seg-ARM2_coronal.pkl'
+ckpt_f = "/home/star/github/brainana/src/fastsurfer_nn/pretrained_model/T1w_seg-ARM2_coronal.pkl"
 
 # Extract LUT path from checkpoint
 checkpoint_path = Path(ckpt_f)
@@ -68,4 +72,3 @@ if result == 0:
 else:
     print(f"\n✗ Post-processing failed: {result}")
     sys.exit(1)
-

@@ -19,15 +19,21 @@ if str(_src_dir) not in sys.path:
 from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.steps.anatomical import anat_surface_reconstruction
 from nhp_mri_prep.utils.nextflow import load_config
-from nhp_mri_prep.steps.qc import qc_surf_recon_tissue_seg, qc_cortical_surf_and_measures
+from nhp_mri_prep.steps.qc import (
+    qc_surf_recon_tissue_seg,
+    qc_cortical_surf_and_measures,
+)
 
 # %%
-dataset_root = Path("/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana")
+dataset_root = Path(
+    "/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana"
+)
 
 # Run controls
 rerun_all = True
 dry_run = False
 overwrite = False
+
 
 # %%
 def list_sites(root):
@@ -95,6 +101,7 @@ def backup_png_if_exists(png_path, do_dry_run):
     shutil.move(png_path, backup_png)
     return f"Moved {png_path} -> {backup_png}"
 
+
 # %%
 # 0. prepare run state and site list
 stats = defaultdict(int)
@@ -120,13 +127,17 @@ if rerun_all:
                 # an archival backup (<sub>_todelete), so this subject was processed before.
                 already_reran = fs_sub_dir.exists() and has_subject_backup(fs_sub_dir)
                 if already_reran and not overwrite:
-                    print(f"{site_name} / {sub}: skip backup, rerun output and backup already exist")
+                    print(
+                        f"{site_name} / {sub}: skip backup, rerun output and backup already exist"
+                    )
                     stats["backup_skipped_already_reran"] += 1
                     continue
 
                 if already_reran and overwrite:
                     # Preserve existing backup history in overwrite mode.
-                    print(f"{site_name} / {sub}: overwrite=True, keeping existing backup {sub}_todelete")
+                    print(
+                        f"{site_name} / {sub}: overwrite=True, keeping existing backup {sub}_todelete"
+                    )
                     stats["backup_preserved_overwrite"] += 1
                     continue
 
@@ -136,7 +147,9 @@ if rerun_all:
                     stats["backup_not_found"] += 1
                     continue
                 if action == "SKIP_ALREADY_BACKED_UP":
-                    print(f"{site_name} / {sub}: skip backup, {sub}_todelete already exists")
+                    print(
+                        f"{site_name} / {sub}: skip backup, {sub}_todelete already exists"
+                    )
                     stats["backup_skipped_already_exists"] += 1
                     continue
                 print(f"{site_name} / {sub}: {action}")
@@ -193,22 +206,32 @@ for site_dir in site_list[::1]:
             stats["skipped_already_reran"] += 1
             continue
         if already_reran and overwrite:
-            print("  --> output and backup already exist, overwrite=True so forcing fresh rerun")
+            print(
+                "  --> output and backup already exist, overwrite=True so forcing fresh rerun"
+            )
             stats["overwrite_runs"] += 1
             # Overwrite mode refreshes ONLY current output; backup archive is preserved.
             if dry_run:
-                print(f"  --> DRY_RUN would remove current fastsurfer dir: {fs_sub_dir}")
+                print(
+                    f"  --> DRY_RUN would remove current fastsurfer dir: {fs_sub_dir}"
+                )
             elif fs_sub_dir.exists():
-                print(f"  --> removing current fastsurfer dir before rerun: {fs_sub_dir}")
+                print(
+                    f"  --> removing current fastsurfer dir before rerun: {fs_sub_dir}"
+                )
                 shutil.rmtree(fs_sub_dir)
             stats["removed_existing_for_overwrite"] += 1
 
         # Clean up partial runs so reconstruction starts from a clean directory.
         if fs_sub_dir.exists() and not output_complete:
             if dry_run:
-                print(f"  --> incomplete fastsurfer dir (missing wmparc.mgz), would remove: {fs_sub_dir}")
+                print(
+                    f"  --> incomplete fastsurfer dir (missing wmparc.mgz), would remove: {fs_sub_dir}"
+                )
             else:
-                print(f"  --> incomplete fastsurfer dir (missing wmparc.mgz), removing: {fs_sub_dir}")
+                print(
+                    f"  --> incomplete fastsurfer dir (missing wmparc.mgz), removing: {fs_sub_dir}"
+                )
                 shutil.rmtree(fs_sub_dir)
             stats["removed_incomplete_output"] += 1
 
@@ -218,10 +241,18 @@ for site_dir in site_list[::1]:
             continue
 
         # Enforce exactly one valid input per required artifact before launching recon.
-        seg_file, seg_status = pick_single(sub_dir, "**/anat/*_desc-brain_atlasARM2.nii.gz", required=True)
-        mask_file, mask_status = pick_single(sub_dir, "**/anat/*_desc-brain_mask.nii.gz", required=True)
-        anat_file, anat_status = pick_single(sub_dir, "**/anat/*_desc-preproc_T1w.nii.gz", required=True)
-        arm6_atlas, arm6_status = pick_single(sub_dir, "**/anat/atlas_space-T1w/atlas-ARM6*.nii.gz", required=True)
+        seg_file, seg_status = pick_single(
+            sub_dir, "**/anat/*_desc-brain_atlasARM2.nii.gz", required=True
+        )
+        mask_file, mask_status = pick_single(
+            sub_dir, "**/anat/*_desc-brain_mask.nii.gz", required=True
+        )
+        anat_file, anat_status = pick_single(
+            sub_dir, "**/anat/*_desc-preproc_T1w.nii.gz", required=True
+        )
+        arm6_atlas, arm6_status = pick_single(
+            sub_dir, "**/anat/atlas_space-T1w/atlas-ARM6*.nii.gz", required=True
+        )
 
         missing_or_multiple = {
             "seg": seg_status,
@@ -230,8 +261,13 @@ for site_dir in site_list[::1]:
             "arm6": arm6_status,
         }
         if any(status is not None for status in missing_or_multiple.values()):
-            print(f"Skipping {site_name} / {sub} due to file selection: {missing_or_multiple}")
-            if any(status == "missing" for status in (seg_status, mask_status, anat_status, arm6_status)):
+            print(
+                f"Skipping {site_name} / {sub} due to file selection: {missing_or_multiple}"
+            )
+            if any(
+                status == "missing"
+                for status in (seg_status, mask_status, anat_status, arm6_status)
+            ):
                 stats["skipped_missing_input"] += 1
             else:
                 stats["skipped_ambiguous_input"] += 1

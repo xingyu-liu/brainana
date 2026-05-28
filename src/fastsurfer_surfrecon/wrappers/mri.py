@@ -44,9 +44,9 @@ def mri_convert(
         subject_dir = Path(subject_dir).resolve()
         input_file = to_relative_path(input_file, subject_dir)
         output_file = to_relative_path(output_file, subject_dir)
-    
+
     cmd = ["mri_convert", str(input_file), str(output_file)]
-    
+
     # Add optional arguments
     for key, value in kwargs.items():
         if value is True:
@@ -54,7 +54,7 @@ def mri_convert(
         elif value is not False and value is not None:
             cmd.append(f"--{key.replace('_', '-')}")
             cmd.append(str(value))
-    
+
     run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_file
 
@@ -94,7 +94,7 @@ def mri_pretess(
         input_vol = to_relative_path(input_vol, subject_dir)
         norm = to_relative_path(norm, subject_dir)
         output_vol = to_relative_path(output_vol, subject_dir)
-    
+
     cmd = [
         "mri_pretess",
         str(input_vol),
@@ -137,7 +137,7 @@ def mri_mc(
         subject_dir = Path(subject_dir).resolve()
         input_vol = to_relative_path(input_vol, subject_dir)
         output_surf = to_relative_path(output_surf, subject_dir)
-    
+
     cmd = [
         "mri_mc",
         str(input_vol),
@@ -185,17 +185,19 @@ def mri_mask(
         input_vol = to_relative_path(input_vol, subject_dir)
         mask = to_relative_path(mask, subject_dir)
         output_vol = to_relative_path(output_vol, subject_dir)
-    
+
     cmd = ["mri_mask"]
-    
+
     if threshold is not None:
         cmd.extend(["-T", str(threshold)])
-    
-    cmd.extend([
-        str(input_vol),
-        str(mask),
-        str(output_vol),
-    ])
+
+    cmd.extend(
+        [
+            str(input_vol),
+            str(mask),
+            str(output_vol),
+        ]
+    )
     run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_vol
 
@@ -252,9 +254,9 @@ def mri_normalize(
             aseg = to_relative_path(aseg, subject_dir)
         if mask:
             mask = to_relative_path(mask, subject_dir)
-    
+
     cmd = ["mri_normalize"]
-    
+
     # Common flags
     # Only add -g 1 if not explicitly disabled (g=0 means don't add it)
     g_value = None
@@ -263,25 +265,25 @@ def mri_normalize(
             g_value = kwargs["g"]
         else:
             g_value = 1  # Default
-    
+
     # Add -g flag only if g_value is not 0
     if g_value is not None and g_value != 0:
         cmd.extend(["-g", str(g_value)])
-    
+
     cmd.extend(["-seed", str(seed)])
     if mprage:
         cmd.append("-mprage")
     if noconform:
         cmd.append("-noconform")
-    
+
     # Add optional aseg
     if aseg:
         cmd.extend(["-aseg", str(aseg)])
-    
+
     # Add optional mask
     if mask:
         cmd.extend(["-mask", str(mask)])
-    
+
     # Add other kwargs (skip 'g' as it's already handled)
     for key, value in kwargs.items():
         if key == "g":  # Skip 'g' as it's already handled above
@@ -294,7 +296,7 @@ def mri_normalize(
             cmd.append(f"-{key.replace('_', '-')}")
             if value is not True:
                 cmd.append(str(value))
-    
+
     cmd.extend([str(input_vol), str(output_vol)])
     run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_vol
@@ -335,12 +337,15 @@ def mri_cc(
         aseg_no_cc = to_relative_path(aseg_no_cc, subject_dir)
         output_aseg = to_relative_path(output_aseg, subject_dir)
         output_lta = to_relative_path(output_lta, subject_dir)
-    
+
     cmd = [
         "mri_cc",
-        "-aseg", str(aseg_no_cc),
-        "-o", str(output_aseg),
-        "-lta", str(output_lta),
+        "-aseg",
+        str(aseg_no_cc),
+        "-o",
+        str(output_aseg),
+        "-lta",
+        str(output_lta),
         subject,
     ]
     run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
@@ -437,22 +442,25 @@ def mri_surf2volseg(
             lh_pial = to_relative_path(lh_pial, subject_dir)
         if rh_pial:
             rh_pial = to_relative_path(rh_pial, subject_dir)
-    
+
     cmd = [
         "mri_surf2volseg",
-        "--o", str(output_vol),
-        "--i", str(input_aseg),
-        "--threads", str(threads),
+        "--o",
+        str(output_vol),
+        "--i",
+        str(input_aseg),
+        "--threads",
+        str(threads),
     ]
-    
+
     if ribbon:
         cmd.extend(["--fix-presurf-with-ribbon", str(ribbon)])
-    
+
     if label_cortex:
         cmd.append("--label-cortex")
     if label_wm:
         cmd.append("--label-wm")
-    
+
     # Left hemisphere
     if lh_annot:
         cmd.extend(["--lh-annot", str(lh_annot), str(lh_annot_offset)])
@@ -462,7 +470,7 @@ def mri_surf2volseg(
         cmd.extend(["--lh-white", str(lh_white)])
     if lh_pial:
         cmd.extend(["--lh-pial", str(lh_pial)])
-    
+
     # Right hemisphere
     if rh_annot:
         cmd.extend(["--rh-annot", str(rh_annot), str(rh_annot_offset)])
@@ -472,7 +480,7 @@ def mri_surf2volseg(
         cmd.extend(["--rh-white", str(rh_white)])
     if rh_pial:
         cmd.extend(["--rh-pial", str(rh_pial)])
-    
+
     run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_vol
 
@@ -509,10 +517,11 @@ def mri_add_xform_to_header(
         xform = to_relative_path(xform, subject_dir)
         input_vol = to_relative_path(input_vol, subject_dir)
         output_vol = to_relative_path(output_vol, subject_dir)
-    
+
     cmd = [
         "mri_add_xform_to_header",
-        "-c", str(xform),
+        "-c",
+        str(xform),
         str(input_vol),
         str(output_vol),
     ]
@@ -554,7 +563,7 @@ def mri_fill(
         Output file path
     """
     from .base import get_fs_home
-    
+
     # Convert paths to relative if subject_dir provided
     # Note: ctab might be outside subject_dir (FreeSurfer home), so only convert if under subject_dir
     if subject_dir:
@@ -567,16 +576,16 @@ def mri_fill(
         # Only convert ctab if it's under subject_dir (user-provided), not FreeSurfer home
         if ctab:
             ctab = to_relative_path(ctab, subject_dir)
-    
+
     cmd = ["mri_fill"]
-    
+
     # Add cut log if provided
     if cut_log:
         cmd.extend(["-a", str(cut_log)])
-    
+
     # Add segmentation
     cmd.extend(["-segmentation", str(aseg)])
-    
+
     # Add color table (default to FreeSurfer's SubCorticalMassLUT.txt if not provided)
     if ctab:
         cmd.extend(["-ctab", str(ctab)])
@@ -591,7 +600,7 @@ def mri_fill(
                 f"SubCorticalMassLUT.txt not found at {default_ctab}. "
                 "mri_fill may fail without -ctab parameter."
             )
-    
+
     cmd.extend([str(wm_vol), str(output_vol)])
     run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
     return output_vol
@@ -608,4 +617,3 @@ __all__ = [
     "mri_add_xform_to_header",
     "mri_fill",
 ]
-

@@ -73,10 +73,10 @@ def _fix_mapped_stats_struct_names(stats_file: Path, hemi_lut_path: Path) -> Non
 
 class Statistics(HemisphereStage):
     """Compute surface statistics."""
-    
+
     name = "statistics"
     description = "Surface statistics and morphometry"
-    
+
     def _run(self) -> None:
         """Compute statistics."""
         # Curvature statistics
@@ -93,12 +93,17 @@ class Statistics(HemisphereStage):
             log_file=self.config.log_file,
             subjects_dir=self.config.subjects_dir,
         )
-        
+
         # Anatomical statistics for mapped parcellation
-        aparc_mapped = self.hemi_label(f"aparc.{self.config.atlas.name}atlas.mapped.annot")
+        aparc_mapped = self.hemi_label(
+            f"aparc.{self.config.atlas.name}atlas.mapped.annot"
+        )
         if aparc_mapped.exists():
             # Use .mapped.stats filename to match original FastSurfer
-            stats_file = self.sd.stats_dir / f"{self.hemi}.aparc.{self.config.atlas.name}atlas.mapped.stats"
+            stats_file = (
+                self.sd.stats_dir
+                / f"{self.hemi}.aparc.{self.config.atlas.name}atlas.mapped.stats"
+            )
             if not stats_file.exists():
                 logger.info(f"Computing anatomical stats for {self.hemi}...")
                 # Color table path (may not exist, but mris_anatomical_stats can work without it)
@@ -122,7 +127,7 @@ class Statistics(HemisphereStage):
                 # Fix struct names in existing file (e.g. from a previous run with truncated names)
                 hemi_lut = self.config.atlas.get_hemi_lut(self.hemi)
                 _fix_mapped_stats_struct_names(stats_file, hemi_lut)
-        
+
         # FS aparc stats if available
         if self.config.processing.fsaparc:
             aparc_fs = self.hemi_label("aparc.annot")
@@ -140,26 +145,23 @@ class Statistics(HemisphereStage):
                         noxfm=self.config.processing.no_talairach,
                         log_file=self.config.log_file,
                     )
-    
+
     # def should_skip(self) -> bool:
     #     """Skip if stats already computed."""
     #     # Check for curvature stats
     #     curvstats = self.sd.stats_dir / f"{self.hemi}.curv.stats"
     #     if not curvstats.exists():
     #         return False
-        
+
     #     # Check for parcellation stats
     #     aparc_mapped = self.hemi_label(f"aparc.{self.config.atlas.name}atlas.mapped.annot")
     #     if aparc_mapped.exists():
     #         stats = self.sd.stats_dir / f"{self.hemi}.aparc.{self.config.atlas.name}atlas.mapped.stats"
     #         if not stats.exists():
     #             return False
-        
+
     #     return True
 
-
     def should_skip(self) -> bool:
-        """Skip if """
-        return (
-            False
-        )
+        """Skip if"""
+        return False

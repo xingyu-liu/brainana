@@ -125,27 +125,23 @@ from .snapshots import (
 
 from .reports import generate_qc_report
 
-from ..quality_control.mri_plotting import (
-    create_overlay_grid_3xN, 
-    create_motion_plot
-)
+from ..quality_control.mri_plotting import create_overlay_grid_3xN, create_motion_plot
 
 __all__ = [
     # Visualization functions
-    'create_overlay_grid_3xN',
-    'create_motion_plot',
-    
+    "create_overlay_grid_3xN",
+    "create_motion_plot",
     # QC functions
-    'create_motion_correction_qc',
-    'create_skullstripping_qc',
-    'create_registration_qc',
-    'create_bias_correction_qc',
-    'create_conform_qc',
-    'create_atlas_segmentation_qc',
-    'create_surf_recon_tissue_seg_qc',
-    'create_cortical_surf_and_measures_qc',
-    'create_tsnr_qc',
-    
+    "create_motion_correction_qc",
+    "create_skullstripping_qc",
+    "create_registration_qc",
+    "create_bias_correction_qc",
+    "create_t1wt2w_combined_qc",
+    "create_conform_qc",
+    "create_atlas_segmentation_qc",
+    "create_surf_recon_tissue_seg_qc",
+    "create_cortical_surf_and_measures_qc",
+    "create_tsnr_qc",
     # Report functions
-    'generate_qc_report',
-] 
+    "generate_qc_report",
+]

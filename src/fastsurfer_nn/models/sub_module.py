@@ -532,9 +532,7 @@ class CompetitiveEncoderBlock(CompetitiveDenseBlock):
         indices : Tensor
             Maxpool indices.
         """
-        out_block = super().forward(
-            x
-        )  # To be concatenated as Skip Connection
+        out_block = super().forward(x)  # To be concatenated as Skip Connection
         out_encoder, indices = self.maxpool(
             out_block
         )  # Max Pool as Input to Next Layer
@@ -555,9 +553,7 @@ class CompetitiveEncoderBlockInput(CompetitiveDenseBlockInput):
         params : Dict
             Parameters like number of channels, stride etc.
         """
-        super().__init__(
-            params
-        )  # The init of CompetitiveDenseBlock takes in params
+        super().__init__(params)  # The init of CompetitiveDenseBlock takes in params
         self.maxpool = nn.MaxPool2d(
             kernel_size=params["pool"],
             stride=params["stride_pool"],
@@ -585,9 +581,7 @@ class CompetitiveEncoderBlockInput(CompetitiveDenseBlockInput):
         Tensor
             The indices of the maxpool operation.
         """
-        out_block = super().forward(
-            x
-        )  # To be concatenated as Skip Connection
+        out_block = super().forward(x)  # To be concatenated as Skip Connection
         out_encoder, indices = self.maxpool(
             out_block
         )  # Max Pool as Input to Next Layer

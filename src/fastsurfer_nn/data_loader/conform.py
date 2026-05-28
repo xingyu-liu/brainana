@@ -18,7 +18,7 @@
 import argparse
 import re
 import sys
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Literal, TypeVar, cast
 
 import nibabel
@@ -44,12 +44,18 @@ else:
     class torch:
         class Tensor:
             pass
-    
+
     def _is_tensor(obj):
         return False
 
+
 from fastsurfer_nn.utils import logging
-from fastsurfer_nn.utils.arg_types import ImageSizeOption, OrientationType, StrictOrientationType, VoxSizeOption
+from fastsurfer_nn.utils.arg_types import (
+    ImageSizeOption,
+    OrientationType,
+    StrictOrientationType,
+    VoxSizeOption,
+)
 from fastsurfer_nn.utils.arg_types import img_size as __img_size
 from fastsurfer_nn.utils.arg_types import orientation as __orientation
 from fastsurfer_nn.utils.arg_types import target_dtype as __target_dtype
@@ -130,13 +136,15 @@ def make_parser() -> argparse.ArgumentParser:
         version="$Id: conform.py,v 1.0 2025/05/12 15:30:12 mreuter, kueglerd Exp $",
     )
     parser.add_argument(
-        "--input", "-i",
+        "--input",
+        "-i",
         dest="input",
         required=True,
         help="The path to input image.",
     )
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         dest="output",
         help="The path to output image.",
     )
@@ -160,7 +168,7 @@ def make_parser() -> argparse.ArgumentParser:
         dest="seg_input",
         action="store_true",
         help="Specifies that the input is a seg image: The *default values* for dtype and rescale are changed to "
-             "'integer' and 'none', which only means the dtype must be an integer and no rescaling is performed.",
+        "'integer' and 'none', which only means the dtype must be an integer and no rescaling is performed.",
     )
     parser.add_argument(
         "--vox_size",
@@ -169,8 +177,8 @@ def make_parser() -> argparse.ArgumentParser:
         default=1.0,
         type=__vox_size,
         help="Specifies the target voxel size to conform to (default: 1, conform to 1mm). Options: <float> between 0 "
-             "and 1 (target voxel size, isotropic, similar to mri_convert's --conform_size <size>); 'min' (conform to "
-             "the minimum voxel size); 'any' (ignore this criteria, accept any voxel size even non-isotropic).",
+        "and 1 (target voxel size, isotropic, similar to mri_convert's --conform_size <size>); 'min' (conform to "
+        "the minimum voxel size); 'any' (ignore this criteria, accept any voxel size even non-isotropic).",
     )
     parser.add_argument(
         "--conform_min",
@@ -178,7 +186,7 @@ def make_parser() -> argparse.ArgumentParser:
         action="store_const",
         const="min",
         help="(Legacy, prefer --vox_size min for same functionality) Specifies that the image should be conformed to "
-             "the minimal voxel size (used for high-res processing) -- overwrites --vox_size.",
+        "the minimal voxel size (used for high-res processing) -- overwrites --vox_size.",
     )
     parser.add_argument(
         "--img_size",
@@ -187,9 +195,9 @@ def make_parser() -> argparse.ArgumentParser:
         metavar="<int>|cube|fov|any",
         type=__img_size,
         help="Specifies the image size to conform to, cube: same value for all three directions. Options: <int> "
-             "(cube, sets dimension of the target image), 'cube' (cube, infer dimensions of image from largest "
-             "field-of-view dimension, then pad to cube), 'fov' (may not be cube, set all three dimensions of image to keep "
-             "the field of view the same) or 'any' (ignore this criteria, in practice similar to fov).",
+        "(cube, sets dimension of the target image), 'cube' (cube, infer dimensions of image from largest "
+        "field-of-view dimension, then pad to cube), 'fov' (may not be cube, set all three dimensions of image to keep "
+        "the field of view the same) or 'any' (ignore this criteria, in practice similar to fov).",
     )
     parser.add_argument(
         "--rescale",
@@ -198,8 +206,8 @@ def make_parser() -> argparse.ArgumentParser:
         default=255,
         type=__rescale_type,
         help="Specifies whether image intensities should be rescaled. Options: <number> (default: 255, will robustly "
-             "rescale intensities to this value, e.g. 0-255), 'none' (no intensity rescaling, i.e. all intensities "
-             "stay the same and values outside of the data type are clamped to the data type range).",
+        "rescale intensities to this value, e.g. 0-255), 'none' (no intensity rescaling, i.e. all intensities "
+        "stay the same and values outside of the data type are clamped to the data type range).",
     )
     advanced = parser.add_argument_group("Advanced options")
     advanced.add_argument(
@@ -217,9 +225,9 @@ def make_parser() -> argparse.ArgumentParser:
         metavar="native|XXX|soft-XXX",
         type=__orientation,
         help="Specify the target (data) orientation. Options: 'native' (will not change the orientation at all, i.e. "
-             "ignore the orientation), <orientation string>, e.g. 'LIA' or 'RAS' (force perfect alignment with the "
-             "scanner directions, as required by FreeSurfer and similar to mri_convert's --out_orientation), or "
-             "'soft-<orientation string>' like 'soft-LIA' (primary directions aligned, but no resampling required).",
+        "ignore the orientation), <orientation string>, e.g. 'LIA' or 'RAS' (force perfect alignment with the "
+        "scanner directions, as required by FreeSurfer and similar to mri_convert's --out_orientation), or "
+        "'soft-<orientation string>' like 'soft-LIA' (primary directions aligned, but no resampling required).",
     )
     parser.add_argument(
         "--verbose",
@@ -237,6 +245,7 @@ def make_parser() -> argparse.ArgumentParser:
     )
     return parser
 
+
 def options_parse():
     """
     Command line option parser.
@@ -252,7 +261,9 @@ def options_parse():
     if not args.check_only and args.output is None:
         raise RuntimeError("Please specify output image")
     if args.check_only and args.output is not None:
-        raise RuntimeError("You passed in check_only. Please do not also specify output image")
+        raise RuntimeError(
+            "You passed in check_only. Please do not also specify output image"
+        )
 
     if args.seg_input:
         if args.dtype == "uint8":
@@ -265,9 +276,9 @@ def options_parse():
 
 
 def to_target_orientation(
-        image_data: _TA,
-        source_affine: npt.NDArray[float],
-        target_orientation: StrictOrientationType,
+    image_data: _TA,
+    source_affine: npt.NDArray[float],
+    target_orientation: StrictOrientationType,
 ) -> tuple[_TA, Callable[[_TB], _TB]]:
     """
     Reorder and flip image_data such that the data is in orientation. This will always be without interpolation.
@@ -288,14 +299,23 @@ def to_target_orientation(
     Callable[[np.ndarray], np.ndarray], Callable[[torch.Tensor], torch.Tensor]
         A function that flips and reorders the data back (returns same type as output).
     """
-    reorient_ornt, unorient_ornt = orientation_to_ornts(source_affine, target_orientation)
+    reorient_ornt, unorient_ornt = orientation_to_ornts(
+        source_affine, target_orientation
+    )
 
-    if np.any([reorient_ornt[:, 1] != 1, reorient_ornt[:, 0] != np.arange(reorient_ornt.shape[0])]):  # is not lia yet
+    if np.any(
+        [
+            reorient_ornt[:, 1] != 1,
+            reorient_ornt[:, 0] != np.arange(reorient_ornt.shape[0]),
+        ]
+    ):  # is not lia yet
+
         def back_to_native(data: _TB) -> _TB:
             return apply_orientation(data, unorient_ornt)
 
         return apply_orientation(image_data, reorient_ornt), back_to_native
     else:  # data is already in lia
+
         def do_nothing(data: _TB) -> _TB:
             return data
 
@@ -303,8 +323,8 @@ def to_target_orientation(
 
 
 def orientation_to_ornts(
-        source_affine: npt.NDArray[float],
-        target_orientation: StrictOrientationType,
+    source_affine: npt.NDArray[float],
+    target_orientation: StrictOrientationType,
 ) -> tuple[npt.NDArray[int], npt.NDArray[int]]:
     """
     Determine the nibabel `ornt` Array to reorder and flip data from source_affine such that the data is in orientation.
@@ -373,14 +393,14 @@ def apply_orientation(arr: _TB | npt.ArrayLike, ornt: npt.NDArray[int]) -> _TB:
 
 
 def map_image(
-        img: nib.analyze.SpatialImage,
-        out_affine: npt.NDArray[float],
-        out_shape: tuple[int, ...] | npt.NDArray[int] | Iterable[int],
-        ras2ras: npt.NDArray[np.number] | None = None,
-        order: int = 1,
-        dtype: np.dtype[_TScalarType] | npt.DTypeLike | None = None,
-        vox_eps: float = 1e-4,
-        rot_eps: float = 1e-6,
+    img: nib.analyze.SpatialImage,
+    out_affine: npt.NDArray[float],
+    out_shape: tuple[int, ...] | npt.NDArray[int] | Iterable[int],
+    ras2ras: npt.NDArray[np.number] | None = None,
+    order: int = 1,
+    dtype: np.dtype[_TScalarType] | npt.DTypeLike | None = None,
+    vox_eps: float = 1e-4,
+    rot_eps: float = 1e-6,
 ) -> npt.NDArray[_TScalarType]:
     """
     Map image to new voxel space (RAS orientation).
@@ -425,7 +445,9 @@ def map_image(
         # if the output has no frames
         if len(out_shape) == 3:
             if any(s != 1 for s in image_data.shape[3:]):
-                raise ValueError(f"Multiple input frames {tuple(image_data.shape)} not supported!")
+                raise ValueError(
+                    f"Multiple input frames {tuple(image_data.shape)} not supported!"
+                )
             image_data = np.squeeze(image_data, axis=tuple(range(3, image_data.ndim)))
         # if the output has the same number of frames as the input
         elif image_data.shape[3:] == out_shape[3:]:
@@ -436,28 +458,33 @@ def map_image(
             vox2vox = _vox2vox
         else:
             raise ValueError(
-                    f"Input image and requested output shape have different frames: {image_data.shape} vs. {out_shape}!"
-                )
+                f"Input image and requested output shape have different frames: {image_data.shape} vs. {out_shape}!"
+            )
 
     delta = np.abs(vox2vox - np.eye(4))
     off_diag = np.ones((4, 4)) - np.eye(4)
-    if np.all(np.less(delta, np.eye(4) * max(vox_eps, rot_eps) + off_diag * rot_eps)) and image_data.shape == out_shape:
+    if (
+        np.all(np.less(delta, np.eye(4) * max(vox_eps, rot_eps) + off_diag * rot_eps))
+        and image_data.shape == out_shape
+    ):
         # no interpolation needed, just use image_data
         return image_data
 
     inv_vox2vox = np.linalg.inv(vox2vox)
-    # NOTE: A crop_transform optimization path existed here but had a bug in offset 
-    # calculation for axis-permuting transformations (e.g., LIA<->RAS). 
+    # NOTE: A crop_transform optimization path existed here but had a bug in offset
+    # calculation for axis-permuting transformations (e.g., LIA<->RAS).
     # Using affine_transform handles all cases correctly.
-    return affine_transform(image_data, inv_vox2vox, output_shape=out_shape, order=order)
+    return affine_transform(
+        image_data, inv_vox2vox, output_shape=out_shape, order=order
+    )
 
 
 def getscale(
-        data: np.ndarray,
-        dst_min: float | int,
-        dst_max: float | int,
-        f_low: float = 0.0,
-        f_high: float = 0.999,
+    data: np.ndarray,
+    dst_min: float | int,
+    dst_max: float | int,
+    f_low: float = 0.0,
+    f_high: float = 0.999,
 ) -> tuple[float, float]:
     """
     Get offset and scale of image intensities to robustly rescale to dst_min..dst_max.
@@ -485,7 +512,7 @@ def getscale(
         Scale factor.
     """
 
-    if f_low < 0. or f_high > 1. or f_low > f_high:
+    if f_low < 0.0 or f_high > 1.0 or f_low > f_high:
         raise ValueError("Invalid values for f_low or f_high, must be within 0 and 1.")
 
     # get min and max from source
@@ -544,22 +571,26 @@ def getscale(
 
     # scale
     if src_min == src_max:
-        LOGGER.warning("Scaling between src_min and src_max. The input image is likely corrupted!")
+        LOGGER.warning(
+            "Scaling between src_min and src_max. The input image is likely corrupted!"
+        )
         scale = 1.0
     else:
         scale = (dst_max - dst_min) / (src_max - src_min)
     # logger.info
-    LOGGER.info(f"rescale:  min: {src_min:8.2f}  max: {src_max:8.2f}  scale: {scale:8.5f}")
+    LOGGER.info(
+        f"rescale:  min: {src_min:8.2f}  max: {src_max:8.2f}  scale: {scale:8.5f}"
+    )
 
     return src_min, scale
 
 
 def scalecrop(
-        data: np.ndarray,
-        dst_min: float,
-        dst_max: float,
-        src_min: float,
-        scale: float,
+    data: np.ndarray,
+    dst_min: float,
+    dst_max: float,
+    src_min: float,
+    scale: float,
 ) -> np.ndarray:
     """
     Crop the intensity ranges to specific min and max values.
@@ -591,11 +622,11 @@ def scalecrop(
 
 
 def rescale(
-        data: np.ndarray,
-        dst_min: float,
-        dst_max: float,
-        f_low: float = 0.0,
-        f_high: float = 0.999
+    data: np.ndarray,
+    dst_min: float,
+    dst_max: float,
+    f_low: float = 0.0,
+    f_high: float = 0.999,
 ) -> np.ndarray:
     """
     Rescale image intensity values (0-255).
@@ -624,17 +655,17 @@ def rescale(
 
 
 def conform(
-        img: nib.analyze.SpatialImage,
-        order: int = 1,
-        vox_size: VoxSizeOption | None = "min",
-        img_size: ImageSizeOption | None = "fov",
-        dtype: type | None = np.uint8,
-        orientation: OrientationType | None = "lia",
-        rescale: int | float | Literal["none"] = 255,
-        verbose: bool = True,
-        vox_eps: float = 1e-4,
-        rot_eps: float = 1e-6,
-        **kwargs,
+    img: nib.analyze.SpatialImage,
+    order: int = 1,
+    vox_size: VoxSizeOption | None = "min",
+    img_size: ImageSizeOption | None = "fov",
+    dtype: type | None = np.uint8,
+    orientation: OrientationType | None = "lia",
+    rescale: int | float | Literal["none"] = 255,
+    verbose: bool = True,
+    vox_eps: float = 1e-4,
+    rot_eps: float = 1e-6,
+    **kwargs,
 ) -> nib.analyze.SpatialImage:
     """Python version of mri_convert -c.
 
@@ -688,12 +719,16 @@ def conform(
     other way around. However, we compute the scale factor from the input to increase similarity.
     """
     if "conform_vox_size" in kwargs:
-        LOGGER.warning("conform_vox_size is deprecated, replaced by vox_size and will be removed.")
+        LOGGER.warning(
+            "conform_vox_size is deprecated, replaced by vox_size and will be removed."
+        )
         vox_size = kwargs["conform_vox_size"]
 
     vox_img = conformed_vox_img_size(img, vox_size, img_size, vox_eps=vox_eps)
     _orientation: OrientationType = "native" if orientation is None else orientation
-    h1 = prepare_mgh_header(img, *vox_img, _orientation, vox_eps=vox_eps, rot_eps=rot_eps)
+    h1 = prepare_mgh_header(
+        img, *vox_img, _orientation, vox_eps=vox_eps, rot_eps=rot_eps
+    )
 
     # affine is the computed target affine for the output image
     target_affine = h1.get_affine()
@@ -745,58 +780,64 @@ def conform(
     if img_size == "cube" or (isinstance(img_size, str) and img_size.lower() == "cube"):
         # Lazy import to avoid circular dependency (data_utils imports from conform)
         from fastsurfer_nn.data_loader.data_utils import pad_volume_to_cube
-        
+
         current_shape = mapped_data.shape[:3]
-        
+
         # Use existing padding function to make volume cubic
-        mapped_data, pad_widths = pad_volume_to_cube(mapped_data, mode='constant')
-        
+        mapped_data, pad_widths = pad_volume_to_cube(mapped_data, mode="constant")
+
         # Check if padding was applied
         if any(p[0] != 0 or p[1] != 0 for p in pad_widths):
             # Adjust affine to account for padding.
             # pad_volume_to_cube prepends pad_widths[i][0] voxels before the FOV block (floor-half split).
             # For odd pad_total, that is NOT pad_total/2; using pad_total/2.0 misaligns the affine by 0.5 voxels.
             # The translation must subtract MdcD @ p_before so cube voxel 0 still maps to the correct world corner.
-            pad_total = np.array([p[0] + p[1] for p in pad_widths])  # per-axis total padding (for logs)
-            center_shift_vox = np.array([p[0] for p in pad_widths], dtype=float)  # actual pre-padding per dim
-            
+            np.array(
+                [p[0] + p[1] for p in pad_widths]
+            )  # per-axis total padding (for logs)
+            center_shift_vox = np.array(
+                [p[0] for p in pad_widths], dtype=float
+            )  # actual pre-padding per dim
+
             # Get MdcD matrix (rotation * voxel size) from header
             # MdcD = Mdc^T * delta (from the comment at line 872)
             # Each column of Mdc^T is multiplied by the corresponding delta value
             mdc = np.asarray(h1["Mdc"])
             delta = np.array(h1.get_zooms()[:3])
-            mdcD = mdc.T * delta  # Broadcasting: (3,3) * (3,) -> each column multiplied by delta
-            
+            mdcD = (
+                mdc.T * delta
+            )  # Broadcasting: (3,3) * (3,) -> each column multiplied by delta
+
             # Convert center shift from voxel space to world space
             center_shift_world = mdcD @ center_shift_vox
-            
+
             # Adjust affine translation
             # The affine translation is: Pxyz_c - vol_center
             # When vol_center shifts by center_shift_world, the translation needs to shift by -center_shift_world
-            
+
             # First, update header shape to reflect padded dimensions
             padded_shape = mapped_data.shape[:3]
             h1.set_data_shape(list(padded_shape) + [1])
-            
+
             # Now adjust the affine translation to account for padding
             # The vol_center in the header will be recomputed from the new shape
             # So we need to adjust the affine translation by -center_shift_world
             target_affine = target_affine.copy()
             target_affine_before = target_affine[:3, 3].copy()
             target_affine[:3, 3] = target_affine[:3, 3] - center_shift_world
-            
+
             if verbose:
-                LOGGER.info(f"Affine adjustment details:")
+                LOGGER.info("Affine adjustment details:")
                 LOGGER.info(f"  Before padding: {target_affine_before}")
                 LOGGER.info(f"  Adjustment: -{center_shift_world}")
                 LOGGER.info(f"  After adjustment: {target_affine[:3, 3]}")
-            
+
             # CRITICAL: The brain center in world space should conceptually stay the same
             # The padding doesn't move the brain, it just adds zeros around it.
             # However, we manually adjusted target_affine[:3, 3] to account for the new volume center.
-            # To ensure consistency, we need to update h1["Pxyz_c"] so that when h1.get_affine() 
+            # To ensure consistency, we need to update h1["Pxyz_c"] so that when h1.get_affine()
             # is called later, it computes the same affine as our manually adjusted target_affine.
-            # 
+            #
             # The affine is computed as: affine_translation = Pxyz_c - vol_center
             # We want: target_affine[:3, 3] = Pxyz_c - new_vol_center
             # Therefore: Pxyz_c = target_affine[:3, 3] + new_vol_center
@@ -804,30 +845,38 @@ def conform(
             delta = np.array(h1.get_zooms()[:3])
             mdcD = mdc.T * delta
             new_vol_center = mdcD @ (np.array(padded_shape, dtype=float) / 2.0)
-            
+
             # Update Pxyz_c so that: target_affine[:3, 3] = Pxyz_c - new_vol_center
             # Therefore: Pxyz_c = target_affine[:3, 3] + new_vol_center
             h1["Pxyz_c"] = target_affine[:3, 3] + new_vol_center
-            
+
             # CRITICAL: Verify that header-computed affine matches our adjusted target_affine
             # We keep using target_affine (which was used for mapping) to preserve orientation
             # But we update Pxyz_c so that h1.get_affine() matches when accessed later
             if verbose:
                 header_affine = h1.get_affine()
                 header_affine_trans = np.array(h1["Pxyz_c"]) - new_vol_center
-                LOGGER.debug(f"Affine verification after padding:")
+                LOGGER.debug("Affine verification after padding:")
                 LOGGER.debug(f"  Adjusted affine translation: {target_affine[:3, 3]}")
-                LOGGER.debug(f"  Header would compute translation: {header_affine_trans}")
-                LOGGER.debug(f"  Translation difference: {target_affine[:3, 3] - header_affine_trans}")
+                LOGGER.debug(
+                    f"  Header would compute translation: {header_affine_trans}"
+                )
+                LOGGER.debug(
+                    f"  Translation difference: {target_affine[:3, 3] - header_affine_trans}"
+                )
                 # Check if rotation/orientation matches (should be identical)
-                rotation_diff = np.abs(target_affine[:3, :3] - header_affine[:3, :3]).max()
+                rotation_diff = np.abs(
+                    target_affine[:3, :3] - header_affine[:3, :3]
+                ).max()
                 LOGGER.debug(f"  Rotation matrix max difference: {rotation_diff}")
                 LOGGER.debug(f"  target_affine[:3,:3]:\n{target_affine[:3, :3]}")
                 LOGGER.debug(f"  header_affine[:3,:3]:\n{header_affine[:3, :3]}")
-                if not np.allclose(target_affine[:3, 3], header_affine_trans, atol=1e-4):
+                if not np.allclose(
+                    target_affine[:3, 3], header_affine_trans, atol=1e-4
+                ):
                     LOGGER.warning(
-                        f"WARNING: Adjusted affine translation doesn't match header computation! "
-                        f"This may cause brain shifting during resampling."
+                        "WARNING: Adjusted affine translation doesn't match header computation! "
+                        "This may cause brain shifting during resampling."
                     )
                 elif rotation_diff > 1e-6:
                     # Log more details about the discrepancy
@@ -835,22 +884,38 @@ def conform(
                         f"WARNING: Rotation matrix differs! This will cause orientation issues. "
                         f"Max difference: {rotation_diff}"
                     )
-                    LOGGER.warning(f"  target_affine rotation:\n{target_affine[:3, :3]}")
-                    LOGGER.warning(f"  header_affine rotation:\n{header_affine[:3, :3]}")
-                    LOGGER.warning(f"  Difference:\n{target_affine[:3, :3] - header_affine[:3, :3]}")
+                    LOGGER.warning(
+                        f"  target_affine rotation:\n{target_affine[:3, :3]}"
+                    )
+                    LOGGER.warning(
+                        f"  header_affine rotation:\n{header_affine[:3, :3]}"
+                    )
+                    LOGGER.warning(
+                        f"  Difference:\n{target_affine[:3, :3] - header_affine[:3, :3]}"
+                    )
                 else:
-                    LOGGER.debug(f"  ✓ Affine matches header computation (translation and rotation)")
-            
+                    LOGGER.debug(
+                        "  ✓ Affine matches header computation (translation and rotation)"
+                    )
+
             if verbose:
-                LOGGER.info(f"Padded image from {current_shape} to {padded_shape} (cubic) for img_size='cube'")
-                LOGGER.info(f"Padding (voxel space): {[f'{p[0]}+{p[1]}={p[0]+p[1]}' for p in pad_widths]}")
-                LOGGER.info(f"Pre-padding voxel shift (p_before per dim): {center_shift_vox}")
-                LOGGER.info(f"Affine translation adjustment (world, -MdcD @ p_before): {center_shift_world}")
+                LOGGER.info(
+                    f"Padded image from {current_shape} to {padded_shape} (cubic) for img_size='cube'"
+                )
+                LOGGER.info(
+                    f"Padding (voxel space): {[f'{p[0]}+{p[1]}={p[0]+p[1]}' for p in pad_widths]}"
+                )
+                LOGGER.info(
+                    f"Pre-padding voxel shift (p_before per dim): {center_shift_vox}"
+                )
+                LOGGER.info(
+                    f"Affine translation adjustment (world, -MdcD @ p_before): {center_shift_world}"
+                )
 
     # mapped data is still float here, clip to integers now
     if np.issubdtype(target_dtype, np.integer):
         mapped_data = np.rint(mapped_data)
-    
+
     # CRITICAL: Use target_affine (which was used for mapping) to preserve orientation
     # The header's Pxyz_c has been updated to match, so h1.get_affine() should match target_affine
     # But we use target_affine directly to ensure exact match with what was used for mapping
@@ -873,12 +938,12 @@ def conform(
 
 
 def prepare_mgh_header(
-        img: nib.analyze.SpatialImage,
-        target_vox_size: npt.NDArray[float] | None = None,
-        target_img_size: npt.NDArray[int] | None = None,
-        orientation: OrientationType = "native",
-        vox_eps: float = 1e-4,
-        rot_eps: float = 1e-6,
+    img: nib.analyze.SpatialImage,
+    target_vox_size: npt.NDArray[float] | None = None,
+    target_img_size: npt.NDArray[int] | None = None,
+    orientation: OrientationType = "native",
+    vox_eps: float = 1e-4,
+    rot_eps: float = 1e-6,
 ) -> MGHHeader:
     """
     Prepare the header with affine by target voxel size, target image size and criteria - initialized from img.
@@ -911,7 +976,9 @@ def prepare_mgh_header(
     source_img_shape = img.header.get_data_shape()
     source_vox_size = img.header.get_zooms()
 
-    source_mdc = img.affine[:3, :3] / np.linalg.norm(img.affine[:3, :3], axis=0, keepdims=True)
+    source_mdc = img.affine[:3, :3] / np.linalg.norm(
+        img.affine[:3, :3], axis=0, keepdims=True
+    )
     # native
     if orientation == "native":
         re_order_axes = [0, 1, 2]
@@ -922,20 +989,34 @@ def prepare_mgh_header(
         if len(orientation) == 3:  # lia, ras, etc
             # this is a 3x3 matrix
             out_ornt = nib.orientations.axcodes2ornt(orientation[-3:].upper())
-            mdc_affine = nib.orientations.inv_ornt_aff(out_ornt, source_img_shape)[:3, :3]
-        else: # soft lia, ras, ....
+            mdc_affine = nib.orientations.inv_ornt_aff(out_ornt, source_img_shape)[
+                :3, :3
+            ]
+        else:  # soft lia, ras, ....
             aff = _ornt_transform[:, 1][None] * source_mdc
-            mdc_affine = np.stack([aff[:3, int(ax)] for ax in _ornt_transform[:, 0]], axis=-1)
+            mdc_affine = np.stack(
+                [aff[:3, int(ax)] for ax in _ornt_transform[:, 0]], axis=-1
+            )
 
-    shape: list[int] = [(source_img_shape if target_img_size is None else target_img_size)[i] for i in re_order_axes]
+    shape: list[int] = [
+        (source_img_shape if target_img_size is None else target_img_size)[i]
+        for i in re_order_axes
+    ]
     h1.set_data_shape(shape + [1])
 
     # --> h1['delta']
-    h1.set_zooms([(target_vox_size if target_vox_size is not None else source_vox_size)[i] for i in re_order_axes])
+    h1.set_zooms(
+        [
+            (target_vox_size if target_vox_size is not None else source_vox_size)[i]
+            for i in re_order_axes
+        ]
+    )
 
     h1["Mdc"] = mdc_affine
     # fov should only be defined, if the image has same fov in all directions? fov == one number
-    _fov = np.asarray([i * v for i, v in zip(h1.get_data_shape(), h1.get_zooms(), strict=False)])
+    _fov = np.asarray(
+        [i * v for i, v in zip(h1.get_data_shape(), h1.get_zooms(), strict=False)]
+    )
     if _fov.min() == _fov.max():
         # fov is not needed for MGHHeader.get_affine()
         h1["fov"] = _fov[0]
@@ -944,22 +1025,29 @@ def prepare_mgh_header(
     # There is a special case here, where an interpolation is triggered, but it is not necessary, if the position of
     # the center could "fix this" condition:
     vox2vox = np.linalg.inv(h1.get_affine()) @ img.affine
-    if does_vox2vox_rot_require_interpolation(vox2vox, vox_eps=vox_eps, rot_eps=rot_eps):
+    if does_vox2vox_rot_require_interpolation(
+        vox2vox, vox_eps=vox_eps, rot_eps=rot_eps
+    ):
         # 1. has rotation, or vox-size resampling => requires resampling
         pass
     else:
         # 2. img_size changes from odd to even and vice versa
         #    i.e. can changing the RAS center make an interpolation unnecessary?
         vec = np.linalg.inv(vox2vox)[:3, 3]
-        tols = {"atol": 1.e-4, "rtol": 0.}
+        tols = {"atol": 1.0e-4, "rtol": 0.0}
         # is it fixable?
-        if not np.allclose(vec, np.round(vec), **tols) and np.allclose(vec * 2, np.round(vec * 2), **tols):
-            new_center = (center + (1 - np.isclose(vec, np.round(vec), **tols)) / 2.0, [1.0])
+        if not np.allclose(vec, np.round(vec), **tols) and np.allclose(
+            vec * 2, np.round(vec * 2), **tols
+        ):
+            new_center = (
+                center + (1 - np.isclose(vec, np.round(vec), **tols)) / 2.0,
+                [1.0],
+            )
             h1["Pxyz_c"] = img.affine.dot(np.hstack(new_center))[:3]
 
     # tr information is not copied when copying from non-mgh formats
-    if len(img.header.get('pixdim', [])) :
-        h1['tr'] = img.header['pixdim'][4] * 1000
+    if len(img.header.get("pixdim", [])):
+        h1["tr"] = img.header["pixdim"][4] * 1000
 
     # The affine can be explicitly constructed by MGHHeader.get_affine() / h1.get_affine()
     # MdcD = np.asarray(h1["Mdc"]).T * h1["delta"]
@@ -969,9 +1057,9 @@ def prepare_mgh_header(
 
 
 def does_vox2vox_rot_require_interpolation(
-        vox2vox: npt.NDArray[float],
-        vox_eps: float = 1e-4,
-        rot_eps: float = 1e-6,
+    vox2vox: npt.NDArray[float],
+    vox_eps: float = 1e-4,
+    rot_eps: float = 1e-6,
 ) -> bool:
     """
     Check whether the affine requires resampling/interpolation or whether reordering is sufficient.
@@ -990,22 +1078,27 @@ def does_vox2vox_rot_require_interpolation(
     bool
         Whether the vox2vox matrix requires resampling.
     """
+
     def isclose(x, y, eps):
         return np.isclose(x, y, atol=eps, rtol=0)
 
     _v2v_pos = np.abs(vox2vox[:3, :3])
     # all values -1, 1 or 0 ==> False (does not require interpolation)
-    return not np.all(np.logical_or(isclose(_v2v_pos, 1, eps=vox_eps), isclose(_v2v_pos, 0, eps=rot_eps)))
+    return not np.all(
+        np.logical_or(
+            isclose(_v2v_pos, 1, eps=vox_eps), isclose(_v2v_pos, 0, eps=rot_eps)
+        )
+    )
 
 
 def is_conform(
-        img: nib.analyze.SpatialImage,
-        vox_size: VoxSizeOption | None = "min",
-        img_size: ImageSizeOption | None = "fov",
-        dtype: type | None = np.uint8,
-        orientation: OrientationType | None = "lia",
-        verbose: bool = True,
-        vox_eps: float = 1e-4,
+    img: nib.analyze.SpatialImage,
+    vox_size: VoxSizeOption | None = "min",
+    img_size: ImageSizeOption | None = "fov",
+    dtype: type | None = np.uint8,
+    orientation: OrientationType | None = "lia",
+    verbose: bool = True,
+    vox_eps: float = 1e-4,
     eps: float = 1e-6,
     **kwargs,
 ) -> bool:
@@ -1048,14 +1141,20 @@ def is_conform(
     This function only needs the header (not the data).
     """
     if "conform_vox_size" in kwargs:
-        LOGGER.warning("conform_vox_size is deprecated, replaced by vox_size and will be removed.")
+        LOGGER.warning(
+            "conform_vox_size is deprecated, replaced by vox_size and will be removed."
+        )
         vox_size = kwargs["conform_vox_size"]
     if "check_dtype" in kwargs:
-        LOGGER.warning("check_dtype is deprecated, replaced by dtype=None and will be removed.")
+        LOGGER.warning(
+            "check_dtype is deprecated, replaced by dtype=None and will be removed."
+        )
         if kwargs["check_dtype"] is False:
             dtype = None
 
-    _vox_size, _img_size = conformed_vox_img_size(img, vox_size, img_size, vox_eps=vox_eps, log_capping=False)
+    _vox_size, _img_size = conformed_vox_img_size(
+        img, vox_size, img_size, vox_eps=vox_eps, log_capping=False
+    )
 
     # check 3d
     if len(img.shape) > 3 and img.shape[3] != 1:
@@ -1073,8 +1172,13 @@ def is_conform(
     else:
         if not isinstance(_vox_size, np.ndarray):
             raise TypeError("_vox_size should be numpy.ndarray here")
-        vox_size_criteria = f"Voxel Size {vox_size}={'x'.join(f'{v:.2f}' for v in _vox_size)}"
-        checks[vox_size_criteria] = np.allclose(izoom[:3], _vox_size, atol=vox_eps, rtol=0), vox_size_text
+        vox_size_criteria = (
+            f"Voxel Size {vox_size}={'x'.join(f'{v:.2f}' for v in _vox_size)}"
+        )
+        checks[vox_size_criteria] = (
+            np.allclose(izoom[:3], _vox_size, atol=vox_eps, rtol=0),
+            vox_size_text,
+        )
 
     # check dimensions
     img_size_text = f"image dimensions {img.shape}"
@@ -1083,18 +1187,28 @@ def is_conform(
         checks[img_size_criteria] = "IGNORED", img_size_text
     else:
         img_size_criteria = f"Dimensions {img_size}={'x'.join(map(str, _img_size[:3]))}"
-        checks[img_size_criteria] = np.array_equal(np.asarray(img.shape[:3]), _img_size), img_size_text
+        checks[img_size_criteria] = (
+            np.array_equal(np.asarray(img.shape[:3]), _img_size),
+            img_size_text,
+        )
 
     # check orientation LIA
     affcode = "".join(nib.orientations.aff2axcodes(img.affine))
     with np.printoptions(precision=2, suppress=True):
-        orientation_text = "affine=" + re.sub("\\s+", " ", str(img.affine[:3, :3])) + f" => {affcode}"
+        orientation_text = (
+            "affine=" + re.sub("\\s+", " ", str(img.affine[:3, :3])) + f" => {affcode}"
+        )
     if orientation is None or orientation == "native":
         checks[f"Orientation {orientation}"] = "IGNORED", orientation_text
     else:
         is_soft = not orientation.startswith("soft")
-        is_correct_orientation = is_orientation(img.affine, orientation[-3:], is_soft, eps)
-        checks[f"Orientation {orientation.upper()}"] = is_correct_orientation, orientation_text
+        is_correct_orientation = is_orientation(
+            img.affine, orientation[-3:], is_soft, eps
+        )
+        checks[f"Orientation {orientation.upper()}"] = (
+            is_correct_orientation,
+            orientation_text,
+        )
 
     # check dtype uchar
     dtype_text = f"dtype {img.get_data_dtype().name}"
@@ -1103,7 +1217,10 @@ def is_conform(
     else:
         _dtype: npt.DTypeLike = to_dtype(dtype)
         _dtype_name = _dtype.name if hasattr(_dtype, "name") else str(dtype)
-        checks[f"Dtype {_dtype_name}"] = np.issubdtype(img.get_data_dtype(), _dtype), dtype_text
+        checks[f"Dtype {_dtype_name}"] = (
+            np.issubdtype(img.get_data_dtype(), _dtype),
+            dtype_text,
+        )
 
     _is_conform = all(map(lambda x: x[0], checks.values()))
 
@@ -1117,7 +1234,7 @@ def is_conform(
             if np.allclose(_vox_size[0], _vox_size, atol=1e-2):
                 conform_str = f"{np.round(_vox_size[0], decimals=2):.2f}-"
             else:
-                conform_str = 'x'.join(f'{v:.2f}' for v in _vox_size) + "-"
+                conform_str = "x".join(f"{v:.2f}" for v in _vox_size) + "-"
         logger.info(f"Preprocessing: {conform_str}conformed image criteria check:")
         for condition, (value, message) in checks.items():
             if isinstance(value, bool):
@@ -1154,10 +1271,10 @@ def to_dtype(dtype: str | np.dtype | type) -> npt.DTypeLike:
 
 
 def is_orientation(
-        affine: npt.NDArray[float],
-        target_orientation: OrientationType = "lia",
-        soft: bool = False,
-        eps: float = 1e-6,
+    affine: npt.NDArray[float],
+    target_orientation: OrientationType = "lia",
+    soft: bool = False,
+    eps: float = 1e-6,
 ):
     """
     Checks whether the affine is LIA-oriented.
@@ -1179,22 +1296,27 @@ def is_orientation(
     bool
         Whether the affine is LIA-oriented.
     """
-    if "".join(nib.orientations.aff2axcodes(affine, tol=eps)).lower() == target_orientation.lower():
+    if (
+        "".join(nib.orientations.aff2axcodes(affine, tol=eps)).lower()
+        == target_orientation.lower()
+    ):
         if soft:
             return True
     else:
         return False
 
-    return does_vox2vox_rot_require_interpolation(affine / np.linalg.norm(affine, axis=0), eps=eps)
+    return does_vox2vox_rot_require_interpolation(
+        affine / np.linalg.norm(affine, axis=0), eps=eps
+    )
 
 
 def conformed_vox_img_size(
-        img: nib.analyze.SpatialImage,
-        vox_size: VoxSizeOption | None,
-        img_size: ImageSizeOption | None,
-        vox_eps: float = 1e-4,
-        log_capping: bool = True,
-        **kwargs,
+    img: nib.analyze.SpatialImage,
+    vox_size: VoxSizeOption | None,
+    img_size: ImageSizeOption | None,
+    vox_eps: float = 1e-4,
+    log_capping: bool = True,
+    **kwargs,
 ) -> tuple[npt.NDArray[float] | None, npt.NDArray[int] | None]:
     """
     Extract the voxel size and the image size.
@@ -1223,14 +1345,19 @@ def conformed_vox_img_size(
         The size of the image adjusted to the conformed voxel size (still in native orientation), shape: 3.
     """
     if "conform_vox_size" in kwargs:
-        LOGGER.warning("conform_vox_size is deprecated, replaced by vox_size and will be removed.")
+        LOGGER.warning(
+            "conform_vox_size is deprecated, replaced by vox_size and will be removed."
+        )
         vox_size = kwargs["conform_vox_size"]
 
     MAX_VOX_SIZE = 1.0
     # this is similar to mri_convert --conform_min
     if isinstance(vox_size, str) and (vox_size := vox_size.lower()) in ["min", "auto"]:
         # find minimal voxel side length
-        min_vox_size = np.round(np.min(img.header.get_zooms()[:3]), decimals=int(np.ceil(-np.log10(vox_eps))))
+        min_vox_size = np.round(
+            np.min(img.header.get_zooms()[:3]),
+            decimals=int(np.ceil(-np.log10(vox_eps))),
+        )
         # use the minimal voxel size directly (no capping at 1mm)
         target_vox_size = np.full((3,), min_vox_size)
     # this is similar to mri_convert --conform_size <float>
@@ -1249,21 +1376,26 @@ def conformed_vox_img_size(
     elif isinstance(img_size, int) and img_size > 0:
         # Fixed size: Force a cube of the specified size
         target_img_size = np.full((3,), img_size)
-    elif isinstance(img_size, str) and (img_size := img_size.lower()) in ["fov", "cube"]:
+    elif isinstance(img_size, str) and (img_size := img_size.lower()) in [
+        "fov",
+        "cube",
+    ]:
         # REMOVED: Special case that forced 256³ for 1mm isotropic data
         # This was problematic for small FOV images (e.g., EPI) where 256³ is too large
         # Now all data uses FOV-based sizing consistently
-        
+
         # Step 1: Start with original image dimensions
         target_img_size = np.array(img.shape[:3])
-        
+
         # Step 2: Adjust for voxel size changes (preserve physical FOV)
         if target_vox_size is not None:
             # Compute field of view dimensions in mm (in native orientation)
             fov = np.array(img.header.get_zooms()[:3]) * target_img_size
             # Compute number of voxels needed to cover field of view with new voxel size
-            target_img_size = np.ceil((fov / target_vox_size * 10000).astype(int).astype(float) / 10000).astype(int)
-        
+            target_img_size = np.ceil(
+                (fov / target_vox_size * 10000).astype(int).astype(float) / 10000
+            ).astype(int)
+
         # Step 3: Handle "fov" vs "cube" difference
         #   - "fov" (RECOMMENDED): Keep FOV-based dimensions (may be non-cubic, e.g., [320, 144, 210])
         #     Preserves exact physical FOV, maintains brain position (no shifting)
@@ -1273,23 +1405,23 @@ def conformed_vox_img_size(
         # Note: For "cube", we don't expand here - padding happens in conform() after resampling
     else:
         raise ValueError("Invalid value for img_size passed.")
-    
+
     # Step 4: Cap image dimensions to prevent CUDA OOM errors
     # This is necessary for very high-resolution images with small voxel sizes
     # Also handle the case when both img_size and vox_size are None (no conforming)
     original_img_size = np.array(img.shape[:3])
     original_vox_size = np.array(img.header.get_zooms()[:3])
-    
+
     # Compute original FOV (physical field of view in mm) - this should be preserved when capping
     original_fov = original_vox_size * original_img_size
-    
+
     # Track if we started with both None (to preserve None state if no capping needed)
-    both_none = (target_img_size is None and target_vox_size is None)
-    
+    both_none = target_img_size is None and target_vox_size is None
+
     # If target_img_size is None (both None case), use original size for capping check
     if target_img_size is None:
         target_img_size = original_img_size
-    
+
     # Compute intended FOV before any capping
     # For "fov" and "cube" cases, target_img_size was computed to preserve original_fov
     # For int case with vox_size specified, the intended FOV is target_vox_size * target_img_size
@@ -1298,25 +1430,27 @@ def conformed_vox_img_size(
         intended_fov = target_vox_size * target_img_size
     else:
         intended_fov = original_fov
-    
+
     # Cap image dimensions if they exceed maximum, and adjust voxel size to preserve FOV
     if np.any(target_img_size > MAX_IMG_DIMENSION):
         original_target_img_size = target_img_size.copy()
-        original_target_vox_size = target_vox_size.copy() if target_vox_size is not None else None
-        
+        original_target_vox_size = (
+            target_vox_size.copy() if target_vox_size is not None else None
+        )
+
         # Find the largest dimension and calculate scale factor to preserve aspect ratio
         max_dim = np.max(target_img_size)
         scale_factor = MAX_IMG_DIMENSION / max_dim
-        
+
         if log_capping:
             LOGGER.warning(
                 f"Image dimensions {target_img_size} exceed maximum {MAX_IMG_DIMENSION}. "
                 f"Capping largest dimension ({max_dim}) and scaling proportionally to prevent memory issues."
             )
-        
+
         # Scale all dimensions proportionally to preserve aspect ratio
         target_img_size = (target_img_size * scale_factor).astype(int)
-        
+
         # Adjust voxel size to preserve FOV and make it isotropic
         # Since we scaled proportionally, we can use a single isotropic voxel size
         # Use the scale factor: new_vox_size = original_vox_size / scale_factor (for each dimension)
@@ -1333,10 +1467,14 @@ def conformed_vox_img_size(
             new_vox_size_per_dim = original_fov / target_img_size
             isotropic_vox_size = np.max(new_vox_size_per_dim)
             target_vox_size = np.full((3,), isotropic_vox_size)
-        
+
         if log_capping:
-            original_vox_str = 'x'.join(f'{v:.2f}' for v in original_target_vox_size) if original_target_vox_size is not None else 'None'
-            new_vox_str = 'x'.join(f'{v:.2f}' for v in target_vox_size)
+            original_vox_str = (
+                "x".join(f"{v:.2f}" for v in original_target_vox_size)
+                if original_target_vox_size is not None
+                else "None"
+            )
+            new_vox_str = "x".join(f"{v:.2f}" for v in target_vox_size)
             LOGGER.info(
                 f"Adjusted image size: {original_target_img_size} -> {target_img_size}, "
                 f"voxel size: {original_vox_str} -> {new_vox_str}"
@@ -1345,13 +1483,13 @@ def conformed_vox_img_size(
         # If both were None and no capping was needed, preserve None state
         target_img_size = None
         # target_vox_size is already None
-    
+
     return target_vox_size, target_img_size
 
 
 def check_affine_in_nifti(
-        img: nib.Nifti1Image | nib.Nifti2Image,
-        logger: logging.Logger | None = None,
+    img: nib.Nifti1Image | nib.Nifti2Image,
+    logger: logging.Logger | None = None,
 ) -> bool:
     """
     Check the affine in nifti Image.
@@ -1377,7 +1515,9 @@ def check_affine_in_nifti(
     message = ""
 
     header = cast(nib.Nifti1Header | nib.Nifti2Header, img.header)
-    if header["qform_code"] != 0 and not np.allclose(img.get_sform(), img.get_qform(), atol=0.001):
+    if header["qform_code"] != 0 and not np.allclose(
+        img.get_sform(), img.get_qform(), atol=0.001
+    ):
         message = (
             f"#############################################################\n"
             f"WARNING: qform and sform transform are not identical!\n"
@@ -1400,8 +1540,8 @@ def check_affine_in_nifti(
         vox_size_affine = np.sqrt((img.affine[:3, :3] * img.affine[:3, :3]).sum(0))
 
         if not np.allclose(vox_size_affine, vox_size_header, atol=1e-3):
-            header_str = 'x'.join(f'{v:.2f}' for v in vox_size_header[:3])
-            affine_str = 'x'.join(f'{v:.2f}' for v in vox_size_affine)
+            header_str = "x".join(f"{v:.2f}" for v in vox_size_header[:3])
+            affine_str = "x".join(f"{v:.2f}" for v in vox_size_affine)
             message = (
                 f"#############################################################\n"
                 f"ERROR: Invalid Nifti-header! Affine matrix is inconsistent with "
@@ -1420,8 +1560,8 @@ def check_affine_in_nifti(
 
     return check
 
-def print_options(options: dict):
 
+def print_options(options: dict):
     options = dict(options)
     for key in ("vox_size", "img_size", "dtype", "orientation"):
         if options.get(key, None) is None:
@@ -1441,9 +1581,9 @@ def print_options(options: dict):
     )
     if not options["check_only"]:
         msg += (
-           "- output volume: {output}",
-           "- order: {order}",
-           "- rescale: {rescale}",
+            "- output volume: {output}",
+            "- order: {order}",
+            "- rescale: {rescale}",
         )
 
     _logger = logging.getLogger(__name__ + ".print_options")
@@ -1459,7 +1599,7 @@ if __name__ == "__main__":
     except RuntimeError as e:
         sys.exit("ERROR: " + str(e.args[0] if len(e.args) == 1 else e.args))
 
-    logging.setup_logging(options.logfile) # logging to only the console
+    logging.setup_logging(options.logfile)  # logging to only the console
 
     if options.verbose:
         print_options(vars(options))
@@ -1474,7 +1614,7 @@ if __name__ == "__main__":
 
     opt_kwargs = {
         "dtype": options.dtype if options.dtype != "any" else None,
-        "vox_size":  options.vox_size,
+        "vox_size": options.vox_size,
         "img_size": options.img_size,
         "orientation": options.orientation,
         "verbose": options.verbose,
@@ -1492,7 +1632,9 @@ if __name__ == "__main__":
         # Note: if check_only, a non-conforming image leads to an error code, this
         # result is needed in recon_surf.sh
         if options.check_only:
-            LOGGER.info("check_only flag provided. Exiting without conforming input image.\n")
+            LOGGER.info(
+                "check_only flag provided. Exiting without conforming input image.\n"
+            )
             sys.exit(1)
 
     # If image is nifti image
@@ -1508,7 +1650,13 @@ if __name__ == "__main__":
         sys.exit("conform only supports mgz and nifti.")
 
     try:
-        new_image = conform(image, order=options.order, rescale=options.rescale, file_type=file_type, **opt_kwargs)
+        new_image = conform(
+            image,
+            order=options.order,
+            rescale=options.rescale,
+            file_type=file_type,
+            **opt_kwargs,
+        )
     except ValueError as e:
         sys.exit(e.args[0])
     LOGGER.info(f"Writing conformed image: {options.output}")

@@ -17,7 +17,7 @@ import json
 import sys
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 # Add src/ to path for nhp_mri_prep imports (nextflow_scripts/ -> nhp_mri_prep -> src)
 _src_dir = Path(__file__).resolve().parent.parent.parent
@@ -31,25 +31,25 @@ from nhp_mri_prep.steps.bids_discovery import discover_bids_dataset
 def validate_bids(bids_dir: Path, skip_validation: bool) -> bool:
     """
     Validate BIDS dataset using bids-validator.
-    
+
     Args:
         bids_dir: Path to BIDS dataset
         skip_validation: If True, skip validation
-        
+
     Returns:
         True if validation passed or was skipped, False otherwise
     """
     if skip_validation:
         print("INFO: BIDS validation skipped")
         return True
-    
+
     print("INFO: Running BIDS validation...")
     try:
         result = subprocess.run(
-            ['bids-validator', str(bids_dir)],
+            ["bids-validator", str(bids_dir)],
             capture_output=True,
             text=True,
-            timeout=300
+            timeout=300,
         )
         if result.returncode == 0:
             print("INFO: BIDS validation passed")
@@ -61,15 +61,24 @@ def validate_bids(bids_dir: Path, skip_validation: bool) -> bool:
     except (FileNotFoundError, OSError) as e:
         # Handle both "command not found" and permission errors
         if isinstance(e, OSError) and e.errno == 13:
-            print("WARNING: bids-validator permission denied, skipping validation", file=sys.stderr)
+            print(
+                "WARNING: bids-validator permission denied, skipping validation",
+                file=sys.stderr,
+            )
         else:
-            print("WARNING: bids-validator not found or not executable, skipping validation", file=sys.stderr)
+            print(
+                "WARNING: bids-validator not found or not executable, skipping validation",
+                file=sys.stderr,
+            )
         return True
     except subprocess.TimeoutExpired:
         print("ERROR: BIDS validation timed out", file=sys.stderr)
         return False
     except Exception as e:
-        print(f"WARNING: BIDS validation encountered an error ({e}), skipping validation", file=sys.stderr)
+        print(
+            f"WARNING: BIDS validation encountered an error ({e}), skipping validation",
+            file=sys.stderr,
+        )
         return True  # Don't fail the pipeline if validation has issues
 
 
@@ -79,7 +88,7 @@ def print_summary(
 ) -> None:
     """
     Print a summary of discovered jobs.
-    
+
     Args:
         anat_jobs: List of anatomical job dictionaries
         func_jobs: List of functional job dictionaries
@@ -88,34 +97,42 @@ def print_summary(
     print("\n" + "=" * 60)
     print("BIDS Discovery Summary")
     print("=" * 60)
-    
+
     # Count subjects
-    anat_subjects = sorted(set(j.get('subject_id') for j in anat_jobs))
-    func_subjects = sorted(set(j.get('subject_id') for j in func_jobs))
+    anat_subjects = sorted(set(j.get("subject_id") for j in anat_jobs))
+    func_subjects = sorted(set(j.get("subject_id") for j in func_jobs))
     all_subjects = sorted(set(anat_subjects + func_subjects))
-    
+
     print(f"\nSubjects: {len(all_subjects)}")
     if len(all_subjects) <= 10:
         print(f"  {', '.join(all_subjects)}")
     else:
         print(f"  {', '.join(all_subjects[:10])} ... ({len(all_subjects) - 10} more)")
-    
+
     # Anatomical summary
-    print(f"\nAnatomical data:")
+    print("\nAnatomical data:")
     print(f"  Total jobs: {len(anat_jobs)}")
-    
-    t1w_jobs = [j for j in anat_jobs if j.get('suffix') == 'T1w']
-    t2w_jobs = [j for j in anat_jobs if j.get('suffix') == 'T2w']
-    synthesis_jobs = [j for j in anat_jobs if j.get('needs_synthesis', False)]
-    t1w_synthesis_jobs = [j for j in synthesis_jobs if j.get('synthesis_type') == 't1w']
-    t2w_synthesis_jobs = [j for j in synthesis_jobs if j.get('synthesis_type') == 't2w']
-    
+
+    t1w_jobs = [j for j in anat_jobs if j.get("suffix") == "T1w"]
+    t2w_jobs = [j for j in anat_jobs if j.get("suffix") == "T2w"]
+    synthesis_jobs = [j for j in anat_jobs if j.get("needs_synthesis", False)]
+    t1w_synthesis_jobs = [j for j in synthesis_jobs if j.get("synthesis_type") == "t1w"]
+    t2w_synthesis_jobs = [j for j in synthesis_jobs if j.get("synthesis_type") == "t2w"]
+
     # Count cross-session vs within-session synthesis
-    t1w_cross_session = [j for j in t1w_synthesis_jobs if j.get('synthesis_scope') == 'cross_session']
-    t1w_within_session = [j for j in t1w_synthesis_jobs if j.get('synthesis_scope') == 'within_session']
-    t2w_cross_session = [j for j in t2w_synthesis_jobs if j.get('synthesis_scope') == 'cross_session']
-    t2w_within_session = [j for j in t2w_synthesis_jobs if j.get('synthesis_scope') == 'within_session']
-    
+    t1w_cross_session = [
+        j for j in t1w_synthesis_jobs if j.get("synthesis_scope") == "cross_session"
+    ]
+    t1w_within_session = [
+        j for j in t1w_synthesis_jobs if j.get("synthesis_scope") == "within_session"
+    ]
+    t2w_cross_session = [
+        j for j in t2w_synthesis_jobs if j.get("synthesis_scope") == "cross_session"
+    ]
+    t2w_within_session = [
+        j for j in t2w_synthesis_jobs if j.get("synthesis_scope") == "within_session"
+    ]
+
     print(f"  T1w files: {len(t1w_jobs)}")
     if t1w_synthesis_jobs:
         if t1w_cross_session:
@@ -134,139 +151,143 @@ def print_summary(
         single_count = len(t2w_jobs) - len(t2w_synthesis_jobs)
         if single_count > 0:
             print(f"    - Single T2w files: {single_count}")
-    
+
     # Functional summary
-    print(f"\nFunctional data:")
+    print("\nFunctional data:")
     print(f"  Total jobs: {len(func_jobs)}")
-    
+
     if func_jobs:
-        func_tasks = sorted(set(j.get('task') for j in func_jobs if j.get('task')))
+        func_tasks = sorted(set(j.get("task") for j in func_jobs if j.get("task")))
         print(f"  BOLD files: {len(func_jobs)}")
         if func_tasks:
             print(f"  Tasks: {', '.join(func_tasks)}")
     else:
-        print(f"  BOLD files: 0")
+        print("  BOLD files: 0")
 
     print("\n")
+
 
 def main():
     parser = argparse.ArgumentParser(
         description="Discover BIDS dataset for Nextflow pipeline"
     )
     parser.add_argument(
-        '--bids_dir',
+        "--bids_dir", type=Path, required=True, help="Path to BIDS dataset directory"
+    )
+    parser.add_argument(
+        "--output_dir", type=Path, required=True, help="Path to output directory"
+    )
+    parser.add_argument(
+        "--config_file",
         type=Path,
         required=True,
-        help='Path to BIDS dataset directory'
+        help="Path to configuration YAML file",
     )
     parser.add_argument(
-        '--output_dir',
-        type=Path,
-        required=True,
-        help='Path to output directory'
+        "--skip_bids_validation", action="store_true", help="Skip BIDS validation"
     )
     parser.add_argument(
-        '--config_file',
-        type=Path,
-        required=True,
-        help='Path to configuration YAML file'
-    )
-    parser.add_argument(
-        '--skip_bids_validation',
-        action='store_true',
-        help='Skip BIDS validation'
-    )
-    parser.add_argument(
-        '--subjects',
+        "--subjects",
         type=str,
         default=None,
-        help='Comma-separated list of subject IDs to filter'
+        help="Comma-separated list of subject IDs to filter",
     )
     parser.add_argument(
-        '--sessions',
+        "--sessions",
         type=str,
         default=None,
-        help='Comma-separated list of session IDs to filter'
+        help="Comma-separated list of session IDs to filter",
     )
     parser.add_argument(
-        '--tasks',
+        "--tasks",
         type=str,
         default=None,
-        help='Comma-separated list of task names to filter'
+        help="Comma-separated list of task names to filter",
     )
     parser.add_argument(
-        '--runs',
+        "--runs",
         type=str,
         default=None,
-        help='Comma-separated list of run numbers to filter'
+        help="Comma-separated list of run numbers to filter",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Validate inputs
     if not args.bids_dir.exists():
         print(f"ERROR: BIDS directory not found: {args.bids_dir}", file=sys.stderr)
         sys.exit(1)
-    
+
     if not args.config_file.exists():
         print(f"ERROR: Config file not found: {args.config_file}", file=sys.stderr)
         sys.exit(1)
-    
+
     # Load config (accepts tabs in indentation via normalization)
     try:
         config = load_yaml_config(args.config_file)
     except Exception as e:
         print(f"ERROR: Failed to load config file: {e}", file=sys.stderr)
         sys.exit(1)
-    
+
     # Parse filtering parameters
     subjects_list = None
     if args.subjects:
-        subjects_list = [s.strip() for s in args.subjects.split(',')]
-    
+        subjects_list = [s.strip() for s in args.subjects.split(",")]
+
     sessions_list = None
     if args.sessions:
-        sessions_list = [s.strip() for s in args.sessions.split(',')]
-    
+        sessions_list = [s.strip() for s in args.sessions.split(",")]
+
     tasks_list = None
     if args.tasks:
-        tasks_list = [t.strip() for t in args.tasks.split(',')]
-    
+        tasks_list = [t.strip() for t in args.tasks.split(",")]
+
     runs_list = None
     if args.runs:
-        runs_list = [r.strip() for r in args.runs.split(',')]
-    
+        runs_list = [r.strip() for r in args.runs.split(",")]
+
     # # Validate BIDS dataset
     # if not validate_bids(args.bids_dir, args.skip_bids_validation):
     #     print("ERROR: BIDS validation failed. Use --skip_bids_validation to skip.", file=sys.stderr)
     #     sys.exit(1)
-    
+
     # Create output directory
     try:
         args.output_dir.mkdir(parents=True, exist_ok=True)
         # Verify directory was created and is accessible
         if not args.output_dir.exists():
-            print(f"ERROR: Failed to create output directory: {args.output_dir}", file=sys.stderr)
+            print(
+                f"ERROR: Failed to create output directory: {args.output_dir}",
+                file=sys.stderr,
+            )
             sys.exit(1)
         if not args.output_dir.is_dir():
-            print(f"ERROR: Output path exists but is not a directory: {args.output_dir}", file=sys.stderr)
+            print(
+                f"ERROR: Output path exists but is not a directory: {args.output_dir}",
+                file=sys.stderr,
+            )
             sys.exit(1)
         # Resolve to absolute path for clarity
         args.output_dir = args.output_dir.resolve()
     except (OSError, PermissionError) as e:
-        print(f"ERROR: Failed to create output directory {args.output_dir}: {e}", file=sys.stderr)
+        print(
+            f"ERROR: Failed to create output directory {args.output_dir}: {e}",
+            file=sys.stderr,
+        )
         sys.exit(1)
-    
+
     # Create nextflow_reports subdirectory
     try:
-        (args.output_dir / 'nextflow_reports').mkdir(exist_ok=True)
-        if not (args.output_dir / 'nextflow_reports').exists():
-            print(f"ERROR: Failed to create nextflow_reports directory", file=sys.stderr)
+        (args.output_dir / "nextflow_reports").mkdir(exist_ok=True)
+        if not (args.output_dir / "nextflow_reports").exists():
+            print("ERROR: Failed to create nextflow_reports directory", file=sys.stderr)
             sys.exit(1)
     except (OSError, PermissionError) as e:
-        print(f"ERROR: Failed to create nextflow_reports directory: {e}", file=sys.stderr)
+        print(
+            f"ERROR: Failed to create nextflow_reports directory: {e}", file=sys.stderr
+        )
         sys.exit(1)
-    
+
     # Discover jobs
     try:
         anat_jobs, func_jobs = discover_bids_dataset(
@@ -275,46 +296,52 @@ def main():
             subjects=subjects_list,
             sessions=sessions_list,
             tasks=tasks_list,
-            runs=runs_list
+            runs=runs_list,
         )
     except Exception as e:
         print(f"ERROR: BIDS discovery failed: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
-    
+
     # Print summary
     print_summary(anat_jobs, func_jobs)
-    
+
     # Save JSON files
-    anat_json_path = args.output_dir / 'nextflow_reports' / 'anatomical_jobs.json'
-    func_json_path = args.output_dir / 'nextflow_reports' / 'functional_jobs.json'
-    
-    with open(anat_json_path, 'w') as f:
+    anat_json_path = args.output_dir / "nextflow_reports" / "anatomical_jobs.json"
+    func_json_path = args.output_dir / "nextflow_reports" / "functional_jobs.json"
+
+    with open(anat_json_path, "w") as f:
         json.dump(anat_jobs, f, indent=2)
-    
-    with open(func_json_path, 'w') as f:
+
+    with open(func_json_path, "w") as f:
         json.dump(func_jobs, f, indent=2)
-    
+
     # Verify files were written successfully
     if not anat_json_path.exists() or not func_json_path.exists():
-        print(f"ERROR: Failed to write job list files", file=sys.stderr)
+        print("ERROR: Failed to write job list files", file=sys.stderr)
         sys.exit(1)
-    
-    print(f"INFO: Discovery complete. Saved job lists to:")
+
+    print("INFO: Discovery complete. Saved job lists to:")
     print(f"  - {anat_json_path}")
     print(f"  - {func_json_path}")
     print(f"INFO: Output directory: {args.output_dir}")
-    
+
     # Exit with error if no jobs found
     if not anat_jobs and not func_jobs:
         print("ERROR: No jobs discovered. Check that:", file=sys.stderr)
         print("  (1) The path is the BIDS dataset root.", file=sys.stderr)
-        print("  (2) It contains at least one subject with anat and/or func data in BIDS layout.", file=sys.stderr)
-        print("  (3) Validate with https://bids-standard.github.io/bids-validator/ if unsure.", file=sys.stderr)
+        print(
+            "  (2) It contains at least one subject with anat and/or func data in BIDS layout.",
+            file=sys.stderr,
+        )
+        print(
+            "  (3) Validate with https://bids-standard.github.io/bids-validator/ if unsure.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-

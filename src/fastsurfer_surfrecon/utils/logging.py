@@ -6,11 +6,6 @@ Matches fastsurfer_nn logging format for consistency.
 
 import logging
 from logging import (
-    CRITICAL,
-    DEBUG,
-    ERROR,
-    INFO,
-    WARNING,
     FileHandler,
     Logger,
     StreamHandler,
@@ -20,7 +15,6 @@ from logging import (
 from os import environ
 from pathlib import Path
 from sys import stdout
-from typing import Optional
 
 
 def setup_logging(log_file_path: Path | str | None = None) -> None:
@@ -48,7 +42,15 @@ def setup_logging(log_file_path: Path | str | None = None) -> None:
 
     # Get log level from environment (matches fastsurfer_nn)
     log_level = environ.get("FASTSURFER_LOG_LEVEL", "INFO").upper()
-    if log_level not in ("INFO", "DEBUG", "WARNING", "WARN", "ERROR", "CRITICAL", "FATAL"):
+    if log_level not in (
+        "INFO",
+        "DEBUG",
+        "WARNING",
+        "WARN",
+        "ERROR",
+        "CRITICAL",
+        "FATAL",
+    ):
         raise RuntimeError(f"Invalid log level: {log_level}")
 
     basicConfig(
@@ -73,4 +75,3 @@ def get_logger(name: str) -> Logger:
         Logger instance
     """
     return getLogger(f"fastsurfer_surfrecon.{name}")
-

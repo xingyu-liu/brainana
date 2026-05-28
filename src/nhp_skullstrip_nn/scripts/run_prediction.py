@@ -19,7 +19,7 @@ from ..model import ModelLoader
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Run prediction with trained nhp_skullstrip_nn model',
+        description="Run prediction with trained nhp_skullstrip_nn model",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -46,117 +46,159 @@ Examples:
   
   # Save only probability map (no binary label)
   run_prediction.py --model model.pth --input brain.nii.gz --output label.nii.gz --no-save-label --save-prob-map
-        """
+        """,
     )
-    
-    parser.add_argument('--model', required=True, 
-                       help='Path to trained model (.pth or .model file)')
-    parser.add_argument('--input', required=True,
-                       help='Path to input image')
-    parser.add_argument('--input-label', default=None,
-                       help='Path to input label')
-    parser.add_argument('--output', required=True,
-                       help='Path to save prediction output')
-    parser.add_argument('--config', default=None,
-                       help='Path to training configuration file (.json). Optional if checkpoint contains config.')
-    parser.add_argument('--device', default='auto',
-                       help='Device to use (auto, cpu, cuda:0, etc.)')
-    parser.add_argument('--rescale-dim', type=int, default=256,
-                       help='Dimension to rescale input to (default: 256)')
-    parser.add_argument('--num-slices', type=int, default=3,
-                       help='Number of input slices (default: 3)')
-    parser.add_argument('--save-label', action='store_true', default=True,
-                       help='Save label output (default: True)')
-    parser.add_argument('--no-save-label', action='store_false', dest='save_label',
-                       help='Disable saving label output')
-    parser.add_argument('--save-prob-map', action='store_true', default=True,
-                       help='Save probability map output (default: True)')
-    parser.add_argument('--no-save-prob-map', action='store_false', dest='save_prob_map',
-                       help='Disable saving probability map output')
-    parser.add_argument('--compute-metrics', action='store_true', default=False,
-                       help='Compute Dice and IoU metrics if input label is provided')
-    parser.add_argument('--force-softmax', action='store_true', default=None,
-                       help='Force softmax application. Use --force-softmax if model outputs logits, omit if model already outputs probabilities.')
-    parser.add_argument('--morph-iterations', type=int, default=0,
-                       help='Morphological post-processing iterations (default: 0)')
-    parser.add_argument('--plot-QC', action='store_true', default=False,
-                       help='Plot QC snapshots')
-    parser.add_argument('--quiet', action='store_true',
-                       help='Suppress verbose output')
-    
+
+    parser.add_argument(
+        "--model", required=True, help="Path to trained model (.pth or .model file)"
+    )
+    parser.add_argument("--input", required=True, help="Path to input image")
+    parser.add_argument("--input-label", default=None, help="Path to input label")
+    parser.add_argument(
+        "--output", required=True, help="Path to save prediction output"
+    )
+    parser.add_argument(
+        "--config",
+        default=None,
+        help="Path to training configuration file (.json). Optional if checkpoint contains config.",
+    )
+    parser.add_argument(
+        "--device", default="auto", help="Device to use (auto, cpu, cuda:0, etc.)"
+    )
+    parser.add_argument(
+        "--rescale-dim",
+        type=int,
+        default=256,
+        help="Dimension to rescale input to (default: 256)",
+    )
+    parser.add_argument(
+        "--num-slices", type=int, default=3, help="Number of input slices (default: 3)"
+    )
+    parser.add_argument(
+        "--save-label",
+        action="store_true",
+        default=True,
+        help="Save label output (default: True)",
+    )
+    parser.add_argument(
+        "--no-save-label",
+        action="store_false",
+        dest="save_label",
+        help="Disable saving label output",
+    )
+    parser.add_argument(
+        "--save-prob-map",
+        action="store_true",
+        default=True,
+        help="Save probability map output (default: True)",
+    )
+    parser.add_argument(
+        "--no-save-prob-map",
+        action="store_false",
+        dest="save_prob_map",
+        help="Disable saving probability map output",
+    )
+    parser.add_argument(
+        "--compute-metrics",
+        action="store_true",
+        default=False,
+        help="Compute Dice and IoU metrics if input label is provided",
+    )
+    parser.add_argument(
+        "--force-softmax",
+        action="store_true",
+        default=None,
+        help="Force softmax application. Use --force-softmax if model outputs logits, omit if model already outputs probabilities.",
+    )
+    parser.add_argument(
+        "--morph-iterations",
+        type=int,
+        default=0,
+        help="Morphological post-processing iterations (default: 0)",
+    )
+    parser.add_argument(
+        "--plot-QC", action="store_true", default=False, help="Plot QC snapshots"
+    )
+    parser.add_argument("--quiet", action="store_true", help="Suppress verbose output")
+
     args = parser.parse_args()
-    
+
     # Setup logging
-    logger = setup_logging('nhp_skullstrip_nn.prediction')
-    
+    logger = setup_logging("nhp_skullstrip_nn.prediction")
+
     # Validate model file
     if not Path(args.model).exists():
         logger.error(f"❌ Model file not found: {args.model}")
         sys.exit(1)
-    
+
     # Validate input file
     if not Path(args.input).exists():
         logger.error(f"❌ Input file not found: {args.input}")
         sys.exit(1)
-    
+
     # Try to load config from checkpoint first
     config = None
     config_source = "checkpoint"
-    
+
     try:
         logger.info("🔍 Loading checkpoint to extract config...")
-        checkpoint = torch.load(args.model, map_location='cpu', weights_only=False)
-        
-        if 'config' in checkpoint:
-            checkpoint_config = checkpoint['config']
+        checkpoint = torch.load(args.model, map_location="cpu", weights_only=False)
+
+        if "config" in checkpoint:
+            checkpoint_config = checkpoint["config"]
             # Filter to valid parameters
             from dataclasses import fields
+
             valid_params = {field.name for field in fields(TrainingConfig)}
-            filtered_config = {k: v for k, v in checkpoint_config.items() if k in valid_params}
+            filtered_config = {
+                k: v for k, v in checkpoint_config.items() if k in valid_params
+            }
             # Ensure required fields are present (can be empty for inference)
-            if 'TRAINING_DATA_DIR' not in filtered_config:
-                filtered_config['TRAINING_DATA_DIR'] = ""
-            if 'OUTPUT_DIR' not in filtered_config:
-                filtered_config['OUTPUT_DIR'] = ""
-            if 'modal' not in filtered_config:
-                filtered_config['modal'] = ""
-            if 'label' not in filtered_config:
-                filtered_config['label'] = ""
+            if "TRAINING_DATA_DIR" not in filtered_config:
+                filtered_config["TRAINING_DATA_DIR"] = ""
+            if "OUTPUT_DIR" not in filtered_config:
+                filtered_config["OUTPUT_DIR"] = ""
+            if "modal" not in filtered_config:
+                filtered_config["modal"] = ""
+            if "label" not in filtered_config:
+                filtered_config["label"] = ""
             config = TrainingConfig(**filtered_config)
-            logger.info(f"✅ Config extracted from checkpoint")
+            logger.info("✅ Config extracted from checkpoint")
         else:
             logger.warning("⚠️  No config found in checkpoint")
             config_source = None
     except Exception as e:
         logger.warning(f"⚠️  Could not load checkpoint: {e}")
         config_source = None
-    
+
     # If no config from checkpoint, try to load from file, otherwise use default params
     if config is None:
-        if args.config is  not None:
+        if args.config is not None:
             # Load configuration from file
             try:
-                with open(args.config, 'r') as f:
-                    config_dict = json.load(f)
+                with open(args.config, "r") as f:
+                    json.load(f)
                 logger.info(f"✅ Config loaded from file: {args.config}")
                 config_source = "file"
             except Exception as e:
                 logger.error(f"❌ Error loading config file: {e}")
                 sys.exit(1)
-    
+
     # Show device info
-    if args.device == 'auto':
+    if args.device == "auto":
         device = get_device()
         logger.info(f"🔍 Auto-selected device: {device}")
     else:
         logger.info(f"🔍 Using device: {args.device}")
-    
+
     logger.info(f"📁 Model: {args.model}")
     logger.info(f"📥 Input: {args.input}")
     if args.input_label:
         logger.info(f"📥 Input Label: {args.input_label}")
     logger.info(f"📤 Output: {args.output}")
-    logger.info(f"⚙️  Config: {config_source} ({'checkpoint' if config_source == 'checkpoint' else args.config})")
+    logger.info(
+        f"⚙️  Config: {config_source} ({'checkpoint' if config_source == 'checkpoint' else args.config})"
+    )
     logger.info(f"🔧 Rescale dimension: {args.rescale_dim}")
     logger.info(f"🔧 Number of slices: {args.num_slices}")
     logger.info(f"🔧 Morph iterations: {args.morph_iterations}")
@@ -168,15 +210,12 @@ Examples:
     if args.force_softmax is not None:
         logger.info(f"🔧 Force softmax: {args.force_softmax}")
     logger.info("-" * 50)
-    logger.info(f'Running inference')
-    
+    logger.info("Running inference")
+
     try:
         # Load model
         model = ModelLoader.load_model_from_file(
-            model_path=args.model,
-            device_id=args.device,
-            config=config,
-            logger=None
+            model_path=args.model, device_id=args.device, config=config, logger=None
         )
 
         # Run prediction with loaded config
@@ -184,7 +223,9 @@ Examples:
             model=model,
             rescale_dim=args.rescale_dim,
             num_slices=args.num_slices,
-            num_classes=getattr(config, 'num_classes', 2) if config else None,  # Use num_classes from checkpoint config
+            num_classes=getattr(config, "num_classes", 2)
+            if config
+            else None,  # Use num_classes from checkpoint config
             input_image=args.input,
             input_label=args.input_label,
             save_label=args.save_label,
@@ -194,9 +235,9 @@ Examples:
             force_softmax=args.force_softmax,
             erosion_dilation_iterations=args.morph_iterations,
             plot_QC_snaps=args.plot_QC,
-            verbose=not args.quiet
-            )
-        
+            verbose=not args.quiet,
+        )
+
         logger.info("-" * 50)
         logger.info("✓ Prediction completed successfully!")
         logger.info(f"   Output saved: {args.output}")
@@ -207,7 +248,7 @@ Examples:
                 # logger.info(f"   {image_name}:")
                 for metric_name, value in metrics.items():
                     logger.info(f"     {metric_name}: {value:.4f}")
-        
+
     except Exception as e:
         logger.error(f"✗ Prediction failed: {e}")
         if not args.quiet:
@@ -216,4 +257,4 @@ Examples:
 
 
 if __name__ == "__main__":
-    main() 
+    main()

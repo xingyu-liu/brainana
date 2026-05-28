@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import Any
-import torch
 
 import matplotlib.pyplot as plt
 
@@ -20,7 +19,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yacs.config
 import threading
-from queue import Queue
 import time
 
 from fastsurfer_nn.utils import logging
@@ -34,7 +32,7 @@ class AsyncDiceTracker:
     """
     Background dice computation tracker to avoid blocking training.
     """
-    
+
     def __init__(self, dice_score_obj, update_interval=0.5, meter=None):
         self.dice_score = dice_score_obj
         self.meter = meter  # Reference to the meter for background exclusion
@@ -44,20 +42,22 @@ class AsyncDiceTracker:
         self.stop_event = threading.Event()
         self.compute_thread = None
         self.last_compute_time = 0
-        
+
     def start(self):
         """Start background computation thread."""
         if self.compute_thread is None or not self.compute_thread.is_alive():
             self.stop_event.clear()
-            self.compute_thread = threading.Thread(target=self._background_worker, daemon=True)
+            self.compute_thread = threading.Thread(
+                target=self._background_worker, daemon=True
+            )
             self.compute_thread.start()
-    
+
     def stop(self):
         """Stop background computation thread."""
         self.stop_event.set()
         if self.compute_thread and self.compute_thread.is_alive():
             self.compute_thread.join(timeout=1.0)
-    
+
     def _background_worker(self):
         """Background worker that computes dice scores."""
         while not self.stop_event.is_set():
@@ -65,20 +65,24 @@ class AsyncDiceTracker:
                 current_time = time.time()
                 if current_time - self.last_compute_time >= self.update_interval:
                     # Use the meter's method to exclude background
-                    if self.meter and hasattr(self.meter, 'get_dice_without_background'):
+                    if self.meter and hasattr(
+                        self.meter, "get_dice_without_background"
+                    ):
                         dice_score = self.meter.get_dice_without_background()
                     else:
                         dice_score, _ = self.dice_score.compute()
-                    dice_value = dice_score.item() if hasattr(dice_score, 'item') else dice_score
-                    
+                    dice_value = (
+                        dice_score.item() if hasattr(dice_score, "item") else dice_score
+                    )
+
                     with self.lock:
                         self.latest_dice = dice_value
                         self.last_compute_time = current_time
-                
+
                 time.sleep(0.1)  # Small sleep to prevent busy waiting
             except Exception:
                 time.sleep(0.5)
-    
+
     def get_latest_dice(self):
         """Get the latest computed dice score (non-blocking)."""
         with self.lock:
@@ -139,14 +143,18 @@ class Meter:
         self.global_iter = global_step
         self.total_iter_num = total_iter
         self.total_epochs = total_epoch
-        
+
         # Background dice tracker for non-blocking progress updates
-        self.async_dice_tracker = AsyncDiceTracker(self.dice_score, update_interval=0.5, meter=self)
-    
+        self.async_dice_tracker = AsyncDiceTracker(
+            self.dice_score, update_interval=0.5, meter=self
+        )
+
     def get_dice_without_background(self):
         """Get dice score excluding background (class 0)."""
         # Use the exclude_background parameter for consistency
-        dice_score, dice_matrix = self.dice_score.compute(per_class=False, exclude_background=True)
+        dice_score, dice_matrix = self.dice_score.compute(
+            per_class=False, exclude_background=True
+        )
         return dice_score
 
     def reset(self):
@@ -155,15 +163,15 @@ class Meter:
         """
         self.batch_losses = []
         self.dice_score.reset()
-    
+
     def start_background_tracking(self):
         """Start background dice computation."""
         self.async_dice_tracker.start()
-    
+
     def stop_background_tracking(self):
         """Stop background dice computation."""
         self.async_dice_tracker.stop()
-    
+
     def get_latest_dice(self):
         """Get the latest dice score from background computation."""
         return self.async_dice_tracker.get_latest_dice()
@@ -206,7 +214,7 @@ class Meter:
             # Skip writing if no writer is provided (e.g., for validation-only runs)
             self.global_iter += 1
             return
-        
+
         self.writer.add_scalar(
             f"{self.mode}/total_loss", loss_total.item(), self.global_iter
         )
@@ -252,7 +260,9 @@ class Meter:
         """
         dice_score, dice_cm_mat = self.dice_score.compute()
         if self.writer is not None:
-            self.writer.add_scalar(f"{self.mode}/mean_dice_score", dice_score, cur_epoch)
+            self.writer.add_scalar(
+                f"{self.mode}/mean_dice_score", dice_score, cur_epoch
+            )
             if self.confusion_mat:
                 fig = plot_confusion_matrix(dice_cm_mat, self.class_names)
                 self.writer.add_figure(f"{self.mode}/confusion_mat", fig, cur_epoch)

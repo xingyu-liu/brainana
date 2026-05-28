@@ -16,8 +16,7 @@ from .pipeline import ReconSurfPipeline
 __all__ = [
     "__version__",
     "ReconSurfConfig",
-    "AtlasConfig", 
+    "AtlasConfig",
     "ProcessingConfig",
     "ReconSurfPipeline",
 ]
-

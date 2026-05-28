@@ -20,55 +20,90 @@ from ..config.config_io import get_nested_config_value
 
 # Configuration constants
 SNAPSHOT_MAPPINGS = {
-    'conform': {'key': 'conform_overlay', 'description': 'Conform to template space'},
-    'biascorrect': {'key': 'bias_correction_comparison', 'description': 'Bias field correction'},
-    'atlasSegmentation': {'key': 'atlas_segmentation_overlay', 'description': 'Atlas segmentation'},
-    'anat2template': {'key': 'anat2template_registration_overlay', 'description': 'Structural to template registration'},
-    'func2anat': {'key': 'func2anat_registration_overlay', 'description': 'Functional to anatomical registration'},
-    'func2target': {'key': 'func2target_registration_overlay', 'description': 'Functional to target registration'},
-    'T2w2T1w': {'key': 'T2w2T1w_registration_overlay', 'description': 'T2w to T1w coregistration'},
-    'T2w2template': {'key': 'T2w2template_registration_overlay', 'description': 'T2w to template registration'},
-    'T1wT2wCombined': {'key': 't1wt2w_combined_comparison', 'description': 'T1wT2wCombined comparison'},
-    'sescoreg': {'key': 'func_coreg_overlay', 'description': 'Within-session functional coregistration'},
-    'tSNR': {'key': 'tsnr_boldmap', 'description': 'tSNR map'},
-    'motion': {'key': 'motion_parameters', 'description': 'Motion parameters'},
-    'surfReconTissueSeg': {'key': 'surf_recon_tissue_seg_overlay', 'description': 'Surface reconstruction tissue segmentation'},
-    'corticalSurfAndMeasures': {'key': 'cortical_surf_and_measures_overlay', 'description': 'Cortical surface and measures'},
-    'skullstrip': {'key': 'skullstrip_overlay', 'description': 'Skullstripping'},
+    "conform": {"key": "conform_overlay", "description": "Conform to template space"},
+    "biascorrect": {
+        "key": "bias_correction_comparison",
+        "description": "Bias field correction",
+    },
+    "atlasSegmentation": {
+        "key": "atlas_segmentation_overlay",
+        "description": "Atlas segmentation",
+    },
+    "anat2template": {
+        "key": "anat2template_registration_overlay",
+        "description": "Structural to template registration",
+    },
+    "func2anat": {
+        "key": "func2anat_registration_overlay",
+        "description": "Functional to anatomical registration",
+    },
+    "func2target": {
+        "key": "func2target_registration_overlay",
+        "description": "Functional to target registration",
+    },
+    "T2w2T1w": {
+        "key": "T2w2T1w_registration_overlay",
+        "description": "T2w to T1w coregistration",
+    },
+    "T2w2template": {
+        "key": "T2w2template_registration_overlay",
+        "description": "T2w to template registration",
+    },
+    "T1wT2wCombined": {
+        "key": "t1wt2w_combined_comparison",
+        "description": "T1wT2wCombined comparison",
+    },
+    "sescoreg": {
+        "key": "func_coreg_overlay",
+        "description": "Within-session functional coregistration",
+    },
+    "tSNR": {"key": "tsnr_boldmap", "description": "tSNR map"},
+    "motion": {"key": "motion_parameters", "description": "Motion parameters"},
+    "surfReconTissueSeg": {
+        "key": "surf_recon_tissue_seg_overlay",
+        "description": "Surface reconstruction tissue segmentation",
+    },
+    "corticalSurfAndMeasures": {
+        "key": "cortical_surf_and_measures_overlay",
+        "description": "Cortical surface and measures",
+    },
+    "skullstrip": {"key": "skullstrip_overlay", "description": "Skullstripping"},
 }
 
 # Figure descriptions shown above the figure (same font style as "Get figure file"); first letter auto-capitalized.
 # Key by desc; for 'conform' use (desc, modality) because anatomical vs functional differ.
 FIGURE_DESCRIPTIONS = {
-    'conform': {
-        'anatomical': 'rigid registered T1w (underlaid); template space (contour)',
-        'functional': 'rigid registered BOLD (underlaid); target space (contour)',
+    "conform": {
+        "anatomical": "rigid registered T1w (underlaid); template space (contour)",
+        "functional": "rigid registered BOLD (underlaid); target space (contour)",
     },
-    'anat2template': 'registered T1w (underlaid); template space (contour)',
-    'atlasSegmentation': 'ARM2: CHARM level 2 parcellation in cortex and SARM level 2 parcellation in subcortex',
-    'surfReconTissueSeg': 'White surface (blue contour); pial surface (red contour)',
-    'T2w2T1w': 'rigid registered T2w (underlaid); T1w space (contour)',
-    'T2w2template': 'registered T2w (underlaid); template space (contour)',
-    'func2anat': 'registered BOLD (underlaid); T1w space (contour)',
-    'func2target': 'registered BOLD (underlaid); target space (contour)',
-    'sescoreg': 'within-session func run coregistration',
-    'tSNR': 'session-average temporal SNR map (volume; surface projection if available)',
+    "anat2template": "registered T1w (underlaid); template space (contour)",
+    "atlasSegmentation": "ARM2: CHARM level 2 parcellation in cortex and SARM level 2 parcellation in subcortex",
+    "surfReconTissueSeg": "White surface (blue contour); pial surface (red contour)",
+    "T2w2T1w": "rigid registered T2w (underlaid); T1w space (contour)",
+    "T2w2template": "registered T2w (underlaid); template space (contour)",
+    "func2anat": "registered BOLD (underlaid); T1w space (contour)",
+    "func2target": "registered BOLD (underlaid); target space (contour)",
+    "sescoreg": "within-session func run coregistration",
+    "tSNR": "session-average temporal SNR map (volume; surface projection if available)",
 }
 
 SNAPSHOT_ORDER = [
-    'conform_overlay', 
-    'skullstrip_overlay', 'atlas_segmentation_overlay', 
-    'bias_correction_comparison', 
-    'anat2template_registration_overlay', 
-    'T2w2T1w_registration_overlay', 
-    't1wt2w_combined_comparison',
-    'T2w2template_registration_overlay',
-    'surf_recon_tissue_seg_overlay', 'cortical_surf_and_measures_overlay',
-    'func_coreg_overlay',  # Within-session coregistration (appears before run-specific snapshots)
-    'tsnr_boldmap',
-    'func2anat_registration_overlay',  # Functional to anatomical (intermediate step in sequential transforms)
-    'func2target_registration_overlay', 
-    'motion_parameters'
+    "conform_overlay",
+    "skullstrip_overlay",
+    "atlas_segmentation_overlay",
+    "bias_correction_comparison",
+    "anat2template_registration_overlay",
+    "T2w2T1w_registration_overlay",
+    "t1wt2w_combined_comparison",
+    "T2w2template_registration_overlay",
+    "surf_recon_tissue_seg_overlay",
+    "cortical_surf_and_measures_overlay",
+    "func_coreg_overlay",  # Within-session coregistration (appears before run-specific snapshots)
+    "tsnr_boldmap",
+    "func2anat_registration_overlay",  # Functional to anatomical (intermediate step in sequential transforms)
+    "func2target_registration_overlay",
+    "motion_parameters",
 ]
 
 SNAPSHOT_ORDER_INDEX = {key: index for index, key in enumerate(SNAPSHOT_ORDER)}
@@ -174,7 +209,9 @@ def _iter_leaf_snapshots(data: Dict[str, Any]) -> Iterator[Dict[str, Any]]:
                 yield from _iter_leaf_snapshots(value)
 
 
-def _anat_suffix(filename: str, entities: Optional[Dict[str, Any]] = None) -> Optional[str]:
+def _anat_suffix(
+    filename: str, entities: Optional[Dict[str, Any]] = None
+) -> Optional[str]:
     """Return ``'T1w'``, ``'T2w'``, or ``None`` from filename ending and BIDS entities."""
     ent = entities or {}
     if filename.endswith("_T2w.png") or ent.get("suffix") == "T2w":
@@ -209,56 +246,73 @@ def _snapshot_sort_key_hierarchy_item(item: tuple) -> tuple:
 
 class BidsEntityProcessor:
     """Handles all BIDS entity processing operations."""
-    
+
     @staticmethod
     def extract_entities_from_snapshots(data: Dict[str, Any]) -> List[Dict[str, str]]:
         """Extract all unique BIDS entity combinations from snapshot hierarchy."""
         entities_list = []
-        
+
         def collect_entities(level_data: Dict[str, Any]) -> None:
             for value in level_data.values():
                 if isinstance(value, dict):
-                    if 'entities' in value:
-                        entities = {k: v for k, v in value['entities'].items() if k not in ['sub', 'desc', 'space']}
+                    if "entities" in value:
+                        entities = {
+                            k: v
+                            for k, v in value["entities"].items()
+                            if k not in ["sub", "desc", "space"]
+                        }
                         if entities and entities not in entities_list:
                             entities_list.append(entities)
                     else:
                         collect_entities(value)
-        
+
         collect_entities(data)
-        return sorted(entities_list, key=lambda x: [x.get(k, '') for k in BIDS_ENTITY_ORDER])
-    
+        return sorted(
+            entities_list, key=lambda x: [x.get(k, "") for k in BIDS_ENTITY_ORDER]
+        )
+
     @staticmethod
     def create_display_text(entities: Dict[str, str]) -> str:
         """Create human-readable display text from BIDS entities."""
         parts = []
         for entity in BIDS_ENTITY_ORDER:
             if entity in entities:
-                if entity == 'ses':
-                    parts.append(f'session <span class="bids-entity">{entities[entity]}</span>')
-                elif entity == 'task':
-                    parts.append(f'task <span class="bids-entity">{entities[entity]}</span>')
-                elif entity == 'run':
-                    parts.append(f'run <span class="bids-entity">{entities[entity]}</span>')
+                if entity == "ses":
+                    parts.append(
+                        f'session <span class="bids-entity">{entities[entity]}</span>'
+                    )
+                elif entity == "task":
+                    parts.append(
+                        f'task <span class="bids-entity">{entities[entity]}</span>'
+                    )
+                elif entity == "run":
+                    parts.append(
+                        f'run <span class="bids-entity">{entities[entity]}</span>'
+                    )
                 else:
-                    parts.append(f'{entity} <span class="bids-entity">{entities[entity]}</span>')
-        
+                    parts.append(
+                        f'{entity} <span class="bids-entity">{entities[entity]}</span>'
+                    )
+
         return ", ".join(parts)
-    
+
     @staticmethod
     def clean_header_id(text: str) -> str:
         """Clean text to create valid HTML ID."""
-        clean_text = re.sub(r'<[^>]+>', '', text)
-        clean_text = re.sub(r'[^a-zA-Z0-9-]', '-', clean_text.lower())
-        return re.sub(r'-+', '-', clean_text).strip('-')
+        clean_text = re.sub(r"<[^>]+>", "", text)
+        clean_text = re.sub(r"[^a-zA-Z0-9-]", "-", clean_text.lower())
+        return re.sub(r"-+", "-", clean_text).strip("-")
 
 
 class SnapshotProcessor:
     """Handles snapshot discovery, parsing, and organization."""
-    
+
     @staticmethod
-    def discover_and_parse(snapshot_dir: Path, logger: logging.Logger, 
-                          provided_paths: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    def discover_and_parse(
+        snapshot_dir: Path,
+        logger: logging.Logger,
+        provided_paths: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
         """Discover and parse all snapshots in one pass."""
         if provided_paths:
             snapshot_files = {name: Path(path) for name, path in provided_paths.items()}
@@ -266,69 +320,73 @@ class SnapshotProcessor:
         else:
             png_files = list(snapshot_dir.glob("*.png"))
             logger.info(f"QC: auto-discovered {len(png_files)} PNG files")
-            snapshot_files = {SnapshotProcessor._create_key(f.name): f for f in png_files}
-        
+            snapshot_files = {
+                SnapshotProcessor._create_key(f.name): f for f in png_files
+            }
+
         snapshots = {}
-        available_entities = {key: set() for key in BIDS_ENTITY_ORDER if key != 'sub'}
-        
+        available_entities = {key: set() for key in BIDS_ENTITY_ORDER if key != "sub"}
+
         for name, path in snapshot_files.items():
             entities = parse_bids_entities(path.name)
-            
+
             # Collect available entities
             for entity_key in BIDS_ENTITY_ORDER:
-                if entity_key != 'sub' and entity_key in entities:
+                if entity_key != "sub" and entity_key in entities:
                     available_entities[entity_key].add(entities[entity_key])
-            
-            desc = entities.get('desc', '')
+
+            desc = entities.get("desc", "")
             mapping = SNAPSHOT_MAPPINGS.get(desc, {})
-            snapshot_type = mapping.get('key', desc)
-            
+            snapshot_type = mapping.get("key", desc)
+
             # Determine modality first
             modality = SnapshotProcessor._determine_modality(path.name)
-            
+
             # Customize description based on modality for conform snapshots
-            description = mapping.get('description', '')
-            if desc == 'conform' and modality == 'functional':
-                description = 'Conform to target space'
-            
+            description = mapping.get("description", "")
+            if desc == "conform" and modality == "functional":
+                description = "Conform to target space"
+
             # Figure description (underlaid/contour text) for QC report
             figure_desc_entry = FIGURE_DESCRIPTIONS.get(desc)
             if isinstance(figure_desc_entry, dict):
-                figure_description = figure_desc_entry.get(modality, '')
+                figure_description = figure_desc_entry.get(modality, "")
             else:
-                figure_description = figure_desc_entry if isinstance(figure_desc_entry, str) else ''
-            
+                figure_description = (
+                    figure_desc_entry if isinstance(figure_desc_entry, str) else ""
+                )
+
             # Store the filename separately for reliable path construction
             snapshots[name] = {
-                'path': str(path),
-                'filename': path.name,
-                'entities': entities,
-                'modality': modality,
-                'description': description,
-                'snapshot_type': snapshot_type,
-                'figure_description': figure_description,
+                "path": str(path),
+                "filename": path.name,
+                "entities": entities,
+                "modality": modality,
+                "description": description,
+                "snapshot_type": snapshot_type,
+                "figure_description": figure_description,
             }
-        
+
         # Convert sets to sorted lists
         for key in available_entities:
             available_entities[key] = sorted(available_entities[key])
-        
+
         logger.info(f"QC: parsed {len(snapshots)} snapshots")
-        return {'snapshots': snapshots, 'available_entities': available_entities}
-    
+        return {"snapshots": snapshots, "available_entities": available_entities}
+
     @staticmethod
     def _create_key(filename: str) -> str:
         """Create snapshot key from filename."""
         entities = parse_bids_entities(filename)
-        desc = entities.get('desc', '')
+        desc = entities.get("desc", "")
         mapping = SNAPSHOT_MAPPINGS.get(desc, {})
-        base_name = mapping.get('key', desc)
-        
+        base_name = mapping.get("key", desc)
+
         key_parts = [base_name]
         for entity_key in BIDS_ENTITY_ORDER:
-            if entity_key != 'sub' and entity_key in entities:
+            if entity_key != "sub" and entity_key in entities:
                 key_parts.append(f"{entity_key}-{entities[entity_key]}")
-        
+
         # Add modality suffix to avoid key collisions between T1w/T2w
         suf = _anat_suffix(filename, entities)
         if suf == "T1w":
@@ -337,45 +395,58 @@ class SnapshotProcessor:
             key_parts.append("T2w")
         elif filename.endswith("_bold.png") or filename.endswith("_boldref.png"):
             key_parts.append("bold")
-        
+
         return "_".join(key_parts)
-    
+
     @staticmethod
     def _determine_modality(name: str) -> str:
         """Determine modality from filename."""
         # Check for functional first (bold or boldref suffix), as functional files can contain
         # space-T1w or space-T2w entities which would otherwise be misclassified
-        if (name.lower().endswith('_bold.png') or '_bold.png' in name.lower() or
-            name.lower().endswith('_boldref.png') or '_boldref.png' in name.lower()):
+        if (
+            name.lower().endswith("_bold.png")
+            or "_bold.png" in name.lower()
+            or name.lower().endswith("_boldref.png")
+            or "_boldref.png" in name.lower()
+        ):
             return "functional"
         # Check for anatomical in suffix position (e.g., _T1w.png, _T2w.png)
         # This avoids false positives from space-T1w or space-T2w entities
-        elif name.endswith('_T1w.png') or name.endswith('_T2w.png'):
+        elif name.endswith("_T1w.png") or name.endswith("_T2w.png"):
             return "anatomical"
         # Fallback: check if T1w/T2w appears as a suffix pattern (before extension)
-        elif '_T1w.' in name or '_T2w.' in name:
+        elif "_T1w." in name or "_T2w." in name:
             return "anatomical"
-        elif 'fmap' in name.lower():
+        elif "fmap" in name.lower():
             return "field_mapping"
         else:
             return "summary"
-    
+
     @staticmethod
-    def organize_by_hierarchy(snapshots: Dict[str, Any], snapshot_dir: Path, 
-                            report_path: Path, logger: logging.Logger) -> Dict[str, Any]:
+    def organize_by_hierarchy(
+        snapshots: Dict[str, Any],
+        snapshot_dir: Path,
+        report_path: Path,
+        logger: logging.Logger,
+    ) -> Dict[str, Any]:
         """Organize snapshots by BIDS hierarchy."""
-        organized = {"anatomical": {}, "functional": {}, "field_mapping": {}, "summary": {}}
-        
+        organized = {
+            "anatomical": {},
+            "functional": {},
+            "field_mapping": {},
+            "summary": {},
+        }
+
         # Calculate relative path from report parent to snapshot directory
         # snapshot_dir is the published path: /full/path/to/output/sub-XXX/figures
         # report_path might be relative (work directory) or absolute (published)
         # We need the published report path for correct relative path calculation
         # Derive it from snapshot_dir: if snapshot_dir is /path/to/output/sub-XXX/figures,
         # then published report is /path/to/output/sub-XXX.html
-        
+
         snapshot_dir_str = str(snapshot_dir)
         report_path_str = str(report_path)
-        
+
         # If report_path is relative, derive published path from snapshot_dir
         if not os.path.isabs(report_path_str):
             # snapshot_dir is like: /path/to/output/sub-XXX/figures
@@ -389,7 +460,7 @@ class SnapshotProcessor:
         else:
             # report_path is already absolute (published path)
             report_parent = str(Path(report_path_str).parent)
-        
+
         # Calculate relative path using string paths (don't resolve to avoid work directory issues)
         try:
             report_to_snapshot_dir = os.path.relpath(snapshot_dir_str, report_parent)
@@ -399,7 +470,7 @@ class SnapshotProcessor:
             # Both paths should share a common prefix up to the output directory
             report_parent_parts = Path(report_parent).parts
             snapshot_dir_parts = Path(snapshot_dir_str).parts
-            
+
             # Find common prefix
             common_parts = []
             for r_part, s_part in zip(report_parent_parts, snapshot_dir_parts):
@@ -407,125 +478,149 @@ class SnapshotProcessor:
                     common_parts.append(r_part)
                 else:
                     break
-            
+
             # Calculate relative path: go up from report_parent, then down to snapshot_dir
             up_levels = len(report_parent_parts) - len(common_parts)
-            down_parts = snapshot_dir_parts[len(common_parts):]
-            
+            down_parts = snapshot_dir_parts[len(common_parts) :]
+
             if up_levels > 0 and down_parts:
-                report_to_snapshot_dir = os.path.join(*(['..'] * up_levels + list(down_parts)))
+                report_to_snapshot_dir = os.path.join(
+                    *([".."] * up_levels + list(down_parts))
+                )
             elif down_parts:
                 report_to_snapshot_dir = os.path.join(*down_parts)
             else:
-                report_to_snapshot_dir = '.'
-        
+                report_to_snapshot_dir = "."
+
         for name, snapshot_info in snapshots.items():
             # Get filename (stored separately for reliability, or extract from path)
-            filename = snapshot_info.get('filename', Path(snapshot_info['path']).name)
-            
+            filename = snapshot_info.get("filename", Path(snapshot_info["path"]).name)
+
             # Construct relative path: from report_parent to snapshot_dir, then filename
-            if report_to_snapshot_dir == '.':
+            if report_to_snapshot_dir == ".":
                 relative_path = filename
             else:
                 relative_path = os.path.join(report_to_snapshot_dir, filename)
-            
+
             snapshot_data = {
                 "path": relative_path,
-                "entities": snapshot_info['entities'],
-                "description": snapshot_info['description'],
-                "snapshot_type": snapshot_info['snapshot_type'],
-                "figure_description": snapshot_info.get('figure_description', ''),
+                "entities": snapshot_info["entities"],
+                "description": snapshot_info["description"],
+                "snapshot_type": snapshot_info["snapshot_type"],
+                "figure_description": snapshot_info.get("figure_description", ""),
             }
-            
-            modality = snapshot_info['modality']
-            SnapshotProcessor._add_to_hierarchy(organized[modality], snapshot_data, 
-                                              snapshot_info['entities'], name)
-        
+
+            modality = snapshot_info["modality"]
+            SnapshotProcessor._add_to_hierarchy(
+                organized[modality], snapshot_data, snapshot_info["entities"], name
+            )
+
         SnapshotProcessor._sort_hierarchy(organized)
         logger.info("QC: organized snapshots by BIDS hierarchy with relative paths")
         return organized
-    
+
     @staticmethod
     def _add_to_hierarchy(root: Dict, snapshot_data: Dict, entities: Dict, name: str):
         """Add snapshot to hierarchical structure."""
         current = root
         for entity_key in BIDS_ENTITY_ORDER:
-            if entity_key != 'sub' and entity_key in entities:
+            if entity_key != "sub" and entity_key in entities:
                 value = entities[entity_key]
                 if value not in current:
                     current[value] = {}
                 current = current[value]
         current[name] = snapshot_data
-    
+
     @staticmethod
     def _sort_hierarchy(data: Dict):
         """Sort hierarchical structure recursively."""
         for key, value in data.items():
-            if isinstance(value, dict) and 'path' not in value:
-                if any(isinstance(v, dict) and 'snapshot_type' in v for v in value.values()):
+            if isinstance(value, dict) and "path" not in value:
+                if any(
+                    isinstance(v, dict) and "snapshot_type" in v for v in value.values()
+                ):
                     # Sort by snapshot order, with special handling for T1w/T2w modality order
-                    sorted_items = sorted(value.items(), key=_snapshot_sort_key_hierarchy_item)
+                    sorted_items = sorted(
+                        value.items(), key=_snapshot_sort_key_hierarchy_item
+                    )
                 else:
                     # For non-snapshot items, ensure T1w comes before T2w
                     def _nonsnap_sort_key(item):
                         name, _ = item
-                        if name.endswith('_T1w.png') or '_T1w' in name:
+                        if name.endswith("_T1w.png") or "_T1w" in name:
                             return (0, name)
-                        if name.endswith('_T2w.png') or '_T2w' in name:
+                        if name.endswith("_T2w.png") or "_T2w" in name:
                             return (1, name)
                         return (2, name)
 
                     sorted_items = sorted(value.items(), key=_nonsnap_sort_key)
-                    
+
                 data[key] = dict(sorted_items)
                 SnapshotProcessor._sort_hierarchy(data[key])
 
 
 class HtmlGenerator:
     """Handles all HTML generation operations."""
-    
+
     @staticmethod
     def create_navigation_menu(organized_snapshots: Dict[str, Any]) -> str:
         """Create navigation menu."""
-        nav_items = ['<li class="nav-item"><a class="nav-link" href="#Summary">Summary</a></li>']
-        
+        nav_items = [
+            '<li class="nav-item"><a class="nav-link" href="#Summary">Summary</a></li>'
+        ]
+
         # Add modality sections with dropdowns if they have content
-        for modality, title in [("anatomical", "Structural"), ("functional", "Functional"),
-                               ("field_mapping", "B₀ field mapping")]:
+        for modality, title in [
+            ("anatomical", "Structural"),
+            ("functional", "Functional"),
+            ("field_mapping", "B₀ field mapping"),
+        ]:
             if organized_snapshots[modality]:
                 section_prefix = modality
-                groups = HtmlGenerator._group_snapshots_by_entities(organized_snapshots[modality], section_prefix)
+                groups = HtmlGenerator._group_snapshots_by_entities(
+                    organized_snapshots[modality], section_prefix
+                )
                 # Anatomical returns two-level dict (ses/run -> modality -> list); nav uses top-level keys
                 group_keys = list(groups.keys())
                 if len(group_keys) > 1:
                     dropdown_items = []
                     for group_key in group_keys:
                         nav_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(group_key)}"
-                        dropdown_items.append(f'<a class="dropdown-item" href="#{nav_id}">{group_key}</a>')
-                    dropdown_content = '\n'.join(dropdown_items)
-                    nav_items.append(f'''<li class="nav-item dropdown">
+                        dropdown_items.append(
+                            f'<a class="dropdown-item" href="#{nav_id}">{group_key}</a>'
+                        )
+                    dropdown_content = "\n".join(dropdown_items)
+                    nav_items.append(
+                        f"""<li class="nav-item dropdown">
 <a class="nav-link dropdown-toggle" id="navbar{modality.title()}" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" href="#">{title}</a>
 <div class="dropdown-menu" aria-labelledby="navbar{modality.title()}">
 {dropdown_content}
 </div>
-</li>''')
+</li>"""
+                    )
                 else:
-                    nav_items.append(f'<li class="nav-item"><a class="nav-link" href="#{modality.title()}">{title}</a></li>')
-        
-        nav_items.extend([
-            '<li class="nav-item"><a class="nav-link" href="#About">About</a></li>',
-            '<li class="nav-item"><a class="nav-link" href="#Methods">Methods</a></li>'
-        ])
-        
-        return '\n'.join(nav_items)
-    
+                    nav_items.append(
+                        f'<li class="nav-item"><a class="nav-link" href="#{modality.title()}">{title}</a></li>'
+                    )
+
+        nav_items.extend(
+            [
+                '<li class="nav-item"><a class="nav-link" href="#About">About</a></li>',
+                '<li class="nav-item"><a class="nav-link" href="#Methods">Methods</a></li>',
+            ]
+        )
+
+        return "\n".join(nav_items)
+
     @staticmethod
     def create_section(section_id: str, title: str, content: str) -> str:
         """Create a section with header and content."""
         return f'<div id="{section_id}"><h1 class="sub-report-title">{title}</h1>{content}</div>'
-    
+
     @staticmethod
-    def create_summary_section(report_data: Dict[str, Any], config: Dict[str, Any]) -> str:
+    def create_summary_section(
+        report_data: Dict[str, Any], config: Dict[str, Any]
+    ) -> str:
         """Create summary section."""
         subject_id = report_data["metadata"]["subject_id"]
         organized = report_data["organized_snapshots"]
@@ -544,7 +639,9 @@ class HtmlGenerator:
                 "functional": func_count,
             }
         else:
-            anat_counts = HtmlGenerator._count_anatomical_by_modality(organized["anatomical"])
+            anat_counts = HtmlGenerator._count_anatomical_by_modality(
+                organized["anatomical"]
+            )
             func_count = HtmlGenerator._count_unique_images(organized["functional"])
             subject_file_counts = {
                 "t1w": anat_counts["t1w"],
@@ -554,8 +651,12 @@ class HtmlGenerator:
                 "functional": func_count,
             }
 
-        subject_file_counts.setdefault("t1w_processed", subject_file_counts.get("t1w", 0))
-        subject_file_counts.setdefault("t2w_processed", subject_file_counts.get("t2w", 0))
+        subject_file_counts.setdefault(
+            "t1w_processed", subject_file_counts.get("t1w", 0)
+        )
+        subject_file_counts.setdefault(
+            "t2w_processed", subject_file_counts.get("t2w", 0)
+        )
 
         structural_li = HtmlGenerator._structural_images_summary_li(subject_file_counts)
         func_count = subject_file_counts.get("functional", 0)
@@ -566,13 +667,15 @@ class HtmlGenerator:
             or config.get("output_spaces")
             or "NMT2Sym"
         )
-        output_space_display = str(output_space_raw).split(":")[0] if output_space_raw else "NMT2Sym"
+        output_space_display = (
+            str(output_space_raw).split(":")[0] if output_space_raw else "NMT2Sym"
+        )
 
         # Surface reconstruction: show "Run by Brainana" if this report includes surface reconstruction QC
         has_surf = HtmlGenerator._has_surface_recon_snapshots(organized["anatomical"])
         freesurfer_text = "Run by Brainana" if has_surf else "Not applicable"
 
-        content = f'''<div class="boiler-html">
+        content = f"""<div class="boiler-html">
 <p><strong>Configuration:</strong> For detailed processing parameters and configuration settings,
 please refer to <code>./nextflow_reports/config.yaml</code> in your output directory.</p>
 </div>
@@ -582,71 +685,94 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
 <li>Functional images: {func_count}</li>
 <li>Output spaces: {output_space_display}</li>
 <li>Surface reconstruction: {freesurfer_text}</li>
-</ul>'''
+</ul>"""
 
         return HtmlGenerator.create_section("Summary", "Summary", content)
-    
+
     @staticmethod
-    def create_modality_section(section_id: str, data: Dict[str, Any], title: str = None) -> str:
+    def create_modality_section(
+        section_id: str, data: Dict[str, Any], title: str = None
+    ) -> str:
         """Create modality section with snapshots."""
         if not data:
             return ""
-        
+
         if title is None:
             title = section_id
-        
+
         content = HtmlGenerator._render_snapshots(data, section_id.lower())
         return HtmlGenerator.create_section(section_id, title, content)
-    
+
     @staticmethod
     def _render_snapshots(data: Dict[str, Any], section_prefix: str) -> str:
         """Render snapshots with grouping."""
         html_parts = []
-        
+
         # Group snapshots by BIDS entities (two-level for anatomical: ses/run then T1w/T2w)
-        snapshot_groups = HtmlGenerator._group_snapshots_by_entities(data, section_prefix)
-        
+        snapshot_groups = HtmlGenerator._group_snapshots_by_entities(
+            data, section_prefix
+        )
+
         def render_snapshot_blocks(snapshots: List[Dict[str, Any]]) -> None:
             for snapshot_data in snapshots:
-                snapshot_id = f"{section_prefix}-{snapshot_data['filename'].replace('.', '-')}"
-                title = snapshot_data.get('description', snapshot_data['filename'])
-                fig_desc = snapshot_data.get('figure_description', '')
+                snapshot_id = (
+                    f"{section_prefix}-{snapshot_data['filename'].replace('.', '-')}"
+                )
+                title = snapshot_data.get("description", snapshot_data["filename"])
+                fig_desc = snapshot_data.get("figure_description", "")
                 if fig_desc:
                     fig_desc = fig_desc[0].upper() + fig_desc[1:]
-                fig_desc_block = f'\n<div class="elem-filename">\n    {fig_desc}\n</div>' if fig_desc else ''
-                html_parts.append(f'''<div id="{snapshot_id}">
+                fig_desc_block = (
+                    f'\n<div class="elem-filename">\n    {fig_desc}\n</div>'
+                    if fig_desc
+                    else ""
+                )
+                html_parts.append(
+                    f"""<div id="{snapshot_id}">
 <h3 class="run-title">{title}</h3>{fig_desc_block}
 <img class="svg-reportlet" src="{snapshot_data["path"]}" style="width: 100%" />
 </div>
 <div class="elem-filename">
     Get figure file: <a href="{snapshot_data["path"]}" target="_blank">{snapshot_data["filename"]}</a>
-</div>''')
+</div>"""
+                )
 
         # Two-level structure (anatomical): ses/run -> T1w/T2w -> snapshots
-        first_val = next(iter(snapshot_groups.values()), None) if snapshot_groups else None
+        first_val = (
+            next(iter(snapshot_groups.values()), None) if snapshot_groups else None
+        )
         two_level = isinstance(first_val, dict)
         if two_level:
             for group_key, modality_dict in snapshot_groups.items():
                 if group_key:
                     header_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(group_key)}"
-                    html_parts.append(f'<h2 class="sub-report-group" id="{header_id}">{group_key}</h2>')
-                for modality in ('T1w', 'T2w'):
+                    html_parts.append(
+                        f'<h2 class="sub-report-group" id="{header_id}">{group_key}</h2>'
+                    )
+                for modality in ("T1w", "T2w"):
                     if modality in modality_dict:
-                        html_parts.append(f'<h3 class="sub-report-group">{modality}</h3>')
+                        html_parts.append(
+                            f'<h3 class="sub-report-group">{modality}</h3>'
+                        )
                         render_snapshot_blocks(modality_dict[modality])
         else:
             for group_key, snapshots in snapshot_groups.items():
                 if group_key:
                     header_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(group_key)}"
-                    html_parts.append(f'<h2 class="sub-report-group" id="{header_id}">{group_key}</h2>')
+                    html_parts.append(
+                        f'<h2 class="sub-report-group" id="{header_id}">{group_key}</h2>'
+                    )
                 render_snapshot_blocks(snapshots)
-        
-        return '\n'.join(html_parts)
-    
+
+        return "\n".join(html_parts)
+
     @staticmethod
-    def _group_snapshots_by_entities(data: Dict[str, Any], section_prefix: str = "") -> Dict[str, Any]:
+    def _group_snapshots_by_entities(
+        data: Dict[str, Any], section_prefix: str = ""
+    ) -> Dict[str, Any]:
         """Group snapshots by BIDS entities. For anatomical (section_prefix=='anatomical'),
-        returns two-level Dict[ses/run_key, Dict[modality, list]]; otherwise flat Dict[group_key, list]."""
+        returns two-level Dict[ses/run_key, Dict[modality, list]]; otherwise flat Dict[group_key, list].
+        """
         all_snapshots = []
         for value in _iter_leaf_snapshots(data):
             filename = Path(value["path"]).name
@@ -661,14 +787,21 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
                     "figure_description": value.get("figure_description", ""),
                 }
             )
-        
+
         # Anatomical: two-level grouping (ses/run -> T1w/T2w -> snapshots)
         if section_prefix == "anatomical":
             groups = {}
             for snapshot in all_snapshots:
-                entities = snapshot['entities']
-                entities_no_suffix = {k: v for k, v in entities.items() if k not in ['sub', 'desc', 'space', 'suffix']}
-                base_group_key = BidsEntityProcessor.create_display_text(entities_no_suffix) or 'sub-level'
+                entities = snapshot["entities"]
+                entities_no_suffix = {
+                    k: v
+                    for k, v in entities.items()
+                    if k not in ["sub", "desc", "space", "suffix"]
+                }
+                base_group_key = (
+                    BidsEntityProcessor.create_display_text(entities_no_suffix)
+                    or "sub-level"
+                )
                 filename = snapshot.get("filename", "")
                 # T1wT2wCombined comparison is shown under T2w (between T2w2T1w and T2w2template)
                 if snapshot.get("snapshot_type") == "t1wt2w_combined_comparison":
@@ -684,71 +817,92 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
             for base_key in groups:
                 for mod in groups[base_key]:
                     groups[base_key][mod].sort(key=_snapshot_sort_key)
+
             # Sort top-level by session
             def anat_group_sort(item):
                 group_name, modality_dict = item
-                session_value = ''
+                session_value = ""
                 for snap_list in modality_dict.values():
                     if snap_list:
-                        session_value = snap_list[0].get('entities', {}).get('ses', '')
+                        session_value = snap_list[0].get("entities", {}).get("ses", "")
                         break
-                return (session_value or '', group_name)
+                return (session_value or "", group_name)
+
             return dict(sorted(groups.items(), key=anat_group_sort))
-        
+
         # Flat grouping for functional / field_mapping
         groups = {}
         for snapshot in all_snapshots:
-            entities = {k: v for k, v in snapshot['entities'].items() if k not in ['sub', 'desc', 'space']}
-            base_group_key = BidsEntityProcessor.create_display_text(entities) or 'sub-level'
-            filename = snapshot.get('filename', '')
-            ent = snapshot.get('entities', {})
+            entities = {
+                k: v
+                for k, v in snapshot["entities"].items()
+                if k not in ["sub", "desc", "space"]
+            }
+            base_group_key = (
+                BidsEntityProcessor.create_display_text(entities) or "sub-level"
+            )
+            filename = snapshot.get("filename", "")
+            ent = snapshot.get("entities", {})
             # T1wT2wCombined comparison is shown under T2w
             if snapshot.get("snapshot_type") == "t1wt2w_combined_comparison":
-                group_key = "T2w" if base_group_key == "sub-level" else f"{base_group_key} T2w"
+                group_key = (
+                    "T2w" if base_group_key == "sub-level" else f"{base_group_key} T2w"
+                )
             else:
                 suf = _anat_suffix(filename, ent)
                 if suf == "T1w":
-                    group_key = "T1w" if base_group_key == "sub-level" else f"{base_group_key} T1w"
+                    group_key = (
+                        "T1w"
+                        if base_group_key == "sub-level"
+                        else f"{base_group_key} T1w"
+                    )
                 elif suf == "T2w":
-                    group_key = "T2w" if base_group_key == "sub-level" else f"{base_group_key} T2w"
+                    group_key = (
+                        "T2w"
+                        if base_group_key == "sub-level"
+                        else f"{base_group_key} T2w"
+                    )
                 else:
                     group_key = base_group_key
             if group_key not in groups:
                 groups[group_key] = []
             groups[group_key].append(snapshot)
-        
+
         for group_key in groups:
             groups[group_key].sort(key=_snapshot_sort_key)
-        
+
         def group_sort_key(group_item):
             group_name, snapshots = group_item
-            session_value = snapshots[0].get('entities', {}).get('ses', '') if snapshots else ''
+            session_value = (
+                snapshots[0].get("entities", {}).get("ses", "") if snapshots else ""
+            )
             has_task_or_run = any(
-                ('task' in s.get('entities', {})) or ('run' in s.get('entities', {}))
+                ("task" in s.get("entities", {})) or ("run" in s.get("entities", {}))
                 for s in snapshots
             )
             # Session-level groups (e.g., "session 001") should appear before
             # task/run-specific groups within the same session.
             group_level_order = 1 if has_task_or_run else 0
-            return (session_value or '', group_level_order, group_name)
-        
+            return (session_value or "", group_level_order, group_name)
+
         return dict(sorted(groups.items(), key=group_sort_key))
-    
+
     @staticmethod
     def _count_unique_images(data: Dict[str, Any]) -> int:
-        """Count unique functional BOLD runs from organized snapshots.
+        """Count unique functional BOLD runs from organized snapshots (fallback).
 
         Excludes ``desc`` (QC/processing step), ``sub`` (report subject), and
         ``space`` — derivative QC filenames use ``space`` for the reference
         grid (e.g. func2anat vs func2target), not a distinct acquisition.
 
-        Session-level within-session coregistration QC (``func_coreg_overlay``)
-        is named with only subject/session (no task/run); it must not be
-        counted as an extra functional acquisition.
+        Only snapshots with ``task`` and/or ``run`` are counted so session-level
+        QC (within-session coregistration, tSNR, etc.) is not treated as an
+        extra BOLD acquisition. Prefer :func:`_count_func_jobs_from_discovery`
+        when ``functional_jobs.json`` is available.
         """
         if not data:
             return 0
-        
+
         unique_images = set()
         _exclude_from_func_identity = frozenset({"desc", "sub", "space"})
 
@@ -758,6 +912,8 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
             if value.get("snapshot_type") == "func_coreg_overlay":
                 continue
             entities = value["entities"]
+            if "task" not in entities and "run" not in entities:
+                continue
             image_id = tuple(
                 sorted(
                     (k, v)
@@ -781,9 +937,7 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
                 entities = value["entities"]
                 image_id = tuple(
                     sorted(
-                        (k, v)
-                        for k, v in entities.items()
-                        if k not in ["desc", "sub"]
+                        (k, v) for k, v in entities.items() if k not in ["desc", "sub"]
                     )
                 )
                 filename = Path(value["path"]).name
@@ -815,14 +969,14 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
             label_e = html.escape(label)
             acq_e = html.escape(str(acquired))
             lead = (
-                f"<tr><td class=\"qc-struct-lab\">{label_e}:</td>"
-                f"<td class=\"qc-struct-k\">Acquired</td>"
+                f'<tr><td class="qc-struct-lab">{label_e}:</td>'
+                f'<td class="qc-struct-k">Acquired</td>'
                 f'<td class="qc-struct-n">{acq_e}</td>'
             )
             if acquired != processed:
                 proc_e = html.escape(str(processed))
                 return (
-                    f"{lead}<td class=\"qc-struct-pipe\" aria-hidden=\"true\">|</td>"
+                    f'{lead}<td class="qc-struct-pipe" aria-hidden="true">|</td>'
                     f'<td class="qc-struct-k">After synthesis</td>'
                     f'<td class="qc-struct-n">{proc_e}</td></tr>'
                 )
@@ -853,19 +1007,21 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
             if "surf" in st or "cortical" in st:
                 return True
         return False
-    
+
     @staticmethod
     def create_about_section(report_data: Dict[str, Any]) -> str:
         """Create about section."""
         metadata = report_data["metadata"]
-        content = f'''<div class="boiler-html">
+        content = f"""<div class="boiler-html">
 <p>This report was generated by <strong>{metadata["pipeline_name"]}</strong> version <strong>{metadata["version"]}</strong>.</p>
 <p>Generated on: {metadata["generation_time"]}</p>
-</div>'''
+</div>"""
         return HtmlGenerator.create_section("About", "About", content)
-    
+
     @staticmethod
-    def _conform_sentence(data_label: str, space_label: str, skull_enabled: bool) -> str:
+    def _conform_sentence(
+        data_label: str, space_label: str, skull_enabled: bool
+    ) -> str:
         """Return the conform-to-space sentence, shared between T1w and fMRI preprocessing."""
         if skull_enabled:
             return (
@@ -894,10 +1050,16 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
             "(Avants et al., 2008) and averaging in reference space."
         ]
 
-        skull_enabled = bool(get_nested_config_value(config, "anat.skullstripping_segmentation.enabled", True))
+        skull_enabled = bool(
+            get_nested_config_value(
+                config, "anat.skullstripping_segmentation.enabled", True
+            )
+        )
 
         if get_nested_config_value(config, "anat.conform.enabled", True):
-            t1w.append(HtmlGenerator._conform_sentence("T1w", "template space", skull_enabled))
+            t1w.append(
+                HtmlGenerator._conform_sentence("T1w", "template space", skull_enabled)
+            )
 
         if skull_enabled:
             t1w.append(
@@ -913,7 +1075,12 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
                 "using the brain mask to restrict the correction."
             )
 
-        xfm_type = (get_nested_config_value(config, "registration.anat2template_xfm_type", "syn") or "syn").lower()
+        xfm_type = (
+            get_nested_config_value(
+                config, "registration.anat2template_xfm_type", "syn"
+            )
+            or "syn"
+        ).lower()
         stage = _XFM_STAGE_LABELS.get(xfm_type, xfm_type)
         reg_sentence = (
             f"Volume-based spatial registration to the template was performed through "
@@ -955,22 +1122,26 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
         if anat_only:
             return "Functional data preprocessing was not performed (anatomical-only mode)."
 
-        sentences = [
-            "fMRI data were preprocessed as follows."
-        ]
+        sentences = ["fMRI data were preprocessed as follows."]
 
-        if get_nested_config_value(config, "func.slice_timing_correction.enabled", True):
+        if get_nested_config_value(
+            config, "func.slice_timing_correction.enabled", True
+        ):
             sentences.append(
                 "Slice timing correction was applied using AFNI 3dTshift (Cox, 1996; Cox & Hyde, 1997)."
             )
 
-        motion_enabled = bool(get_nested_config_value(config, "func.motion_correction.enabled", True))
+        motion_enabled = bool(
+            get_nested_config_value(config, "func.motion_correction.enabled", True)
+        )
         if motion_enabled:
             sentences.append(
                 "Head motion correction was performed with mcflirt (FSL; Jenkinson et al., 2002)."
             )
 
-        despike_enabled = bool(get_nested_config_value(config, "func.despike.enabled", False))
+        despike_enabled = bool(
+            get_nested_config_value(config, "func.despike.enabled", False)
+        )
         if despike_enabled:
             sentences.append(
                 "Despiking was applied using AFNI 3dDespike (Cox, 1996; Cox & Hyde, 1997) "
@@ -983,7 +1154,9 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
                 "performed using ANTs (Avants et al., 2008) by registering each run's mean image to a reference run."
             )
 
-        func_skull = bool(get_nested_config_value(config, "func.skullstripping.enabled", True))
+        func_skull = bool(
+            get_nested_config_value(config, "func.skullstripping.enabled", True)
+        )
         if get_nested_config_value(config, "func.conform.enabled", True):
             if func_skull:
                 sentences.append(
@@ -1002,14 +1175,17 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
                 "The fMRI data was skullstripped using a CNN model fine-tuned from DeepBet (Wang et al., 2021)."
             )
 
-        func2anat_xfm = (get_nested_config_value(config, "registration.func2anat_xfm_type", "syn") or "syn").lower()
+        func2anat_xfm = (
+            get_nested_config_value(config, "registration.func2anat_xfm_type", "syn")
+            or "syn"
+        ).lower()
         xfm_desc = _XFM_COREG_LABELS.get(func2anat_xfm, func2anat_xfm)
         if func2anat_xfm == "syn":
             sentences.append(
-                f"The mean fMRI data was registered to the selected anatomical reference using "
-                f"ANTs (rigid and affine; Avants et al., 2008); for non-linear registration, FireANTs "
-                f"(Jena et al., 2024; Jena et al., 2026) was used. The resulting transforms were applied "
-                f"to the full 4D BOLD and brain mask in sequence."
+                "The mean fMRI data was registered to the selected anatomical reference using "
+                "ANTs (rigid and affine; Avants et al., 2008); for non-linear registration, FireANTs "
+                "(Jena et al., 2024; Jena et al., 2026) was used. The resulting transforms were applied "
+                "to the full 4D BOLD and brain mask in sequence."
             )
         else:
             sentences.append(
@@ -1042,7 +1218,8 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
         if "subject_file_counts" in dataset_context:
             sfc = dataset_context["subject_file_counts"]
             has_t2w = (
-                max(int(sfc.get("t2w", 0) or 0), int(sfc.get("t2w_processed", 0) or 0)) > 0
+                max(int(sfc.get("t2w", 0) or 0), int(sfc.get("t2w_processed", 0) or 0))
+                > 0
             )
         else:
             anat_counts = HtmlGenerator._count_anatomical_by_modality(
@@ -1057,25 +1234,27 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
             "Results included in this manuscript come from preprocessing performed using "
             f"<b>brainana {html.escape(version)}</b>."
         )
-        parts.append(f"<p class=\"methods-intro\">{intro}</p>")
+        parts.append(f'<p class="methods-intro">{intro}</p>')
 
         t1w_text = ""
         t2w_text = None
         func_text = ""
 
         # Anatomical section — built directly to support optional T2w subheadings
-        parts.append("<h3 class=\"methods-subtitle\">Anatomical data preprocessing</h3>")
+        parts.append('<h3 class="methods-subtitle">Anatomical data preprocessing</h3>')
         if isinstance(config, dict):
-            t1w_text, t2w_text = HtmlGenerator._build_anat_methods_paragraph(config, has_t2w)
+            t1w_text, t2w_text = HtmlGenerator._build_anat_methods_paragraph(
+                config, has_t2w
+            )
             if has_t2w:
-                parts.append("<h4 class=\"methods-subsubtitle\">T1w preprocessing</h4>")
+                parts.append('<h4 class="methods-subsubtitle">T1w preprocessing</h4>')
             parts.append(f"<p>{html.escape(t1w_text)}</p>")
             if has_t2w and t2w_text:
-                parts.append("<h4 class=\"methods-subsubtitle\">T2w preprocessing</h4>")
+                parts.append('<h4 class="methods-subsubtitle">T2w preprocessing</h4>')
                 parts.append(f"<p>{html.escape(t2w_text)}</p>")
 
         # Functional section
-        parts.append("<h3 class=\"methods-subtitle\">Functional data preprocessing</h3>")
+        parts.append('<h3 class="methods-subtitle">Functional data preprocessing</h3>')
         if isinstance(config, dict):
             func_text = HtmlGenerator._build_func_methods_paragraph(config)
             parts.append(f"<p>{html.escape(func_text)}</p>")
@@ -1083,15 +1262,21 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
         # References: only those cited in the methods text above
         methods_body = " ".join([intro, t1w_text, t2w_text or "", func_text])
         refs_list = _cited_references(methods_body)
-        parts.append("<h3 class=\"methods-subtitle\">References</h3>")
+        parts.append('<h3 class="methods-subtitle">References</h3>')
         items = "".join(f"<li>{html.escape(ref)}</li>" for ref in refs_list)
-        parts.append(f"<ul class=\"methods-refs\">{items}</ul>")
+        parts.append(f'<ul class="methods-refs">{items}</ul>')
 
-        content = "<div class=\"boiler-html methods-structured\">\n" + "\n".join(parts) + "\n</div>"
+        content = (
+            '<div class="boiler-html methods-structured">\n'
+            + "\n".join(parts)
+            + "\n</div>"
+        )
         return HtmlGenerator.create_section("Methods", "Methods", content)
 
 
-def _resolve_nextflow_reports_dir(snapshot_dir: Path, report_path: Path) -> Optional[Path]:
+def _resolve_nextflow_reports_dir(
+    snapshot_dir: Path, report_path: Path
+) -> Optional[Path]:
     """Return nextflow_reports/ if anatomical_jobs.json exists (Brainana output root)."""
     candidates: List[Path] = []
     snap = snapshot_dir.resolve()
@@ -1109,7 +1294,9 @@ def _resolve_nextflow_reports_dir(snapshot_dir: Path, report_path: Path) -> Opti
     return None
 
 
-def _count_anat_inputs_from_jobs(jobs: List[Dict[str, Any]], subject_id: str, suffix: str) -> int:
+def _count_anat_inputs_from_jobs(
+    jobs: List[Dict[str, Any]], subject_id: str, suffix: str
+) -> int:
     """Count original anatomical NIfTI inputs for a subject from discovery job list."""
     n = 0
     for job in jobs:
@@ -1127,6 +1314,11 @@ def _subject_has_anatomical_job(jobs: List[Dict[str, Any]], subject_id: str) -> 
     return any(j.get("subject_id") == subject_id for j in jobs)
 
 
+def _count_func_jobs_from_discovery(jobs: List[Dict[str, Any]], subject_id: str) -> int:
+    """Count discovered functional BOLD jobs for one subject (exact ``subject_id``)."""
+    return sum(1 for job in jobs if job.get("subject_id") == subject_id)
+
+
 def generate_qc_report(
     snapshot_dir: Union[str, Path],
     report_path: Union[str, Path],
@@ -1134,29 +1326,35 @@ def generate_qc_report(
     logger: Optional[logging.Logger] = None,
     snapshot_paths: Optional[Dict[str, str]] = None,
     dataset_context: Optional[Dict[str, Any]] = None,
-    **kwargs
+    **kwargs,
 ) -> Dict[str, str]:
     """Generate comprehensive HTML quality control report."""
     snapshot_dir, report_path = Path(snapshot_dir), Path(report_path)
-    
+
     if logger is None:
         logger = logging.getLogger(__name__)
-        
+
     try:
         # Discover and parse snapshots
-        snapshot_data = SnapshotProcessor.discover_and_parse(snapshot_dir, logger, snapshot_paths)
-        
+        snapshot_data = SnapshotProcessor.discover_and_parse(
+            snapshot_dir, logger, snapshot_paths
+        )
+
         # Organize snapshots by hierarchy
         organized_snapshots = SnapshotProcessor.organize_by_hierarchy(
-            snapshot_data['snapshots'], snapshot_dir, report_path, logger
+            snapshot_data["snapshots"], snapshot_dir, report_path, logger
         )
-        
+
         # Build report metadata
-        subject_id_match = re.search(r'sub-(\w+)', report_path.name)
+        subject_id_match = re.search(r"sub-(\w+)", report_path.name)
         subject_id = subject_id_match.group(1) if subject_id_match else None
-        
-        anat_proc = HtmlGenerator._count_anatomical_by_modality(organized_snapshots["anatomical"])
-        func_snap = HtmlGenerator._count_unique_images(organized_snapshots["functional"])
+
+        anat_proc = HtmlGenerator._count_anatomical_by_modality(
+            organized_snapshots["anatomical"]
+        )
+        func_snap = HtmlGenerator._count_unique_images(
+            organized_snapshots["functional"]
+        )
         subject_file_counts: Dict[str, Any] = {
             "t1w": anat_proc["t1w"],
             "t2w": anat_proc["t2w"],
@@ -1184,7 +1382,28 @@ def generate_qc_report(
                         jobs_path,
                     )
             except (OSError, json.JSONDecodeError) as e:
-                logger.warning("QC: could not read %s for report summary counts: %s", jobs_path, e)
+                logger.warning(
+                    "QC: could not read %s for report summary counts: %s", jobs_path, e
+                )
+
+            func_jobs_path = nfr / "functional_jobs.json"
+            try:
+                with open(func_jobs_path, encoding="utf-8") as jf:
+                    func_jobs: List[Dict[str, Any]] = json.load(jf)
+                subject_file_counts["functional"] = _count_func_jobs_from_discovery(
+                    func_jobs, subject_id
+                )
+                logger.info(
+                    "QC: using functional input counts from discovery for subject %s (%s)",
+                    subject_id,
+                    func_jobs_path,
+                )
+            except (OSError, json.JSONDecodeError) as e:
+                logger.warning(
+                    "QC: could not read %s for report summary counts: %s",
+                    func_jobs_path,
+                    e,
+                )
 
         merged_context = dict(dataset_context or {})
         user_sfc = merged_context.pop("subject_file_counts", None)
@@ -1196,44 +1415,59 @@ def generate_qc_report(
         merged_context["subject_file_counts"] = subject_file_counts
 
         from nhp_mri_prep.version import get_version
+
         report_data = {
             "metadata": {
                 "generation_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "pipeline_name": "brainana",
                 "version": get_version(),
                 "working_directory": str(report_path.parent),
-                "subject_id": subject_id
+                "subject_id": subject_id,
             },
             "configuration": config,
             "organized_snapshots": organized_snapshots,
             "dataset_context": merged_context,
-            "available_entities": snapshot_data['available_entities']
+            "available_entities": snapshot_data["available_entities"],
         }
-        
+
         # Generate HTML report
         _generate_html_report(report_data, report_path, logger)
-        
+
         logger.info(f"QC: report generated successfully - {report_path}")
         return {"html_report": str(report_path)}
-        
+
     except Exception as e:
         logger.error(f"QC: report generation failed - {str(e)}")
         raise RuntimeError(f"Quality control report generation failed: {str(e)}")
 
 
-def _generate_html_report(report_data: Dict[str, Any], report_path: Path, logger: logging.Logger) -> None:
+def _generate_html_report(
+    report_data: Dict[str, Any], report_path: Path, logger: logging.Logger
+) -> None:
     """Generate HTML report file."""
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Generate all sections
-    navigation = HtmlGenerator.create_navigation_menu(report_data["organized_snapshots"])
-    summary = HtmlGenerator.create_summary_section(report_data, report_data["configuration"])
-    anatomical = HtmlGenerator.create_modality_section("Anatomical", report_data["organized_snapshots"]["anatomical"], "Structural")
-    functional = HtmlGenerator.create_modality_section("Functional", report_data["organized_snapshots"]["functional"])
-    field_mapping = HtmlGenerator.create_modality_section("FieldMapping", report_data["organized_snapshots"]["field_mapping"], "B₀ field mapping")
+    navigation = HtmlGenerator.create_navigation_menu(
+        report_data["organized_snapshots"]
+    )
+    summary = HtmlGenerator.create_summary_section(
+        report_data, report_data["configuration"]
+    )
+    anatomical = HtmlGenerator.create_modality_section(
+        "Anatomical", report_data["organized_snapshots"]["anatomical"], "Structural"
+    )
+    functional = HtmlGenerator.create_modality_section(
+        "Functional", report_data["organized_snapshots"]["functional"]
+    )
+    field_mapping = HtmlGenerator.create_modality_section(
+        "FieldMapping",
+        report_data["organized_snapshots"]["field_mapping"],
+        "B₀ field mapping",
+    )
     about = HtmlGenerator.create_about_section(report_data)
     methods = HtmlGenerator.create_methods_section(report_data)
-    
+
     # Create complete HTML
     html_content = _create_html_template().format(
         NAVIGATION_MENU=navigation,
@@ -1244,10 +1478,10 @@ def _generate_html_report(report_data: Dict[str, Any], report_path: Path, logger
         ABOUT_SECTION=about,
         METHODS_SECTION=methods,
         GENERATION_TIME=report_data["metadata"]["generation_time"],
-        VERSION=report_data["metadata"]["version"]
+        VERSION=report_data["metadata"]["version"],
     )
-    
-    with open(report_path, 'w', encoding='utf-8') as f:
+
+    with open(report_path, "w", encoding="utf-8") as f:
         f.write(html_content)
     logger.info(f"Output: HTML report written - {report_path}")
 

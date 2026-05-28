@@ -17,29 +17,29 @@ def run_parallel_hemis(
 ) -> dict[str, T]:
     """
     Run a function on both hemispheres in parallel.
-    
+
     Parameters
     ----------
     func : callable
         Function that takes hemisphere ('lh' or 'rh') as argument
     hemis : sequence of str
         Hemispheres to process (default: both)
-        
+
     Returns
     -------
     dict
         Results keyed by hemisphere
-        
+
     Raises
     ------
     Exception
         Re-raises any exception from hemisphere processing
     """
     results = {}
-    
+
     with ThreadPoolExecutor(max_workers=len(hemis)) as executor:
         futures = {executor.submit(func, hemi): hemi for hemi in hemis}
-        
+
         for future in as_completed(futures):
             hemi = futures[future]
             try:
@@ -48,7 +48,7 @@ def run_parallel_hemis(
             except Exception as e:
                 logger.error(f"Error processing {hemi}: {e}")
                 raise
-    
+
     return results
 
 
@@ -59,10 +59,10 @@ def run_parallel(
 ) -> None:
     """
     Run a function on multiple items in parallel.
-    
+
     Uses ThreadPoolExecutor to process items concurrently. If any item
     fails, the exception is logged and re-raised, stopping all processing.
-    
+
     Parameters
     ----------
     func : callable
@@ -71,7 +71,7 @@ def run_parallel(
         Items to process
     max_workers : int, default=2
         Maximum number of parallel workers. Should not exceed the number of items.
-        
+
     Raises
     ------
     Exception
@@ -79,7 +79,7 @@ def run_parallel(
     """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(func, item): item for item in items}
-        
+
         for future in as_completed(futures):
             item = futures[future]
             try:
@@ -87,4 +87,3 @@ def run_parallel(
             except Exception as e:
                 logger.error(f"Error processing {item}: {e}")
                 raise
-

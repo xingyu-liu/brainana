@@ -34,11 +34,11 @@ class ToTensorTest:
     __call__
         Converts image.
     """
-    
+
     def __init__(self, rescale: float = 255.0):
         """
         Initialize ToTensorTest.
-        
+
         Parameters
         ----------
         rescale : float
@@ -80,17 +80,17 @@ class ToTensorTest:
 class ToTensor:
     """
     Convert ndarrays in sample to Tensors.
-    
+
     Methods
     -------
     __call__
         Convert image.
     """
-    
+
     def __init__(self, rescale: float = 255.0):
         """
         Initialize ToTensor.
-        
+
         Parameters
         ----------
         rescale : float
@@ -118,7 +118,7 @@ class ToTensor:
             sample["weight"],
             sample["scale_factor"],
         )
-        
+
         img = img.astype(np.float32)
 
         # Normalize HDF5 data from [0, rescale] to [0, 1] range
@@ -141,11 +141,11 @@ class ToTensor:
 class Pad2D:
     """
     Pad image(s) to target size. Supports both edge padding and zero padding.
-    
+
     Unified padding transform that works for both:
     - Single images (inference): takes npt.NDArray, returns np.ndarray
     - Sample dicts (training): takes dict with "img", "label", "weight", returns dict
-    
+
     Edge padding replicates edge pixels (better for boundary performance).
     Zero padding fills with zeros.
 
@@ -164,11 +164,12 @@ class Pad2D:
     __call__
         Pads image(s) with specified mode.
     """
+
     def __init__(
-            self,
-            output_size: Number | tuple[Number, Number],
-            mode: str = 'edge',
-            pos: None | str = 'top_left'
+        self,
+        output_size: Number | tuple[Number, Number],
+        mode: str = "edge",
+        pos: None | str = "top_left",
     ):
         """
         Initialize padding transform.
@@ -183,16 +184,19 @@ class Pad2D:
             Position to put the input. Default = 'top_left'.
         """
         from fastsurfer_nn.data_loader.data_utils import pad_to_size
+
         if isinstance(output_size, Number):
             output_size = (int(output_size),) * 2
         self.output_size = output_size
-        if mode not in ['edge', 'zero']:
+        if mode not in ["edge", "zero"]:
             raise ValueError(f"mode must be 'edge' or 'zero', got '{mode}'")
         self.mode = mode
         self.pos = pos
         self._pad_to_size = pad_to_size
 
-    def __call__(self, input_data: npt.NDArray | dict[str, Any]) -> np.ndarray | dict[str, Any]:
+    def __call__(
+        self, input_data: npt.NDArray | dict[str, Any]
+    ) -> np.ndarray | dict[str, Any]:
         """
         Pad image(s) with specified mode.
 
@@ -208,8 +212,10 @@ class Pad2D:
         """
         # Handle single image (inference case)
         if isinstance(input_data, np.ndarray):
-            return self._pad_to_size(input_data, self.output_size, mode=self.mode, pos=self.pos)
-        
+            return self._pad_to_size(
+                input_data, self.output_size, mode=self.mode, pos=self.pos
+            )
+
         # Handle sample dict (training case)
         if isinstance(input_data, dict):
             img, label, weight, sf = (
@@ -218,13 +224,17 @@ class Pad2D:
                 input_data["weight"],
                 input_data["scale_factor"],
             )
-            
+
             img = self._pad_to_size(img, self.output_size, mode=self.mode, pos=self.pos)
-            label = self._pad_to_size(label, self.output_size, mode=self.mode, pos=self.pos)
-            weight = self._pad_to_size(weight, self.output_size, mode=self.mode, pos=self.pos)
+            label = self._pad_to_size(
+                label, self.output_size, mode=self.mode, pos=self.pos
+            )
+            weight = self._pad_to_size(
+                weight, self.output_size, mode=self.mode, pos=self.pos
+            )
 
             return {"img": img, "label": label, "weight": weight, "scale_factor": sf}
-        
+
         raise TypeError(f"Pad2D expects np.ndarray or dict, got {type(input_data)}")
 
 
@@ -244,6 +254,7 @@ class AddGaussianNoise:
     __call__
         Adds noise to scale factor.
     """
+
     def __init__(self, mean: Real = 0, std: Real = 0.1):
         """
         Construct object.
@@ -286,7 +297,7 @@ class AddGaussianNoise:
 class AugmentationPadImage:
     """
     Pad Image with symmetric padding on all sides for augmentation.
-    
+
     This is different from Pad2D which pads to a target size. This class adds
     symmetric padding (same amount on all sides) which is useful for augmentation
     operations that need border space.
@@ -303,10 +314,11 @@ class AugmentationPadImage:
     __call__
         Adds symmetric padding to img, label, and weight.
     """
+
     def __init__(
-            self,
-            pad_size: int | tuple[tuple[int, int], tuple[int, int]] = 16,
-            pad_type: str = "edge"
+        self,
+        pad_size: int | tuple[tuple[int, int], tuple[int, int]] = 16,
+        pad_type: str = "edge",
     ):
         """
         Construct object.
@@ -365,7 +377,7 @@ class AugmentationRandomCrop:
     Randomly Crop Image to given size.
     """
 
-    def __init__(self, output_size: int | tuple, crop_type: str = 'Random'):
+    def __init__(self, output_size: int | tuple, crop_type: str = "Random"):
         """Construct object.
 
         Attributes
@@ -425,4 +437,3 @@ class AugmentationRandomCrop:
         weight = weight[top:bottom, left:right]
 
         return {"img": img, "label": label, "weight": weight, "scale_factor": sf}
-

@@ -46,7 +46,7 @@ def get_current_stage_id() -> Optional[str]:
 class FreeSurferError(Exception):
     """
     Exception raised when a FreeSurfer command fails.
-    
+
     Attributes
     ----------
     cmd : str, optional
@@ -54,8 +54,10 @@ class FreeSurferError(Exception):
     returncode : int, optional
         The exit code of the failed command
     """
-    
-    def __init__(self, message: str, cmd: Optional[str] = None, returncode: Optional[int] = None):
+
+    def __init__(
+        self, message: str, cmd: Optional[str] = None, returncode: Optional[int] = None
+    ):
         self.cmd = cmd
         self.returncode = returncode
         super().__init__(message)
@@ -64,12 +66,12 @@ class FreeSurferError(Exception):
 def get_fs_home() -> Path:
     """
     Get FreeSurfer home directory from environment.
-    
+
     Returns
     -------
     Path
         Path to FREESURFER_HOME
-        
+
     Raises
     ------
     FreeSurferError
@@ -81,28 +83,28 @@ def get_fs_home() -> Path:
             "FREESURFER_HOME environment variable not set. "
             "Please source FreeSurfer's SetUpFreeSurfer.sh"
         )
-    
+
     fs_path = Path(fs_home)
     if not fs_path.exists():
         raise FreeSurferError(f"FREESURFER_HOME does not exist: {fs_path}")
-    
+
     return fs_path
 
 
 def find_command(cmd: str) -> str:
     """
     Find a command, checking if it's available.
-    
+
     Parameters
     ----------
     cmd : str
         Command name
-        
+
     Returns
     -------
     str
         Full path to command or just the command name if in PATH
-        
+
     Raises
     ------
     FreeSurferError
@@ -117,14 +119,14 @@ def find_command(cmd: str) -> str:
 def to_relative_path(path: Path, subject_dir: Path) -> Path:
     """
     Convert absolute path to relative path from subject_dir if under it.
-    
+
     Parameters
     ----------
     path : Path
         Path to convert (can be absolute or relative)
     subject_dir : Path
         Subject directory (e.g., /path/to/subject)
-        
+
     Returns
     -------
     Path
@@ -152,7 +154,7 @@ def run_fs_command(
 ) -> subprocess.CompletedProcess:
     """
     Run a FreeSurfer command.
-    
+
     Parameters
     ----------
     cmd : sequence of str or Path
@@ -175,12 +177,12 @@ def run_fs_command(
         Capture stdout and stderr
     timeout : float, optional
         Timeout in seconds
-        
+
     Returns
     -------
     subprocess.CompletedProcess
         Completed process information
-        
+
     Raises
     ------
     FreeSurferError
@@ -189,33 +191,34 @@ def run_fs_command(
     # Convert all arguments to strings
     cmd_list = [str(c) for c in cmd]
     cmd_str = " ".join(cmd_list)
-    
+
     # Resolve subject_dir if provided
     if subject_dir:
         subject_dir = Path(subject_dir).resolve()
-    
+
     # Merge environment
     run_env = os.environ.copy()
     if env:
         run_env.update(env)
-    
+
     # Ensure FREESURFER_HOME is set
     if "FREESURFER_HOME" not in run_env:
         raise FreeSurferError(
             "FREESURFER_HOME not set. Cannot run FreeSurfer commands."
         )
-    
+
     logger.debug(f"Running: {cmd_str}")
-    
+
     # Log command to cmd log file (fastsurfer_recon.cmd format)
     # Use provided cmd_log_file or global one
     active_cmd_log_file = cmd_log_file or _cmd_log_file
     if active_cmd_log_file:
         from datetime import datetime  # Import here to avoid circular dependency
+
         active_cmd_log_file.parent.mkdir(parents=True, exist_ok=True)
         with open(active_cmd_log_file, "a") as f:
             timestamp = datetime.now().strftime("%a %b %d %H:%M:%S %Z %Y")
-            f.write(f"\n#--------------------------------------------\n")
+            f.write("\n#--------------------------------------------\n")
             # Include stage identifier if available
             if _current_stage_id:
                 f.write(f"#@# {_current_stage_id}: {cmd_list[0]} {timestamp}\n")
@@ -225,7 +228,7 @@ def run_fs_command(
             if subject_dir:
                 f.write(f"cd {subject_dir}\n")
             f.write(f"{' '.join(cmd_list)}\n")
-    
+
     try:
         result = subprocess.run(
             cmd_list,
@@ -245,7 +248,7 @@ def run_fs_command(
             f"Command not found: {cmd_list[0]}",
             cmd=cmd_str,
         ) from e
-    
+
     # Log output
     if log_file and capture_output:
         with open(log_file, "a") as f:
@@ -255,7 +258,7 @@ def run_fs_command(
             if result.stderr:
                 f.write(f"[stderr]\n{result.stderr}")
             f.write(f"[exit code: {result.returncode}]\n")
-    
+
     # Check for errors
     if check and result.returncode != 0:
         error_msg = result.stderr or result.stdout or "Unknown error"
@@ -264,7 +267,7 @@ def run_fs_command(
             cmd=cmd_str,
             returncode=result.returncode,
         )
-    
+
     return result
 
 
@@ -280,7 +283,7 @@ def run_recon_all(
 ) -> subprocess.CompletedProcess:
     """
     Run recon-all with specified steps.
-    
+
     Parameters
     ----------
     subject : str
@@ -299,29 +302,29 @@ def run_recon_all(
         SUBJECTS_DIR path. If None, uses environment variable.
     **kwargs
         Additional arguments to run_fs_command
-        
+
     Returns
     -------
     subprocess.CompletedProcess
     """
     cmd = ["recon-all", "-s", subject]
-    
+
     if hemi:
         cmd.extend(["-hemi", hemi])
-    
+
     if steps:
         cmd.extend(steps)
-    
+
     if flags:
         cmd.extend(flags)
-    
+
     # Threading
     if threads > 1:
         cmd.extend(["-threads", str(threads), "-itkthreads", str(threads)])
-    
+
     # Standard flags
     cmd.extend(["-no-isrunning", "-umask", "022"])
-    
+
     # Set SUBJECTS_DIR in environment
     env = kwargs.pop("env", {})
     if subjects_dir:
@@ -330,6 +333,5 @@ def run_recon_all(
     elif "SUBJECTS_DIR" not in env:
         # Try to get from environment if not provided and not in env
         env["SUBJECTS_DIR"] = os.environ.get("SUBJECTS_DIR", "")
-    
-    return run_fs_command(cmd, log_file=log_file, env=env, **kwargs)
 
+    return run_fs_command(cmd, log_file=log_file, env=env, **kwargs)

@@ -46,7 +46,7 @@ def get_euler_number(surface_path: Path) -> Optional[int]:
         if match:
             return int(match.group(1))
         return None
-    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
         return None
 
 

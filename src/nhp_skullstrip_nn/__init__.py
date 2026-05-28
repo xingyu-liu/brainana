@@ -21,17 +21,17 @@ from .config import TrainingConfig, InferenceConfig
 from .utils import get_device, setup_logging, get_logger
 
 __all__ = [
-    'data',
-    'model', 
-    'train',
-    'utils',
-    'inference',
-    'UNet2d',
-    'VolumeDataset',
-    'predict_volumes',
-    'TrainingConfig',
-    'InferenceConfig',
-    'get_device',
-    'setup_logging',
-    'get_logger'
+    "data",
+    "model",
+    "train",
+    "utils",
+    "inference",
+    "UNet2d",
+    "VolumeDataset",
+    "predict_volumes",
+    "TrainingConfig",
+    "InferenceConfig",
+    "get_device",
+    "setup_logging",
+    "get_logger",
 ]

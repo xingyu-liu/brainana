@@ -60,12 +60,12 @@ def _resolve_atlas_path(filename: str) -> Path:
 def _extract_atlas_from_checkpoint(ckpt_path: Path) -> Optional[str]:
     """
     Extract atlas name from a checkpoint file.
-    
+
     Parameters
     ----------
     ckpt_path : Path
         Path to checkpoint file
-        
+
     Returns
     -------
     str, None
@@ -84,7 +84,7 @@ def run_segmentation(
     input_image: Union[str, Path],
     modal: str,
     output_dir: Union[str, Path],
-    device_id: Union[int, str] = 'auto',
+    device_id: Union[int, str] = "auto",
     output_data_format: Literal["mgz", "nifti"] = "nifti",
     enable_crop_2round: bool = False,
     plane_weight_coronal: Optional[float] = None,
@@ -94,7 +94,7 @@ def run_segmentation(
     fix_wm_islands: bool = True,
     create_hemimask: bool = True,
     fix_roi_wm: bool = False,
-    roi_name: str = 'V1',
+    roi_name: str = "V1",
     wm_thr: float = 0.5,
     save_debug_intermediates: bool = False,
     registration_threads: Optional[int] = None,
@@ -102,18 +102,18 @@ def run_segmentation(
 ) -> Dict[str, str]:
     """
     Perform multi-class atlas segmentation using fastsurfer_nn.
-    
+
     This function performs segmentation and generates brain mask, segmentation, and hemisphere mask.
-    
+
     The function implements an efficient "input space → model space → input space" workflow:
     1. Runs fastsurfer_nn segmentation on the input image (in model space)
     2. Resamples segmentation back to native input space (in-memory, single operation)
     3. Creates brain mask and hemisphere mask from the resampled segmentation
     4. Saves all outputs to the output directory (all in native input space)
-    
+
     All outputs are automatically in the same space as the input image, providing
     a seamless user experience without manual resampling.
-    
+
     Args:
         input_image: Path to the input image (T1w)
         modal: 'anat' (modality - only anatomical images are supported)
@@ -160,11 +160,11 @@ def run_segmentation(
             Number of threads to use for ANTs registration when fix_roi_wm=True.
             If None, uses config default (typically 8). Note: ANTs may show N+1 threads
             (N worker threads + 1 main thread) in process monitors.
-            
+
         Note: Preprocessing parameters (vox_size, orientation, image_size)
         are automatically read from checkpoint metadata (required), ensuring consistency
         with the training configuration.
-        
+
     Returns:
         Dictionary with output file paths:
         - 'brain_mask': Path to the generated brain mask (binary, values 0 or 1)
@@ -172,39 +172,46 @@ def run_segmentation(
         - 'hemimask': Path to the hemisphere mask file (optional)
         - 'input_image': Path to the input image
         - 'atlas_name': Name of atlas used (optional)
-        
+
     Raises:
         FileNotFoundError: If input image doesn't exist
         RuntimeError: If segmentation fails
         ValueError: If modality is not 'anat' or no checkpoints found
     """
-    
+
     # Setup logger if not provided
     if logger is None:
         logger = logging.getLogger(__name__)
         if not logger.handlers:
             handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+            formatter = logging.Formatter(
+                "%(asctime)s | %(levelname)-8s | %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
             handler.setFormatter(formatter)
             handler.setLevel(logging.INFO)
             logger.addHandler(handler)
             logger.setLevel(logging.INFO)
-    
+
     logger.info(f"Segmentation (fastsurfer_nn): starting for {modal} modality")
-    
+
     # Validate inputs
     input_image = Path(input_image)
     if not input_image.exists():
-        logger.error(f"Segmentation (fastsurfer_nn): input image not found: {input_image}")
+        logger.error(
+            f"Segmentation (fastsurfer_nn): input image not found: {input_image}"
+        )
         raise FileNotFoundError(f"Input image not found: {input_image}")
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if modal != 'anat':
-        logger.error(f"Segmentation (fastsurfer_nn): invalid modality={modal}, must be 'anat'")
+    if modal != "anat":
+        logger.error(
+            f"Segmentation (fastsurfer_nn): invalid modality={modal}, must be 'anat'"
+        )
         raise ValueError(f"Invalid modality: {modal}. Must be 'anat'")
-    
+
     # Use PRETRAINED_MODEL_DIR from constants
     pretrained_dir = PRETRAINED_MODEL_DIR
 
@@ -212,34 +219,34 @@ def run_segmentation(
     # Hardcoded checkpoint mapping: {modality}_seg-{atlas}_planexxx.pkl
     # Replace 'planexxx' with actual plane name (axial, coronal, sagittal) or 'mixed'
     checkpoint_map = {
-        'anat': 'T1w_seg-ARM2_planexxx.pkl',
+        "anat": "T1w_seg-ARM2_planexxx.pkl",
     }
     ckpt_template = checkpoint_map[modal]
 
     if use_mixed_model:
         # Mixed-plane model: look for single mixed checkpoint
-        ckpt_name = ckpt_template.replace('planexxx', 'mixed')
+        ckpt_name = ckpt_template.replace("planexxx", "mixed")
         mixed_ckpt_path = pretrained_dir / ckpt_name
-        
+
         if not mixed_ckpt_path.exists():
             raise ValueError(
                 f"Mixed-plane checkpoint not found for {modal} modality. "
                 f"Expected file: {ckpt_name} in {pretrained_dir}"
             )
-        
+
         logger.info(f"Checkpoint: using mixed-plane model {ckpt_name}")
         # Use the same mixed checkpoint for all 3 planes
         checkpoints = {
-            'axial': mixed_ckpt_path,
-            'coronal': mixed_ckpt_path,
-            'sagittal': mixed_ckpt_path,
+            "axial": mixed_ckpt_path,
+            "coronal": mixed_ckpt_path,
+            "sagittal": mixed_ckpt_path,
         }
     else:
         # Separate plane models: look for individual plane checkpoints
         # Resolve checkpoint paths by replacing 'planexxx' with actual plane names
         checkpoints = {}
         for plane in ["axial", "coronal", "sagittal"]:
-            ckpt_name = ckpt_template.replace('planexxx', plane)
+            ckpt_name = ckpt_template.replace("planexxx", plane)
             ckpt_path = pretrained_dir / ckpt_name
             if ckpt_path.exists():
                 checkpoints[plane] = ckpt_path
@@ -247,38 +254,44 @@ def run_segmentation(
             else:
                 checkpoints[plane] = None
                 logger.warning(f"Checkpoint: not found {ckpt_path}")
-        
+
         # Validate that at least one checkpoint is found
-        found_planes = [plane for plane, ckpt in checkpoints.items() if ckpt is not None]
+        found_planes = [
+            plane for plane, ckpt in checkpoints.items() if ckpt is not None
+        ]
         if not found_planes:
             raise ValueError(
                 f"No checkpoints found for {modal} modality. "
                 f"Expected files like: {ckpt_template.replace('planexxx', '{plane}')} "
                 f"in {pretrained_dir}"
             )
-        
+
         logger.info(f"Checkpoint: found for planes={', '.join(found_planes)}")
-    
+
     # Extract atlas metadata from checkpoints
     try:
         atlas_name, atlas_metadata = setup_atlas_from_checkpoints(
-            ckpt_ax=checkpoints.get('axial'),
-            ckpt_cor=checkpoints.get('coronal'),
-            ckpt_sag=checkpoints.get('sagittal')
+            ckpt_ax=checkpoints.get("axial"),
+            ckpt_cor=checkpoints.get("coronal"),
+            ckpt_sag=checkpoints.get("sagittal"),
         )
         # Check if this is a binary model
         is_binary = atlas_metadata.get("is_binary_task", False)
         if is_binary:
-            logger.info(f"Model: binary brain mask task detected (atlas_name={atlas_name}, num_classes={atlas_metadata.get('num_classes', 2)})")
+            logger.info(
+                f"Model: binary brain mask task detected (atlas_name={atlas_name}, num_classes={atlas_metadata.get('num_classes', 2)})"
+            )
         else:
-            logger.info(f"Atlas: using {atlas_name} (num_classes={atlas_metadata.get('num_classes', 'unknown')})")
+            logger.info(
+                f"Atlas: using {atlas_name} (num_classes={atlas_metadata.get('num_classes', 'unknown')})"
+            )
     except Exception as e:
         logger.warning(f"Atlas: could not extract metadata: {e}")
         # Fallback: determine binary from checkpoint
         first_ckpt = next(ckpt for ckpt in checkpoints.values() if ckpt is not None)
-        
+
         is_binary, num_classes = is_binary_checkpoint(first_ckpt)
-        
+
         if is_binary is True:
             # Binary model - doesn't need an atlas
             num_classes = num_classes or 2
@@ -289,21 +302,27 @@ def run_segmentation(
                 "num_classes": num_classes,
                 "plane": "",  # Not specific to a single plane (multi-plane model)
             }
-            logger.info(f"Model: detected binary model (num_classes={num_classes}, no atlas required)")
+            logger.info(
+                f"Model: detected binary model (num_classes={num_classes}, no atlas required)"
+            )
         else:
             # Multi-class model or cannot determine - try to extract or use default
             atlas_name = _extract_atlas_from_checkpoint(first_ckpt)
             atlas_metadata = None
-            logger.warning(f"Atlas: using fallback {atlas_name} (metadata will be auto-detected)")
-    
+            logger.warning(
+                f"Atlas: using fallback {atlas_name} (metadata will be auto-detected)"
+            )
+
     # Convert device_id to device string
-    if device_id == 'auto':
-        device_str = 'auto'
+    if device_id == "auto":
+        device_str = "auto"
     elif device_id == -1:
-        device_str = 'cpu'
+        device_str = "cpu"
     else:
-        device_str = f'cuda:{device_id}' if isinstance(device_id, int) else str(device_id)
-    
+        device_str = (
+            f"cuda:{device_id}" if isinstance(device_id, int) else str(device_id)
+        )
+
     try:
         # Run segmentation using the high-level API
         # This will create segmentation, mask, and hemimask
@@ -313,9 +332,9 @@ def run_segmentation(
             output_dir=output_dir,
             atlas_name=atlas_name,
             atlas_metadata=atlas_metadata,
-            ckpt_ax=checkpoints.get('axial'),
-            ckpt_cor=checkpoints.get('coronal'),
-            ckpt_sag=checkpoints.get('sagittal'),
+            ckpt_ax=checkpoints.get("axial"),
+            ckpt_cor=checkpoints.get("coronal"),
+            ckpt_sag=checkpoints.get("sagittal"),
             device=device_str,
             viewagg_device=device_str,
             plane_weight_coronal=plane_weight_coronal,
@@ -328,66 +347,84 @@ def run_segmentation(
             logger=logger,
             save_debug_intermediates=save_debug_intermediates,
         )
-        
+
         logger.info("Segmentation (fastsurfer_nn): completed successfully")
         logger.info(f"Output: files saved to {output_dir}")
         logger.info(f"Output: segmentation={seg_results.get('segmentation')}")
         logger.info(f"Output: brain_mask={seg_results.get('mask')}")
-        if 'hemimask' in seg_results:
+        if "hemimask" in seg_results:
             logger.info(f"Output: hemisphere_mask={seg_results.get('hemimask')}")
-        if 'input_cropped' in seg_results:
+        if "input_cropped" in seg_results:
             logger.info(f"Output: input_cropped={seg_results.get('input_cropped')}")
-        
+
         # Save LUT alongside segmentation when available (multi-class with atlas)
         if "segmentation" in seg_results and atlas_name is not None:
             fastsurfercnn_dir = REPO_ROOT / "src" / "fastsurfer_nn"
-            lut_path = fastsurfercnn_dir / "atlas" / f"atlas-{atlas_name}" / f"{atlas_name}_ColorLUT.tsv"
+            lut_path = (
+                fastsurfercnn_dir
+                / "atlas"
+                / f"atlas-{atlas_name}"
+                / f"{atlas_name}_ColorLUT.tsv"
+            )
             if lut_path.exists():
                 output_f = str(seg_results["segmentation"])
-                lut_out = output_f.replace(".nii.gz", "_lut.tsv").replace(".mgz", "_lut.tsv")
+                lut_out = output_f.replace(".nii.gz", "_lut.tsv").replace(
+                    ".mgz", "_lut.tsv"
+                )
                 shutil.copy2(lut_path, lut_out)
                 logger.info(f"Output: LUT saved to {lut_out}")
             else:
                 logger.debug(f"LUT not found at {lut_path}, skipping LUT save")
-        
+
         # Apply ROI WM fixing if enabled
         if fix_roi_wm:
             # Skip ROI WM fixing for brainmask atlas
-            if atlas_name == 'brainmask':
-                logger.info(f"Skipping {roi_name} white matter fixing: not applicable for brainmask atlas")
+            if atlas_name == "brainmask":
+                logger.info(
+                    f"Skipping {roi_name} white matter fixing: not applicable for brainmask atlas"
+                )
             else:
-                if enable_crop_2round and 'input_cropped' in seg_results:
-                    logger.info("2-pass refinement was applied - applying ROI WM fixing to final pass results only")
+                if enable_crop_2round and "input_cropped" in seg_results:
+                    logger.info(
+                        "2-pass refinement was applied - applying ROI WM fixing to final pass results only"
+                    )
                 elif enable_crop_2round:
-                    logger.info("2-pass criteria not met (single pass) - applying ROI WM fixing to results")
+                    logger.info(
+                        "2-pass criteria not met (single pass) - applying ROI WM fixing to results"
+                    )
                 logger.info(f"Applying {roi_name} white matter fixing...")
-                
+
                 # Check required files exist
-                if 'segmentation' not in seg_results:
+                if "segmentation" not in seg_results:
                     raise ValueError(
                         f"{roi_name} WM fixing requires segmentation file, but segmentation was not generated. "
                         "This may occur with binary brain mask models."
                     )
-                if 'hemimask' not in seg_results:
+                if "hemimask" not in seg_results:
                     raise ValueError(
                         f"{roi_name} WM fixing requires hemisphere mask file, but hemimask was not generated."
                     )
-                
-                seg_file = Path(seg_results['segmentation'])
-                mask_file = Path(seg_results['mask'])
-                hemi_mask_file = Path(seg_results['hemimask'])
-                
+
+                seg_file = Path(seg_results["segmentation"])
+                mask_file = Path(seg_results["mask"])
+                hemi_mask_file = Path(seg_results["hemimask"])
+
                 # Determine LUT path from checkpoint (same logic as predictor)
                 if atlas_name is None:
                     raise ValueError(
                         "Cannot determine LUT path: atlas_name is None. "
                         f"{roi_name} WM fixing requires a multi-class model with atlas_name in checkpoint metadata."
                     )
-                
+
                 # Use the same logic as RunModelOnData to determine LUT path from atlas_name
                 fastsurfercnn_dir = REPO_ROOT / "src" / "fastsurfer_nn"
-                lut_path = fastsurfercnn_dir / "atlas" / f"atlas-{atlas_name}" / f"{atlas_name}_ColorLUT.tsv"
-                
+                lut_path = (
+                    fastsurfercnn_dir
+                    / "atlas"
+                    / f"atlas-{atlas_name}"
+                    / f"{atlas_name}_ColorLUT.tsv"
+                )
+
                 if not lut_path.exists():
                     raise FileNotFoundError(
                         f"LUT file not found at {lut_path}. "
@@ -395,20 +432,30 @@ def run_segmentation(
                         "Please ensure the atlas is installed correctly."
                     )
                 logger.info(f"LUT path (from checkpoint): {lut_path}")
-                
+
                 # Resolve template file paths from template_zoo/template/ and template_zoo/atlas/
-                tpl_T1w_f = _resolve_template_path("tpl-NMT2Sym_res-05_T1w_brain.nii.gz")
-                tpl_roi_wm_f = _resolve_template_path(f"tpl-NMT2Sym_res-05_T1w_WM_{roi_name}.nii.gz")
-                tpl_seg_f = _resolve_atlas_path(f"atlas-{atlas_name}_space-NMT2Sym_res-05.nii.gz")
-                
+                tpl_T1w_f = _resolve_template_path(
+                    "tpl-NMT2Sym_res-05_T1w_brain.nii.gz"
+                )
+                tpl_roi_wm_f = _resolve_template_path(
+                    f"tpl-NMT2Sym_res-05_T1w_WM_{roi_name}.nii.gz"
+                )
+                tpl_seg_f = _resolve_atlas_path(
+                    f"atlas-{atlas_name}_space-NMT2Sym_res-05.nii.gz"
+                )
+
                 # Validate template files exist
                 if not tpl_seg_f.exists():
-                    raise FileNotFoundError(f"Template segmentation file not found: {tpl_seg_f}")
+                    raise FileNotFoundError(
+                        f"Template segmentation file not found: {tpl_seg_f}"
+                    )
                 if not tpl_T1w_f.exists():
                     raise FileNotFoundError(f"Template T1w file not found: {tpl_T1w_f}")
                 if not tpl_roi_wm_f.exists():
-                    raise FileNotFoundError(f"Template WM file not found: {tpl_roi_wm_f}")
-                
+                    raise FileNotFoundError(
+                        f"Template WM file not found: {tpl_roi_wm_f}"
+                    )
+
                 # Import fix_roi_wm
                 try:
                     from fastsurfer_nn.postprocessing.fix_roi_wm import (
@@ -420,14 +467,16 @@ def run_segmentation(
                     raise ImportError(
                         "Cannot import fix_roi_wm. Please ensure fastsurfer_nn.postprocessing.fix_roi_wm is available."
                     ) from e
-                
+
                 # Determine which T1w to use (original or cropped if 2-round was applied)
                 t1w_file = Path(input_image)
-                if 'input_cropped' in seg_results:
+                if "input_cropped" in seg_results:
                     # If 2-round cropping was applied, use the cropped input
-                    t1w_file = Path(seg_results['input_cropped'])
-                    logger.info(f"Using cropped input for {roi_name} WM fixing: {t1w_file}")
-                
+                    t1w_file = Path(seg_results["input_cropped"])
+                    logger.info(
+                        f"Using cropped input for {roi_name} WM fixing: {t1w_file}"
+                    )
+
                 # Call fix_roi_wm
                 try:
                     fix_roi_wm(
@@ -443,15 +492,19 @@ def run_segmentation(
                         wm_thr=wm_thr,
                         backup_original=True,
                         verbose=True,
-                        registration_threads=registration_threads
+                        registration_threads=registration_threads,
                     )
-                    logger.info(f"{roi_name} white matter fixing completed successfully")
+                    logger.info(
+                        f"{roi_name} white matter fixing completed successfully"
+                    )
                 except Exception as e:
                     logger.warning(
                         f"{roi_name} WM fixing failed: {e}. "
                         f"Falling back to unfixed segmentation."
                     )
-                    logger.debug(f"{roi_name} WM fixing exception details:", exc_info=True)
+                    logger.debug(
+                        f"{roi_name} WM fixing exception details:", exc_info=True
+                    )
                     backup_f = seg_file.with_name(
                         _get_stem_without_extension(seg_file) + "_orig.nii.gz"
                     )
@@ -460,23 +513,22 @@ def run_segmentation(
                         logger.info(
                             f"Restored segmentation from pre-fix backup: {backup_f}"
                         )
-        
+
         # Return all output file paths
         result = {
-            'brain_mask': str(seg_results['mask']),
-            'input_image': str(input_image),
-            'atlas_name': atlas_name
+            "brain_mask": str(seg_results["mask"]),
+            "input_image": str(input_image),
+            "atlas_name": atlas_name,
         }
-        if 'segmentation' in seg_results:
-            result['segmentation'] = str(seg_results['segmentation'])
-        if 'hemimask' in seg_results:
-            result['hemimask'] = str(seg_results['hemimask'])
-        if 'input_cropped' in seg_results:
-            result['input_cropped'] = str(seg_results['input_cropped'])
-        
+        if "segmentation" in seg_results:
+            result["segmentation"] = str(seg_results["segmentation"])
+        if "hemimask" in seg_results:
+            result["hemimask"] = str(seg_results["hemimask"])
+        if "input_cropped" in seg_results:
+            result["input_cropped"] = str(seg_results["input_cropped"])
+
         return result
-        
+
     except Exception as e:
         logger.error(f"Segmentation (fastsurfer_nn): failed: {str(e)}")
         raise RuntimeError(f"Segmentation (fastsurfer_nn) failed: {str(e)}") from e
-

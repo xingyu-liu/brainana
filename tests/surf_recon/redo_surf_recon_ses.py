@@ -22,7 +22,10 @@ if str(_src_dir) not in sys.path:
 from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.steps.anatomical import anat_surface_reconstruction
 from nhp_mri_prep.utils.nextflow import load_config
-from nhp_mri_prep.steps.qc import qc_surf_recon_tissue_seg, qc_cortical_surf_and_measures
+from nhp_mri_prep.steps.qc import (
+    qc_surf_recon_tissue_seg,
+    qc_cortical_surf_and_measures,
+)
 
 # %%
 dataset_root = Path("/mnt/DataDrive2/macaque/data_preproc/macaque_mri/UNC-Wisconsin")
@@ -31,6 +34,7 @@ dataset_root = Path("/mnt/DataDrive2/macaque/data_preproc/macaque_mri/UNC-Wiscon
 rerun_all = True
 dry_run = False
 overwrite = False
+
 
 # %%
 def list_sites(root):
@@ -56,7 +60,9 @@ def list_sessions(sub_dir):
 
 def get_filtered_matches(search_dir, pattern):
     """Collect glob matches, excluding NMT2Sym-space derivatives."""
-    return [path for path in search_dir.glob(pattern) if "space-NMT2Sym" not in str(path)]
+    return [
+        path for path in search_dir.glob(pattern) if "space-NMT2Sym" not in str(path)
+    ]
 
 
 def pick_single(search_dir, pattern, required=True):
@@ -237,20 +243,30 @@ for site_name, site_dir, sub_dir in site_subject_pairs:
             stats["skipped_already_reran"] += 1
             continue
         if already_reran and overwrite:
-            print("  --> output and backup already exist, overwrite=True so forcing fresh rerun")
+            print(
+                "  --> output and backup already exist, overwrite=True so forcing fresh rerun"
+            )
             stats["overwrite_runs"] += 1
             if dry_run:
-                print(f"  --> DRY_RUN would remove current fastsurfer dir: {fs_sub_dir}")
+                print(
+                    f"  --> DRY_RUN would remove current fastsurfer dir: {fs_sub_dir}"
+                )
             elif fs_sub_dir.exists():
-                print(f"  --> removing current fastsurfer dir before rerun: {fs_sub_dir}")
+                print(
+                    f"  --> removing current fastsurfer dir before rerun: {fs_sub_dir}"
+                )
                 shutil.rmtree(fs_sub_dir)
             stats["removed_existing_for_overwrite"] += 1
 
         if fs_sub_dir.exists() and not output_complete:
             if dry_run:
-                print(f"  --> incomplete fastsurfer dir (missing wmparc.mgz), would remove: {fs_sub_dir}")
+                print(
+                    f"  --> incomplete fastsurfer dir (missing wmparc.mgz), would remove: {fs_sub_dir}"
+                )
             else:
-                print(f"  --> incomplete fastsurfer dir (missing wmparc.mgz), removing: {fs_sub_dir}")
+                print(
+                    f"  --> incomplete fastsurfer dir (missing wmparc.mgz), removing: {fs_sub_dir}"
+                )
                 shutil.rmtree(fs_sub_dir)
             stats["removed_incomplete_output"] += 1
 
@@ -260,10 +276,18 @@ for site_name, site_dir, sub_dir in site_subject_pairs:
             continue
 
         anat_dir = ses_dir / "anat"
-        seg_file, seg_status = pick_single(anat_dir, "*_desc-brain_atlasARM2.nii.gz", required=True)
-        mask_file, mask_status = pick_single(anat_dir, "*_desc-brain_mask.nii.gz", required=True)
-        anat_file, anat_status = pick_single(anat_dir, "*_desc-preproc_T1w.nii.gz", required=True)
-        arm6_atlas, arm6_status = pick_single(anat_dir, "atlas/atlas-ARM6*.nii.gz", required=True)
+        seg_file, seg_status = pick_single(
+            anat_dir, "*_desc-brain_atlasARM2.nii.gz", required=True
+        )
+        mask_file, mask_status = pick_single(
+            anat_dir, "*_desc-brain_mask.nii.gz", required=True
+        )
+        anat_file, anat_status = pick_single(
+            anat_dir, "*_desc-preproc_T1w.nii.gz", required=True
+        )
+        arm6_atlas, arm6_status = pick_single(
+            anat_dir, "atlas/atlas-ARM6*.nii.gz", required=True
+        )
 
         missing_or_multiple = {
             "seg": seg_status,
@@ -272,8 +296,13 @@ for site_name, site_dir, sub_dir in site_subject_pairs:
             "arm6": arm6_status,
         }
         if any(status is not None for status in missing_or_multiple.values()):
-            print(f"Skipping {site_name} / {sub} / {ses} due to file selection: {missing_or_multiple}")
-            if any(status == "missing" for status in (seg_status, mask_status, anat_status, arm6_status)):
+            print(
+                f"Skipping {site_name} / {sub} / {ses} due to file selection: {missing_or_multiple}"
+            )
+            if any(
+                status == "missing"
+                for status in (seg_status, mask_status, anat_status, arm6_status)
+            ):
                 stats["skipped_missing_input"] += 1
             else:
                 stats["skipped_ambiguous_input"] += 1
@@ -290,7 +319,11 @@ for site_name, site_dir, sub_dir in site_subject_pairs:
                     input_file=anat_file,
                     working_dir=fastsurfer_dir.parent,
                     config=config,
-                    metadata={"subject_id": fs_id, "session_id": ses, "session_count": 1},
+                    metadata={
+                        "subject_id": fs_id,
+                        "session_id": ses,
+                        "session_count": 1,
+                    },
                 ),
                 t1w_file=anat_file,
                 segmentation_file=seg_file,

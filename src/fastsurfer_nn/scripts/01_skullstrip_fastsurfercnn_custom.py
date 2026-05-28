@@ -15,7 +15,7 @@ if str(_src_dir) not in sys.path:
 from fastsurfer_nn.inference.segmentation import run_segmentation
 
 # %%
-# # # anat 
+# # # anat
 # input_dir = "/mnt/DataDrive3/xliu/monkey_training_groundtruth/test_prediction/anat"
 # input_image = f"{input_dir}/anat_marge_upright.nii.gz"
 input_image = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/sub-032109_enhanceWM_v2/others/T1w.nii.gz"
@@ -29,13 +29,13 @@ input_image = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/surf_recon/s
 # output_dir = f'{surfrecon_dir}/NMT2Sym_brain_v2'
 # input_image = f'{surfrecon_dir}/test_anat_2pass_seg.nii.gz'
 
-output_dir = input_image.split('.nii')[0]
+output_dir = input_image.split(".nii")[0]
 
 modal = "anat"
 weight_axial, weight_coronal, weight_sagittal = 0.4, 0.4, 0.2
 use_mixed_model = False
 if use_mixed_model:
-    weight_axial, weight_coronal, weight_sagittal = 1/3, 1/3, 1/3
+    weight_axial, weight_coronal, weight_sagittal = 1 / 3, 1 / 3, 1 / 3
 enable_crop_2round = False
 
 fix_roi_wm = True
@@ -73,10 +73,11 @@ else:
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s | %(levelname)-8s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    format="%(asctime)s | %(levelname)-8s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
 
 # %%
 def main():
@@ -88,20 +89,20 @@ def main():
     logger.info(f"Test: output_dir={output_dir}")
     logger.info(f"Test: use_mixed_model={use_mixed_model}")
     logger.info("=" * 80)
-    
+
     # Check if input file exists
     if not Path(input_image).exists():
         logger.error(f"Test: input image not found: {input_image}")
         return
-    
+
     try:
         result = run_segmentation(
             input_image=input_image,
             modal=modal,
             output_dir=output_dir,
-            device_id='auto',
+            device_id="auto",
             logger=logger,
-            output_data_format='nifti',
+            output_data_format="nifti",
             enable_crop_2round=enable_crop_2round,
             plane_weight_coronal=weight_coronal,
             plane_weight_axial=weight_axial,
@@ -113,15 +114,15 @@ def main():
             save_debug_intermediates=save_debug_intermediates,
             registration_threads=registration_threads,
         )
-        
+
         logger.info("=" * 80)
         logger.info("Test: skullstripping completed successfully")
         logger.info(f"Test: result={result}")
         logger.info("=" * 80)
-        
+
         # Verify output file exists
         # Skip non-file-path keys like 'atlas_name' and 'input_image'
-        skip_keys = {'atlas_name', 'input_image'}
+        skip_keys = {"atlas_name", "input_image"}
         for key, value in result.items():
             if key in skip_keys:
                 logger.info(f"Test: {key}={value} (metadata, skipping file check)")
@@ -132,11 +133,11 @@ def main():
                     logger.info(f"Test: output file created={key}: {value}")
                 else:
                     logger.error(f"Test: output file not found: {key}: {value}")
-            
+
     except Exception as e:
         logger.error(f"Test: failed with error: {e}", exc_info=True)
         raise
 
+
 if __name__ == "__main__":
     main()
-

@@ -36,7 +36,7 @@ def get_num_threads():
         from os import cpu_count
 
         num_cores = cpu_count()
-    
+
     # If system has 8 or fewer cores, use all of them
     # If system has more than 8 cores, default to 8 to avoid resource cap issues
     if num_cores <= 8:
@@ -48,26 +48,26 @@ def get_num_threads():
 def setup_pytorch_threads(num_threads: int = None):
     """
     Configure PyTorch to use a specific number of threads.
-    
+
     This sets CPU threads for PyTorch operations, which are used for:
     - CPU-only model operations
     - GPU workflows (data loading, preprocessing, CPU↔GPU transfers)
-    
+
     Parameters
     ----------
     num_threads : int, optional
         Number of threads to use. If None, uses get_num_threads() default.
     """
     import torch
-    
+
     if num_threads is None:
         num_threads = get_num_threads()
-    
+
     torch.set_num_threads(num_threads)
-    
+
     # Also set environment variables for OpenMP and MKL
     # These libraries are used by PyTorch for CPU operations
-    os.environ['OMP_NUM_THREADS'] = str(num_threads)
-    os.environ['MKL_NUM_THREADS'] = str(num_threads)
-    os.environ['NUMEXPR_NUM_THREADS'] = str(num_threads)
-    os.environ['OPENBLAS_NUM_THREADS'] = str(num_threads)
+    os.environ["OMP_NUM_THREADS"] = str(num_threads)
+    os.environ["MKL_NUM_THREADS"] = str(num_threads)
+    os.environ["NUMEXPR_NUM_THREADS"] = str(num_threads)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(num_threads)

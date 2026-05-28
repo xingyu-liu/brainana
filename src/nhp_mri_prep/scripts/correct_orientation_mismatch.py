@@ -8,7 +8,6 @@ based on the actual physical orientation of the axes.
 import sys
 import logging
 from pathlib import Path
-import os
 
 # Add src/ to path for nhp_mri_prep imports (scripts/ -> nhp_mri_prep -> src)
 _src_dir = Path(__file__).resolve().parent.parent.parent
@@ -26,7 +25,7 @@ from nhp_mri_prep.utils import get_logger, setup_logging
 # real_S_is_actually_labeled_as = "S"
 # real_I_is_actually_labeled_as = "I"
 
-input_f = '/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_reorient/sub-baby31/ses-240710/func/sub-baby31_ses-240710_run-2_bold.nii.gz'
+input_f = "/mnt/DataDrive2/macaque/data_raw/macaque_mri/new_livingstone_test/bids_reorient/sub-baby31/ses-240710/func/sub-baby31_ses-240710_run-2_bold.nii.gz"
 real_A_is_actually_labeled_as = "I"
 real_P_is_actually_labeled_as = "S"
 real_S_is_actually_labeled_as = "A"
@@ -39,7 +38,7 @@ real_I_is_actually_labeled_as = "P"
 # real_S_is_actually_labeled_as = "A"
 # real_I_is_actually_labeled_as = "P"
 
-# 
+#
 output_f = input_f.replace(".nii.gz", "_ortcorrected.nii.gz")
 
 # %%
@@ -72,7 +71,7 @@ config = {
 }
 
 # Perform orientation mismatch correction
-logger.info(f"Starting orientation mismatch correction")
+logger.info("Starting orientation mismatch correction")
 logger.info(f"Input: {input_f}")
 logger.info(f"Output: {output_f}")
 logger.info(f"real_A_is_actually_labeled_as: {real_A_is_actually_labeled_as}")
@@ -84,21 +83,27 @@ outputs = correct_orientation_mismatch(
     output_name=output_name,
     logger=logger,
     config=config,
-    generate_tmean=False
+    generate_tmean=False,
 )
 
 if outputs.get("imagef_orientation_corrected"):
-    logger.info(f"Successfully corrected orientation: {outputs['imagef_orientation_corrected']}")
+    logger.info(
+        f"Successfully corrected orientation: {outputs['imagef_orientation_corrected']}"
+    )
     # If the output path is different from what was created, move it
     corrected_path = Path(outputs["imagef_orientation_corrected"])
     if corrected_path != output_path:
         import shutil
+
         shutil.move(str(corrected_path), str(output_path))
         logger.info(f"Moved output to: {output_path}")
 else:
-    logger.info("Orientation mismatch correction was skipped (orientation already correct)")
+    logger.info(
+        "Orientation mismatch correction was skipped (orientation already correct)"
+    )
     # If correction was skipped, just copy the input to output
     import shutil
+
     shutil.copy2(str(input_path), str(output_path))
     logger.info(f"Copied input to output: {output_path}")
 

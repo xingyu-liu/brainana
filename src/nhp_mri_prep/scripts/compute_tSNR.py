@@ -1,4 +1,3 @@
-
 # %%
 import os
 import subprocess
@@ -14,59 +13,66 @@ from nhp_mri_prep.quality_control.mri_plotting import (
 
 try:
     from PIL import Image
+
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
 
 try:
     from surfplot import Plot
+
     SURFPLOT_AVAILABLE = True
 except Exception:
     SURFPLOT_AVAILABLE = False
 
 # %%
 # set path
-dataset_root = pathlib.Path('/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_taskval')
-subid = 'sub-baby10'
-sesid = 'ses-161030'
+dataset_root = pathlib.Path(
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_taskval"
+)
+subid = "sub-baby10"
+sesid = "ses-161030"
 min_tp = 10
-cmap = 'magma'
+cmap = "magma"
 
 overwrite = False
 
-output_dir = pathlib.Path('/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_taskval/tSNR')
+output_dir = pathlib.Path(
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_taskval/tSNR"
+)
 output_dir.mkdir(parents=True, exist_ok=True)
 
 # %%
 # list all the preprocessed func files in T1w space
-func_dir = dataset_root / subid / sesid / 'func'
-func_f_list = sorted(func_dir.glob('*space-T1w*desc-preproc_bold.nii.gz'))
+func_dir = dataset_root / subid / sesid / "func"
+func_f_list = sorted(func_dir.glob("*space-T1w*desc-preproc_bold.nii.gz"))
 func_f_list.sort()
 
 # list all the mask files if exists
-mask_f_list = sorted(func_dir.glob('*space-T1w*desc-brain_mask.nii.gz'))
+mask_f_list = sorted(func_dir.glob("*space-T1w*desc-brain_mask.nii.gz"))
 mask_f_list.sort()
 mask_lookup = {f.name: f for f in mask_f_list}
 
 # find the freesurfer recon all folder if exists
-fs_subjects_dir = dataset_root / 'fastsurfer'
+fs_subjects_dir = dataset_root / "fastsurfer"
 fs_subject_dir = fs_subjects_dir / subid
 if not fs_subject_dir.exists():
     fs_subject_dir = None
 
+
 # %%
 def get_run_statmean_path(func_f, out_dir):
     out_name = pathlib.Path(func_f).name.replace(
-        'desc-preproc_bold',
-        'stat-tsnr_boldmap',
+        "desc-preproc_bold",
+        "stat-tsnr_boldmap",
     )
     return out_dir / out_name
 
 
 def find_mask_for_func(func_f):
     expected_name = pathlib.Path(func_f).name.replace(
-        'desc-preproc_bold.nii.gz',
-        'desc-brain_mask.nii.gz',
+        "desc-preproc_bold.nii.gz",
+        "desc-brain_mask.nii.gz",
     )
     return mask_lookup.get(expected_name)
 
@@ -76,12 +82,12 @@ def compute_tSNR(func_f, min_n_tp=10, mask_f=None):
     func = func_img.get_fdata()
     # make sure it is 4D, otherwise return None
     if func.ndim != 4:
-        print(f'Skip {func_f.name}: not a 4D file.')
+        print(f"Skip {func_f.name}: not a 4D file.")
         return None, None
 
     # also make sure it has over n timepoints, otherwise return None
     if func.shape[-1] < min_n_tp:
-        print(f'Skip {func_f.name}: only {func.shape[-1]} timepoints (< {min_n_tp}).')
+        print(f"Skip {func_f.name}: only {func.shape[-1]} timepoints (< {min_n_tp}).")
         return None, None
 
     mask = None
@@ -89,11 +95,11 @@ def compute_tSNR(func_f, min_n_tp=10, mask_f=None):
         mask_img = nib.load(str(mask_f))
         mask = mask_img.get_fdata() > 0
         if mask.shape != func.shape[:3]:
-            print(f'Warning: mask shape mismatch for {func_f.name}; ignore mask.')
+            print(f"Warning: mask shape mismatch for {func_f.name}; ignore mask.")
             mask = None
 
     # compute tSNR, fabs(mean)/stdev
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", invalid="ignore"):
         tSNR = np.abs(np.nanmean(func, axis=-1) / np.nanstd(func, axis=-1))
     tSNR[~np.isfinite(tSNR)] = 0.0
     if mask is not None:
@@ -103,7 +109,9 @@ def compute_tSNR(func_f, min_n_tp=10, mask_f=None):
 
 
 def save_tsnr_nifti(tsnr_data, ref_img, out_f):
-    out_img = nib.Nifti1Image(tsnr_data.astype(np.float32), ref_img.affine, ref_img.header)
+    out_img = nib.Nifti1Image(
+        tsnr_data.astype(np.float32), ref_img.affine, ref_img.header
+    )
     nib.save(out_img, str(out_f))
 
 
@@ -111,38 +119,45 @@ def project_tsnr_to_surface(tsnr_nifti_f, out_prefix, fs_subject_dir):
     if fs_subject_dir is None:
         return
 
-    hemi_map = {'L': 'lh', 'R': 'rh'}
+    hemi_map = {"L": "lh", "R": "rh"}
     env = os.environ.copy()
-    env['SUBJECTS_DIR'] = str(fs_subjects_dir)
+    env["SUBJECTS_DIR"] = str(fs_subjects_dir)
     base_name = out_prefix.name
-    stat_suffix = '_stat-tsnr_boldmap'
+    stat_suffix = "_stat-tsnr_boldmap"
 
-    for hemi in ('L', 'R'):
+    for hemi in ("L", "R"):
         if base_name.endswith(stat_suffix):
             stem = base_name[: -len(stat_suffix)]
-            out_name = f'{stem}_hemi-{hemi}{stat_suffix}.surf.gii'
+            out_name = f"{stem}_hemi-{hemi}{stat_suffix}.surf.gii"
         else:
-            out_name = f'{base_name}_hemi-{hemi}_stat-tsnr_boldmap.surf.gii'
+            out_name = f"{base_name}_hemi-{hemi}_stat-tsnr_boldmap.surf.gii"
         out_f = out_prefix.parent / out_name
         if out_f.exists() and (not overwrite):
             continue
         cmd = [
-            'mri_vol2surf',
-            '--mov', str(tsnr_nifti_f),
-            '--regheader', subid,
-            '--hemi', hemi_map[hemi],
-            '--projfrac', '0.5',
-            '--surf-fwhm', '2',
-            '--out_type', 'gii',
-            '--o', str(out_f),
+            "mri_vol2surf",
+            "--mov",
+            str(tsnr_nifti_f),
+            "--regheader",
+            subid,
+            "--hemi",
+            hemi_map[hemi],
+            "--projfrac",
+            "0.5",
+            "--surf-fwhm",
+            "2",
+            "--out_type",
+            "gii",
+            "--o",
+            str(out_f),
         ]
         try:
             subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
         except FileNotFoundError:
-            print('mri_vol2surf not found; skip surface projection.')
+            print("mri_vol2surf not found; skip surface projection.")
             return
         except subprocess.CalledProcessError as exc:
-            print(f'Failed surface projection for {out_f.name}: {exc.stderr}')
+            print(f"Failed surface projection for {out_f.name}: {exc.stderr}")
 
 
 # %%
@@ -153,7 +168,7 @@ def project_tsnr_to_surface(tsnr_nifti_f, out_prefix, fs_subject_dir):
 run_tsnr_files = []
 
 for func_f in func_f_list:
-    print(f'Processing {func_f.name} ...')
+    print(f"Processing {func_f.name} ...")
     tsnr_out_f = get_run_statmean_path(func_f, output_dir)
 
     if tsnr_out_f.exists() and (not overwrite):
@@ -172,18 +187,23 @@ for func_f in func_f_list:
 # generate session-average tSNR volume, then project that volume to surface (mri_vol2surf)
 # skip session nifti if the output already exists (unless overwrite)
 # surfaces: ..._hemi-L_stat-tsnr_boldmap.surf.gii, ..._hemi-R_stat-tsnr_boldmap.surf.gii
-session_vol_out_f = output_dir / f'{subid}_{sesid}_stat-tsnr_boldmap.nii.gz'
+session_vol_out_f = output_dir / f"{subid}_{sesid}_stat-tsnr_boldmap.nii.gz"
 if (not session_vol_out_f.exists()) or overwrite:
     if len(run_tsnr_files) > 0:
-        vol_stack = np.stack([nib.load(str(f)).get_fdata() for f in run_tsnr_files], axis=-1)
+        vol_stack = np.stack(
+            [nib.load(str(f)).get_fdata() for f in run_tsnr_files], axis=-1
+        )
         session_tsnr = np.nanmean(vol_stack, axis=-1)
-        save_tsnr_nifti(session_tsnr, nib.load(str(run_tsnr_files[0])), session_vol_out_f)
+        save_tsnr_nifti(
+            session_tsnr, nib.load(str(run_tsnr_files[0])), session_vol_out_f
+        )
     else:
-        print('No valid runwise tSNR volumes found; skip session average volume.')
+        print("No valid runwise tSNR volumes found; skip session average volume.")
 
 if session_vol_out_f.exists():
-    session_prefix = output_dir / f'{subid}_{sesid}_stat-tsnr_boldmap'
+    session_prefix = output_dir / f"{subid}_{sesid}_stat-tsnr_boldmap"
     project_tsnr_to_surface(session_vol_out_f, session_prefix, fs_subject_dir)
+
 
 # %%
 def add_right_colorbar(
@@ -196,15 +216,18 @@ def add_right_colorbar(
     bar_height_ratio=0.5,
     bar_width_to_height=0.06,
     gap_ratio=0.05,
-    text_color='white',
+    text_color="white",
 ):
-
     fig.subplots_adjust(right=map_right)
     fig_width_in, fig_height_in = fig.get_size_inches()
 
     # Make colorbar size proportional to figure size.
     bar_height = bar_height_ratio
-    bar_width = bar_height * bar_width_to_height * (fig_height_in / fig_width_in) if fig_width_in > 0 else 0.015
+    bar_width = (
+        bar_height * bar_width_to_height * (fig_height_in / fig_width_in)
+        if fig_width_in > 0
+        else 0.015
+    )
     gap_frac = gap_ratio
     cbar_x = map_right + gap_frac
     cbar_x = min(cbar_x, 0.99 - bar_width)
@@ -214,20 +237,21 @@ def add_right_colorbar(
     norm = colors.Normalize(vmin=vmin, vmax=vmax)
     sm = cm.ScalarMappable(norm=norm, cmap=cmap_name)
     sm.set_array([])
-    cb = fig.colorbar(sm, cax=cax, label='tSNR')
-    cb.ax.yaxis.set_label_position('left')
+    cb = fig.colorbar(sm, cax=cax, label="tSNR")
+    cb.ax.yaxis.set_label_position("left")
     cb.ax.yaxis.tick_left()
     cb.ax.yaxis.label.set_color(text_color)
     cb.ax.tick_params(colors=text_color)
     for spine in cb.ax.spines.values():
         spine.set_edgecolor(text_color)
 
+
 # %%
 # plot QC snapshots
 # create a volume map and surf map separately, then patch them together
-vol_png = output_dir / f'{subid}_{sesid}_stat-tsnr_boldmap_vol.png'
-surf_png = output_dir / f'{subid}_{sesid}_stat-tsnr_boldmap_surf.png'
-qc_png = output_dir / f'{subid}_{sesid}_stat-tsnr_boldmap_qc.png'
+vol_png = output_dir / f"{subid}_{sesid}_stat-tsnr_boldmap_vol.png"
+surf_png = output_dir / f"{subid}_{sesid}_stat-tsnr_boldmap_surf.png"
+qc_png = output_dir / f"{subid}_{sesid}_stat-tsnr_boldmap_qc.png"
 
 # 1) volume map
 if session_vol_out_f.exists():
@@ -245,25 +269,29 @@ if session_vol_out_f.exists():
             underlay_data=session_vol_out_f,
             overlay_data=None,
             num_cols=6,
-            perspectives=['axial'],
-            title='',
+            perspectives=["axial"],
+            title="",
             alpha=0.7,
             underlay_cmap=cmap,
             show_title=False,
             underlay_vmin=vol_vmin,
             underlay_vmax=vol_vmax,
         )
-        add_right_colorbar(fig, vol_vmin, vol_vmax, cmap, text_color='white')
-        fig.savefig(vol_png, dpi=PLOT_VOL_DPI, bbox_inches='tight', pad_inches=0.0)
+        add_right_colorbar(fig, vol_vmin, vol_vmax, cmap, text_color="white")
+        fig.savefig(vol_png, dpi=PLOT_VOL_DPI, bbox_inches="tight", pad_inches=0.0)
         plt.close(fig)
 else:
-    print(f'Skip volume QC: missing session tSNR file - {session_vol_out_f}')
+    print(f"Skip volume QC: missing session tSNR file - {session_vol_out_f}")
 
 # 2) surf map: 1x4 layout -> lh lateral, lh medial, rh lateral, rh medial
-lh_surf = output_dir / f'{subid}_{sesid}_hemi-L_stat-tsnr_boldmap.surf.gii'
-rh_surf = output_dir / f'{subid}_{sesid}_hemi-R_stat-tsnr_boldmap.surf.gii'
-lh_infl = fs_subject_dir / 'surf' / 'lh.inflated' if fs_subject_dir is not None else None
-rh_infl = fs_subject_dir / 'surf' / 'rh.inflated' if fs_subject_dir is not None else None
+lh_surf = output_dir / f"{subid}_{sesid}_hemi-L_stat-tsnr_boldmap.surf.gii"
+rh_surf = output_dir / f"{subid}_{sesid}_hemi-R_stat-tsnr_boldmap.surf.gii"
+lh_infl = (
+    fs_subject_dir / "surf" / "lh.inflated" if fs_subject_dir is not None else None
+)
+rh_infl = (
+    fs_subject_dir / "surf" / "rh.inflated" if fs_subject_dir is not None else None
+)
 
 if (not surf_png.exists()) or overwrite:
     can_plot_surface = (
@@ -289,35 +317,46 @@ if (not surf_png.exists()) or overwrite:
         p = Plot(
             surf_lh=str(lh_infl),
             surf_rh=str(rh_infl),
-            views=['lateral', 'medial'],
-            layout='row',
+            views=["lateral", "medial"],
+            layout="row",
             size=(1600, 200),
             zoom=2,
         )
         p.add_layer(
-            {'left': np.clip(lh_data, vmin, vmax), 'right': np.clip(rh_data, vmin, vmax)},
+            {
+                "left": np.clip(lh_data, vmin, vmax),
+                "right": np.clip(rh_data, vmin, vmax),
+            },
             cmap=cmap,
             cbar=False,
         )
         fig = p.build()
-        fig.patch.set_facecolor('black')
+        fig.patch.set_facecolor("black")
         for ax in fig.axes:
-            ax.set_facecolor('black')
-        add_right_colorbar(fig, vmin, vmax, cmap, text_color='white')
-        fig.savefig(surf_png, dpi=PLOT_VOL_DPI, bbox_inches='tight', pad_inches=0.0, facecolor='black')
+            ax.set_facecolor("black")
+        add_right_colorbar(fig, vmin, vmax, cmap, text_color="white")
+        fig.savefig(
+            surf_png,
+            dpi=PLOT_VOL_DPI,
+            bbox_inches="tight",
+            pad_inches=0.0,
+            facecolor="black",
+        )
         plt.close(fig)
     else:
-        print('Skip surface QC: missing surfplot dependency or required surface inputs.')
+        print(
+            "Skip surface QC: missing surfplot dependency or required surface inputs."
+        )
 
 # 3) patch volume and surface maps (stacked in one column)
 if (not qc_png.exists()) or overwrite:
     if not PIL_AVAILABLE:
-        print('Skip final QC patching: Pillow is not installed.')
+        print("Skip final QC patching: Pillow is not installed.")
     elif (not vol_png.exists()) and (not surf_png.exists()):
-        print('Skip final QC patching: no QC panels were generated.')
+        print("Skip final QC patching: no QC panels were generated.")
     else:
         panel_paths = [p for p in (vol_png, surf_png) if p.exists()]
-        panels = [Image.open(p).convert('RGB') for p in panel_paths]
+        panels = [Image.open(p).convert("RGB") for p in panel_paths]
         max_w = max(im.width for im in panels)
         resized = []
         for im in panels:
@@ -328,7 +367,7 @@ if (not qc_png.exists()) or overwrite:
 
         pad = 0
         total_h = sum(im.height for im in resized) + pad * (len(resized) - 1)
-        canvas = Image.new('RGB', (max_w, total_h), color='white')
+        canvas = Image.new("RGB", (max_w, total_h), color="white")
         y = 0
         for im in resized:
             x = (max_w - im.width) // 2

@@ -13,9 +13,6 @@ license = {text = "AGPL-3.0"}
 requires-python = ">=3.11"
 authors = [
     {name = "Xingyu Liu", email = "liuxingyu987@gmail.com"},
-    {name = "Yijun Zhuang"},
-    {name = "Zi Yin"},
-    {name = "Zonglei Zhen"},
     {name = "Michael Arcaro", email = "marcaro@sas.upenn.edu"},
 ]
 keywords = [
@@ -30,7 +27,7 @@ keywords = [
 
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
@@ -132,3 +129,16 @@ include = ["nhp_mri_prep*", "fastsurfer_nn*", "fastsurfer_surfrecon*", "nhp_skul
     "config/*.yaml",
     "pretrained_model/*.pth",
 ]
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint.per-file-ignores]
+# Notebooks run setup (paths, installs) before imports in later cells.
+"scripts/*.ipynb" = ["E402"]
+# Standalone entrypoints prepend src/ before importing brainana packages.
+"src/**/scripts/**/*.py" = ["E402"]
+"src/**/training/**/*.py" = ["E402"]
+"src/**/train/**/*.py" = ["E402"]
+"src/**/nextflow_scripts/**/*.py" = ["E402"]
+"tests/surf_recon/redo_*.py" = ["E402"]

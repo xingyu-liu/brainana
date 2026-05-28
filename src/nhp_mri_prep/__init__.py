@@ -24,7 +24,6 @@ __version__ = get_version()
 
 # Import core functionality - unified preprocessing module
 from .operations import (
-    reorient,
     slice_timing_correction,
     motion_correction,
     despike,
@@ -32,9 +31,6 @@ from .operations import (
     apply_skullstripping,
     bias_correction,
     ants_register,
-    ants_apply_transforms,
-    compose_ants_registration_cmd,
-    compose_transform_cmd,
 )
 
 # Import quality control functionality
@@ -48,48 +44,48 @@ from .quality_control import (
 
 
 # Import configuration functionality
-from .config import (
-    Config,
-    load_config,
-    get_config
-)
+from .config import Config, load_config, get_config
 
 # Import utility functions
 from .utils import run_command, setup_logging, get_logger
 
 __all__ = [
-    '__version__',
+    "__version__",
     # Functional preprocessing
-    'slice_timing_correction',
-    'motion_correction',
-    'despike',
-    'apply_segmentation',
-    'apply_skullstripping',
+    "slice_timing_correction",
+    "motion_correction",
+    "despike",
+    "apply_segmentation",
+    "apply_skullstripping",
     # Shared preprocessing
-    'bias_correction',
+    "bias_correction",
     # Quality control
-    'create_motion_correction_qc',
-    'create_skullstripping_qc',
-    'create_registration_qc',
-    'create_bias_correction_qc',
-    'generate_qc_report',
-    'generate_report',     # backward compatibility
+    "create_motion_correction_qc",
+    "create_skullstripping_qc",
+    "create_registration_qc",
+    "create_bias_correction_qc",
+    "generate_qc_report",
+    "generate_report",  # backward compatibility
     # Registration
-    'ants_register',
+    "ants_register",
     # Configuration
-    'Config',
-    'load_config',
-    'get_config',
+    "Config",
+    "load_config",
+    "get_config",
     # Utilities
-    'run_command',
-    'setup_logging',
-    'get_logger'
+    "run_command",
+    "setup_logging",
+    "get_logger",
 ]
 
 # Note: Package info display can be enabled by setting environment variable NHP_MRI_PREP_VERBOSE=1
 import os
-if os.environ.get('NHP_MRI_PREP_VERBOSE', '0') == '1':
+
+if os.environ.get("NHP_MRI_PREP_VERBOSE", "0") == "1":
     # Use logging instead of print for consistency
     import logging
+
     logger = logging.getLogger(__name__)
-    logger.info(f"System: nhp_mri_prep v{__version__} (brainana) - NHP MRI preprocessing package")
+    logger.info(
+        f"System: nhp_mri_prep v{__version__} (brainana) - NHP MRI preprocessing package"
+    )

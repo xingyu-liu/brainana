@@ -26,7 +26,6 @@ Values can also be extracted by
 >>> #  'help': 'Absolute path to file in which run logs will be saved. If not set, logs will not be saved.'}
 """
 
-import argparse
 import types
 from collections.abc import Iterable, Mapping
 from dataclasses import Field, dataclass
@@ -34,8 +33,10 @@ from pathlib import Path
 from typing import Literal, Optional, Protocol, TypeVar, get_args, get_origin
 
 from fastsurfer_nn.utils import PLANES, Plane
-from fastsurfer_nn.utils.arg_types import VALID_ORIENTATIONS, OrientationType, unquote_str
-from fastsurfer_nn.utils.arg_types import float_gt_zero_and_le_one as __conform_to_one
+from fastsurfer_nn.utils.arg_types import (
+    VALID_ORIENTATIONS,
+    unquote_str,
+)
 from fastsurfer_nn.utils.arg_types import img_size as __image_size
 from fastsurfer_nn.utils.arg_types import orientation as __orientation
 from fastsurfer_nn.utils.arg_types import vox_size as __vox_size
@@ -52,9 +53,7 @@ PLANE_HELP = {
 
 
 class CanAddArguments(Protocol):
-    """
-
-    """
+    """ """
 
     def add_argument(self, *args, **kwargs):
         """
@@ -64,11 +63,11 @@ class CanAddArguments(Protocol):
 
 
 def __arg(
-        *default_flags: str,
-        dcf: Field | None = None,
-        dc=None,
-        fieldname: str = "",
-        **default_kwargs,
+    *default_flags: str,
+    dcf: Field | None = None,
+    dc=None,
+    fieldname: str = "",
+    **default_kwargs,
 ):
     """
     Create stub function, which sets default settings for argparse arguments.
@@ -153,23 +152,24 @@ class SubjectDirectoryConfig:
     the type in argparse as the value for `type` of `parser.add_argument()` (`Optional` is a callable, while `Union` is
     not).
     """
+
     orig_name: str = field(
         help="Name of T1 full head MRI. Absolute path if single image else common "
-             "image name. Default: `mri/orig.mgz`.",
+        "image name. Default: `mri/orig.mgz`.",
         default="mri/orig.mgz",
         flags=("--t1",),
     )
     pred_name: str = field(
         default="mri/aparc+aseg.orig.mgz",
         help="Name of intermediate DL-based segmentation file (similar to aparc+aseg). When using FastSurfer, this "
-             "segmentation is already conformed, since inference is always based on a conformed image. Absolute path "
-             "if single image else common image name. Default: mri/aparc+aseg.orig.mgz (will be updated with atlas name if detected from checkpoint).",
+        "segmentation is already conformed, since inference is always based on a conformed image. Absolute path "
+        "if single image else common image name. Default: mri/aparc+aseg.orig.mgz (will be updated with atlas name if detected from checkpoint).",
     )
     conf_name: str = field(
         default="mri/orig.mgz",
         help="Name under which the conformed input image will be saved, in the same directory as the segmentation (the "
-             "input image is always conformed first, if it is not already conformed). The original input image is "
-             "saved in the output directory as $id/mri/orig/001.mgz. Default: mri/orig.mgz.",
+        "input image is always conformed first, if it is not already conformed). The original input image is "
+        "saved in the output directory as $id/mri/orig/001.mgz. Default: mri/orig.mgz.",
         flags=("--conformed_name",),
     )
 
@@ -187,31 +187,31 @@ class SubjectDirectoryConfig:
         flags=("--sid",),
         default=None,
         help="Optional: directly set the subject id to use. Can be used for single subject input. For multi-subject "
-             "processing, use remove suffix if sid is not second to last element of input file passed to --t1",
+        "processing, use remove suffix if sid is not second to last element of input file passed to --t1",
     )
     search_tag: str = field(
         flags=("--tag",),
         default="*",
         help="Search tag to process only certain subjects. If a single image should be analyzed, set the tag with its "
-             "id. Default: processes all.",
+        "id. Default: processes all.",
     )
     brainmask_name: str = field(
         default="mri/mask.mgz",
         help="Name under which the brainmask image will be saved, in the same directory as the segmentation. The "
-             "brainmask is created from the aparc_aseg segmentation (dilate 5, erode 4, largest component). Default: "
-             "`mri/mask.mgz`.",
+        "brainmask is created from the aparc_aseg segmentation (dilate 5, erode 4, largest component). Default: "
+        "`mri/mask.mgz`.",
         flags=("--brainmask_name",),
     )
     remove_suffix: str = field(
         flags=("--remove_suffix",),
         default="",
         help="Optional: remove suffix from path definition of input file to yield correct subject name (e.g. "
-             "/ses-x/anat/ for BIDS or /mri/ for FreeSurfer input). Default: do not remove anything.",
+        "/ses-x/anat/ for BIDS or /mri/ for FreeSurfer input). Default: do not remove anything.",
     )
     out_dir: Optional[Path] = field(  # noqa: UP045
         default=None,
         help="Directory in which evaluation results should be written. Will be created if it does not exist. Optional "
-             "if full path is defined for --pred_name.",
+        "if full path is defined for --pred_name.",
     )
 
 
@@ -225,7 +225,9 @@ ALL_FLAGS = {
         dc=SubjectDirectoryConfig,
         fieldname="pred_name",
     ),
-    "conformed_name": __arg("--conformed_name", dc=SubjectDirectoryConfig, fieldname="conf_name"),
+    "conformed_name": __arg(
+        "--conformed_name", dc=SubjectDirectoryConfig, fieldname="conf_name"
+    ),
     "norm_name": __arg(
         "--norm_name",
         type=str,
@@ -240,8 +242,8 @@ ALL_FLAGS = {
         dest="aseg_name",
         default="mri/aseg.auto_noCCseg.mgz",
         help="Name under which the reduced aseg segmentation will be saved, in the same directory as the aparc-aseg "
-             "segmentation (labels of full aparc segmentation are reduced to aseg). Default: "
-             "mri/aseg.auto_noCCseg.mgz.",
+        "segmentation (labels of full aparc segmentation are reduced to aseg). Default: "
+        "mri/aseg.auto_noCCseg.mgz.",
     ),
     "seg_log": __arg(
         "--seg_log",
@@ -254,7 +256,7 @@ ALL_FLAGS = {
         "--device",
         default="auto",
         help="Select device to run inference on: cpu, or cuda (= Nvidia gpu) or specify a certain gpu (e.g. cuda:1), "
-             "Default: auto",
+        "Default: auto",
     ),
     "viewagg_device": __arg(
         "--viewagg_device",
@@ -262,10 +264,10 @@ ALL_FLAGS = {
         type=str,
         default="auto",
         help="Define the device, where the view aggregation should be run. By default, the program checks if you have "
-             "enough memory to run the view aggregation on the gpu (cuda). The total memory is considered for this "
-             "decision. If this fails, or you actively overwrote the check with setting > --viewagg_device cpu <, view "
-             "agg is run on the cpu. Equivalently, if you define > --viewagg_device cuda <, view agg will be run on "
-             "the gpu (no memory check will be done).",
+        "enough memory to run the view aggregation on the gpu (cuda). The total memory is considered for this "
+        "decision. If this fails, or you actively overwrote the check with setting > --viewagg_device cpu <, view "
+        "agg is run on the cpu. Equivalently, if you define > --viewagg_device cuda <, view agg will be run on "
+        "the gpu (no memory check will be done).",
     ),
     "in_dir": __arg("--in_dir", dc=SubjectDirectoryConfig, fieldname="in_dir"),
     "tag": __arg(
@@ -275,7 +277,9 @@ ALL_FLAGS = {
         fieldname="search_tag",
     ),
     "csv_file": __arg("--csv_file", dc=SubjectDirectoryConfig),
-    "batch_size": __arg("--batch_size", type=int, default=1, help="Batch size for inference. Default=1"),
+    "batch_size": __arg(
+        "--batch_size", type=int, default=1, help="Batch size for inference. Default=1"
+    ),
     "sd": __arg("--sd", dc=SubjectDirectoryConfig, fieldname="out_dir"),
     "qc_log": __arg(
         "--qc_log",
@@ -283,7 +287,7 @@ ALL_FLAGS = {
         dest="qc_log",
         default="",
         help="Absolute path to file in which a list of subjects that failed QC check (when processing multiple "
-             "subjects) will be saved. If not set, the file will not be saved.",
+        "subjects) will be saved. If not set, the file will not be saved.",
     ),
     "vox_size": __arg(
         "--vox_size",
@@ -291,10 +295,10 @@ ALL_FLAGS = {
         default="min",
         dest="vox_size",
         help="Choose the primary voxelsize to process, must be either a number between 0 and 1 (below 0.7 is "
-             "experimental) or 'min' (default). A number forces processing at that specific voxel size, 'min' "
-             "determines the voxel size from the image itself (conforming to the minimum voxel size, or 1 if the "
-             "minimum voxel size is above 0.95mm). 'any' will try to keep the voxel size unchanged (even anisotropic, "
-             "which is experimental).",
+        "experimental) or 'min' (default). A number forces processing at that specific voxel size, 'min' "
+        "determines the voxel size from the image itself (conforming to the minimum voxel size, or 1 if the "
+        "minimum voxel size is above 0.95mm). 'any' will try to keep the voxel size unchanged (even anisotropic, "
+        "which is experimental).",
     ),
     "orientation": __arg(
         "--orientation",
@@ -304,8 +308,8 @@ ALL_FLAGS = {
         metavar="{native,XXX,soft-XXX}",
         default="lia",
         help="Select the target affine format for output, native: input defined by input image, soft-XXX (e.g. "
-             "soft-lia): store as XXX, but do not interpolate, XXX (e.g. lia): force XXX, affine is only 0 or +-1. "
-             "Default: lia (required by the surface pipeline).",
+        "soft-lia): store as XXX, but do not interpolate, XXX (e.g. lia): force XXX, affine is only 0 or +-1. "
+        "Default: lia (required by the surface pipeline).",
     ),
     "image_size": __arg(
         "--image_size",
@@ -313,8 +317,8 @@ ALL_FLAGS = {
         dest="image_size",
         default="fov",
         help="Select how the image should be conformed. A positive integer yields a cube of that size, 'fov' yields "
-             "dimensions, so the field of view stays consistent (default, recommended), 'cube' yields a cube of dimensions fully containing "
-             "the field of view.",
+        "dimensions, so the field of view stays consistent (default, recommended), 'cube' yields a cube of dimensions fully containing "
+        "the field of view.",
     ),
     "lut": __arg(
         "--lut",
@@ -340,7 +344,7 @@ ALL_FLAGS = {
         dest="async_io",
         action="store_true",
         help="Allow asynchronous file operations (default: off). Note, this may impact the order of messages in the "
-             "log, but speed up the segmentation specifically for slow file systems.",
+        "log, but speed up the segmentation specifically for slow file systems.",
     ),
 }
 
@@ -378,7 +382,9 @@ def add_arguments(parser: T_AddArgs, flags: Iterable[str]) -> T_AddArgs:
         if add_flag is not None:
             add_flag(parser)
         else:
-            raise ValueError(f"The flag '{flag}' is not defined in {add_arguments.__qualname__}.")
+            raise ValueError(
+                f"The flag '{flag}' is not defined in {add_arguments.__qualname__}."
+            )
     return parser
 
 

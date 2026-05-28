@@ -20,7 +20,15 @@ Date: Aug-19-2022
 
 import json
 import os.path
-from collections.abc import Callable, Collection, Hashable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import (
+    Callable,
+    Collection,
+    Hashable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from functools import partial, partialmethod, reduce
 from numbers import Integral, Number
 from pathlib import Path
@@ -398,9 +406,7 @@ class Mapper(Generic[KT, VT]):
         for src in sorted(self.source_space):
             a = self._map_dict[src]
             if not isinstance(a, Hashable):
-                a = tuple(
-                    a.tolist() if isinstance(a, np.ndarray | torch.Tensor) else a
-                )
+                a = tuple(a.tolist() if isinstance(a, np.ndarray | torch.Tensor) else a)
             rev_mappings.setdefault(a, src)
         return rev_mappings
 
@@ -435,7 +441,8 @@ class Mapper(Generic[KT, VT]):
         return self._map_dict.__contains__(item)
 
     def chain(
-        self, other_mapper: "Mapper[VT, T_OtherValue]",
+        self,
+        other_mapper: "Mapper[VT, T_OtherValue]",
     ) -> "Mapper[KT, T_OtherValue]":
         """
         Chain the current mapper with the `other_mapper`.
@@ -575,7 +582,11 @@ class Mapper(Generic[KT, VT]):
             unique_target_classes = np.unique(
                 list(self._map_dict.values()), return_counts=True
             )
-            cls_cts = {cls: cts for cls, cts in zip(*unique_target_classes, strict=False) if cts > 1}
+            cls_cts = {
+                cls: cts
+                for cls, cts in zip(*unique_target_classes, strict=False)
+                if cts > 1
+            }
             mappings = ((v, k) for k, v in mappings)  # swap source and target mappings
         else:
             cls_cts = {}
@@ -761,7 +772,9 @@ class ColorLookupTable(Generic[KT]):
         try:
             index = self._classes.index(key)
         except ValueError:
-            raise KeyError(f"The class/key '{key}' (e.g. {self._classes[0]}) was not found in {self._name}!") from None
+            raise KeyError(
+                f"The class/key '{key}' (e.g. {self._classes[0]}) was not found in {self._name}!"
+            ) from None
         return self.getitem_by_index(index)
 
     def getitem_by_index(
@@ -800,7 +813,8 @@ class ColorLookupTable(Generic[KT]):
         if self._color_palette is None:
             raise RuntimeError("No color_palette set")
         return Mapper(
-            dict(zip(self.classes, self.color_palette, strict=False)), name="color-" + self.name
+            dict(zip(self.classes, self.color_palette, strict=False)),
+            name="color-" + self.name,
         )
 
     def labelname2index(self) -> Mapper[KT, int]:
@@ -944,7 +958,8 @@ class JsonColorLookupTable(ColorLookupTable[KT]):
         if not isinstance(labels, dict):
             raise RuntimeError("The json file contained no values.")
         return Mapper(
-            dict(zip(self._classes, labels.values(), strict=False)), name="value-" + self.name
+            dict(zip(self._classes, labels.values(), strict=False)),
+            name="value-" + self.name,
         )
 
 
@@ -981,11 +996,18 @@ class TSVLookupTable(ColorLookupTable[str]):
             file_or_buffer = Path(file_or_buffer)
         if name is None:
             if isinstance(file_or_buffer, Path):
-                name = "unnamed buffer string" if file_or_buffer.is_file() else file_or_buffer.name
+                name = (
+                    "unnamed buffer string"
+                    if file_or_buffer.is_file()
+                    else file_or_buffer.name
+                )
             else:
                 name = "unnamed stream"
         if header is None:
-            header = isinstance(file_or_buffer, Path) and file_or_buffer.name == "FastSurfer_ColorLut.txt"
+            header = (
+                isinstance(file_or_buffer, Path)
+                and file_or_buffer.name == "FastSurfer_ColorLut.txt"
+            )
 
         COMMENT = "#"
         names = {
@@ -998,7 +1020,7 @@ class TSVLookupTable(ColorLookupTable[str]):
 
         self._data = pandas.read_csv(
             file_or_buffer,
-            sep='\\s+',
+            sep="\\s+",
             index_col=0,
             skip_blank_lines=True,
             comment=COMMENT,
@@ -1008,7 +1030,10 @@ class TSVLookupTable(ColorLookupTable[str]):
         )
         if (self._data.index != 0).all() and add_background:
             df = pandas.DataFrame.from_dict(
-                {k: [v] for k, v in zip(names.keys(), ["Unknown", 0, 0, 0, 0], strict=False)}
+                {
+                    k: [v]
+                    for k, v in zip(names.keys(), ["Unknown", 0, 0, 0, 0], strict=False)
+                }
             )
             self._data = pandas.concat([df, self._data])
         classes = self._data["Label name"].tolist()
@@ -1016,9 +1041,7 @@ class TSVLookupTable(ColorLookupTable[str]):
         color_palette = np.asarray(
             [tuple(int(row[k].item()) for k in channels) for row in self._data.iloc]
         )
-        super().__init__(
-            classes=classes, color_palette=color_palette, name=name
-        )
+        super().__init__(classes=classes, color_palette=color_palette, name=name)
 
     def getitem_by_index(
         self, index: int
@@ -1068,5 +1091,6 @@ class TSVLookupTable(ColorLookupTable[str]):
             If no value is associated.
         """
         return Mapper(
-            dict(zip(self._classes, self._data.index, strict=False)), name="value-" + self.name
+            dict(zip(self._classes, self._data.index, strict=False)),
+            name="value-" + self.name,
         )

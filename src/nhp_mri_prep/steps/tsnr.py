@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 _HEMI_MAP = {"L": "lh", "R": "rh"}
 _STAT_SUFFIX = "_stat-tsnr_boldmap"
 
+
 # %%
 def compute_tsnr_run(
     bold_file: Union[str, Path],
@@ -153,7 +154,9 @@ def compute_tsnr_session_avg(
         if resolved_run_path.exists():
             run_tsnr_paths_existing.append(resolved_run_path)
         else:
-            logger.warning(f"tSNR session avg: missing file, skipping: {resolved_run_path}")
+            logger.warning(
+                f"tSNR session avg: missing file, skipping: {resolved_run_path}"
+            )
 
     if not run_tsnr_paths_existing:
         meta["error"] = "no_valid_run_tsnr_files"
@@ -212,7 +215,9 @@ def project_tsnr_to_surface(
         return result
 
     if not fs_subject_directory.is_dir():
-        logger.warning(f"tSNR surf: FastSurfer subject dir missing: {fs_subject_directory}")
+        logger.warning(
+            f"tSNR surf: FastSurfer subject dir missing: {fs_subject_directory}"
+        )
         result["skipped"] = True
         result["reason"] = "missing_fs_subject_dir"
         return result
@@ -235,7 +240,9 @@ def project_tsnr_to_surface(
     for hemi_code in ("L", "R"):
         if volume_stem.endswith(_STAT_SUFFIX):
             stem_without_stat = volume_stem[: -len(_STAT_SUFFIX)]
-            surf_gii_filename = f"{stem_without_stat}_hemi-{hemi_code}{_STAT_SUFFIX}.surf.gii"
+            surf_gii_filename = (
+                f"{stem_without_stat}_hemi-{hemi_code}{_STAT_SUFFIX}.surf.gii"
+            )
         else:
             surf_gii_filename = f"{volume_stem}_hemi-{hemi_code}{_STAT_SUFFIX}.surf.gii"
         surf_gii_output_path = surf_output_directory / surf_gii_filename
@@ -260,7 +267,9 @@ def project_tsnr_to_surface(
             subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
             hemisphere_to_gii_path[hemi_code] = surf_gii_output_path
         except FileNotFoundError:
-            logger.warning("tSNR surf: mri_vol2surf not found; skip surface projection.")
+            logger.warning(
+                "tSNR surf: mri_vol2surf not found; skip surface projection."
+            )
             result["skipped"] = True
             result["reason"] = "mri_vol2surf_not_found"
             return result

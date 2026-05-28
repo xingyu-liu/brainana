@@ -45,31 +45,33 @@ def mgh_from_sitk(
         h1 = MGHHeader.from_header(orig_mgh_header)
     else:
         h1 = MGHHeader()
-    
+
     # Get voxel sizes and set zooms (=delta in h1 header)
     spacing = sitk_img.GetSpacing()
     h1.set_zooms(np.asarray(spacing))
-    
+
     # Get direction cosines from sitk image, reshape to 3x3 Matrix
     direction = np.asarray(sitk_img.GetDirection()).reshape(3, 3, order="F") * [
-        -1, -1, 1,
+        -1,
+        -1,
+        1,
     ]
     h1["Mdc"] = direction
-    
+
     # Compute affine
     origin = np.asarray(sitk_img.GetOrigin()).reshape(3, 1) * [[-1], [-1], [1]]
     affine = np.vstack([np.hstack([h1["Mdc"].T * h1["delta"], origin]), [0, 0, 0, 1]])
-    
+
     # Get dims and calculate new image center in world coords
     dims = np.array(sitk_img.GetSize())
     if dims.size == 3:
         dims = np.hstack((dims, [1]))
     h1["dims"] = dims
     h1["Pxyz_c"] = affine.dot(np.hstack((dims[:3] / 2.0, [1])))[:3]
-    
+
     # Swap axes as data is stored differently between sITK and Nibabel
     data = np.swapaxes(sitk.GetArrayFromImage(sitk_img), 0, 2)
-    
+
     # Assemble MGHImage from header, image data and affine
     mgh_img = nib.MGHImage(data, affine, h1)
     return mgh_img
@@ -91,25 +93,25 @@ def sitk_from_mgh(img: nib.MGHImage) -> sitk.Image:
     """
     # Reorder data as structure differs between nibabel and sITK
     data = np.swapaxes(np.asanyarray(img.dataobj), 0, 2)
-    
+
     # sitk can only create image with system native endianness
     if not data.dtype.isnative:
         data = data.byteswap().view(data.dtype.newbyteorder())
-    
+
     # Create image from array
     img_sitk = sitk.GetImageFromArray(data)
-    
+
     # Get direction from MDC, need to change sign of dim 0 and 1
     direction = img.header["Mdc"] * [-1, -1, 1]
     img_sitk.SetDirection(direction.ravel(order="F"))
-    
+
     # Set voxel sizes
     img_sitk.SetSpacing(np.array(img.header.get_zooms()).tolist())
-    
+
     # Get origin from affine, needs to change sign of dim 0 and 1
     origin = img.affine[:3, 3:] * [[-1], [-1], [1]]
     img_sitk.SetOrigin(origin.ravel())
-    
+
     return img_sitk
 
 
@@ -266,4 +268,3 @@ __all__ = [
     "readITKimage",
     "writeITKimage",
 ]
-

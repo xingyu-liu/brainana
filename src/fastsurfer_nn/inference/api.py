@@ -20,7 +20,6 @@ segmentation and skullstripping on brain images.
 """
 
 import copy
-import logging
 import shutil
 import traceback
 from pathlib import Path
@@ -52,6 +51,7 @@ from fastsurfer_nn.utils.constants import (
 
 LOGGER = logging.getLogger(__name__)
 
+
 # %%
 def _apply_two_pass_refinement(
     input_image: Path,
@@ -77,12 +77,12 @@ def _apply_two_pass_refinement(
 ) -> bool:
     """
     Apply two-pass refinement: crop image and run fresh segmentation.
-    
-    This function moves first-pass outputs to pass_1/ directory, crops the 
+
+    This function moves first-pass outputs to pass_1/ directory, crops the
     ORIGINAL input image using the brain mask, then runs a completely fresh
     segmentation on the cropped image. This avoids any state/affine issues
     from reusing the predictor.
-    
+
     Parameters
     ----------
     input_image : Path
@@ -115,7 +115,7 @@ def _apply_two_pass_refinement(
         Logger instance to use for logging. If not provided, uses the module-level logger.
     save_debug_intermediates : bool, default=False
         If True, save intermediate files for debugging in the second pass.
-        
+
     Returns
     -------
     bool
@@ -123,24 +123,24 @@ def _apply_two_pass_refinement(
     """
     pass_1_dir = output_dir / "pass_1"
     pass_1_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Use provided logger or fall back to module-level logger
     log = logger if logger is not None else LOGGER
-    
+
     log.info("Applying two-pass refinement...")
     log.info(f"  Moving first-pass outputs to {pass_1_dir.name}/")
-    
+
     # Define first-pass files
     first_pass_files = {
         "segmentation": output_dir / f"segmentation{file_ext}",
         "mask": output_dir / f"mask{file_ext}",
     }
-    
+
     # Check for hemimask
     hemi_mask_path = output_dir / f"mask_hemi{file_ext}"
     if hemi_mask_path.exists():
         first_pass_files["hemimask"] = hemi_mask_path
-    
+
     try:
         # Step 1: Move first-pass outputs to pass_1 directory
         for key, src_path in first_pass_files.items():
@@ -148,31 +148,35 @@ def _apply_two_pass_refinement(
                 dst_path = pass_1_dir / src_path.name
                 shutil.move(str(src_path), str(dst_path))
                 log.info(f"  Moved {key}: {src_path.name}")
-        
+
         # Step 2: Crop ORIGINAL input image using first-pass mask
         mask_path = pass_1_dir / f"mask{file_ext}"
         cropped_input_path = output_dir / f"input_cropped{file_ext}"
-        
-        log.info(f"  Cropping original input to brain region (margin={TWO_PASS_CROP_MARGIN*100:.0f}%)...")
-        
+
+        log.info(
+            f"  Cropping original input to brain region (margin={TWO_PASS_CROP_MARGIN*100:.0f}%)..."
+        )
+
         # Load original image to get its shape for logging
         orig_img = nib.load(input_image)
-        
+
         cropped_img = crop_image_to_brain_mask(
             str(input_image),  # Crop the ORIGINAL input image
-            str(mask_path),     # Using mask from first pass
+            str(mask_path),  # Using mask from first pass
             margin=TWO_PASS_CROP_MARGIN,
             save_path=cropped_input_path,
         )
-        
+
         log.info(f"  ✓ Cropped: {orig_img.shape} → {cropped_img.shape}")
-        log.info(f"  ✓ Space saved: {np.prod(orig_img.shape) / np.prod(cropped_img.shape):.1f}x reduction")
+        log.info(
+            f"  ✓ Space saved: {np.prod(orig_img.shape) / np.prod(cropped_img.shape):.1f}x reduction"
+        )
         log.info(f"  ✓ Saved cropped input: {cropped_input_path.name}")
-        
+
         # Step 3: Run FRESH segmentation on cropped image (starting from scratch)
         log.info("  Running 2nd pass with fresh predictor on cropped image...")
         log.info("  (This runs the full pipeline from scratch - no state reuse)")
-        
+
         segmentation(
             input_image=cropped_input_path,
             output_dir=output_dir,  # Outputs go back to main directory
@@ -195,16 +199,16 @@ def _apply_two_pass_refinement(
             logger=log,
             save_debug_intermediates=save_debug_intermediates,
         )
-        
+
         log.info("  ✓ Two-pass refinement completed successfully")
         return True
-        
+
     except Exception as e:
         log.error(f"  ✗ Two-pass refinement failed: {e}")
         log.debug(f"  Error details: {traceback.format_exc()}")
         log.warning("  Falling back to first-pass prediction")
         log.info(f"  First-pass outputs are available in {pass_1_dir.name}/")
-        
+
         # Try to restore first-pass outputs to main directory
         try:
             log.info("  Restoring first-pass outputs to main directory...")
@@ -215,7 +219,7 @@ def _apply_two_pass_refinement(
                     log.info(f"  Restored {key}: {src_path.name}")
         except Exception as restore_error:
             log.error(f"  Failed to restore first-pass outputs: {restore_error}")
-        
+
         return False
 
 
@@ -243,24 +247,24 @@ def segmentation(
 ) -> dict[str, Path]:
     """
     Run segmentation and save outputs (segmentation, mask, hemimask) to output directory.
-    
+
     Supports both multi-class atlas segmentation and binary brain mask models.
-    This is a high-level convenience function that implements the automatic 
+    This is a high-level convenience function that implements the automatic
     "input space → model space → input space" workflow:
     1. Runs fastsurfer_nn segmentation on the input image (in model space)
     2. Resamples segmentation back to native input space (in-memory, pure Python)
     3. Creates brain mask from the resampled segmentation (with topological refinement)
     4. Creates hemisphere mask (multi-class only, requires LUT)
     5. Saves all outputs to the specified output directory (all in native space)
-    
+
     All outputs are automatically in the same space as the input image.
     Uses pure Python resampling (no external tool dependencies).
-    
+
     Both binary and multi-class models go through the same pipeline:
     - Prediction output is saved as "segmentation" (binary 0/1 or multi-class label IDs)
-    - Brain mask is created via create_mask() which applies dilation, erosion, and 
+    - Brain mask is created via create_mask() which applies dilation, erosion, and
       largest component selection for topological refinement
-    
+
     Parameters
     ----------
     input_image : str, Path
@@ -294,9 +298,9 @@ def segmentation(
         Resampling uses pure Python (in-memory), no external tools needed.
     enable_crop_2round : bool, default=False
         If True, enable two-pass refinement: after first pass, if brain occupies < 20% of FOV
-        and image dimension > model height, crop the ORIGINAL input image to brain region 
-        and run a completely fresh segmentation on it. First-pass outputs are moved to 
-        output_dir/pass_1/, cropped input is saved as output_dir/input_cropped.{ext}, and 
+        and image dimension > model height, crop the ORIGINAL input image to brain region
+        and run a completely fresh segmentation on it. First-pass outputs are moved to
+        output_dir/pass_1/, cropped input is saved as output_dir/input_cropped.{ext}, and
         final outputs (from second pass) are saved to main output_dir in cropped image's native space.
     logger : logging.Logger, optional
         Logger instance to use for logging. If not provided, uses the module-level logger.
@@ -306,13 +310,13 @@ def segmentation(
         - prediction after each plane (before aggregation)
         - final aggregated prediction (before resampling)
         Files are saved to output_dir/debug_intermediates/
-        
+
     Note
     ----
     Preprocessing parameters (vox_size, orientation, image_size)
     are automatically read from checkpoint metadata (required), ensuring consistency
     with the training configuration.
-    
+
     Returns
     -------
     dict[str, Path]
@@ -347,19 +351,23 @@ def segmentation(
     # Determine binary vs multi-class mode and set all related flags
     # Binary models (NUM_CLASSES=2) don't have LUT, so certain features are disabled
     is_binary = atlas_metadata.get("is_binary_task", False)
-    
+
     if is_binary:
         log.info("Binary brain mask model detected")
         # Binary models: disable WM island correction (requires LUT with hemisphere info)
         if fix_wm_islands:
-            log.info("  (fix_wm_islands=True was provided but disabled for binary models)")
+            log.info(
+                "  (fix_wm_islands=True was provided but disabled for binary models)"
+            )
         fix_wm_islands = False
         create_hemi_mask = False  # Binary models don't have hemisphere labels
     else:
         # Multi-class models: use user-provided create_hemimask setting
         create_hemi_mask = create_hemimask
         if not create_hemimask:
-            log.info("  (create_hemimask=False: skipping hemisphere mask creation to save processing time)")
+            log.info(
+                "  (create_hemimask=False: skipping hemisphere mask creation to save processing time)"
+            )
 
     # Create debug directory if needed
     debug_dir = None
@@ -392,11 +400,13 @@ def segmentation(
     # Run prediction (returns segmentation in model/conformed space)
     log.info(f"Running segmentation on {input_image}")
     pred_data = predictor.get_prediction(str(input_image))
-    
+
     # Save final aggregated prediction before resampling (debug)
     if save_debug_intermediates and debug_dir is not None:
         debug_pred_path = debug_dir / "prediction_aggregated_before_resample.nii.gz"
-        log.info(f"Saving aggregated prediction (before resampling) to {debug_pred_path.name}")
+        log.info(
+            f"Saving aggregated prediction (before resampling) to {debug_pred_path.name}"
+        )
         data_utils.save_image(
             predictor._conformed_img.header,
             predictor._conformed_img.affine,
@@ -404,17 +414,25 @@ def segmentation(
             debug_pred_path,
             dtype=np.int16,
         )
-    
+
     # Debug: Log prediction statistics for binary models
     if is_binary:
         unique_vals, counts = np.unique(pred_data, return_counts=True)
-        log.info(f"Binary model prediction statistics: unique values={unique_vals}, counts={counts}")
+        log.info(
+            f"Binary model prediction statistics: unique values={unique_vals}, counts={counts}"
+        )
         log.info(f"  Prediction shape: {pred_data.shape}, dtype: {pred_data.dtype}")
         log.info(f"  Prediction range: [{pred_data.min()}, {pred_data.max()}]")
         if len(unique_vals) > 2:
-            log.warning(f"  WARNING: Binary model prediction has {len(unique_vals)} unique values (expected 2: 0 and 1)")
+            log.warning(
+                f"  WARNING: Binary model prediction has {len(unique_vals)} unique values (expected 2: 0 and 1)"
+            )
         # Ensure binary predictions are integer type (0 or 1)
-        if pred_data.dtype != np.int16 and pred_data.dtype != np.int32 and pred_data.dtype != np.int64:
+        if (
+            pred_data.dtype != np.int16
+            and pred_data.dtype != np.int32
+            and pred_data.dtype != np.int64
+        ):
             log.info(f"  Converting binary prediction from {pred_data.dtype} to int16")
             pred_data = pred_data.astype(np.int16)
 
@@ -422,15 +440,17 @@ def segmentation(
     # Both binary and multi-class models go through the same create_mask() pipeline
     # for topological refinement (dilation, erosion, largest component selection)
     log.info("Creating brain mask from segmentation (with topological refinement)...")
-    
+
     # Calculate mask dilation and erosion sizes based on image resolution
     # Get voxel size from conformed image (in model space where mask is created)
     zoom = predictor._conformed_img.header.get_zooms()[:3]
     resolution = np.mean(zoom)  # Average voxel size in mm
     mask_dilation_voxels = int(MASK_DILATION_SIZE_MM / resolution)
     mask_erosion_voxels = max(0, mask_dilation_voxels - 1)  # Ensure non-negative
-    log.info(f"Mask parameters: dilation={mask_dilation_voxels} voxels, erosion={mask_erosion_voxels} voxels (resolution={resolution:.3f} mm)")
-    
+    log.info(
+        f"Mask parameters: dilation={mask_dilation_voxels} voxels, erosion={mask_erosion_voxels} voxels (resolution={resolution:.3f} mm)"
+    )
+
     # do morphological operations
     brain_mask = create_mask(
         copy.deepcopy(pred_data),
@@ -479,17 +499,15 @@ def segmentation(
     ]
     if hemi_mask is not None:
         data_to_save.append(("hemimask", hemi_mask, hemi_mask_path, np.uint8))
-    
+
     if predictor._should_resample():
         log.info("Resampling to native space...")
-        
+
         for name, data, path, dtype in data_to_save:
             log.info(f"Resampling {name}...")
-            resampled = predictor._resample_to_native(
-                data, interpolation="nearest"
-            )
+            resampled = predictor._resample_to_native(data, interpolation="nearest")
             log.info(f"Successfully resampled {name} (shape: {resampled.shape})")
-            
+
             data_utils.save_image(
                 predictor._input_native_img.header,
                 predictor._input_native_img.affine,
@@ -497,11 +515,11 @@ def segmentation(
                 path,
                 dtype=dtype,
             )
-        
+
     else:
         # Input was already conformed - save directly (still in native space)
         log.info("No resampling needed - input was already conformed")
-        
+
         for name, data, path, dtype in data_to_save:
             log.info(f"Saving {name}...")
             data_utils.save_image(
@@ -532,15 +550,17 @@ def segmentation(
         should_refine, brain_ratio, max_orig_dim = should_apply_refinement(
             brain_mask, reference_img, model_height
         )
-        
+
         log.info("")
         log.info("=" * 60)
         log.info("Two-pass refinement decision:")
         log.info(f"  Brain occupancy: {brain_ratio*100:.1f}% of FOV")
         log.info(f"  Image dimensions: {reference_img.shape} (max: {max_orig_dim})")
         log.info(f"  Model height: {model_height}")
-        log.info(f"  Threshold: brain < {TWO_PASS_BRAIN_RATIO_THRESHOLD*100:.0f}% AND dim > {model_height}")
-        
+        log.info(
+            f"  Threshold: brain < {TWO_PASS_BRAIN_RATIO_THRESHOLD*100:.0f}% AND dim > {model_height}"
+        )
+
         # Log the decision clearly
         if should_refine:
             log.info(
@@ -557,7 +577,7 @@ def segmentation(
             log.info(f"  → DECISION: WILL NOT apply 2nd pass ({reason})")
         log.info("=" * 60)
         log.info("")
-        
+
         if should_refine:
             # Apply two-pass refinement (runs fresh segmentation on cropped image)
             refinement_applied = _apply_two_pass_refinement(
@@ -582,7 +602,7 @@ def segmentation(
                 logger=log,
                 save_debug_intermediates=save_debug_intermediates,
             )
-            
+
             # If refinement succeeded, update result paths to reflect second-pass outputs
             # (which are already saved by the fresh segmentation call)
             if refinement_applied:
@@ -597,4 +617,3 @@ def segmentation(
         log.info("GPU memory cache cleared after inference")
 
     return result
-

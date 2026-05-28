@@ -10,7 +10,9 @@ from tqdm.auto import tqdm
 
 # %%
 # Parameters
-dataset_root = Path("/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana")
+dataset_root = Path(
+    "/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana"
+)
 config_file = Path("/home/star/github/brainana/src/nhp_mri_prep/config/defaults.yaml")
 template_dir = Path("/home/star/github/brainana/template_zoo")
 
@@ -23,6 +25,7 @@ include_sessions = []
 
 # Hardcoded to match your historical preprocessing setup
 inverse_xfm_pattern = "*from-NMT2Sym_to-T1w_mode-image_xfm*"
+
 
 # %%
 def parse_subject_session(anat_dir: Path):
@@ -54,7 +57,9 @@ def _is_t1w_preproc_in_t1w_space(path: Path) -> bool:
 def find_required_inputs_for_subject(subject_dir: Path, site_name: str):
     subject_id = subject_dir.name.replace("sub-", "")
     anat_dirs = sorted(
-        p for p in subject_dir.glob("**/anat") if p.is_dir() and p.parent.name.startswith(("sub-", "ses-"))
+        p
+        for p in subject_dir.glob("**/anat")
+        if p.is_dir() and p.parent.name.startswith(("sub-", "ses-"))
     )
     record = {
         "anat_dir": None,
@@ -77,7 +82,9 @@ def find_required_inputs_for_subject(subject_dir: Path, site_name: str):
     t1w_candidates = []
     for anat_dir in anat_dirs:
         t1w_candidates.extend(
-            p for p in anat_dir.glob("*desc-preproc_T1w.nii.gz") if _is_t1w_preproc_in_t1w_space(p)
+            p
+            for p in anat_dir.glob("*desc-preproc_T1w.nii.gz")
+            if _is_t1w_preproc_in_t1w_space(p)
         )
     t1w_candidates = sorted(t1w_candidates)
     if len(t1w_candidates) == 0:
@@ -109,15 +116,18 @@ def find_required_inputs_for_subject(subject_dir: Path, site_name: str):
         return record
 
     # Keep preproc image as spatial reference, but remove desc-preproc from atlas filename template.
-    bids_name_no_preproc = (
-        t1w_path.name.replace("_space-T1w_desc-preproc_T1w.nii.gz", "_T1w.nii.gz")
-        .replace("_desc-preproc_T1w.nii.gz", "_T1w.nii.gz")
-    )
+    bids_name_no_preproc = t1w_path.name.replace(
+        "_space-T1w_desc-preproc_T1w.nii.gz", "_T1w.nii.gz"
+    ).replace("_desc-preproc_T1w.nii.gz", "_T1w.nii.gz")
     record["bids_name"] = Path(bids_name_no_preproc)
     record["t1w_reference"] = t1w_path
     record["inverse_reg_xfm"] = inverse_candidates[0]
 
-    existing_outputs = sorted(record["out_dir_t1w"].glob("*.nii.gz")) if record["out_dir_t1w"].exists() else []
+    existing_outputs = (
+        sorted(record["out_dir_t1w"].glob("*.nii.gz"))
+        if record["out_dir_t1w"].exists()
+        else []
+    )
     if existing_outputs and not overwrite:
         record["status"] = "skip_exists"
         record["reason"] = f"atlas_space-T1w_exists_n={len(existing_outputs)}"
@@ -158,7 +168,9 @@ not_ready_records = [rec for rec in all_records if rec["status"] != "ready"]
 if not_ready_records:
     print("\nDetailed records not ready:")
     for rec in not_ready_records:
-        subject_label = f"sub-{rec['subject_id']}" if rec["subject_id"] else "sub-unknown"
+        subject_label = (
+            f"sub-{rec['subject_id']}" if rec["subject_id"] else "sub-unknown"
+        )
         session_label = f"/ses-{rec['session_id']}" if rec["session_id"] else ""
         site_label = rec["site"] if rec["site"] else "site-unknown"
         case_label = f"{site_label}:{subject_label}{session_label}"
@@ -278,7 +290,9 @@ print(f"Processed records: {len(run_results)}")
 for status in sorted(result_counts):
     print(f"  {status}: {result_counts[status]}")
 
-failed_rows = [r for r in run_results if r["status"] in {"failed", "failed_input_ambiguity"}]
+failed_rows = [
+    r for r in run_results if r["status"] in {"failed", "failed_input_ambiguity"}
+]
 if failed_rows:
     print("\nFailure / ambiguity details:")
     for row in failed_rows:
@@ -288,4 +302,3 @@ if failed_rows:
             tb_lines = row["traceback"].strip().splitlines()
             for line in tb_lines[-6:]:
                 print(f"    {line}")
-
