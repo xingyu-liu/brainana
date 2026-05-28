@@ -53,7 +53,7 @@ class TemplateManager:
         # Default values for template resolution
         self.defaults = {
             'template': 'NMT2Sym',
-            'res': 'res-1', 
+            'res': 'res-05',
             'desc': 'brain'
         }
     
@@ -219,7 +219,7 @@ class TemplateManager:
                           "NMT2Sym:res-1"
                           "NMT2Sym:res-1:brain"
                           "NMT2Sym:hemi-lh:res-1:brain"
-                          If None, uses default "NMT2Sym:res-1:brain"
+                          If None, uses default "NMT2Sym:res-05:brain"
         
         Returns:
             Absolute path to template file
@@ -300,8 +300,8 @@ class TemplateManager:
         score += len(requested) * 100
         
         # Bonus for having default components when not explicitly specified
-        # If user didn't specify a resolution, prefer res-1
-        if 'res' not in requested and 'res' in available and available['res'] == 'res-1':
+        # If user didn't specify a resolution, prefer res-05
+        if 'res' not in requested and 'res' in available and available['res'] == 'res-05':
             score += 20
         
         # If user didn't specify a description, prefer brain
@@ -433,8 +433,8 @@ def resolve_template(template_spec: Optional[str] = None) -> str:
     Wrapper function that uses the global TemplateManager instance.
     
     Args:
-        template_spec: Specification like "NMT2Sym:res-1:brain"
-                      If None, uses default "NMT2Sym:res-1:brain"
+        template_spec: Specification like "NMT2Sym:res-05:brain"
+                      If None, uses default "NMT2Sym:res-05:brain"
     
     Returns:
         Absolute path to template file

@@ -736,19 +736,20 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
     
     @staticmethod
     def _count_unique_images(data: Dict[str, Any]) -> int:
-        """Count unique functional BOLD runs from organized snapshots.
+        """Count unique functional BOLD runs from organized snapshots (fallback).
 
         Excludes ``desc`` (QC/processing step), ``sub`` (report subject), and
         ``space`` — derivative QC filenames use ``space`` for the reference
         grid (e.g. func2anat vs func2target), not a distinct acquisition.
 
-        Session-level within-session coregistration QC (``func_coreg_overlay``)
-        is named with only subject/session (no task/run); it must not be
-        counted as an extra functional acquisition.
+        Only snapshots with ``task`` and/or ``run`` are counted so session-level
+        QC (within-session coregistration, tSNR, etc.) is not treated as an
+        extra BOLD acquisition. Prefer :func:`_count_func_jobs_from_discovery`
+        when ``functional_jobs.json`` is available.
         """
         if not data:
             return 0
-        
+
         unique_images = set()
         _exclude_from_func_identity = frozenset({"desc", "sub", "space"})
 
@@ -758,6 +759,8 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
             if value.get("snapshot_type") == "func_coreg_overlay":
                 continue
             entities = value["entities"]
+            if "task" not in entities and "run" not in entities:
+                continue
             image_id = tuple(
                 sorted(
                     (k, v)
@@ -1127,6 +1130,11 @@ def _subject_has_anatomical_job(jobs: List[Dict[str, Any]], subject_id: str) -> 
     return any(j.get("subject_id") == subject_id for j in jobs)
 
 
+def _count_func_jobs_from_discovery(jobs: List[Dict[str, Any]], subject_id: str) -> int:
+    """Count discovered functional BOLD jobs for one subject (exact ``subject_id``)."""
+    return sum(1 for job in jobs if job.get("subject_id") == subject_id)
+
+
 def generate_qc_report(
     snapshot_dir: Union[str, Path],
     report_path: Union[str, Path],
@@ -1185,6 +1193,23 @@ def generate_qc_report(
                     )
             except (OSError, json.JSONDecodeError) as e:
                 logger.warning("QC: could not read %s for report summary counts: %s", jobs_path, e)
+
+            func_jobs_path = nfr / "functional_jobs.json"
+            try:
+                with open(func_jobs_path, encoding="utf-8") as jf:
+                    func_jobs: List[Dict[str, Any]] = json.load(jf)
+                subject_file_counts["functional"] = _count_func_jobs_from_discovery(
+                    func_jobs, subject_id
+                )
+                logger.info(
+                    "QC: using functional input counts from discovery for subject %s (%s)",
+                    subject_id,
+                    func_jobs_path,
+                )
+            except (OSError, json.JSONDecodeError) as e:
+                logger.warning(
+                    "QC: could not read %s for report summary counts: %s", func_jobs_path, e
+                )
 
         merged_context = dict(dataset_context or {})
         user_sfc = merged_context.pop("subject_file_counts", None)

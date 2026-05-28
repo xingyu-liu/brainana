@@ -9,7 +9,7 @@ About
    :width: 100%
 
 |
-**Brainana** is a preprocessing and registration pipeline for non-human primate (NHP) neuroimaging data. It provides anatomical, functional processing, and surface reconstruction.
+**Brainana** is a unified preprocessing framework for macaque MRI. It provides anatomical, functional preprocessing, and surface reconstruction.
 
 .. image:: _static/pipeline_details/pipeline_overview.png
    :alt: Brainana pipeline overview schematic
@@ -25,7 +25,11 @@ Licensed under the GNU Affero General Public License v3 (AGPL-3.0).
 
 Citation
 ^^^^^^^^
-Brainana: a non-human primate MRI volume and surface preprocessing pipeline (in preparation).
+Brainana: an end-to-end preprocessing framework for macaque neuroimaging (in preparation).
+
+Docs versions
+^^^^^^^^^^^^^
+Use ``stable`` for released behavior and reproducible results, and use ``latest`` for in-development changes that may be ahead of the latest release.
 
 Contents
 --------

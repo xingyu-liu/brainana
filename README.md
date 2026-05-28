@@ -14,9 +14,19 @@
 
 ## Documentation
 
-Installation, usage, processing details, outputs, and troubleshooting are documented on **[Read the Docs](https://brainana.readthedocs.io/en/latest/)**.
+Brainana documentation is hosted on **[Read the Docs](https://brainana.readthedocs.io/en/stable/)**.
 
-Start with [Installation](https://brainana.readthedocs.io/en/latest/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/latest/usage_notes.html).
+- **Use [`stable`](https://brainana.readthedocs.io/en/stable/)** for the latest released behavior.
+- **Use [`latest`](https://brainana.readthedocs.io/en/latest/)** for in-development docs that may be ahead of release.
+
+Start with [Installation](https://brainana.readthedocs.io/en/stable/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/stable/usage_notes.html).
+
+Additional references:
+- [Processing details](https://brainana.readthedocs.io/en/stable/processing.html)
+- [Outputs](https://brainana.readthedocs.io/en/stable/outputs.html)
+- [FAQ](https://brainana.readthedocs.io/en/stable/faq.html)
+- [Changelog](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## Citation
 

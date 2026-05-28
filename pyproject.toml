@@ -13,9 +13,6 @@ license = {text = "AGPL-3.0"}
 requires-python = ">=3.11"
 authors = [
     {name = "Xingyu Liu", email = "liuxingyu987@gmail.com"},
-    {name = "Yijun Zhuang"},
-    {name = "Zi Yin"},
-    {name = "Zonglei Zhen"},
     {name = "Michael Arcaro", email = "marcaro@sas.upenn.edu"},
 ]
 keywords = [
@@ -30,7 +27,7 @@ keywords = [
 
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
