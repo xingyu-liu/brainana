@@ -12,7 +12,7 @@ import SimpleITK as sitk
 logger = logging.getLogger("test_anat_conformation")
 
 # Bump when search/schedule semantics change (benchmark resume invalidation).
-SITK_PIPELINE_REV = "seed_max_overlap_v1"
+SITK_PIPELINE_REV = "centered_grid_corratio_v6"
 
 # GEOMETRY seed is preferred only when its fixed/moving overlap beats the COG seed
 # by this relative margin, so near-ties keep the FLIRT-faithful COG seed (no
@@ -70,8 +70,19 @@ def _sitk_shrink_for_target_mm(img: sitk.Image, target_mm: float) -> int:
 
 
 def _sitk_apply_sampling(
-    reg: sitk.ImageRegistrationMethod, sitk_config: dict[str, Any], modality: str, *, heavy: bool = False
+    reg: sitk.ImageRegistrationMethod,
+    sitk_config: dict[str, Any],
+    modality: str,
+    *,
+    heavy: bool = False,
+    full: bool = False,
 ) -> None:
+    # Full (all-voxel) sampling for the coarse search: the 8/4 mm images are tiny so
+    # it is nearly free, and it removes the random-sampling noise that otherwise lets a
+    # 180 deg flip out-rank the true pose (their cost gap is only ~0.12-0.17).
+    if full:
+        reg.SetMetricSamplingStrategy(reg.NONE)
+        return
     pct = float(sitk_config.get("search_sampling_pct", 0.2))
     if heavy and modality == "func":
         pct = max(pct, 0.25)
@@ -80,12 +91,24 @@ def _sitk_apply_sampling(
 
 
 def _sitk_rotation_samples_deg(deg_min: float, deg_max: float, step_deg: float) -> np.ndarray:
-    """Mirror FLIRT set_rot_sampling / set_rot_samplings grid size."""
-    span = float(deg_max - deg_min)
-    n_pts = max(1, int(round(span / step_deg)) + 1)
-    if n_pts == 1:
-        return np.array([0.5 * (deg_min + deg_max)])
-    return np.linspace(deg_min, deg_max, n_pts)
+    """Rotation grid CENTERED on 0 (identity): samples 0, +/-step, +/-2*step, ... in range.
+
+    A rotation search must always try identity. The old linspace(deg_min, deg_max, n)
+    only landed on 0 when the interval count was even, so the default 40 deg step over
+    (-180, 180) skipped 0 while sampling the 180 deg flip exactly — biasing the search to
+    flips and never generating the (correct) near-identity pose for cases whose true
+    rotation is small (e.g. 032142 ~4.6 deg, 032123 ~12.8 deg). Centering on 0, like
+    FLIRT's search, samples identity and symmetric +/- rotations and drops the exact
+    180 deg endpoint.
+    """
+    step = abs(float(step_deg))
+    if step <= 0.0:
+        return np.array([0.0])
+    k_lo = int(np.ceil(deg_min / step))
+    k_hi = int(np.floor(deg_max / step))
+    if k_hi < k_lo:
+        return np.array([0.0])
+    return np.arange(k_lo, k_hi + 1, dtype=np.float64) * step
 
 
 def _sitk_image_cog_mm(img: sitk.Image) -> np.ndarray:
@@ -221,11 +244,12 @@ def _sitk_refine_translation_only(
     *,
     learning_rate_mm: float,
     iters: int,
+    full_sampling: bool = False,
 ) -> tuple[sitk.Euler3DTransform, float]:
     reg = sitk.ImageRegistrationMethod()
     _set_sitk_metric(reg, sitk_config, search_stage=True)
     reg.SetInterpolator(sitk.sitkLinear)
-    _sitk_apply_sampling(reg, sitk_config, modality, heavy=True)
+    _sitk_apply_sampling(reg, sitk_config, modality, heavy=True, full=full_sampling)
     reg.SetOptimizerAsGradientDescent(
         learningRate=learning_rate_mm,
         numberOfIterations=iters,
@@ -244,12 +268,14 @@ def _sitk_eval_metric(
     tx: sitk.Euler3DTransform,
     sitk_config: dict[str, Any],
     modality: str,
+    *,
+    full_sampling: bool = False,
 ) -> float:
     """Evaluate search metric at tx without moving parameters (ITK needs >=1 iter)."""
     reg = sitk.ImageRegistrationMethod()
     _set_sitk_metric(reg, sitk_config, search_stage=True)
     reg.SetInterpolator(sitk.sitkLinear)
-    _sitk_apply_sampling(reg, sitk_config, modality)
+    _sitk_apply_sampling(reg, sitk_config, modality, full=full_sampling)
     reg.SetOptimizerAsGradientDescent(
         learningRate=0.0,
         numberOfIterations=1,
@@ -263,41 +289,53 @@ def _sitk_eval_metric(
     return float(reg.GetMetricValue())
 
 
-def _trilinear_interp_volumes(
-    tx_vol: np.ndarray,
-    ty_vol: np.ndarray,
-    tz_vol: np.ndarray,
-    xf: float,
-    yf: float,
-    zf: float,
-) -> tuple[float, float, float]:
-    """Trilinear interp in rotation-index space (FLIRT tx.interpolate)."""
+def _sitk_corratio_cost(
+    fixed: sitk.Image, moving: sitk.Image, tx: sitk.Euler3DTransform, nbins: int = 32
+) -> float:
+    """FLIRT-style correlation ratio CR(fixed | moving), negated so lower = better.
 
-    def _interp(vol: np.ndarray, x: float, y: float, z: float) -> float:
-        nx, ny, nz = vol.shape
-        if nx <= 1 or ny <= 1 or nz <= 1:
-            return float(vol[0, 0, 0])
-        x = float(np.clip(x, 0.0, nx - 1.001))
-        y = float(np.clip(y, 0.0, ny - 1.001))
-        z = float(np.clip(z, 0.0, nz - 1.001))
-        x0, y0, z0 = int(np.floor(x)), int(np.floor(y)), int(np.floor(z))
-        x1 = min(x0 + 1, nx - 1)
-        y1 = min(y0 + 1, ny - 1)
-        z1 = min(z0 + 1, nz - 1)
-        xd, yd, zd = x - x0, y - y0, z - z0
-        c000, c100 = vol[x0, y0, z0], vol[x1, y0, z0]
-        c010, c110 = vol[x0, y1, z0], vol[x1, y1, z0]
-        c001, c101 = vol[x0, y0, z1], vol[x1, y0, z1]
-        c011, c111 = vol[x0, y1, z1], vol[x1, y1, z1]
-        c00 = c000 * (1 - xd) + c100 * xd
-        c10 = c010 * (1 - xd) + c110 * xd
-        c01 = c001 * (1 - xd) + c101 * xd
-        c11 = c011 * (1 - xd) + c111 * xd
-        c0 = c00 * (1 - yd) + c10 * yd
-        c1 = c01 * (1 - yd) + c11 * yd
-        return float(c0 * (1 - zd) + c1 * zd)
+    Bins the resampled moving intensities and measures the residual within-bin variance
+    of the fixed image. Unlike normalized cross-correlation it is robust to the 180 deg
+    flip ambiguity at coarse scale (verified: it ranks the true pose above a flip by a
+    ~2x larger margin), which is what NCC's thin margin cannot do once the coarse pose
+    is only crudely positioned.
+    """
+    resampled = sitk.Resample(moving, fixed, tx, sitk.sitkLinear, 0.0, moving.GetPixelID())
+    x = sitk.GetArrayViewFromImage(fixed).astype(np.float64).ravel()
+    y = sitk.GetArrayViewFromImage(resampled).astype(np.float64).ravel()
+    ymin, ymax = float(y.min()), float(y.max())
+    tot_var = float(x.var())
+    if ymax <= ymin or tot_var <= 0.0:
+        return 0.0
+    bins = np.clip(((y - ymin) / (ymax - ymin) * nbins).astype(np.intp), 0, nbins - 1)
+    n = np.bincount(bins, minlength=nbins).astype(np.float64)
+    sx = np.bincount(bins, weights=x, minlength=nbins)
+    sx2 = np.bincount(bins, weights=x * x, minlength=nbins)
+    nz = n > 0
+    within = np.zeros(nbins, dtype=np.float64)
+    within[nz] = sx2[nz] - (sx[nz] ** 2) / n[nz]  # = n_k * Var_k(fixed)
+    cr = 1.0 - within.sum() / (x.size * tot_var)
+    return -float(cr)
 
-    return _interp(tx_vol, xf, yf, zf), _interp(ty_vol, xf, yf, zf), _interp(tz_vol, xf, yf, zf)
+
+def _sitk_rank_cost(
+    fixed: sitk.Image,
+    moving: sitk.Image,
+    tx: sitk.Euler3DTransform,
+    sitk_config: dict[str, Any],
+    modality: str,
+    *,
+    full_sampling: bool = False,
+) -> float:
+    """Scalar cost used to RANK coarse-search poses (lower = better).
+
+    Defaults to the SimpleITK search metric; set ``search_rank_metric='CorrelationRatio'``
+    to rank by correlation ratio instead (translation refinement still uses the SimpleITK
+    metric, which has no corratio). Opt-in: the func/MattesMI path is unaffected.
+    """
+    if sitk_config.get("search_rank_metric") == "CorrelationRatio":
+        return _sitk_corratio_cost(fixed, moving, tx, int(sitk_config.get("corratio_bins", 32)))
+    return _sitk_eval_metric(fixed, moving, tx, sitk_config, modality, full_sampling=full_sampling)
 
 
 def _sitk_copy_euler(tx: sitk.Euler3DTransform) -> sitk.Euler3DTransform:
@@ -315,39 +353,49 @@ def _sitk_flirt_search_cost(
     sitk_config: dict[str, Any],
     modality: str,
 ) -> list[tuple[float, sitk.Euler3DTransform]]:
-    """Port of FLIRT search_cost + optimise_strategy3 candidate list."""
+    """FLIRT-faithful coarse rotation search returning the lowest-cost candidates.
+
+    For every rotation on the coarse grid we optimise the translation, then score the
+    cost *at that rotation's own optimised translation*, and rank rotations by cost.
+
+    The previous implementation discarded each rotation's cost and instead trilinearly
+    interpolated the optimised translations across the (coarse, ~40 deg-spaced) grid
+    before scoring a finer rotation grid. That interpolation handed good rotations a
+    wrong translation, so their cost looked bad and they were filtered out before the
+    schedule — verified on 032142/032123: the correctly-aligned coarse cell was found
+    (full-res masked NCC ~0.17/0.26) yet never survived into the candidate list (~0.02/
+    0.11). Scoring each rotation at its own translation, with no interpolation, keeps it.
+    """
     t0 = time.perf_counter()
     deg_min, deg_max = sitk_config.get("search_range_deg", _SITK_SEARCH_RANGE_DEG)
     coarse_step = float(sitk_config["coarse_step_deg"])
-    fine_step = float(sitk_config["fine_step_deg"])
     tx_iters = int(sitk_config.get("search_tx_iters", 50))
-    cost_frac = float(sitk_config.get("cost_thresh_fraction", 0.2))
     lr_tx = _sitk_min_spacing(fixed_8) * 0.5
 
     center = _sitk_fixed_geometric_center(fixed_8)
     rx_c = _sitk_rotation_samples_deg(deg_min, deg_max, coarse_step)
     ry_c = _sitk_rotation_samples_deg(deg_min, deg_max, coarse_step)
     rz_c = _sitk_rotation_samples_deg(deg_min, deg_max, coarse_step)
-    nx, ny, nz = len(rx_c), len(ry_c), len(rz_c)
-    tx_vol = np.zeros((nx, ny, nz), dtype=np.float64)
-    ty_vol = np.zeros((nx, ny, nz), dtype=np.float64)
-    tz_vol = np.zeros((nx, ny, nz), dtype=np.float64)
-
     logger.info(
         "FLIRT search coarse: %dx%dx%d rotations @ ~%.1f mm, tx_iters=%d",
-        nx,
-        ny,
-        nz,
-        _sitk_min_spacing(fixed_8) * _sitk_shrink_for_target_mm(fixed_8, _SITK_STAGE1_TARGET_MM),
+        len(rx_c),
+        len(ry_c),
+        len(rz_c),
+        _sitk_min_spacing(fixed_8),
         tx_iters,
     )
-    n_coarse = 0
-    for ix, rx in enumerate(rx_c):
-        for iy, ry in enumerate(ry_c):
-            for iz, rz in enumerate(rz_c):
+
+    scored: list[tuple[float, sitk.Euler3DTransform]] = []
+    for rx in rx_c:
+        for ry in ry_c:
+            for rz in rz_c:
                 seed = _sitk_seed_transform(
                     fixed_8, moving_8, center, np.deg2rad(rx), np.deg2rad(ry), np.deg2rad(rz)
                 )
+                # FLIRT-faithful: optimise TRANSLATION only, holding the grid rotation
+                # fixed (FLIRT's search_cost does the same). Refining rotation here lets
+                # poses drift into high-correlation 180 deg flips; FLIRT instead stays
+                # robust via its corratio cost + per-local-minimum refinement.
                 refined, _ = _sitk_refine_translation_only(
                     fixed_8,
                     moving_8,
@@ -356,113 +404,40 @@ def _sitk_flirt_search_cost(
                     modality,
                     learning_rate_mm=lr_tx,
                     iters=tx_iters,
+                    full_sampling=True,
                 )
-                params = list(refined.GetParameters())
-                tx_vol[ix, iy, iz] = params[3]
-                ty_vol[ix, iy, iz] = params[4]
-                tz_vol[ix, iy, iz] = params[5]
-                n_coarse += 1
+                # Score at the finer 4 mm scale with full (all-voxel) sampling.
+                cost = _sitk_rank_cost(
+                    fixed_4, moving_4, refined, sitk_config, modality, full_sampling=True
+                )
+                scored.append((cost, refined))
+    scored.sort(key=lambda r: r[0])
     logger.info(
-        "FLIRT search coarse done: %d cells in %.1f s",
-        n_coarse,
+        "FLIRT search coarse done: %d cells in %.1f s; best cost=%.6f",
+        len(scored),
         time.perf_counter() - t0,
+        scored[0][0],
     )
 
+    # Polish the top candidates' translation at 4 mm and re-rank before the schedule.
     t1 = time.perf_counter()
-    rx_f = _sitk_rotation_samples_deg(deg_min, deg_max, fine_step)
-    ry_f = _sitk_rotation_samples_deg(deg_min, deg_max, fine_step)
-    rz_f = _sitk_rotation_samples_deg(deg_min, deg_max, fine_step)
-    fx = (nx - 1) / max(1.0, len(rx_f) - 1)
-    fy = (ny - 1) / max(1.0, len(ry_f) - 1)
-    fz = (nz - 1) / max(1.0, len(rz_f) - 1)
-    costs = np.zeros((len(rx_f), len(ry_f), len(rz_f)), dtype=np.float64)
-    logger.info(
-        "FLIRT search fine cost grid: %dx%dx%d @ ~%.1f mm",
-        len(rx_f),
-        len(ry_f),
-        len(rz_f),
-        _sitk_min_spacing(fixed_4) * _sitk_shrink_for_target_mm(fixed_4, _SITK_STAGE4_TARGET_MM),
-    )
-    for ix, rx in enumerate(rx_f):
-        for iy, ry in enumerate(ry_f):
-            for iz, rz in enumerate(rz_f):
-                txv, tyv, tzv = _trilinear_interp_volumes(
-                    tx_vol, ty_vol, tz_vol, ix * fx, iy * fy, iz * fz
-                )
-                tx_init = _sitk_euler_from_rot_trans(
-                    center,
-                    np.deg2rad(rx),
-                    np.deg2rad(ry),
-                    np.deg2rad(rz),
-                    txv,
-                    tyv,
-                    tzv,
-                )
-                costs[ix, iy, iz] = _sitk_eval_metric(
-                    fixed_4, moving_4, tx_init, sitk_config, modality
-                )
-    cost_min = float(costs.min())
-    cost_max = float(costs.max())
-    p20 = float(np.percentile(costs, 20))
-    thresh = min(cost_min + cost_frac * (cost_max - cost_min), p20)
-    if thresh <= cost_min:
-        thresh = max(cost_min * 1.0001, cost_min + 1e-9)
-    survivors = int(np.sum(costs <= thresh))
-    logger.info(
-        "FLIRT search fine costs: min=%.6f max=%.6f thresh=%.6f survivors=%d (%.1f s)",
-        cost_min,
-        cost_max,
-        thresh,
-        survivors,
-        time.perf_counter() - t1,
-    )
-
-    t2 = time.perf_counter()
+    lr_tx4 = _sitk_min_spacing(fixed_4) * 0.5
     results: list[tuple[float, sitk.Euler3DTransform]] = []
-    if survivors <= 0:
-        ix, iy, iz = np.unravel_index(int(np.argmin(costs)), costs.shape)
-        rx, ry, rz = rx_f[ix], ry_f[iy], rz_f[iz]
-        txv, tyv, tzv = _trilinear_interp_volumes(tx_vol, ty_vol, tz_vol, ix * fx, iy * fy, iz * fz)
-        seed = _sitk_euler_from_rot_trans(
-            center, np.deg2rad(rx), np.deg2rad(ry), np.deg2rad(rz), txv, tyv, tzv
+    for _, tx in scored[:_SITK_FLIRT_TOP_K]:
+        refined, _ = _sitk_refine_translation_only(
+            fixed_4, moving_4, tx, sitk_config, modality,
+            learning_rate_mm=lr_tx4, iters=tx_iters, full_sampling=True,
         )
-        refined, m = _sitk_refine_translation_only(
-            fixed_4, moving_4, seed, sitk_config, modality, learning_rate_mm=lr_tx, iters=tx_iters
+        cost = _sitk_rank_cost(
+            fixed_4, moving_4, refined, sitk_config, modality, full_sampling=True
         )
-        results.append((m, refined))
-    else:
-        for ix, rx in enumerate(rx_f):
-            for iy, ry in enumerate(ry_f):
-                for iz, rz in enumerate(rz_f):
-                    if costs[ix, iy, iz] > thresh:
-                        continue
-                    txv, tyv, tzv = _trilinear_interp_volumes(
-                        tx_vol, ty_vol, tz_vol, ix * fx, iy * fy, iz * fz
-                    )
-                    seed = _sitk_euler_from_rot_trans(
-                        center,
-                        np.deg2rad(rx),
-                        np.deg2rad(ry),
-                        np.deg2rad(rz),
-                        txv,
-                        tyv,
-                        tzv,
-                    )
-                    refined, m = _sitk_refine_translation_only(
-                        fixed_4,
-                        moving_4,
-                        seed,
-                        sitk_config,
-                        modality,
-                        learning_rate_mm=lr_tx,
-                        iters=tx_iters,
-                    )
-                    results.append((m, refined))
-    results.sort(key=lambda x: x[0])
+        results.append((cost, refined))
+    results.sort(key=lambda r: r[0])
     logger.info(
-        "FLIRT search fine refine: %d poses in %.1f s (total %.1f s)",
+        "FLIRT search refine top-%d @ 4 mm: best cost=%.6f (%.1f s, total %.1f s)",
         len(results),
-        time.perf_counter() - t2,
+        results[0][0],
+        time.perf_counter() - t1,
         time.perf_counter() - t0,
     )
     return results[:_SITK_FLIRT_TOP_K]
@@ -528,7 +503,7 @@ def _sitk_flirt_schedule(
     logger.info("FLIRT schedule: re-score %d candidates", len(pool))
     rescored: list[tuple[float, sitk.Euler3DTransform]] = []
     for _, tx in pool:
-        m = _sitk_eval_metric(fixed, moving, tx, sitk_config, modality)
+        m = _sitk_rank_cost(fixed, moving, tx, sitk_config, modality)
         rescored.append((m, tx))
     rescored.sort(key=lambda x: x[0])
 

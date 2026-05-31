@@ -108,7 +108,7 @@ class SitkModalityProfile:
     schedule_metric: str | None = None
     histogram_bins: tuple[int, ...] = ()
     learning_rates: tuple[float, ...] = (1.0,)
-    coarse_step_deg: int = 40
+    coarse_step_deg_options: tuple[int, ...] = (40,)
     fine_step_deg_options: tuple[int, ...] = (15,)
     cost_thresh_fraction_options: tuple[float, ...] = (0.2,)
     search_tx_iters_options: tuple[int, ...] = (50,)
@@ -125,7 +125,7 @@ _SITK_PROFILE_DEFAULT = SitkModalityProfile(
     metric="Correlation",
     search_metric="Correlation",
     histogram_bins=(32,),
-    coarse_step_deg=40,
+    coarse_step_deg_options=(40, 30),
     fine_step_deg_options=(15,),
     cost_thresh_fraction_options=(0.1,),
     search_tx_iters_options=(30,),
@@ -138,7 +138,7 @@ _SITK_PROFILE_FUNC = SitkModalityProfile(
     schedule_metric="MattesMI",
     histogram_bins=(32,),
     learning_rates=(1.0,),
-    coarse_step_deg=30,
+    coarse_step_deg_options=(30,),
     fine_step_deg_options=(15, 10),
     cost_thresh_fraction_options=(0.1, 0.15, 0.2),
     search_tx_iters_options=(30, 50),
@@ -161,28 +161,32 @@ def _sitk_cost_thresh_tag(fraction: float) -> str:
 
 def _sitk_param_label(
     *,
+    coarse_step_deg: int,
     fine_step_deg: int,
     cost_thresh_fraction: float,
     search_tx_iters: int,
     schedule_iters: int,
     histogram_bins: int | None = None,
     learning_rate: float = 1.0,
+    include_coarse: bool = False,
     include_bins: bool = False,
     include_learning_rate: bool = False,
 ) -> str:
+    coarse_part = f"cs{coarse_step_deg:02d}_" if include_coarse else ""
     bins_part = f"_b{histogram_bins}" if include_bins and histogram_bins is not None else ""
     lr_part = f"_{_sitk_lr_tag(learning_rate)}" if include_learning_rate else ""
     ct = _sitk_cost_thresh_tag(cost_thresh_fraction)
     return (
-        f"sitk_flirt_fs{fine_step_deg:02d}_{ct}_ti{search_tx_iters}_si{schedule_iters}"
+        f"sitk_flirt_{coarse_part}fs{fine_step_deg:02d}_{ct}_ti{search_tx_iters}_si{schedule_iters}"
         f"{bins_part}{lr_part}"
     )
 
 
 def _build_sitk_param_grid(profile: SitkModalityProfile) -> list[dict[str, Any]]:
-    """FLIRT-faithful search + schedule; sweep fine step, threshold, tx/schedule iters."""
+    """FLIRT-faithful search + schedule; sweep coarse/fine step, threshold, tx/schedule iters."""
     include_lr = len(profile.learning_rates) > 1
     include_bins = profile.metric == "MattesMI" and len(profile.histogram_bins) > 0
+    include_coarse = len(profile.coarse_step_deg_options) > 1
     grid: list[dict[str, Any]] = []
     bin_values: tuple[int | None, ...] = (
         profile.histogram_bins if include_bins else (None,)
@@ -190,44 +194,47 @@ def _build_sitk_param_grid(profile: SitkModalityProfile) -> list[dict[str, Any]]
     lr_values = profile.learning_rates if include_lr else (1.0,)
     for histogram_bin in bin_values:
         for learning_rate in lr_values:
-            for fine_step_deg in profile.fine_step_deg_options:
-                for cost_thresh in profile.cost_thresh_fraction_options:
-                    for search_tx_iters in profile.search_tx_iters_options:
-                        for schedule_iters in profile.schedule_iters_options:
-                            label = _sitk_param_label(
-                                fine_step_deg=fine_step_deg,
-                                cost_thresh_fraction=cost_thresh,
-                                search_tx_iters=search_tx_iters,
-                                schedule_iters=schedule_iters,
-                                histogram_bins=histogram_bin,
-                                learning_rate=learning_rate,
-                                include_bins=include_bins,
-                                include_learning_rate=include_lr,
-                            )
-                            schedule_metric = (
-                                profile.schedule_metric
-                                if profile.schedule_metric is not None
-                                else profile.metric
-                            )
-                            entry: dict[str, Any] = {
-                                "metric": profile.metric,
-                                "search_metric": profile.search_metric,
-                                "schedule_metric": schedule_metric,
-                                "search_range_deg": _SITK_SEARCH_RANGE_DEG,
-                                "coarse_step_deg": profile.coarse_step_deg,
-                                "fine_step_deg": fine_step_deg,
-                                "cost_thresh_fraction": cost_thresh,
-                                "search_tx_iters": search_tx_iters,
-                                "schedule_iters": schedule_iters,
-                                "search_sampling_pct": profile.search_sampling_pct,
-                                "learning_rate": learning_rate,
-                                "label": label,
-                            }
-                            if histogram_bin is not None:
-                                entry["number_of_histogram_bins"] = histogram_bin
-                            if profile.coarse_tx_iters is not None:
-                                entry["coarse_tx_iters"] = profile.coarse_tx_iters
-                            grid.append(entry)
+            for coarse_step_deg in profile.coarse_step_deg_options:
+                for fine_step_deg in profile.fine_step_deg_options:
+                    for cost_thresh in profile.cost_thresh_fraction_options:
+                        for search_tx_iters in profile.search_tx_iters_options:
+                            for schedule_iters in profile.schedule_iters_options:
+                                label = _sitk_param_label(
+                                    coarse_step_deg=coarse_step_deg,
+                                    fine_step_deg=fine_step_deg,
+                                    cost_thresh_fraction=cost_thresh,
+                                    search_tx_iters=search_tx_iters,
+                                    schedule_iters=schedule_iters,
+                                    histogram_bins=histogram_bin,
+                                    learning_rate=learning_rate,
+                                    include_coarse=include_coarse,
+                                    include_bins=include_bins,
+                                    include_learning_rate=include_lr,
+                                )
+                                schedule_metric = (
+                                    profile.schedule_metric
+                                    if profile.schedule_metric is not None
+                                    else profile.metric
+                                )
+                                entry: dict[str, Any] = {
+                                    "metric": profile.metric,
+                                    "search_metric": profile.search_metric,
+                                    "schedule_metric": schedule_metric,
+                                    "search_range_deg": _SITK_SEARCH_RANGE_DEG,
+                                    "coarse_step_deg": coarse_step_deg,
+                                    "fine_step_deg": fine_step_deg,
+                                    "cost_thresh_fraction": cost_thresh,
+                                    "search_tx_iters": search_tx_iters,
+                                    "schedule_iters": schedule_iters,
+                                    "search_sampling_pct": profile.search_sampling_pct,
+                                    "learning_rate": learning_rate,
+                                    "label": label,
+                                }
+                                if histogram_bin is not None:
+                                    entry["number_of_histogram_bins"] = histogram_bin
+                                if profile.coarse_tx_iters is not None:
+                                    entry["coarse_tx_iters"] = profile.coarse_tx_iters
+                                grid.append(entry)
     return grid
 
 
@@ -875,7 +882,7 @@ def _sitk_register(
         "SimpleITK FLIRT register (%s): coarse=%s° fine=%s° ct=%.2f "
         "ti=%s si=%s search=%s schedule=%s (rev=%s)",
         label,
-        sitk_config.get("coarse_step_deg", prof.coarse_step_deg),
+        sitk_config.get("coarse_step_deg", prof.coarse_step_deg_options[0]),
         sitk_config.get("fine_step_deg", _SITK_FINE_STEP_DEG_DEFAULT),
         sitk_config.get("cost_thresh_fraction", 0.2),
         sitk_config.get("search_tx_iters", 50),
@@ -1492,6 +1499,9 @@ def _html_param_naming_legend(modality: str) -> str:
         "<dd>FSL FLIRT baseline (single run per image).</dd>"
         "<dt><code>sitk_flirt</code></dt>"
         "<dd>SimpleITK FLIRT-style coarse rotation search + fine schedule.</dd>"
+        f"<dt><code>cs##</code></dt>"
+        "<dd>Coarse rotation search step (degrees); e.g. <code>cs40</code> = 40° "
+        "(omitted when only one coarse step is used).</dd>"
         f"<dt><code>fs##</code></dt>"
         "<dd>Fine rotation search step (degrees); e.g. <code>fs15</code> = 15°.</dd>"
         "<dt><code>ct##</code></dt>"
@@ -1507,19 +1517,20 @@ def _html_param_naming_legend(modality: str) -> str:
         "<dt><code>lr#p#</code></dt>"
         "<dd>Optimizer learning-rate scale; e.g. <code>lr0p5</code> = 0.5×.</dd>"
     )
+    coarse_vals = ", ".join(f"{d}°" for d in profile.coarse_step_deg_options)
     fine_vals = ", ".join(f"{d}°" for d in profile.fine_step_deg_options)
     sched_m = profile.schedule_metric or profile.metric
     metric_note = (
         f"Search metric: <strong>{html.escape(profile.search_metric)}</strong>; "
         f"schedule metric: <strong>{html.escape(sched_m)}</strong>; "
-        f"coarse rotation step <strong>{profile.coarse_step_deg}°</strong> "
-        f"(matches FLIRT <code>coarsesearch</code>); "
+        f"coarse step(s) swept: <strong>{coarse_vals}</strong> "
+        f"(FLIRT <code>coarsesearch</code>); "
         f"fine step(s) swept: <strong>{fine_vals}</strong>; "
         f"pipeline <strong>{html.escape(SITK_PIPELINE_REV)}</strong>."
     )
     extra = func_extra if modality == "func" else ""
     example = (
-        "sitk_flirt_fs15_ct15_ti30_si50"
+        "sitk_flirt_cs40_fs15_ct10_ti30_si50"
         if modality != "func"
         else "sitk_flirt_fs15_ct15_ti30_si30_b32"
     )
@@ -2098,16 +2109,16 @@ if __name__ == "__main__":
     logger.info("Methods: %s", ", ".join(METHODS))
     if "simpleitk" in METHODS:
         logger.info(
-            "SimpleITK FLIRT grid: %d anat/t2w sets (coarse %s°, fs %s, ct %s, ti %s, si %s), "
-            "%d func sets (coarse %s°, fs %s, bins %s, lr %s)",
+            "SimpleITK FLIRT grid: %d anat/t2w sets (cs %s°, fs %s, ct %s, ti %s, si %s), "
+            "%d func sets (cs %s°, fs %s, bins %s, lr %s)",
             len(_SITK_PARAM_GRIDS["default"]),
-            _SITK_PROFILE_DEFAULT.coarse_step_deg,
+            _SITK_PROFILE_DEFAULT.coarse_step_deg_options,
             _SITK_PROFILE_DEFAULT.fine_step_deg_options,
             _SITK_PROFILE_DEFAULT.cost_thresh_fraction_options,
             _SITK_PROFILE_DEFAULT.search_tx_iters_options,
             _SITK_PROFILE_DEFAULT.schedule_iters_options,
             len(_SITK_PARAM_GRIDS["func"]),
-            _SITK_PROFILE_FUNC.coarse_step_deg,
+            _SITK_PROFILE_FUNC.coarse_step_deg_options,
             _SITK_PROFILE_FUNC.fine_step_deg_options,
             _SITK_PROFILE_FUNC.histogram_bins,
             _SITK_PROFILE_FUNC.learning_rates,
