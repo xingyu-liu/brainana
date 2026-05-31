@@ -4,13 +4,12 @@ Benchmark FLIRT vs SimpleITK for anatomical conformation (rigid alignment).
 
 Runs identical preprocessing (skullstrip, template pad/downsample, template resample),
 then compares registration backends in order: FLIRT baseline, SimpleITK parameter
-grid (FLIRT-faithful search + schedule + param grid), with QC snapshots and a
-self-contained HTML report.
+grid (FLIRT-faithful search + schedule + param grid), with QC snapshots and an
+HTML report that links to those images.
 """
 
 from __future__ import annotations
 
-import base64
 import csv
 import html
 import logging
@@ -36,7 +35,7 @@ _scripts_dir = Path(__file__).resolve().parent
 if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
-from sitk_flirt_search import sitk_flirt_register
+from sitk_flirt_search import SITK_PIPELINE_REV, sitk_flirt_register
 
 from nhp_mri_prep.operations.preprocessing import (
     DEFAULT_CONFORM_PADDING_PERCENTAGE,
@@ -102,6 +101,7 @@ class SitkModalityProfile:
     pyramid_target_mm: tuple[float, ...]
     metric: str
     search_metric: str = "Correlation"
+    schedule_metric: str | None = None
     histogram_bins: tuple[int, ...] = ()
     learning_rates: tuple[float, ...] = (1.0,)
     coarse_step_deg: int = 40
@@ -110,6 +110,7 @@ class SitkModalityProfile:
     search_tx_iters_options: tuple[int, ...] = (50,)
     schedule_iters_options: tuple[int, ...] = (40,)
     search_sampling_pct: float = 0.2
+    coarse_tx_iters: int | None = None
 
 
 _SITK_SEARCH_RANGE_DEG = (-180.0, 180.0)
@@ -122,7 +123,7 @@ _SITK_PROFILE_DEFAULT = SitkModalityProfile(
     histogram_bins=(32,),
     coarse_step_deg=40,
     fine_step_deg_options=(15, 10),
-    cost_thresh_fraction_options=(0.15, 0.2),
+    cost_thresh_fraction_options=(0.1, 0.15, 0.2),
     search_tx_iters_options=(30, 50),
     schedule_iters_options=(30, 50),
 )
@@ -130,13 +131,14 @@ _SITK_PROFILE_FUNC = SitkModalityProfile(
     pyramid_target_mm=(8.0, 4.0, 2.0),
     metric="MattesMI",
     search_metric="MattesMI",
-    histogram_bins=(24, 32),
-    learning_rates=(0.5, 1.0),
+    schedule_metric="MattesMI",
+    histogram_bins=(32,),
+    learning_rates=(1.0,),
     coarse_step_deg=30,
-    fine_step_deg_options=(10,),
-    cost_thresh_fraction_options=(0.2,),
-    search_tx_iters_options=(50,),
-    schedule_iters_options=(40,),
+    fine_step_deg_options=(15, 10),
+    cost_thresh_fraction_options=(0.1, 0.15, 0.2),
+    search_tx_iters_options=(30, 50),
+    schedule_iters_options=(30, 40),
 )
 
 
@@ -198,10 +200,15 @@ def _build_sitk_param_grid(profile: SitkModalityProfile) -> list[dict[str, Any]]
                                 include_bins=include_bins,
                                 include_learning_rate=include_lr,
                             )
+                            schedule_metric = (
+                                profile.schedule_metric
+                                if profile.schedule_metric is not None
+                                else profile.metric
+                            )
                             entry: dict[str, Any] = {
                                 "metric": profile.metric,
                                 "search_metric": profile.search_metric,
-                                "schedule_metric": profile.search_metric,
+                                "schedule_metric": schedule_metric,
                                 "search_range_deg": _SITK_SEARCH_RANGE_DEG,
                                 "coarse_step_deg": profile.coarse_step_deg,
                                 "fine_step_deg": fine_step_deg,
@@ -214,6 +221,8 @@ def _build_sitk_param_grid(profile: SitkModalityProfile) -> list[dict[str, Any]]
                             }
                             if histogram_bin is not None:
                                 entry["number_of_histogram_bins"] = histogram_bin
+                            if profile.coarse_tx_iters is not None:
+                                entry["coarse_tx_iters"] = profile.coarse_tx_iters
                             grid.append(entry)
     return grid
 
@@ -386,6 +395,15 @@ def _transform_artifacts_valid(
     return all(_is_valid_output(p) for p in _variant_transform_paths(method, work_dir, param_set))
 
 
+def _sitk_pipeline_rev_path(variant_dir: Path) -> Path:
+    return variant_dir / ".sitk_pipeline_rev"
+
+
+def _sitk_pipeline_rev_ok(variant_dir: Path) -> bool:
+    rev_path = _sitk_pipeline_rev_path(variant_dir)
+    return rev_path.is_file() and rev_path.read_text().strip() == SITK_PIPELINE_REV
+
+
 def _variant_completion_state(
     method: str,
     work_dir: Path,
@@ -398,6 +416,8 @@ def _variant_completion_state(
     has_conformed = _is_valid_nifti(conformed_f)
     has_brain = _is_valid_nifti(brain_f)
     if has_xfm and has_conformed and has_brain:
+        if method == "sitk" and not _sitk_pipeline_rev_ok(work_dir / param_set):
+            return "run"
         return "done"
     if has_xfm and (not has_conformed or not has_brain):
         return "apply_only"
@@ -532,7 +552,8 @@ def setup_logging(verbose: bool = False) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        format="%(asctime)s [%(levelname)s]: %(message)s",
+        datefmt="%H:%M:%S",
     )
 
 
@@ -777,11 +798,15 @@ def _sitk_center_sidecar_path(mat_path: Path) -> Path:
 
 
 def _sitk_save_transform_artifacts(
-    tx: sitk.Euler3DTransform, mat_path: Path
+    tx: sitk.Euler3DTransform, mat_path: Path, *, param_set: str | None = None
 ) -> None:
     """Save 4x4 affine and rotation-center sidecar for resume/QC."""
     np.savetxt(mat_path, _sitk_tx_to_matrix(tx))
     np.savetxt(_sitk_center_sidecar_path(mat_path), np.array(tx.GetCenter(), dtype=np.float64))
+    if param_set is not None:
+        _sitk_pipeline_rev_path(mat_path.parent).write_text(
+            SITK_PIPELINE_REV + "\n", encoding="utf-8"
+        )
 
 
 def _sitk_copy_euler(tx: sitk.Euler3DTransform) -> sitk.Euler3DTransform:
@@ -829,17 +854,22 @@ def _sitk_register(
     moving = _sitk_ensure_3d(sitk.ReadImage(str(moving_path), sitk.sitkFloat32))
 
     label = sitk_config.get("label", "default")
+    prof = sitk_profile_for_modality(modality)
     logger.info(
-        "SimpleITK FLIRT register (%s): coarse=%s° fine=%s° ct=%.2f ti=%s si=%s",
+        "SimpleITK FLIRT register (%s): coarse=%s° fine=%s° ct=%.2f "
+        "ti=%s si=%s search=%s schedule=%s (rev=%s)",
         label,
-        sitk_config.get(
-            "coarse_step_deg",
-            sitk_profile_for_modality(modality).coarse_step_deg,
-        ),
+        sitk_config.get("coarse_step_deg", prof.coarse_step_deg),
         sitk_config.get("fine_step_deg", _SITK_FINE_STEP_DEG_DEFAULT),
         sitk_config.get("cost_thresh_fraction", 0.2),
         sitk_config.get("search_tx_iters", 50),
         sitk_config.get("schedule_iters", 40),
+        sitk_config.get("search_metric", prof.search_metric),
+        sitk_config.get(
+            "schedule_metric",
+            prof.schedule_metric if prof.schedule_metric else prof.metric,
+        ),
+        SITK_PIPELINE_REV,
     )
     t0 = time.perf_counter()
     final_tx = sitk_flirt_register(fixed, moving, sitk_config, modality)
@@ -850,7 +880,9 @@ def _sitk_register(
     )
 
     forward_transform = work_dir / f"{output_prefix}.mat"
-    _sitk_save_transform_artifacts(final_tx, forward_transform)
+    _sitk_save_transform_artifacts(
+        final_tx, forward_transform, param_set=label
+    )
     validate_output_file(forward_transform, logger)
     logger.info("SimpleITK transform saved to %s", forward_transform)
 
@@ -1164,13 +1196,16 @@ def _fmt_float_attr(val: float) -> str:
     return str(val)
 
 
-def _embed_image_base64(image_path: str) -> str:
+def _report_image_src(image_path: str, report_path: Path) -> str:
+    """Relative URL from report.html to a QC PNG on disk."""
     path = Path(image_path)
     if not path.is_file():
         return ""
-    data = path.read_bytes()
-    b64 = base64.b64encode(data).decode("ascii")
-    return f"data:image/png;base64,{b64}"
+    try:
+        rel = path.resolve().relative_to(report_path.parent.resolve())
+    except ValueError:
+        return ""
+    return html.escape(rel.as_posix())
 
 
 def _best_row_for_image(image_rows: list[BenchmarkRow]) -> BenchmarkRow | None:
@@ -1448,7 +1483,7 @@ def _html_param_naming_legend(modality: str) -> str:
         "<dt><code>ct##</code></dt>"
         "<dd>Cost threshold (% of best coarse cost, ×0.01); e.g. <code>ct15</code> = 0.15.</dd>"
         "<dt><code>ti##</code></dt>"
-        "<dd>Translation-refinement iterations in coarse search stages.</dd>"
+        "<dd>Fine-survivor translation-refinement iterations (coarse uses 20 iters by default).</dd>"
         "<dt><code>si##</code></dt>"
         "<dd>Gradient-descent schedule iterations at fine pyramid levels.</dd>"
     )
@@ -1459,17 +1494,20 @@ def _html_param_naming_legend(modality: str) -> str:
         "<dd>Optimizer learning-rate scale; e.g. <code>lr0p5</code> = 0.5×.</dd>"
     )
     fine_vals = ", ".join(f"{d}°" for d in profile.fine_step_deg_options)
+    sched_m = profile.schedule_metric or profile.metric
     metric_note = (
-        f"Search/schedule metric: <strong>{html.escape(profile.search_metric)}</strong>; "
+        f"Search metric: <strong>{html.escape(profile.search_metric)}</strong>; "
+        f"schedule metric: <strong>{html.escape(sched_m)}</strong>; "
         f"coarse rotation step <strong>{profile.coarse_step_deg}°</strong> "
         f"(matches FLIRT <code>coarsesearch</code>); "
-        f"fine step(s) swept: <strong>{fine_vals}</strong>."
+        f"fine step(s) swept: <strong>{fine_vals}</strong>; "
+        f"pipeline <strong>{html.escape(SITK_PIPELINE_REV)}</strong>."
     )
     extra = func_extra if modality == "func" else ""
     example = (
         "sitk_flirt_fs15_ct15_ti30_si50"
         if modality != "func"
-        else "sitk_flirt_fs10_ct20_ti50_si40_b24_lr0p5"
+        else "sitk_flirt_fs15_ct15_ti30_si30_b32"
     )
     return (
         '<div class="param-naming-legend">'
@@ -1505,7 +1543,7 @@ def generate_html_report(
     auto_refresh_sec: int = 0,
     active_methods: list[str] | None = None,
 ) -> Path:
-    """Write self-contained HTML report with metrics table and embedded QC images."""
+    """Write HTML report with metrics table and linked QC images."""
     report_path = output_dir / "report.html"
     param_summaries = _summarize_by_param(rows)
     best_summary_idxs = _best_summary_indices(param_summaries)
@@ -1629,10 +1667,11 @@ def generate_html_report(
                 anchor_id = _qc_anchor_id(row)
                 img_html = '<p class="missing">QC not available</p>'
                 if row.qc_snapshot_path and Path(row.qc_snapshot_path).is_file():
-                    src = _embed_image_base64(row.qc_snapshot_path)
+                    src = _report_image_src(row.qc_snapshot_path, report_path)
                     if src:
                         img_html = (
-                            f'<img src="{src}" alt="{html.escape(row.param_set)}"/>'
+                            f'<img src="{src}" alt="{html.escape(row.param_set)}" '
+                            f'loading="lazy"/>'
                         )
 
                 is_best = best_row is not None and row.param_set == best_row.param_set
@@ -1782,6 +1821,16 @@ def _run_and_record_variant(
         )
         total_time_s = result.total_time_s
     else:
+        if (
+            resume
+            and method == "sitk"
+            and _transform_artifacts_valid(method, method_dir, param_set)
+        ):
+            logger.info(
+                "%s: re-register (stale pipeline, need rev %s)",
+                method,
+                SITK_PIPELINE_REV,
+            )
         result = run_registration()
         conformed_f = result.conformed_f
         conformed_brain_f = result.conformed_brain_f
@@ -1999,7 +2048,7 @@ INPUT_DIRS = {
         "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/input_T2w"
     ),
 }
-MODALITIES = ("func", "t2w", "anat")
+MODALITIES = ("anat", "func", "t2w",)
 TEMPLATE = None  # Path(...) to override per-image fixed; None = auto from input dir
 RESUME = True  # skip complete variants; apply-only if transform exists without conformed outputs
 VERBOSE = False
@@ -2048,6 +2097,10 @@ if __name__ == "__main__":
             _SITK_PROFILE_FUNC.fine_step_deg_options,
             _SITK_PROFILE_FUNC.histogram_bins,
             _SITK_PROFILE_FUNC.learning_rates,
+        )
+        logger.info(
+            "SimpleITK pipeline rev=%s (GitHub search/schedule baseline)",
+            SITK_PIPELINE_REV,
         )
     if RESUME:
         logger.info(

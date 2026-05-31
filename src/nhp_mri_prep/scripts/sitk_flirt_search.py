@@ -11,6 +11,9 @@ import SimpleITK as sitk
 
 logger = logging.getLogger("test_anat_conformation")
 
+# Bump when search/schedule semantics change (benchmark resume invalidation).
+SITK_PIPELINE_REV = "github_baseline"
+
 _SITK_SEARCH_RANGE_DEG = (-180.0, 180.0)
 _SITK_STAGE1_TARGET_MM = 8.0
 _SITK_STAGE4_TARGET_MM = 4.0
