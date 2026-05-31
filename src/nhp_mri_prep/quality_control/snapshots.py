@@ -52,8 +52,6 @@ except (ImportError, ValueError, Exception):
     SURFPLOT_AVAILABLE = False
 
 # %%
-
-
 def create_conform_qc(
     conformed_file: str,
     template_file: str,
