@@ -12,7 +12,12 @@ import SimpleITK as sitk
 logger = logging.getLogger("test_anat_conformation")
 
 # Bump when search/schedule semantics change (benchmark resume invalidation).
-SITK_PIPELINE_REV = "github_baseline"
+SITK_PIPELINE_REV = "seed_max_overlap_v1"
+
+# GEOMETRY seed is preferred only when its fixed/moving overlap beats the COG seed
+# by this relative margin, so near-ties keep the FLIRT-faithful COG seed (no
+# regression on cases where COG overlap already matches GEOMETRY overlap).
+_SITK_SEED_GEOMETRY_MARGIN = 0.1
 
 _SITK_SEARCH_RANGE_DEG = (-180.0, 180.0)
 _SITK_STAGE1_TARGET_MM = 8.0
@@ -138,6 +143,73 @@ def _sitk_flirt_cog_seed(
     return _sitk_euler_from_rot_trans(
         center, rx_rad, ry_rad, rz_rad, float(t_param[0]), float(t_param[1]), float(t_param[2])
     )
+
+
+def _sitk_overlap_voxels(
+    fixed: sitk.Image, moving: sitk.Image, tx: sitk.Euler3DTransform
+) -> int:
+    """Count voxels where fixed and resampled moving are both positive."""
+    resampled = sitk.Resample(
+        moving, fixed, tx, sitk.sitkLinear, 0.0, moving.GetPixelID()
+    )
+    fixed_arr = sitk.GetArrayFromImage(fixed)
+    moving_arr = sitk.GetArrayFromImage(resampled)
+    return int(((fixed_arr > 0) & (moving_arr > 0)).sum())
+
+
+def _sitk_geometry_seed(
+    fixed: sitk.Image,
+    moving: sitk.Image,
+    rx_rad: float,
+    ry_rad: float,
+    rz_rad: float,
+) -> sitk.Euler3DTransform:
+    """GEOMETRY-centered init with explicit rotation (fallback when COG seed has no overlap)."""
+    geom = sitk.CenteredTransformInitializer(
+        fixed,
+        moving,
+        sitk.Euler3DTransform(),
+        sitk.CenteredTransformInitializerFilter.GEOMETRY,
+    )
+    params = list(geom.GetParameters())
+    params[0:3] = [rx_rad, ry_rad, rz_rad]
+    out = sitk.Euler3DTransform()
+    out.SetFixedParameters(geom.GetFixedParameters())
+    out.SetParameters(params)
+    return out
+
+
+def _sitk_seed_transform(
+    fixed: sitk.Image,
+    moving: sitk.Image,
+    center: tuple[float, float, float],
+    rx_rad: float,
+    ry_rad: float,
+    rz_rad: float,
+) -> sitk.Euler3DTransform:
+    """Pick the seed (COG vs GEOMETRY) with the larger fixed/moving overlap.
+
+    The COG seed is FLIRT-faithful, but a whole-head / off-center FOV (neck,
+    shoulders) drags the intensity centre off the brain, leaving little or no
+    overlap with the template. Choosing by overlap — rather than "COG unless
+    overlap is exactly zero" — also rescues partial-overlap traps (e.g. 032142),
+    where COG overlap is nonzero yet far smaller than the GEOMETRY-centred seed.
+    """
+    cog_seed = _sitk_flirt_cog_seed(fixed, moving, center, rx_rad, ry_rad, rz_rad)
+    cog_overlap = _sitk_overlap_voxels(fixed, moving, cog_seed)
+    geom_seed = _sitk_geometry_seed(fixed, moving, rx_rad, ry_rad, rz_rad)
+    geom_overlap = _sitk_overlap_voxels(fixed, moving, geom_seed)
+    if geom_overlap > cog_overlap * (1.0 + _SITK_SEED_GEOMETRY_MARGIN):
+        logger.debug(
+            "GEOMETRY seed wins overlap (geom=%d > cog=%d) rot=%.0f,%.0f,%.0f deg",
+            geom_overlap,
+            cog_overlap,
+            np.degrees(rx_rad),
+            np.degrees(ry_rad),
+            np.degrees(rz_rad),
+        )
+        return geom_seed
+    return cog_seed
 
 
 def _sitk_refine_translation_only(
@@ -273,7 +345,7 @@ def _sitk_flirt_search_cost(
     for ix, rx in enumerate(rx_c):
         for iy, ry in enumerate(ry_c):
             for iz, rz in enumerate(rz_c):
-                seed = _sitk_flirt_cog_seed(
+                seed = _sitk_seed_transform(
                     fixed_8, moving_8, center, np.deg2rad(rx), np.deg2rad(ry), np.deg2rad(rz)
                 )
                 refined, _ = _sitk_refine_translation_only(

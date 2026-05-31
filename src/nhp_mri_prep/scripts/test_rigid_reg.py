@@ -35,7 +35,11 @@ _scripts_dir = Path(__file__).resolve().parent
 if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
-from sitk_flirt_search import SITK_PIPELINE_REV, sitk_flirt_register
+from sitk_flirt_search import (
+    SITK_PIPELINE_REV,
+    _sitk_fixed_geometric_center,
+    sitk_flirt_register,
+)
 
 from nhp_mri_prep.operations.preprocessing import (
     DEFAULT_CONFORM_PADDING_PERCENTAGE,
@@ -122,10 +126,10 @@ _SITK_PROFILE_DEFAULT = SitkModalityProfile(
     search_metric="Correlation",
     histogram_bins=(32,),
     coarse_step_deg=40,
-    fine_step_deg_options=(15, 10),
-    cost_thresh_fraction_options=(0.1, 0.15, 0.2),
-    search_tx_iters_options=(30, 50),
-    schedule_iters_options=(30, 50),
+    fine_step_deg_options=(15,),
+    cost_thresh_fraction_options=(0.1,),
+    search_tx_iters_options=(30,),
+    schedule_iters_options=(50,),
 )
 _SITK_PROFILE_FUNC = SitkModalityProfile(
     pyramid_target_mm=(8.0, 4.0, 2.0),
@@ -384,8 +388,7 @@ def _variant_transform_paths(
     if method == "flirt":
         return (work_dir / "conform_scanner2native.mat",)
     if method == "sitk":
-        mat = work_dir / f"conform_scanner2native_sitk_{param_set}.mat"
-        return (mat, _sitk_center_sidecar_path(mat))
+        return (work_dir / f"conform_scanner2native_sitk_{param_set}.mat",)
     raise ValueError(f"Unknown method for transform paths: {method}")
 
 
@@ -568,10 +571,28 @@ def shared_preprocess(
     template_path = validate_input_file(template_file, logger)
     work_dir = ensure_working_directory(work_dir, logger)
 
-    logger.info("Preprocess: skullstripping %s", image_path.name)
+    # The skullstrip NN expects a 3D volume; collapse any 4D input to its temporal
+    # mean (tmean) first, mirroring the 4D-template handling below. Fixes 4D
+    # mp2rage inputs (e.g. 032188) that otherwise crash skullstripping → no output.
+    image_for_strip = image_path
+    input_img = nib.load(image_path)
+    if input_img.ndim == 4:
+        logger.warning("4D input image detected; averaging time dimension (tmean) before skullstrip.")
+        mean_input = np.mean(input_img.get_fdata(), axis=-1)
+        image_for_strip = work_dir / "_input_3d.nii.gz"
+        nib.save(
+            nib.Nifti1Image(
+                mean_input.astype(input_img.get_data_dtype()),
+                input_img.affine,
+                input_img.header,
+            ),
+            str(image_for_strip),
+        )
+
+    logger.info("Preprocess: skullstripping %s", Path(image_for_strip).name)
     brain_f = work_dir / "brain_for_conform.nii.gz"
     skull_result = apply_skullstripping(
-        imagef=str(image_path),
+        imagef=str(image_for_strip),
         modal=modality,
         working_dir=str(work_dir),
         output_name="brain_for_conform.nii.gz",
@@ -793,16 +814,11 @@ def _sitk_tx_to_matrix(tx: sitk.Euler3DTransform) -> np.ndarray:
     return matrix
 
 
-def _sitk_center_sidecar_path(mat_path: Path) -> Path:
-    return mat_path.with_suffix(mat_path.suffix + ".center.txt")
-
-
 def _sitk_save_transform_artifacts(
     tx: sitk.Euler3DTransform, mat_path: Path, *, param_set: str | None = None
 ) -> None:
-    """Save 4x4 affine and rotation-center sidecar for resume/QC."""
+    """Save FLIRT-compatible 4x4 world affine (.mat only)."""
     np.savetxt(mat_path, _sitk_tx_to_matrix(tx))
-    np.savetxt(_sitk_center_sidecar_path(mat_path), np.array(tx.GetCenter(), dtype=np.float64))
     if param_set is not None:
         _sitk_pipeline_rev_path(mat_path.parent).write_text(
             SITK_PIPELINE_REV + "\n", encoding="utf-8"
@@ -818,22 +834,22 @@ def _sitk_copy_euler(tx: sitk.Euler3DTransform) -> sitk.Euler3DTransform:
 
 
 
-def _sitk_transform_from_matrix(
-    mat: np.ndarray, center_path: Path | None = None
+def _sitk_transform_from_mat(
+    mat: np.ndarray, registration_fixedf: Path
 ) -> sitk.Euler3DTransform:
-    """Rebuild centered Euler3DTransform from saved affine + optional center sidecar."""
+    """Rebuild centered Euler3DTransform from saved 4x4 affine + registration fixed image."""
+    fixed = _sitk_ensure_3d(
+        sitk.ReadImage(str(validate_input_file(registration_fixedf, logger)), sitk.sitkFloat32)
+    )
+    center = _sitk_fixed_geometric_center(fixed)
     rotation = mat[:3, :3].astype(np.float64)
     t_full = mat[:3, 3].astype(np.float64)
+    c = np.array(center, dtype=np.float64)
+    t_param = t_full - c + rotation @ c
     tx = sitk.Euler3DTransform()
-    if center_path is not None and center_path.is_file():
-        center = np.loadtxt(center_path, dtype=np.float64).reshape(-1)
-        t_param = t_full - center + rotation @ center
-        tx.SetCenter(center.tolist())
-        tx.SetMatrix(rotation.reshape(-1).tolist())
-        tx.SetTranslation(t_param.tolist())
-    else:
-        tx.SetMatrix(rotation.reshape(-1).tolist())
-        tx.SetTranslation(t_full.tolist())
+    tx.SetCenter(center)
+    tx.SetMatrix(rotation.reshape(-1).tolist())
+    tx.SetTranslation(t_param.tolist())
     return tx
 
 
@@ -943,9 +959,8 @@ def run_sitk(
                 f"SimpleITK apply-only resume: transform missing under {work_dir}"
             )
         logger.info("SimpleITK (%s): apply-only resume (skip registration)", label)
-        transform_obj = _sitk_transform_from_matrix(
-            np.loadtxt(mat_path),
-            center_path=_sitk_center_sidecar_path(mat_path),
+        transform_obj = _sitk_transform_from_mat(
+            np.loadtxt(mat_path), preprocess.template_for_reg
         )
         reg_time_s = 0.0
     else:
@@ -1037,9 +1052,8 @@ def _ensure_conformed_brain(
         xfm = work_dir / f"{prefix}.mat"
         if not xfm.is_file():
             raise FileNotFoundError(f"SimpleITK transform not found for brain apply: {xfm}")
-        transform_obj = _sitk_transform_from_matrix(
-            np.loadtxt(xfm),
-            center_path=_sitk_center_sidecar_path(xfm),
+        transform_obj = _sitk_transform_from_mat(
+            np.loadtxt(xfm), preprocess.template_for_reg
         )
         _sitk_apply_transforms(
             movingf=preprocess.brain_f,
@@ -2035,7 +2049,7 @@ def run_modality_benchmark(
 # %%  --- PARAMS (edit here) ---
 
 OUTPUT_DIR = Path(
-    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/results_params_v5"
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/results_params_anat_v3"
 )
 INPUT_DIRS = {
     "anat": Path(
@@ -2048,7 +2062,7 @@ INPUT_DIRS = {
         "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/input_T2w"
     ),
 }
-MODALITIES = ("anat", "func", "t2w",)
+MODALITIES = ("anat",)  # ("anat", "func", "t2w",)
 TEMPLATE = None  # Path(...) to override per-image fixed; None = auto from input dir
 RESUME = True  # skip complete variants; apply-only if transform exists without conformed outputs
 VERBOSE = False
