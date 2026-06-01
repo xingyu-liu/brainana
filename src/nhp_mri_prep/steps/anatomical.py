@@ -22,6 +22,11 @@ from ..operations.registration import (
     ants_apply_transforms,
     flirt_apply_transforms,
 )
+from ..operations.sitk_rigid_registration import (
+    apply_sitk_affine,
+    conform_world_mat_path,
+)
+import SimpleITK as sitk
 from ..utils.templates import discover_atlases_in_space
 from ..utils.mri import get_image_shape, shape_to_ants_input_type
 from fastsurfer_surfrecon.config import AtlasConfig, ReconSurfConfig
@@ -178,6 +183,13 @@ def anat_conform(input: StepInput, template_file: Path) -> StepOutput:
         "anat.skullstripping_segmentation.enabled", True
     )
 
+    # Rigid backend: 'flirt' (FSL, default) or 'sitk' (FSL- and AFNI-free). The lite
+    # pipeline sets this to 'sitk'. Resolve from either a dotted Config or a plain nested
+    # dict (the lite notebook passes a plain dict, where dotted-string .get falls through).
+    rigid_method = input.config.get("anat.conform.rigid_method") or input.config.get(
+        "anat", {}
+    ).get("conform", {}).get("rigid_method", "flirt")
+
     # Call operation
     result = conform_to_template(
         imagef=str(input.input_file),
@@ -187,6 +199,7 @@ def anat_conform(input: StepInput, template_file: Path) -> StepOutput:
         logger=logger,
         modal="anat",
         skip_skullstripping=skip_skullstripping,
+        rigid_method=rigid_method,
     )
 
     output_file = (
@@ -211,6 +224,7 @@ def anat_conform(input: StepInput, template_file: Path) -> StepOutput:
             "step": "conform",
             "modality": "anat",
             "template_file": str(template_file),
+            "rigid_method": rigid_method,
         },
         additional_files=additional_files,
     )
@@ -490,6 +504,7 @@ def anat_reproject_atlases_to_scanner(
     conform_inverse_xfm: Path,
     scanner_reference: Path,
     working_dir: Path,
+    rigid_method: str = "flirt",
 ) -> StepOutput:
     """
     Reproject T1w-space atlases to scanner space using conform inverse transform.
@@ -499,12 +514,21 @@ def anat_reproject_atlases_to_scanner(
         conform_inverse_xfm: Inverse conform transform (T1w -> scanner)
         scanner_reference: Scanner-space reference image defining output grid
         working_dir: Working directory; atlas outputs go to working_dir/atlas/
+        rigid_method: Conform backend that produced the transform — 'flirt' (FSL, default)
+            applies via ``flirt -applyxfm``; 'sitk' applies the world-space affine via
+            SimpleITK (FSL-free), matching ``conform_to_template(rigid_method=...)``.
 
     Returns:
         StepOutput with output_file=atlas_dir, additional_files={atlas_name: path}
     """
     atlas_dir = working_dir / "atlas"
     atlas_dir.mkdir(parents=True, exist_ok=True)
+
+    # For the sitk backend, the conform inverse is applied by inverting the stored
+    # world-space affine (forward maps template->scanner, so scanner->template = inverse).
+    sitk_world_mat = (
+        conform_world_mat_path(conform_inverse_xfm) if rigid_method == "sitk" else None
+    )
 
     additional_files: Dict[str, Path] = {}
     for atlas_path in atlas_files:
@@ -515,16 +539,27 @@ def anat_reproject_atlases_to_scanner(
         else:
             stem = in_name.replace(".nii.gz", "")
             out_name = f"{stem}_space-scanner.nii.gz"
-        result = flirt_apply_transforms(
-            movingf=str(atlas_path),
-            outputf_name=out_name,
-            reff=str(scanner_reference),
-            working_dir=str(atlas_dir),
-            transformf=str(conform_inverse_xfm),
-            logger=logger,
-            interpolation="nearestneighbour",
-            generate_tmean=False,
-        )
+        if rigid_method == "sitk":
+            result = apply_sitk_affine(
+                movingf=str(atlas_path),
+                outputf_name=out_name,
+                reff=str(scanner_reference),
+                working_dir=str(atlas_dir),
+                world_mat=sitk_world_mat,
+                interpolation=sitk.sitkNearestNeighbor,
+                invert=True,
+            )
+        else:
+            result = flirt_apply_transforms(
+                movingf=str(atlas_path),
+                outputf_name=out_name,
+                reff=str(scanner_reference),
+                working_dir=str(atlas_dir),
+                transformf=str(conform_inverse_xfm),
+                logger=logger,
+                interpolation="nearestneighbour",
+                generate_tmean=False,
+            )
         out_path = Path(result["imagef_registered"])
         additional_files[out_name] = out_path
 

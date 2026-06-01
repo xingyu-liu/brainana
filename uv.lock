@@ -7,6 +7,9 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 
+[manifest]
+overrides = [{ name = "simpleitk", specifier = ">=2.3.0" }]
+
 [[package]]
 name = "absl-py"
 version = "2.3.1"
@@ -172,13 +175,15 @@ docs = [
     { name = "myst-parser" },
     { name = "sphinx", version = "9.0.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "sphinx", version = "9.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "sphinx-copybutton" },
     { name = "sphinx-rtd-theme" },
+    { name = "sphinxcontrib-mermaid" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0" },
-    { name = "fireants" },
+    { name = "fireants", specifier = "==1.5.0" },
     { name = "h5py", specifier = ">=3.8.0" },
     { name = "joblib", specifier = ">=1.5.1" },
     { name = "lapy", specifier = ">=1.0.0" },
@@ -206,9 +211,11 @@ requires-dist = [
     { name = "scikit-sparse", specifier = ">=0.4.0" },
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "seaborn", specifier = ">=0.13.0" },
-    { name = "simpleitk", specifier = "==2.2.1" },
+    { name = "simpleitk", specifier = ">=2.3.0" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7.0" },
+    { name = "sphinx-copybutton", marker = "extra == 'docs'", specifier = ">=0.5.0" },
     { name = "sphinx-rtd-theme", marker = "extra == 'docs'", specifier = ">=2.0" },
+    { name = "sphinxcontrib-mermaid", marker = "extra == 'docs'", specifier = ">=0.9" },
     { name = "surfplot", specifier = ">=0.2.0" },
     { name = "tensorboard", specifier = ">=2.15.0" },
     { name = "torch", specifier = ">=2.3.0" },
@@ -544,7 +551,7 @@ wheels = [
 
 [[package]]
 name = "fireants"
-version = "1.0.0"
+version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "hydra-core" },
@@ -552,6 +559,7 @@ dependencies = [
     { name = "nibabel" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "pytest" },
     { name = "scikit-image" },
     { name = "scipy" },
     { name = "simpleitk" },
@@ -559,9 +567,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/94/12/13d5d04cc82316f907e59ef5cdc58c019460959069cb9e78555b9dd76e76/fireants-1.0.0.tar.gz", hash = "sha256:815ddcf5e5809902ac73c3f3b3d7f4ef3fc5e62a4ee90006ccc26e351c45134b", size = 147838, upload_time = "2025-09-26T18:45:23.142Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c8/24/dd52ff7098993a0712cf9b6b9e178ec5bce98ee7f031a5ccf64d993ecb6f/fireants-1.5.0.tar.gz", hash = "sha256:4167f109066860b0456c554199b9039645f623faf517a713ca08e02df2fbf3e8", size = 92290928, upload_time = "2026-03-21T19:52:32.737Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/74/4e/0d5143400b17dfa56b4de10eff237677893c7dd81b8b340ac952996571a2/fireants-1.0.0-py3-none-any.whl", hash = "sha256:067d3134ea8faaeac03b173cc47866027228d11077fbee4616b463d0e0fe3e8d", size = 203505, upload_time = "2025-09-26T18:45:22.106Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/1c/3bbaf31893db79e40332bcebbc5759b660db73017828c9f4993021682184/fireants-1.5.0-py3-none-any.whl", hash = "sha256:0e5c72ea23490227e2c663fa0b8f6b610bf65947c399eb182d93369f6f5a7c7f", size = 217480, upload_time = "2026-03-21T19:52:30.593Z" },
 ]
 
 [[package]]
@@ -2315,14 +2323,20 @@ wheels = [
 
 [[package]]
 name = "simpleitk"
-version = "2.2.1"
+version = "2.5.5"
 source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/28/8f/c21ee6dc4dbede4fc385b5d70703d45f749db2738c7b0c175546f43c9f86/simpleitk-2.5.5.tar.gz", hash = "sha256:254f70febed55868801c89f310e650eb1b87148d82b1d4e3628d8f0181a7f529", size = 2112106, upload_time = "2026-05-13T20:28:15.503Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ed/7a/6a1fa72a14456a188414339734079cdff454ef2c5ab9ae84be61745500ef/SimpleITK-2.2.1-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:beb2081b912fae321be4c060ca2ff105edddf83bf6d5d3bd833f1801d23b773d", size = 45520303, upload_time = "2023-01-06T14:04:22.426Z" },
-    { url = "https://files.pythonhosted.org/packages/e3/2e/e2ce9cfeca3fcded96bb1691fd26a4ee187a6b5bb68491cce8b24898a84c/SimpleITK-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:498fedec0d12671933c4861b0674a2435df18a840abaef2e0810d08e3f9686cd", size = 30235410, upload_time = "2022-12-08T21:57:35.695Z" },
-    { url = "https://files.pythonhosted.org/packages/c2/df/b177254a75998ba15d22f53eecfcbb7e46c5cdcfdeb22c7ecff8478bbbfb/SimpleITK-2.2.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ea705139755f1ef234239caa72bec400b8babf3c5b83d2164d68afaa18b61a2b", size = 48052116, upload_time = "2022-12-08T21:57:41.323Z" },
-    { url = "https://files.pythonhosted.org/packages/36/84/955a50535c88d10ee40c5275695d775235e07f67d3c996b85c5ea1d8a722/SimpleITK-2.2.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9a19d1fadeb1c7ad6454e3a0b5dc375bcca8d2d84b25d9ca5bd9897cc26d7e22", size = 52728744, upload_time = "2023-01-03T21:05:42.742Z" },
-    { url = "https://files.pythonhosted.org/packages/6c/b7/d5fc65e808fc65e0a37e983c75507f814de07d2c9faada2100390eae5e29/SimpleITK-2.2.1-cp311-cp311-win_amd64.whl", hash = "sha256:5da94685c6c082e567ac699786065b8b834c7c1fc92fbd7b2822e9f8e251b066", size = 27035433, upload_time = "2023-01-03T21:05:47.542Z" },
+    { url = "https://files.pythonhosted.org/packages/79/39/b494f7c90a2739369ef04f7f09c67d29a8dd3150fff51b0c2f89111b7f81/simpleitk-2.5.5-cp311-abi3-macosx_10_9_x86_64.whl", hash = "sha256:e831d15f5ea5b0e02ed3a6ac5f2dd34ba0a0eeaa4ebacfb1d970999836b19ee0", size = 42679794, upload_time = "2026-05-13T20:24:49.959Z" },
+    { url = "https://files.pythonhosted.org/packages/6e/34/4b3208b35dea488263a5c9f4a464ef20316f663e9e90d5de61349c31b327/simpleitk-2.5.5-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:ee87416622cec6ed6b96747a0648c82c6e88f10b6553668ce90736f09ab5a994", size = 38646487, upload_time = "2026-05-13T20:25:09.636Z" },
+    { url = "https://files.pythonhosted.org/packages/14/e5/6a77865140278c86a392a85bd2317a1097bd891f54955ebe5db623e4b37c/simpleitk-2.5.5-cp311-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:847f42057d7bf01b5721b107dd3e00d4ee8d514f6f1ff85794ffedacaf4afc53", size = 48082097, upload_time = "2026-05-13T20:25:26.946Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/68/ed67a355a62848ee04bb4f01e89d3be871052c2c3ae6d5fc0fb2f6010979/simpleitk-2.5.5-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:8ace5e392be00d5bec28c87ef1d73016f8ebe671dafffe9e9d045f20b0968033", size = 52778654, upload_time = "2026-05-13T20:25:41.737Z" },
+    { url = "https://files.pythonhosted.org/packages/42/ab/3a03de43173749171340ad974636105cb02c780f76055551c874c3df7fff/simpleitk-2.5.5-cp311-abi3-win_amd64.whl", hash = "sha256:a5fcfcfe9242d3d509b254b3213ca0f5db2c15903f2fc375d9ac5d38e57d415d", size = 18920455, upload_time = "2026-05-13T20:25:48.765Z" },
+    { url = "https://files.pythonhosted.org/packages/58/e9/e2ea5fc95dbc66dbed925634ed308ea5246d1ec923dfdf74cc82e081acd4/simpleitk-2.5.5-cp314-cp314t-macosx_10_9_x86_64.whl", hash = "sha256:2e486cac9d0a147c70ebf983e7e5fb49da1d039f1a3393a9b04dcdfdc78899b4", size = 42709520, upload_time = "2026-05-13T20:26:09.907Z" },
+    { url = "https://files.pythonhosted.org/packages/82/ac/8208b28cf1b3a998ab4d730f8f80acfcffd2fc023a5f7e4090c4b4ff4c38/simpleitk-2.5.5-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:a45327a014c730c4bf903de288162a608857df7b9f91ace39e8600c6f8d00465", size = 38662876, upload_time = "2026-05-13T20:26:25.906Z" },
+    { url = "https://files.pythonhosted.org/packages/74/15/83d370f2b37ab224af0a9a5e83511f55046a1f1f51395c552916443cefe7/simpleitk-2.5.5-cp314-cp314t-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:bd0d4552648dfce62f7462116a131ed9240fe072fb9abaa1efa31464b637937c", size = 47935456, upload_time = "2026-05-13T20:26:57.97Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/bd/4f4998f4c5f581282d9cedd0e965e0e8b6fb0f1e3ca9113c9cffcbe22b72/simpleitk-2.5.5-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:29c4e26fe02c4c0d67bbdd89225ad655eed0b8d6346b875aa9b09018773009c2", size = 52629787, upload_time = "2026-05-13T20:27:14.4Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/eb/0df2167bf35f502c90576ef39db58e0728159429bbb0fdccf35acaae63b7/simpleitk-2.5.5-cp314-cp314t-win_amd64.whl", hash = "sha256:dd204e3490014cd475a654817ca9d593e69c9b5f637290478fd0020c0f84406b", size = 19514461, upload_time = "2026-05-13T20:27:21.388Z" },
 ]
 
 [[package]]
@@ -2407,6 +2421,19 @@ wheels = [
 ]
 
 [[package]]
+name = "sphinx-copybutton"
+version = "0.5.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sphinx", version = "9.0.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "sphinx", version = "9.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fc/2b/a964715e7f5295f77509e59309959f4125122d648f86b4fe7d70ca1d882c/sphinx-copybutton-0.5.2.tar.gz", hash = "sha256:4cf17c82fb9646d1bc9ca92ac280813a3b605d8c421225fd9913154103ee1fbd", size = 23039, upload_time = "2023-04-14T08:10:22.998Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9e/48/1ea60e74949eecb12cdd6ac43987f9fd331156388dcc2319b45e2ebb81bf/sphinx_copybutton-0.5.2-py3-none-any.whl", hash = "sha256:fb543fd386d917746c9a2c50360c7905b605726b9355cd26e9974857afeae06e", size = 13343, upload_time = "2023-04-14T08:10:20.844Z" },
+]
+
+[[package]]
 name = "sphinx-rtd-theme"
 version = "3.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2468,6 +2495,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b2/e8/9ed3830aeed71f17c026a07a5097edcf44b692850ef215b161b8ad875729/sphinxcontrib-jsmath-1.0.1.tar.gz", hash = "sha256:a9925e4a4587247ed2191a22df5f6970656cb8ca2bd6284309578f2153e0c4b8", size = 5787, upload_time = "2019-01-21T16:10:16.347Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c2/42/4c8646762ee83602e3fb3fbe774c2fac12f317deb0b5dbeeedd2d3ba4b77/sphinxcontrib_jsmath-1.0.1-py2.py3-none-any.whl", hash = "sha256:2ec2eaebfb78f3f2078e73666b1415417a116cc848b72e5172e596c871103178", size = 5071, upload_time = "2019-01-21T16:10:14.333Z" },
+]
+
+[[package]]
+name = "sphinxcontrib-mermaid"
+version = "2.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jinja2" },
+    { name = "pyyaml" },
+    { name = "sphinx", version = "9.0.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "sphinx", version = "9.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/19/75/3a1cc926da8c563c58ddc124a7b3fe5ccadcae96c96e3a6f8ac3653a210a/sphinxcontrib_mermaid-2.0.2.tar.gz", hash = "sha256:f09576c78ca93fa0e3034fd9c45aaffa7c44ab449de9c43b8b8d262afe52bc66", size = 19265, upload_time = "2026-05-05T13:59:02.959Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/16/8d/93be7e0f7fa915a576859b3bfac7a7baa3303181c44d7db7eefbd3e8a69f/sphinxcontrib_mermaid-2.0.2-py3-none-any.whl", hash = "sha256:d862e514991279fb4816302c5cfe167d2557bf3ce7125ae0cb47dac80a0f46ce", size = 14094, upload_time = "2026-05-05T13:59:01.585Z" },
 ]
 
 [[package]]

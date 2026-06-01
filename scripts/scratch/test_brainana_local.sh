@@ -14,11 +14,11 @@ fi
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT=/home/star/github/brainana
 
 # Test parameters
-bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled_multianat
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_v9
+bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_v1.1.0
 config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
 
 working_dir=${output_dir}_wd

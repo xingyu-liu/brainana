@@ -53,8 +53,8 @@ dependencies = [
     "Pillow>=8.0.0",
     "scikit-image>=0.20.0",
     "SimpleITK>=2.3.0",
-    # FireANTs for GPU-accelerated registration
-    "fireants",
+    # FireANTs for GPU-accelerated registration (pinned; v1.5.0 provides the API brainana imports)
+    "fireants==1.5.0",
     # fastsurfer_nn dependencies
     "yacs>=0.1.8",
     "h5py>=3.8.0",
@@ -105,6 +105,12 @@ docs = [
 Homepage = "https://github.com/xingyu-liu/brainana"
 Documentation = "https://brainana.readthedocs.io"
 Repository = "https://github.com/xingyu-liu/brainana"
+
+[tool.uv]
+# fireants 1.5.0 hard-pins simpleitk==2.2.1, which isn't on PyPI for all platforms.
+# brainana standardizes on SimpleITK>=2.3.0 (verified working with fireants 1.5.0),
+# so override the transitive pin to let uv resolve. See the SimpleITK dependency note above.
+override-dependencies = ["simpleitk>=2.3.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

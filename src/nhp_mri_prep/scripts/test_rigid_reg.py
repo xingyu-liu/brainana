@@ -35,10 +35,23 @@ _scripts_dir = Path(__file__).resolve().parent
 if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
-from sitk_flirt_search import (
+from nhp_mri_prep.operations.sitk_rigid_registration import (
+    _SITK_FINE_STEP_DEG_DEFAULT,
+    _SITK_PROFILE_FUNC,
+    _SITK_PROFILE_T1W,
+    _SITK_SEARCH_RANGE_DEG,
     SITK_PIPELINE_REV,
+    SitkModalityProfile,
+    _build_sitk_param_grid,
     _sitk_fixed_geometric_center,
+    _sitk_load_world_for_resume,
+    _sitk_pipeline_rev_path,
+    _sitk_transform_from_mat,
+    sitk_apply_transforms as _sitk_apply_transforms,
+    sitk_config_for_modality,
     sitk_flirt_register,
+    sitk_profile_for_modality,
+    sitk_register as _sitk_register,
 )
 
 from nhp_mri_prep.operations.preprocessing import (
@@ -48,6 +61,7 @@ from nhp_mri_prep.operations.preprocessing import (
 )
 from nhp_mri_prep.operations.registration import (
     flirt_apply_transforms,
+    flirt_config_for_modality,
     flirt_register,
 )
 from nhp_mri_prep.operations.validation import (
@@ -63,191 +77,12 @@ MOVING_PREFIX = "moving_"
 FIXED_PREFIX = "fixed_"
 MOVING_GLOBS = ("moving_*.nii.gz", "moving_*.nii")
 
-# %% FLIRT settings mirrored from conform_to_template (preprocessing.py)
-FLIRT_CONFIG_ANAT = {
-    "registration": {
-        "flirt": {
-            "cost": "corratio",
-            "searchcost": "corratio",
-            "coarsesearch": 40,
-            "finesearch": 15,
-        }
-    }
-}
-
-FLIRT_CONFIG_FUNC = {
-    "registration": {
-        "flirt": {
-            "cost": "mutualinfo",
-            "searchcost": "mutualinfo",
-            "coarsesearch": 30,
-            "finesearch": 10,
-        }
-    }
-}
-
-
-def flirt_config_for_modality(modality: str) -> dict[str, Any]:
-    """Return FLIRT config matching conform_to_template for anat/func."""
-    if modality == "func":
-        return FLIRT_CONFIG_FUNC
-    # anat conform; t2w benchmark has no conform_to_template equivalent
-    return FLIRT_CONFIG_ANAT
-
 _METHOD_ORDER = {"flirt": 0, "sitk": 1}
 
 
 # %% SimpleITK: modality profiles + parameter grid
-@dataclass(frozen=True)
-class SitkModalityProfile:
-    """FLIRT-like search + schedule knobs and optional grid sweeps."""
-
-    pyramid_target_mm: tuple[float, ...]
-    metric: str
-    search_metric: str = "Correlation"
-    schedule_metric: str | None = None
-    histogram_bins: tuple[int, ...] = ()
-    learning_rates: tuple[float, ...] = (1.0,)
-    coarse_step_deg_options: tuple[int, ...] = (40,)
-    fine_step_deg_options: tuple[int, ...] = (15,)
-    cost_thresh_fraction_options: tuple[float, ...] = (0.2,)
-    search_tx_iters_options: tuple[int, ...] = (50,)
-    schedule_iters_options: tuple[int, ...] = (40,)
-    search_sampling_pct: float = 0.2
-    coarse_tx_iters: int | None = None
-    # "CorrelationRatio" selects the FLIRT-faithful corratio + Powell + find_cost_minima
-    # search/refine path (anat); None keeps the correlation/MattesMI gradient-descent path.
-    search_rank_metric: str | None = None
-
-
-_SITK_SEARCH_RANGE_DEG = (-180.0, 180.0)
-_SITK_FINE_STEP_DEG_DEFAULT = 15
-
-_SITK_PROFILE_DEFAULT = SitkModalityProfile(
-    pyramid_target_mm=(8.0, 4.0, 2.0),
-    metric="Correlation",
-    search_metric="Correlation",
-    search_rank_metric="CorrelationRatio",
-    histogram_bins=(32,),
-    coarse_step_deg_options=(40,),
-    fine_step_deg_options=(15,),
-    cost_thresh_fraction_options=(0.1,),
-    search_tx_iters_options=(30,),
-    schedule_iters_options=(50,),
-)
-_SITK_PROFILE_FUNC = SitkModalityProfile(
-    pyramid_target_mm=(8.0, 4.0, 2.0),
-    metric="MattesMI",
-    search_metric="MattesMI",
-    schedule_metric="MattesMI",
-    histogram_bins=(32,),
-    learning_rates=(1.0,),
-    coarse_step_deg_options=(30,),
-    fine_step_deg_options=(10,),
-    cost_thresh_fraction_options=(0.1,),
-    search_tx_iters_options=(30,),
-    schedule_iters_options=(50,),
-)
-
-
-def sitk_profile_for_modality(modality: str) -> SitkModalityProfile:
-    """Return SimpleITK grid profile; func uses FLIRT func conform search steps."""
-    return _SITK_PROFILE_FUNC if modality == "func" else _SITK_PROFILE_DEFAULT
-
-
-def _sitk_lr_tag(learning_rate: float) -> str:
-    return f"lr{learning_rate:.1f}".replace(".", "p")
-
-
-def _sitk_cost_thresh_tag(fraction: float) -> str:
-    return f"ct{int(round(fraction * 100))}"
-
-
-def _sitk_param_label(
-    *,
-    coarse_step_deg: int,
-    fine_step_deg: int,
-    cost_thresh_fraction: float,
-    search_tx_iters: int,
-    schedule_iters: int,
-    histogram_bins: int | None = None,
-    learning_rate: float = 1.0,
-    include_coarse: bool = False,
-    include_bins: bool = False,
-    include_learning_rate: bool = False,
-) -> str:
-    coarse_part = f"cs{coarse_step_deg:02d}_" if include_coarse else ""
-    bins_part = f"_b{histogram_bins}" if include_bins and histogram_bins is not None else ""
-    lr_part = f"_{_sitk_lr_tag(learning_rate)}" if include_learning_rate else ""
-    ct = _sitk_cost_thresh_tag(cost_thresh_fraction)
-    return (
-        f"sitk_flirt_{coarse_part}fs{fine_step_deg:02d}_{ct}_ti{search_tx_iters}_si{schedule_iters}"
-        f"{bins_part}{lr_part}"
-    )
-
-
-def _build_sitk_param_grid(profile: SitkModalityProfile) -> list[dict[str, Any]]:
-    """FLIRT-faithful search + schedule; sweep coarse/fine step, threshold, tx/schedule iters."""
-    include_lr = len(profile.learning_rates) > 1
-    include_bins = profile.metric == "MattesMI" and len(profile.histogram_bins) > 0
-    include_coarse = len(profile.coarse_step_deg_options) > 1
-    grid: list[dict[str, Any]] = []
-    bin_values: tuple[int | None, ...] = (
-        profile.histogram_bins if include_bins else (None,)
-    )
-    lr_values = profile.learning_rates if include_lr else (1.0,)
-    for histogram_bin in bin_values:
-        for learning_rate in lr_values:
-            for coarse_step_deg in profile.coarse_step_deg_options:
-                for fine_step_deg in profile.fine_step_deg_options:
-                    for cost_thresh in profile.cost_thresh_fraction_options:
-                        for search_tx_iters in profile.search_tx_iters_options:
-                            for schedule_iters in profile.schedule_iters_options:
-                                label = _sitk_param_label(
-                                    coarse_step_deg=coarse_step_deg,
-                                    fine_step_deg=fine_step_deg,
-                                    cost_thresh_fraction=cost_thresh,
-                                    search_tx_iters=search_tx_iters,
-                                    schedule_iters=schedule_iters,
-                                    histogram_bins=histogram_bin,
-                                    learning_rate=learning_rate,
-                                    include_coarse=include_coarse,
-                                    include_bins=include_bins,
-                                    include_learning_rate=include_lr,
-                                )
-                                schedule_metric = (
-                                    profile.schedule_metric
-                                    if profile.schedule_metric is not None
-                                    else profile.metric
-                                )
-                                entry: dict[str, Any] = {
-                                    "metric": profile.metric,
-                                    "search_metric": profile.search_metric,
-                                    "schedule_metric": schedule_metric,
-                                    "search_range_deg": _SITK_SEARCH_RANGE_DEG,
-                                    "coarse_step_deg": coarse_step_deg,
-                                    "fine_step_deg": fine_step_deg,
-                                    "cost_thresh_fraction": cost_thresh,
-                                    "search_tx_iters": search_tx_iters,
-                                    "schedule_iters": schedule_iters,
-                                    "search_sampling_pct": profile.search_sampling_pct,
-                                    "learning_rate": learning_rate,
-                                    "label": label,
-                                }
-                                if histogram_bin is not None:
-                                    entry["number_of_histogram_bins"] = histogram_bin
-                                if profile.coarse_tx_iters is not None:
-                                    entry["coarse_tx_iters"] = profile.coarse_tx_iters
-                                if profile.search_rank_metric is not None:
-                                    entry["search_rank_metric"] = profile.search_rank_metric
-                                grid.append(entry)
-    return grid
-
-
-
-
 _SITK_PARAM_GRIDS: dict[str, list[dict[str, Any]]] = {
-    "default": _build_sitk_param_grid(_SITK_PROFILE_DEFAULT),
+    "default": _build_sitk_param_grid(_SITK_PROFILE_T1W),
     "func": _build_sitk_param_grid(_SITK_PROFILE_FUNC),
 }
 
@@ -409,10 +244,6 @@ def _transform_artifacts_valid(
     method: str, work_dir: Path, param_set: str
 ) -> bool:
     return all(_is_valid_output(p) for p in _variant_transform_paths(method, work_dir, param_set))
-
-
-def _sitk_pipeline_rev_path(variant_dir: Path) -> Path:
-    return variant_dir / ".sitk_pipeline_rev"
 
 
 def _sitk_pipeline_rev_ok(variant_dir: Path) -> bool:
@@ -798,227 +629,6 @@ def run_flirt(
 
 
 
-def _sitk_ensure_3d(img: sitk.Image) -> sitk.Image:
-    """Return a 3-D version of img, computing the temporal mean if img is 4-D.
-
-    If the image is already 3-D it is returned unchanged.
-    """
-    if img.GetDimension() != 4:
-        return img
-    arr = sitk.GetArrayFromImage(img)  # shape (t, z, y, x) in SimpleITK array order
-    mean_arr = arr.mean(axis=0).astype(np.float32)
-    out = sitk.GetImageFromArray(mean_arr)
-    out.SetSpacing(img.GetSpacing()[:3])
-    out.SetOrigin(img.GetOrigin()[:3])
-    out.SetDirection(
-        [img.GetDirection()[i] for i in (0, 1, 2, 4, 5, 6, 8, 9, 10)]
-    )
-    return out
-
-
-def _sitk_tx_to_matrix(tx: sitk.Euler3DTransform) -> np.ndarray:
-    """Convert centered Euler3DTransform to 4x4 affine (world-space, SimpleITK LPS)."""
-    matrix = np.eye(4, dtype=np.float64)
-    rotation = np.array(tx.GetMatrix(), dtype=np.float64).reshape(3, 3)
-    center = np.array(tx.GetCenter(), dtype=np.float64)
-    translation = np.array(tx.GetTranslation(), dtype=np.float64)
-    matrix[:3, :3] = rotation
-    matrix[:3, 3] = translation + center - rotation @ center
-    return matrix
-
-
-def _sitk_affine_lps(img: sitk.Image) -> np.ndarray:
-    """Voxel-index -> physical (SimpleITK LPS world) 4x4 affine for an image."""
-    direction = np.array(img.GetDirection(), dtype=np.float64).reshape(3, 3)
-    spacing = np.array(img.GetSpacing(), dtype=np.float64)
-    origin = np.array(img.GetOrigin(), dtype=np.float64)
-    affine = np.eye(4, dtype=np.float64)
-    affine[:3, :3] = direction @ np.diag(spacing)
-    affine[:3, 3] = origin
-    return affine
-
-
-def _sitk_fsl_scale(img: sitk.Image) -> np.ndarray:
-    """Voxel-index -> FSL-mm scaling for an image (diag(pixdim), x-flipped if the
-    stored orientation is radiological, i.e. positive affine determinant — matching how
-    FSL/FLIRT build their internal mm coordinates)."""
-    spacing = np.array(img.GetSpacing(), dtype=np.float64)
-    size = img.GetSize()
-    scale = np.diag([spacing[0], spacing[1], spacing[2], 1.0])
-    if np.linalg.det(_sitk_affine_lps(img)[:3, :3]) > 0:
-        scale[0, 0] = -spacing[0]
-        scale[0, 3] = (size[0] - 1) * spacing[0]
-    return scale
-
-
-def _sitk_tx_to_fsl_matrix(
-    tx: sitk.Euler3DTransform, fixed: sitk.Image, moving: sitk.Image
-) -> np.ndarray:
-    """Convert the sitk world transform to an FSL FLIRT matrix.
-
-    Produces a drop-in for FLIRT's ``conform_scanner2native.mat`` — usable with
-    ``flirt -in <brain> -ref <template> -applyxfm -init``. The sitk transform maps
-    fixed(template)->moving(brain) in LPS world; FLIRT's matrix maps in->ref in FSL-mm,
-    so we go world -> voxel-to-voxel -> FSL-mm and invert the direction. Verified by
-    applying via FSL applyxfm: reproduces the registration (NCC matches FLIRT).
-    """
-    world = _sitk_tx_to_matrix(tx)  # template-world -> brain-world (LPS)
-    a_fixed = _sitk_affine_lps(fixed)
-    a_moving = _sitk_affine_lps(moving)
-    vox2vox = np.linalg.inv(a_moving) @ world @ a_fixed  # template-vox -> brain-vox
-    s_fixed = _sitk_fsl_scale(fixed)
-    s_moving = _sitk_fsl_scale(moving)
-    return np.linalg.inv(s_moving @ vox2vox @ np.linalg.inv(s_fixed))
-
-
-def _sitk_world_mat_path(mat_path: Path) -> Path:
-    """Sidecar path holding the world-space affine (for sitk resume reconstruction)."""
-    return mat_path.with_suffix(".world.mat")
-
-
-def _sitk_load_world_for_resume(mat_path: Path) -> np.ndarray:
-    """Load the world-space affine for resume: the `.world.mat` sidecar (new FSL-primary
-    layout) if present, else the primary `.mat` (legacy runs that stored world there)."""
-    world = _sitk_world_mat_path(mat_path)
-    return np.loadtxt(world if world.is_file() else mat_path)
-
-
-def _sitk_save_transform_artifacts(
-    tx: sitk.Euler3DTransform,
-    mat_path: Path,
-    fixed: sitk.Image,
-    moving: sitk.Image,
-    *,
-    param_set: str | None = None,
-) -> None:
-    """Save the transform as a FLIRT-compatible FSL matrix (primary .mat) plus its inverse
-    (`_inverse.mat`), mirroring FLIRT's conform_scanner2native[/_inverse].mat outputs, and
-    the world-space affine as a `.world.mat` sidecar used to rebuild the tx on resume.
-    """
-    forward_fsl = _sitk_tx_to_fsl_matrix(tx, fixed, moving)
-    np.savetxt(mat_path, forward_fsl)
-    inverse_path = mat_path.with_name(f"{mat_path.stem}_inverse{mat_path.suffix}")
-    np.savetxt(inverse_path, np.linalg.inv(forward_fsl))
-    np.savetxt(_sitk_world_mat_path(mat_path), _sitk_tx_to_matrix(tx))
-    if param_set is not None:
-        _sitk_pipeline_rev_path(mat_path.parent).write_text(
-            SITK_PIPELINE_REV + "\n", encoding="utf-8"
-        )
-
-
-def _sitk_copy_euler(tx: sitk.Euler3DTransform) -> sitk.Euler3DTransform:
-    """Deep-copy a centered Euler3DTransform."""
-    out = sitk.Euler3DTransform()
-    out.SetFixedParameters(tx.GetFixedParameters())
-    out.SetParameters(tx.GetParameters())
-    return out
-
-
-
-def _sitk_transform_from_mat(
-    mat: np.ndarray, registration_fixedf: Path
-) -> sitk.Euler3DTransform:
-    """Rebuild centered Euler3DTransform from saved 4x4 affine + registration fixed image."""
-    fixed = _sitk_ensure_3d(
-        sitk.ReadImage(str(validate_input_file(registration_fixedf, logger)), sitk.sitkFloat32)
-    )
-    center = _sitk_fixed_geometric_center(fixed)
-    rotation = mat[:3, :3].astype(np.float64)
-    t_full = mat[:3, 3].astype(np.float64)
-    c = np.array(center, dtype=np.float64)
-    t_param = t_full - c + rotation @ c
-    tx = sitk.Euler3DTransform()
-    tx.SetCenter(center)
-    tx.SetMatrix(rotation.reshape(-1).tolist())
-    tx.SetTranslation(t_param.tolist())
-    return tx
-
-
-def _sitk_register(
-    fixedf: Path,
-    movingf: Path,
-    work_dir: Path,
-    output_prefix: str,
-    sitk_config: dict[str, Any],
-    modality: str = "anat",
-) -> dict[str, Any]:
-    """Rigid registration: FLIRT search_cost + defaultschedule (sitk_flirt_search)."""
-    fixed_path = validate_input_file(fixedf, logger)
-    moving_path = validate_input_file(movingf, logger)
-    work_dir = ensure_working_directory(work_dir, logger)
-
-    fixed = _sitk_ensure_3d(sitk.ReadImage(str(fixed_path), sitk.sitkFloat32))
-    moving = _sitk_ensure_3d(sitk.ReadImage(str(moving_path), sitk.sitkFloat32))
-
-    label = sitk_config.get("label", "default")
-    prof = sitk_profile_for_modality(modality)
-    logger.info(
-        "SimpleITK FLIRT register (%s): coarse=%s° fine=%s° ct=%.2f "
-        "ti=%s si=%s search=%s schedule=%s (rev=%s)",
-        label,
-        sitk_config.get("coarse_step_deg", prof.coarse_step_deg_options[0]),
-        sitk_config.get("fine_step_deg", _SITK_FINE_STEP_DEG_DEFAULT),
-        sitk_config.get("cost_thresh_fraction", 0.2),
-        sitk_config.get("search_tx_iters", 50),
-        sitk_config.get("schedule_iters", 40),
-        sitk_config.get("search_metric", prof.search_metric),
-        sitk_config.get(
-            "schedule_metric",
-            prof.schedule_metric if prof.schedule_metric else prof.metric,
-        ),
-        SITK_PIPELINE_REV,
-    )
-    t0 = time.perf_counter()
-    final_tx = sitk_flirt_register(fixed, moving, sitk_config, modality)
-    logger.info(
-        "SimpleITK FLIRT pipeline finished in %.1f s (label=%s)",
-        time.perf_counter() - t0,
-        label,
-    )
-
-    forward_transform = work_dir / f"{output_prefix}.mat"
-    _sitk_save_transform_artifacts(
-        final_tx, forward_transform, fixed, moving, param_set=label
-    )
-    validate_output_file(forward_transform, logger)
-    logger.info("SimpleITK transform saved to %s", forward_transform)
-
-    return {
-        "forward_transform": str(forward_transform),
-        "transform_obj": final_tx,
-    }
-
-
-
-def _sitk_apply_transforms(
-    movingf: Path,
-    outputf_name: str,
-    reff: Path,
-    work_dir: Path,
-    transform_obj: sitk.Euler3DTransform,
-) -> dict[str, str]:
-    """Apply SimpleITK rigid transform to an image via trilinear resampling."""
-    moving_path = validate_input_file(movingf, logger)
-    ref_path = validate_input_file(reff, logger)
-    work_dir = ensure_working_directory(work_dir, logger)
-
-    fixed = _sitk_ensure_3d(sitk.ReadImage(str(ref_path), sitk.sitkFloat32))
-    moving = _sitk_ensure_3d(sitk.ReadImage(str(moving_path), sitk.sitkFloat32))
-    resampled = sitk.Resample(
-        moving,
-        fixed,
-        transform_obj,
-        sitk.sitkLinear,
-        0.0,
-        moving.GetPixelID(),
-    )
-
-    output_path = work_dir / outputf_name
-    sitk.WriteImage(resampled, str(output_path))
-    validate_output_file(output_path, logger)
-    return {"imagef_registered": str(output_path)}
-
-
 def run_sitk(
     preprocess: PreprocessResult,
     work_dir: Path,
@@ -1367,7 +977,6 @@ def _fmt_mean_std(mean: float, std: float, decimals: int = 4) -> str:
 def _html_metrics_row(
     row: BenchmarkRow,
     row_class: str,
-    anchor_prefix: str = "qc",
 ) -> str:
     qc_cell = "—"
     anchor = _qc_anchor_id(row)
@@ -1542,11 +1151,16 @@ def _html_param_naming_legend(modality: str) -> str:
         "<dd>Coarse rotation search step (degrees); e.g. <code>cs40</code> = 40° "
         "(omitted when only one coarse step is used).</dd>"
         f"<dt><code>fs##</code></dt>"
-        "<dd>Fine rotation search step (degrees); e.g. <code>fs15</code> = 15°.</dd>"
+        "<dd>Fine rotation-search step (degrees): local grid at this spacing within "
+        "±coarse_step/2 around each retained coarse minimum (FLIRT <code>finesearch</code>); "
+        "e.g. <code>fs15</code> = 15°.</dd>"
         "<dt><code>ct##</code></dt>"
-        "<dd>Cost threshold (% of best coarse cost, ×0.01); e.g. <code>ct15</code> = 0.15.</dd>"
+        "<dd>Cost threshold (×0.01): retain coarse minima with "
+        "cost ≤ min + (ct·0.01)·(max−min) of the coarse cost range; "
+        "e.g. <code>ct15</code> = 0.15.</dd>"
         "<dt><code>ti##</code></dt>"
-        "<dd>Fine-survivor translation-refinement iterations (coarse uses 20 iters by default).</dd>"
+        "<dd>Per-cell translation-refinement iterations (<code>search_tx_iters</code>), "
+        "used by both coarse and fine rotation cells.</dd>"
         "<dt><code>si##</code></dt>"
         "<dd>Gradient-descent schedule iterations at fine pyramid levels.</dd>"
     )
@@ -1587,7 +1201,6 @@ def refresh_combined_report(
     report_root: Path,
     modalities: tuple[str, ...] = ("anat", "func", "t2w"),
     auto_refresh_sec: int = 0,
-    active_methods: list[str] | None = None,
 ) -> Path:
     """Rewrite OUTPUT_DIR/report.html from per-modality metrics.csv files."""
     rows = load_all_modality_rows(report_root, modalities)
@@ -1596,7 +1209,6 @@ def refresh_combined_report(
         report_root,
         all_modalities=modalities,
         auto_refresh_sec=auto_refresh_sec,
-        active_methods=active_methods,
     )
 
 
@@ -1605,7 +1217,6 @@ def generate_html_report(
     output_dir: Path,
     all_modalities: tuple[str, ...] = ("anat", "func", "t2w"),
     auto_refresh_sec: int = 0,
-    active_methods: list[str] | None = None,
 ) -> Path:
     """Write HTML report with metrics table and linked QC images."""
     report_path = output_dir / "report.html"
@@ -1851,7 +1462,6 @@ def _run_and_record_variant(
     report_root: Path | None,
     report_modalities: tuple[str, ...],
     report_auto_refresh_sec: int,
-    active_methods: list[str] | None = None,
 ) -> BenchmarkRow:
     """Run or resume one registration variant, record metrics, refresh report."""
     logger.info("--- Method: %s (%s) ---", method, method_label)
@@ -1921,7 +1531,6 @@ def _run_and_record_variant(
             report_root,
             report_modalities,
             auto_refresh_sec=report_auto_refresh_sec,
-            active_methods=active_methods,
         )
     logger.info(
         "%s: NMI=%.4f NCC=%.4f reg_time=%.2fs total_time=%.2fs",
@@ -1977,7 +1586,6 @@ def run_benchmark_for_image(
         report_root=report_root,
         report_modalities=report_modalities,
         report_auto_refresh_sec=report_auto_refresh_sec,
-        active_methods=methods,
     )
 
     if "flirt" in methods_set:
@@ -2099,7 +1707,7 @@ def run_modality_benchmark(
 # %%  --- PARAMS (edit here) ---
 
 OUTPUT_DIR = Path(
-    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/results_params_anat_v4"
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/results_params_anat_v5"
 )
 INPUT_DIRS = {
     "anat": Path(
@@ -2112,7 +1720,7 @@ INPUT_DIRS = {
         "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/input_T2w"
     ),
 }
-MODALITIES = ("anat", "func")  # ("anat", "func", "t2w",)
+MODALITIES = ("anat",)  # ("anat", "func", "t2w",)
 TEMPLATE = None  # Path(...) to override per-image fixed; None = auto from input dir
 RESUME = True  # skip complete variants; apply-only if transform exists without conformed outputs
 VERBOSE = False
@@ -2151,11 +1759,11 @@ if __name__ == "__main__":
             "SimpleITK FLIRT grid: %d anat/t2w sets (cs %s°, fs %s, ct %s, ti %s, si %s), "
             "%d func sets (cs %s°, fs %s, bins %s, lr %s)",
             len(_SITK_PARAM_GRIDS["default"]),
-            _SITK_PROFILE_DEFAULT.coarse_step_deg_options,
-            _SITK_PROFILE_DEFAULT.fine_step_deg_options,
-            _SITK_PROFILE_DEFAULT.cost_thresh_fraction_options,
-            _SITK_PROFILE_DEFAULT.search_tx_iters_options,
-            _SITK_PROFILE_DEFAULT.schedule_iters_options,
+            _SITK_PROFILE_T1W.coarse_step_deg_options,
+            _SITK_PROFILE_T1W.fine_step_deg_options,
+            _SITK_PROFILE_T1W.cost_thresh_fraction_options,
+            _SITK_PROFILE_T1W.search_tx_iters_options,
+            _SITK_PROFILE_T1W.schedule_iters_options,
             len(_SITK_PARAM_GRIDS["func"]),
             _SITK_PROFILE_FUNC.coarse_step_deg_options,
             _SITK_PROFILE_FUNC.fine_step_deg_options,
@@ -2179,7 +1787,6 @@ if __name__ == "__main__":
         OUTPUT_DIR,
         MODALITIES,
         auto_refresh_sec=REPORT_AUTO_REFRESH_SEC,
-        active_methods=METHODS,
     )
     logger.info("Live report: %s", report_path)
 
@@ -2204,7 +1811,6 @@ if __name__ == "__main__":
         OUTPUT_DIR,
         MODALITIES,
         auto_refresh_sec=0,
-        active_methods=METHODS,
     )
     print()
     print(f"\nHTML report: {report_path}")

@@ -359,6 +359,43 @@ def _use_fireants(logger: logging.Logger) -> bool:
     return True
 
 
+# Conform scanner→template FLIRT defaults (used by conform_to_template).
+FLIRT_CONFORM_CONFIG_ANAT: Dict[str, Any] = {
+    "registration": {
+        "flirt": {
+            "cost": "corratio",
+            "searchcost": "corratio",
+            "searchrx": (-180, 180),
+            "searchry": (-180, 180),
+            "searchrz": (-180, 180),
+            "coarsesearch": 40,
+            "finesearch": 15,
+        }
+    }
+}
+
+FLIRT_CONFORM_CONFIG_FUNC: Dict[str, Any] = {
+    "registration": {
+        "flirt": {
+            "cost": "mutualinfo",
+            "searchcost": "mutualinfo",
+            "searchrx": (-180, 180),
+            "searchry": (-180, 180),
+            "searchrz": (-180, 180),
+            "coarsesearch": 30,
+            "finesearch": 10,
+        }
+    }
+}
+
+
+def flirt_config_for_modality(modality: str) -> Dict[str, Any]:
+    """Return FLIRT config for conform_to_template (anat vs func)."""
+    if modality == "func":
+        return FLIRT_CONFORM_CONFIG_FUNC
+    return FLIRT_CONFORM_CONFIG_ANAT
+
+
 def flirt_register(
     fixedf: Union[str, Path],
     movingf: Union[str, Path],

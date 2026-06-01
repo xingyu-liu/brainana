@@ -20,7 +20,17 @@ from .validation import (
     ensure_working_directory,
     validate_output_file,
 )
-from .registration import flirt_register, flirt_apply_transforms
+from .registration import (
+    flirt_register,
+    flirt_apply_transforms,
+    flirt_config_for_modality,
+)
+from .sitk_rigid_registration import (
+    sitk_register,
+    sitk_apply_transforms,
+    sitk_config_for_modality,
+    sitk_resample_to_spacing,
+)
 from ..utils import (
     run_command,
     calculate_func_tmean,
@@ -30,6 +40,7 @@ from ..utils import (
 )
 from ..config import validate_slice_timing_config
 from ..utils.mri import (
+    apply_brain_mask,
     correct_affine_for_mismatch_orientation,
     get_opposite_orientation,
     pad_image,
@@ -318,13 +329,14 @@ def conform_to_template(
     logger: Optional[logging.Logger] = None,
     modal: str = "anat",
     skip_skullstripping: bool = False,
+    rigid_method: str = "flirt",
 ) -> Dict[str, str]:
-    """Conform input image to template space using FLIRT rigid registration.
+    """Conform input image to template space using rigid registration.
 
     This function performs the following steps:
     1. Skullstrips the input image using nhp_skullstrip_nn (unless skip_skullstripping=True)
     2. prepare template for registration
-    3. Performs FLIRT rigid registration
+    3. Performs rigid registration (FSL FLIRT or SimpleITK, see ``rigid_method``)
     4. prepare template for xfm application
     5. Applies transformation
 
@@ -336,6 +348,9 @@ def conform_to_template(
         logger: Logger instance (optional, will create one if not provided)
         modal: Modality type ('anat' or 'func'), default is 'anat'
         skip_skullstripping: If True, skip skullstripping and assume input is already skullstripped (default: False)
+        rigid_method: Rigid registration backend, 'flirt' (FSL, default) or 'sitk'
+            (SimpleITK, FSL-free). The 'sitk' path is a drop-in replacement that needs no
+            FSL binary and writes the same .mat / _inverse.mat / .world.mat artifacts.
 
     Returns:
         Dictionary with output file paths:
@@ -351,6 +366,11 @@ def conform_to_template(
     """
     if logger is None:
         logger = logging.getLogger(__name__)
+
+    if rigid_method not in ("flirt", "sitk"):
+        raise ValueError(
+            f"Invalid rigid_method '{rigid_method}'; expected 'flirt' or 'sitk'."
+        )
 
     # Validate inputs
     image_path = validate_input_file(imagef, logger)
@@ -510,26 +530,35 @@ def conform_to_template(
             logger.info(
                 f"Downsampling template to: {np.array2string(downsample_voxel_sizes, precision=4, suppress_small=True)} mm"
             )
-            cmd = [
-                "3dresample",
-                "-dxyz",
-                str(downsample_voxel_sizes[0]),
-                str(downsample_voxel_sizes[1]),
-                str(downsample_voxel_sizes[2]),
-                "-input",
-                template_f_for_reg,
-                "-prefix",
-                str(template_f_downsampled),
-                "-rmode",
-                "Cu",
-            ]
-            logger.debug(f"Command: {' '.join(cmd)}")
             try:
-                returncode, stdout, stderr = run_command(cmd, step_logger=logger)
-                if returncode != 0:
-                    raise RuntimeError(
-                        f"3dresample failed (exit code {returncode}): {stderr}"
+                if rigid_method == "sitk":
+                    # FSL/AFNI-free resample (SimpleITK), matching 3dresample -rmode Cu.
+                    sitk_resample_to_spacing(
+                        template_f_for_reg,
+                        template_f_downsampled,
+                        tuple(float(v) for v in downsample_voxel_sizes),
+                        logger=logger,
                     )
+                else:
+                    cmd = [
+                        "3dresample",
+                        "-dxyz",
+                        str(downsample_voxel_sizes[0]),
+                        str(downsample_voxel_sizes[1]),
+                        str(downsample_voxel_sizes[2]),
+                        "-input",
+                        template_f_for_reg,
+                        "-prefix",
+                        str(template_f_downsampled),
+                        "-rmode",
+                        "Cu",
+                    ]
+                    logger.debug(f"Command: {' '.join(cmd)}")
+                    returncode, stdout, stderr = run_command(cmd, step_logger=logger)
+                    if returncode != 0:
+                        raise RuntimeError(
+                            f"3dresample failed (exit code {returncode}): {stderr}"
+                        )
             except Exception as e:
                 logger.error(f"Error during template downsampling: {e}")
                 raise RuntimeError(
@@ -543,50 +572,50 @@ def conform_to_template(
             template_f_for_reg = str(template_f_downsampled)
 
         # ------------------------------------------------------------
-        # Step 3: FLIRT rigid registration
+        # Step 3: rigid registration (FSL FLIRT or SimpleITK)
+        sitk_transform_obj = None
         try:
-            # Set modality-specific FLIRT parameters
-            if modal == "anat":
-                flirt_config = {
-                    "registration": {
-                        "flirt": {
-                            "cost": "corratio",
-                            "searchcost": "corratio",
-                            "coarsesearch": 40,
-                            "finesearch": 15,
-                        }
-                    }
-                }
-            else:  # modal == 'func'
-                flirt_config = {
-                    "registration": {
-                        "flirt": {
-                            "cost": "mutualinfo",
-                            "searchcost": "mutualinfo",
-                            "coarsesearch": 30,
-                            "finesearch": 10,
-                        }
-                    }
-                }
-
-            registration_result = flirt_register(
-                fixedf=template_f_for_reg,
-                movingf=str(brain_f),
-                working_dir=str(work_dir),
-                output_prefix="conform_scanner2native",
-                config=flirt_config,
-                logger=logger,
-                dof=6,
-            )
-            xfm_forward_f = Path(registration_result["forward_transform"])
-            xfm_inverse_f = (
-                Path(registration_result.get("inverse_transform"))
-                if "inverse_transform" in registration_result
-                else None
-            )
+            if rigid_method == "sitk":
+                logger.info("Step: SimpleITK rigid registration (FSL-free)")
+                registration_result = sitk_register(
+                    fixedf=template_f_for_reg,
+                    movingf=str(brain_f),
+                    work_dir=work_dir,
+                    output_prefix="conform_scanner2native",
+                    sitk_config=sitk_config_for_modality(modal),
+                    modality=modal,
+                )
+                # Keep the in-memory transform for an exact forward apply (Step 5).
+                sitk_transform_obj = registration_result["transform_obj"]
+                xfm_forward_f = Path(registration_result["forward_transform"])
+                # sitk_register writes a sibling FSL inverse (..._inverse.mat).
+                xfm_inverse_candidate = xfm_forward_f.with_name(
+                    f"{xfm_forward_f.stem}_inverse{xfm_forward_f.suffix}"
+                )
+                xfm_inverse_f = (
+                    xfm_inverse_candidate if xfm_inverse_candidate.exists() else None
+                )
+            else:
+                registration_result = flirt_register(
+                    fixedf=template_f_for_reg,
+                    movingf=str(brain_f),
+                    working_dir=str(work_dir),
+                    output_prefix="conform_scanner2native",
+                    config=flirt_config_for_modality(modal),
+                    logger=logger,
+                    dof=6,
+                )
+                xfm_forward_f = Path(registration_result["forward_transform"])
+                xfm_inverse_f = (
+                    Path(registration_result.get("inverse_transform"))
+                    if "inverse_transform" in registration_result
+                    else None
+                )
         except Exception as e:
-            logger.error(f"Error during FLIRT registration: {e}")
-            raise RuntimeError(f"Conform step failed during FLIRT registration: {e}. ")
+            logger.error(f"Error during {rigid_method} registration: {e}")
+            raise RuntimeError(
+                f"Conform step failed during {rigid_method} registration: {e}. "
+            )
 
         # ------------------------------------------------------------
         # Step 4: prepare template for xfm application
@@ -600,26 +629,35 @@ def conform_to_template(
             )
 
         # Resample to isotropic using minimum brain_voxel_sizes (target voxel size)
-        cmd = [
-            "3dresample",
-            "-dxyz",
-            str(target_voxel_sizes[0]),
-            str(target_voxel_sizes[1]),
-            str(target_voxel_sizes[2]),
-            "-input",
-            str(template_f_for_reg),
-            "-prefix",
-            str(template_f_for_xfm),
-            "-rmode",
-            "Cu",
-        ]
-        logger.debug(f"Command: {' '.join(cmd)}")
         try:
-            returncode, stdout, stderr = run_command(cmd, step_logger=logger)
-            if returncode != 0:
-                raise RuntimeError(
-                    f"3dresample failed (exit code {returncode}): {stderr}"
+            if rigid_method == "sitk":
+                # FSL/AFNI-free resample (SimpleITK), matching 3dresample -rmode Cu.
+                sitk_resample_to_spacing(
+                    str(template_f_for_reg),
+                    template_f_for_xfm,
+                    tuple(float(v) for v in target_voxel_sizes),
+                    logger=logger,
                 )
+            else:
+                cmd = [
+                    "3dresample",
+                    "-dxyz",
+                    str(target_voxel_sizes[0]),
+                    str(target_voxel_sizes[1]),
+                    str(target_voxel_sizes[2]),
+                    "-input",
+                    str(template_f_for_reg),
+                    "-prefix",
+                    str(template_f_for_xfm),
+                    "-rmode",
+                    "Cu",
+                ]
+                logger.debug(f"Command: {' '.join(cmd)}")
+                returncode, stdout, stderr = run_command(cmd, step_logger=logger)
+                if returncode != 0:
+                    raise RuntimeError(
+                        f"3dresample failed (exit code {returncode}): {stderr}"
+                    )
 
             # Validate resampled template exists
             validate_output_file(template_f_for_xfm, logger)
@@ -636,16 +674,25 @@ def conform_to_template(
         # ------------------------------------------------------------
         # Step 5: Apply the affine transformation to the input image
         try:
-            apply_result = flirt_apply_transforms(
-                movingf=str(image_path),
-                outputf_name=output_name,
-                reff=str(template_f_for_xfm),
-                working_dir=str(work_dir),
-                transformf=str(xfm_forward_f),
-                logger=logger,
-                interpolation="trilinear",
-                generate_tmean=False,  # Not needed for anatomical conform
-            )
+            if rigid_method == "sitk":
+                apply_result = sitk_apply_transforms(
+                    movingf=str(image_path),
+                    outputf_name=output_name,
+                    reff=str(template_f_for_xfm),
+                    work_dir=work_dir,
+                    transform_obj=sitk_transform_obj,
+                )
+            else:
+                apply_result = flirt_apply_transforms(
+                    movingf=str(image_path),
+                    outputf_name=output_name,
+                    reff=str(template_f_for_xfm),
+                    working_dir=str(work_dir),
+                    transformf=str(xfm_forward_f),
+                    logger=logger,
+                    interpolation="trilinear",
+                    generate_tmean=False,  # Not needed for anatomical conform
+                )
             conformed_f = Path(apply_result["imagef_registered"])
         except Exception as e:
             logger.error(f"Error during affine transformation application: {e}")
@@ -1435,16 +1482,7 @@ def apply_segmentation(
         )
 
     output_path = work_dir / output_name
-    command_apply = [
-        "fslmaths",
-        str(image_to_mask),
-        "-mul",
-        str(brain_mask_path),
-        str(output_path),
-    ]
-    returncode, stdout, stderr = run_command(command_apply, step_logger=logger)
-    if returncode != 0:
-        raise RuntimeError(f"fslmaths failed (exit code {returncode}): {stderr}")
+    apply_brain_mask(image_to_mask, brain_mask_path, output_path, logger=logger)
 
     # Validate final output
     validate_output_file(output_path, logger)
@@ -1577,16 +1615,7 @@ def apply_skullstripping(
 
     # Apply brain mask to input image
     output_path = work_dir / output_name
-    command_apply = [
-        "fslmaths",
-        str(image_path),
-        "-mas",
-        str(brain_mask_path),
-        str(output_path),
-    ]
-    returncode, stdout, stderr = run_command(command_apply, step_logger=logger)
-    if returncode != 0:
-        raise RuntimeError(f"fslmaths failed (exit code {returncode}): {stderr}")
+    apply_brain_mask(image_path, brain_mask_path, output_path, logger=logger)
 
     # Validate final output
     validate_output_file(output_path, logger)
@@ -1605,10 +1634,11 @@ def apply_mask(
     logger: Optional[logging.Logger] = None,
     generate_tmean: bool = False,
 ) -> Dict[str, Optional[str]]:
-    """Apply a mask to an image (3D or 4D) using FSL.
+    """Apply a mask to an image (3D or 4D), FSL-free.
 
     Shared helper for both the Python step wrappers and Nextflow inline scripts.
-    Uses ``fslmaths -mas`` and can optionally compute a temporal mean (tmean) for 4D data.
+    Binarizes the mask (|mask| > 0) and applies it via nibabel (equivalent to
+    ``fslmaths -mas``); can optionally compute a temporal mean (tmean) for 4D data.
     """
     if logger is None:
         logger = logging.getLogger(__name__)
@@ -1629,39 +1659,14 @@ def apply_mask(
     logger.info(f"Data: input mask - {os.path.basename(mask_path)}")
     logger.info(f"System: output path - {output_path}")
 
-    # Binarize mask
-    mask_to_use = Path(mask_path)
-    mask_binarized = work_dir / "mask_binarized.nii.gz"
-    cmd_mask_bin = [
-        "fslmaths",
-        str(mask_to_use),
-        "-abs",
-        "-bin",
-        str(mask_binarized),
-    ]
-    returncode, stdout, stderr = run_command(cmd_mask_bin, step_logger=logger)
-    if returncode != 0:
-        raise RuntimeError(
-            f"Mask binarization failed (exit code {returncode}): {stderr}"
-        )
-    validate_output_file(mask_binarized, logger)
-    mask_to_use = mask_binarized
-
-    # Apply mask
-    cmd_apply = [
-        "fslmaths",
-        str(Path(image_path)),
-        "-mas",
-        str(mask_to_use),
-        str(output_path),
-    ]
-    returncode, stdout, stderr = run_command(cmd_apply, step_logger=logger)
-    if returncode != 0:
-        raise RuntimeError(f"fslmaths failed (exit code {returncode}): {stderr}")
+    # Binarize the mask (|mask| > 0) and apply it (nibabel, FSL-free).
+    apply_brain_mask(
+        Path(image_path), Path(mask_path), output_path, logger=logger, binarize=True
+    )
 
     validate_output_file(output_path, logger)
     outputs["imagef_masked"] = str(output_path)
-    outputs["mask_used"] = str(mask_to_use)
+    outputs["mask_used"] = str(mask_path)
 
     if generate_tmean:
         tmean_path = work_dir / (output_name.split(".nii")[0] + "_tmean.nii.gz")
@@ -1843,21 +1848,10 @@ def bias_correction(
             )
             logger.info(f"System: brain output path - {brain_output_path}")
 
-            # Apply mask using fslmaths
-            command_apply_mask = [
-                "fslmaths",
-                str(output_path),
-                "-mas",
-                str(mask_path),
-                str(brain_output_path),
-            ]
-            returncode, stdout, stderr = run_command(
-                command_apply_mask, step_logger=logger
+            # Apply mask (nibabel, FSL-free)
+            apply_brain_mask(
+                output_path, mask_path, brain_output_path, logger=logger
             )
-            if returncode != 0:
-                raise RuntimeError(
-                    f"fslmaths failed when applying mask (exit code {returncode}): {stderr}"
-                )
 
             validate_output_file(brain_output_path, logger)
             outputs["imagef_brain"] = brain_output_path
