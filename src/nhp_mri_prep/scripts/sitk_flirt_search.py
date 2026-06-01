@@ -12,7 +12,7 @@ import SimpleITK as sitk
 logger = logging.getLogger("test_anat_conformation")
 
 # Bump when search/schedule semantics change (benchmark resume invalidation).
-SITK_PIPELINE_REV = "centered_grid_corratio_v6"
+SITK_PIPELINE_REV = "corratio_powell_minima_v7"
 
 # GEOMETRY seed is preferred only when its fixed/moving overlap beats the COG seed
 # by this relative margin, so near-ties keep the FLIRT-faithful COG seed (no
@@ -25,6 +25,11 @@ _SITK_STAGE4_TARGET_MM = 4.0
 _SITK_SCHEDULE_SCALES_MM = (4.0, 2.0, 1.0)
 _SITK_FLIRT_TOP_K = 10
 _SITK_TRANSLATION_REFINE_CONVERGENCE = 1e-4
+# Corratio + Powell refinement (FLIRT-faithful path): multi-scale pyramid, max Powell
+# iterations per scale, and the cap on how many coarse local minima we refine.
+_SITK_POWELL_SCALES_MM = (8.0, 4.0, 2.0, 1.0)
+_SITK_POWELL_MAXITER = 120
+_SITK_CORRATIO_MAX_MINIMA = 8
 
 
 def _unwrap_euler3d(tx: sitk.Transform) -> sitk.Euler3DTransform:
@@ -516,6 +521,139 @@ def _sitk_flirt_schedule(
     return best_tx
 
 
+def _sitk_euler_params(
+    center: tuple[float, float, float], params: np.ndarray
+) -> sitk.Euler3DTransform:
+    tx = sitk.Euler3DTransform()
+    tx.SetCenter(center)
+    tx.SetParameters([float(v) for v in params])
+    return tx
+
+
+def _sitk_find_cost_minima(grid: np.ndarray, thresh: float) -> list[tuple[int, int, int]]:
+    """Local minima (26-neighbour) of the cost-vs-rotation grid, below `thresh`.
+
+    Port of FLIRT find_cost_minima: refining every basin (not just the global best)
+    keeps a correctly-oriented but globally-suboptimal pose in contention.
+    """
+    nx, ny, nz = grid.shape
+    minima: list[tuple[int, int, int]] = []
+    for i in range(nx):
+        for j in range(ny):
+            for k in range(nz):
+                if grid[i, j, k] > thresh:
+                    continue
+                sub = grid[max(0, i - 1) : i + 2, max(0, j - 1) : j + 2, max(0, k - 1) : k + 2]
+                if grid[i, j, k] <= float(sub.min()) + 1e-9:
+                    minima.append((i, j, k))
+    return minima
+
+
+def _sitk_corratio_powell_refine(
+    fixed: sitk.Image,
+    moving: sitk.Image,
+    center: tuple[float, float, float],
+    params0: np.ndarray,
+    scales_mm: tuple[float, ...],
+    nbins: int,
+    maxiter: int,
+) -> np.ndarray:
+    """Multi-scale Powell refinement of the 6 rigid params, minimising corratio.
+
+    FLIRT optimises corratio with Powell (derivative-free). Gradient descent on
+    correlation drifts into the higher-correlation 180 deg flip at coarse scale; Powell
+    on corratio holds the true basin (verified: converges to FLIRT's exact rotation).
+    """
+    from scipy.optimize import minimize  # lazy: only the corratio path needs scipy
+
+    p = np.array(params0, dtype=np.float64)
+    for mm in scales_mm:
+        shrink = _sitk_shrink_for_target_mm(fixed, mm)
+        fs = sitk.Shrink(fixed, [shrink] * 3) if shrink > 1 else fixed
+        ms = sitk.Shrink(moving, [shrink] * 3) if shrink > 1 else moving
+
+        def _cost(q: np.ndarray) -> float:
+            return _sitk_corratio_cost(fs, ms, _sitk_euler_params(center, q), nbins)
+
+        p = minimize(
+            _cost, p, method="Powell", options={"maxiter": maxiter, "xtol": 1e-3, "ftol": 1e-4}
+        ).x
+    return p
+
+
+def _sitk_corratio_register(
+    fixed: sitk.Image,
+    moving: sitk.Image,
+    fixed_8: sitk.Image,
+    moving_8: sitk.Image,
+    fixed_4: sitk.Image,
+    moving_4: sitk.Image,
+    sitk_config: dict[str, Any],
+    modality: str,
+) -> sitk.Euler3DTransform:
+    """FLIRT-faithful corratio path (search_rank_metric='CorrelationRatio').
+
+    Coarse corratio cost-vs-rotation grid (translation-only per cell) -> find_cost_minima
+    (local minima) PLUS the identity/COG seed -> refine each with corratio+Powell -> pick
+    the best by final corratio. The identity seed is FLIRT's own initial estimate; it
+    rescues co-oriented truths whose near-identity region is not itself a coarse local
+    minimum (e.g. 032123), which local-minima selection alone would miss.
+    """
+    t0 = time.perf_counter()
+    deg_min, deg_max = sitk_config.get("search_range_deg", _SITK_SEARCH_RANGE_DEG)
+    coarse_step = float(sitk_config["coarse_step_deg"])
+    tx_iters = int(sitk_config.get("search_tx_iters", 50))
+    lr_tx = _sitk_min_spacing(fixed_8) * 0.5
+    nbins = int(sitk_config.get("corratio_bins", 32))
+    center = _sitk_fixed_geometric_center(fixed_8)
+    rs = _sitk_rotation_samples_deg(deg_min, deg_max, coarse_step)
+    n = len(rs)
+
+    grid = np.full((n, n, n), np.inf, dtype=np.float64)
+    params_at: dict[tuple[int, int, int], np.ndarray] = {}
+    for i, rx in enumerate(rs):
+        for j, ry in enumerate(rs):
+            for k, rz in enumerate(rs):
+                seed = _sitk_seed_transform(
+                    fixed_8, moving_8, center, np.deg2rad(rx), np.deg2rad(ry), np.deg2rad(rz)
+                )
+                refined, _ = _sitk_refine_translation_only(
+                    fixed_8, moving_8, seed, sitk_config, modality,
+                    learning_rate_mm=lr_tx, iters=tx_iters, full_sampling=True,
+                )
+                grid[i, j, k] = _sitk_corratio_cost(fixed_4, moving_4, refined, nbins)
+                params_at[(i, j, k)] = np.array(refined.GetParameters(), dtype=np.float64)
+
+    thresh = float(np.percentile(grid, 20))
+    minima = _sitk_find_cost_minima(grid, thresh)
+    minima.sort(key=lambda c: grid[c])
+    minima = minima[:_SITK_CORRATIO_MAX_MINIMA]
+    seeds = [params_at[c] for c in minima]
+    # FLIRT's initial estimate: identity rotation at the COG/geometry seed.
+    id_seed = _sitk_seed_transform(fixed_8, moving_8, center, 0.0, 0.0, 0.0)
+    seeds.append(np.array(id_seed.GetParameters(), dtype=np.float64))
+    logger.info(
+        "FLIRT corratio search: %d coarse cells, %d minima + identity seed (%.1f s)",
+        grid.size, len(minima), time.perf_counter() - t0,
+    )
+
+    scales = sitk_config.get("powell_scales_mm", _SITK_POWELL_SCALES_MM)
+    maxiter = int(sitk_config.get("powell_maxiter", _SITK_POWELL_MAXITER))
+    best_cost = float("inf")
+    best_params = seeds[-1]
+    for p0 in seeds:
+        p = _sitk_corratio_powell_refine(fixed, moving, center, p0, scales, nbins, maxiter)
+        cost = _sitk_corratio_cost(fixed, moving, _sitk_euler_params(center, p), nbins)
+        if cost < best_cost:
+            best_cost = cost
+            best_params = p
+    logger.info(
+        "FLIRT corratio refine: %d seeds, best corratio cost=%.6f (total %.1f s)",
+        len(seeds), best_cost, time.perf_counter() - t0,
+    )
+    return _sitk_euler_params(center, best_params)
+
+
 def sitk_flirt_register(
     fixed: sitk.Image,
     moving: sitk.Image,
@@ -529,6 +667,13 @@ def sitk_flirt_register(
     moving_8 = sitk.Shrink(moving, [shrink_8] * 3)
     fixed_4 = sitk.Shrink(fixed, [shrink_4] * 3)
     moving_4 = sitk.Shrink(moving, [shrink_4] * 3)
+
+    # FLIRT-faithful corratio + Powell + find_cost_minima path (anat default); the
+    # correlation/MattesMI gradient-descent path is unchanged for func and other configs.
+    if sitk_config.get("search_rank_metric") == "CorrelationRatio":
+        return _sitk_corratio_register(
+            fixed, moving, fixed_8, moving_8, fixed_4, moving_4, sitk_config, modality
+        )
 
     candidates = _sitk_flirt_search_cost(
         fixed_8, moving_8, fixed_4, moving_4, sitk_config, modality

@@ -115,6 +115,9 @@ class SitkModalityProfile:
     schedule_iters_options: tuple[int, ...] = (40,)
     search_sampling_pct: float = 0.2
     coarse_tx_iters: int | None = None
+    # "CorrelationRatio" selects the FLIRT-faithful corratio + Powell + find_cost_minima
+    # search/refine path (anat); None keeps the correlation/MattesMI gradient-descent path.
+    search_rank_metric: str | None = None
 
 
 _SITK_SEARCH_RANGE_DEG = (-180.0, 180.0)
@@ -124,6 +127,7 @@ _SITK_PROFILE_DEFAULT = SitkModalityProfile(
     pyramid_target_mm=(8.0, 4.0, 2.0),
     metric="Correlation",
     search_metric="Correlation",
+    search_rank_metric="CorrelationRatio",
     histogram_bins=(32,),
     coarse_step_deg_options=(40, 30),
     fine_step_deg_options=(15,),
@@ -234,6 +238,8 @@ def _build_sitk_param_grid(profile: SitkModalityProfile) -> list[dict[str, Any]]
                                     entry["number_of_histogram_bins"] = histogram_bin
                                 if profile.coarse_tx_iters is not None:
                                     entry["coarse_tx_iters"] = profile.coarse_tx_iters
+                                if profile.search_rank_metric is not None:
+                                    entry["search_rank_metric"] = profile.search_rank_metric
                                 grid.append(entry)
     return grid
 
