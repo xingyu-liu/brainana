@@ -143,10 +143,10 @@ _SITK_PROFILE_FUNC = SitkModalityProfile(
     histogram_bins=(32,),
     learning_rates=(1.0,),
     coarse_step_deg_options=(30,),
-    fine_step_deg_options=(15, 10),
-    cost_thresh_fraction_options=(0.1, 0.15, 0.2),
-    search_tx_iters_options=(30, 50),
-    schedule_iters_options=(30, 40),
+    fine_step_deg_options=(10,),
+    cost_thresh_fraction_options=(0.1,),
+    search_tx_iters_options=(30,),
+    schedule_iters_options=(50,),
 )
 
 
@@ -2099,7 +2099,7 @@ def run_modality_benchmark(
 # %%  --- PARAMS (edit here) ---
 
 OUTPUT_DIR = Path(
-    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/results_params_anat_v3"
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/results_params_anat_v4"
 )
 INPUT_DIRS = {
     "anat": Path(
@@ -2112,7 +2112,7 @@ INPUT_DIRS = {
         "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/input_T2w"
     ),
 }
-MODALITIES = ("anat",)  # ("anat", "func", "t2w",)
+MODALITIES = ("anat", "func")  # ("anat", "func", "t2w",)
 TEMPLATE = None  # Path(...) to override per-image fixed; None = auto from input dir
 RESUME = True  # skip complete variants; apply-only if transform exists without conformed outputs
 VERBOSE = False

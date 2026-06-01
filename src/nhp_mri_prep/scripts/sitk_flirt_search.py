@@ -12,7 +12,7 @@ import SimpleITK as sitk
 logger = logging.getLogger("test_anat_conformation")
 
 # Bump when search/schedule semantics change (benchmark resume invalidation).
-SITK_PIPELINE_REV = "corratio_powell_minima_v7"
+SITK_PIPELINE_REV = "corratio_powell_minima_v8"
 
 # GEOMETRY seed is preferred only when its fixed/moving overlap beats the COG seed
 # by this relative margin, so near-ties keep the FLIRT-faithful COG seed (no
@@ -161,13 +161,24 @@ def _sitk_flirt_cog_seed(
     ry_rad: float,
     rz_rad: float,
 ) -> sitk.Euler3DTransform:
-    """FLIRT search_cost COG init: trans = ref_cog - R @ mov_cog (centered Euler)."""
+    """COG init for the fixed->moving resample transform: place the fixed COG onto the
+    moving COG, i.e. tx(ref_cog) = mov_cog, so trans = mov_cog - R @ (ref_cog - c) - c.
+
+    The transform is consumed by ``sitk.Resample(moving, fixed, tx)``, which maps points
+    from the FIXED domain into the MOVING domain (each fixed voxel samples moving at
+    ``tx(p)``). Overlap therefore requires the fixed COG to sample the moving COG. The
+    previous form (``ref_cog - R @ (mov_cog - c) - c``) instead enforced tx(mov_cog) =
+    ref_cog — the inverse direction — leaving tx(ref_cog) displaced by ~2x the COG offset
+    and, crucially, rotation-invariant (rotating pivots around the wrong correspondence).
+    That was harmless when ref_cog ~ mov_cog but produced zero overlap for off-centre FOVs
+    (e.g. sub-03), trapping the corratio search in a flat (no-overlap) cost region.
+    """
     ref_cog = _sitk_image_cog_mm(fixed)
     mov_cog = _sitk_image_cog_mm(moving)
     rot_tx = _sitk_euler_from_rot_trans(center, rx_rad, ry_rad, rz_rad, 0.0, 0.0, 0.0)
     rotation = np.array(rot_tx.GetMatrix(), dtype=np.float64).reshape(3, 3)
     c = np.array(center, dtype=np.float64)
-    t_param = ref_cog - rotation @ (mov_cog - c) - c
+    t_param = mov_cog - rotation @ (ref_cog - c) - c
     return _sitk_euler_from_rot_trans(
         center, rx_rad, ry_rad, rz_rad, float(t_param[0]), float(t_param[1]), float(t_param[2])
     )
