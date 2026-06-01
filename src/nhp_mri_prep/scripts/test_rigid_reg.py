@@ -432,7 +432,7 @@ def _variant_completion_state(
     has_conformed = _is_valid_nifti(conformed_f)
     has_brain = _is_valid_nifti(brain_f)
     if has_xfm and has_conformed and has_brain:
-        if method == "sitk" and not _sitk_pipeline_rev_ok(work_dir / param_set):
+        if method == "sitk" and not _sitk_pipeline_rev_ok(work_dir):
             return "run"
         return "done"
     if has_xfm and (not has_conformed or not has_brain):
