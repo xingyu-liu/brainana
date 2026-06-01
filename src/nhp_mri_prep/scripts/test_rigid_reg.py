@@ -129,7 +129,7 @@ _SITK_PROFILE_DEFAULT = SitkModalityProfile(
     search_metric="Correlation",
     search_rank_metric="CorrelationRatio",
     histogram_bins=(32,),
-    coarse_step_deg_options=(40, 30),
+    coarse_step_deg_options=(40,),
     fine_step_deg_options=(15,),
     cost_thresh_fraction_options=(0.1,),
     search_tx_iters_options=(30,),
@@ -817,7 +817,7 @@ def _sitk_ensure_3d(img: sitk.Image) -> sitk.Image:
 
 
 def _sitk_tx_to_matrix(tx: sitk.Euler3DTransform) -> np.ndarray:
-    """Convert centered Euler3DTransform to 4x4 affine (world-space)."""
+    """Convert centered Euler3DTransform to 4x4 affine (world-space, SimpleITK LPS)."""
     matrix = np.eye(4, dtype=np.float64)
     rotation = np.array(tx.GetMatrix(), dtype=np.float64).reshape(3, 3)
     center = np.array(tx.GetCenter(), dtype=np.float64)
@@ -827,11 +827,79 @@ def _sitk_tx_to_matrix(tx: sitk.Euler3DTransform) -> np.ndarray:
     return matrix
 
 
+def _sitk_affine_lps(img: sitk.Image) -> np.ndarray:
+    """Voxel-index -> physical (SimpleITK LPS world) 4x4 affine for an image."""
+    direction = np.array(img.GetDirection(), dtype=np.float64).reshape(3, 3)
+    spacing = np.array(img.GetSpacing(), dtype=np.float64)
+    origin = np.array(img.GetOrigin(), dtype=np.float64)
+    affine = np.eye(4, dtype=np.float64)
+    affine[:3, :3] = direction @ np.diag(spacing)
+    affine[:3, 3] = origin
+    return affine
+
+
+def _sitk_fsl_scale(img: sitk.Image) -> np.ndarray:
+    """Voxel-index -> FSL-mm scaling for an image (diag(pixdim), x-flipped if the
+    stored orientation is radiological, i.e. positive affine determinant — matching how
+    FSL/FLIRT build their internal mm coordinates)."""
+    spacing = np.array(img.GetSpacing(), dtype=np.float64)
+    size = img.GetSize()
+    scale = np.diag([spacing[0], spacing[1], spacing[2], 1.0])
+    if np.linalg.det(_sitk_affine_lps(img)[:3, :3]) > 0:
+        scale[0, 0] = -spacing[0]
+        scale[0, 3] = (size[0] - 1) * spacing[0]
+    return scale
+
+
+def _sitk_tx_to_fsl_matrix(
+    tx: sitk.Euler3DTransform, fixed: sitk.Image, moving: sitk.Image
+) -> np.ndarray:
+    """Convert the sitk world transform to an FSL FLIRT matrix.
+
+    Produces a drop-in for FLIRT's ``conform_scanner2native.mat`` — usable with
+    ``flirt -in <brain> -ref <template> -applyxfm -init``. The sitk transform maps
+    fixed(template)->moving(brain) in LPS world; FLIRT's matrix maps in->ref in FSL-mm,
+    so we go world -> voxel-to-voxel -> FSL-mm and invert the direction. Verified by
+    applying via FSL applyxfm: reproduces the registration (NCC matches FLIRT).
+    """
+    world = _sitk_tx_to_matrix(tx)  # template-world -> brain-world (LPS)
+    a_fixed = _sitk_affine_lps(fixed)
+    a_moving = _sitk_affine_lps(moving)
+    vox2vox = np.linalg.inv(a_moving) @ world @ a_fixed  # template-vox -> brain-vox
+    s_fixed = _sitk_fsl_scale(fixed)
+    s_moving = _sitk_fsl_scale(moving)
+    return np.linalg.inv(s_moving @ vox2vox @ np.linalg.inv(s_fixed))
+
+
+def _sitk_world_mat_path(mat_path: Path) -> Path:
+    """Sidecar path holding the world-space affine (for sitk resume reconstruction)."""
+    return mat_path.with_suffix(".world.mat")
+
+
+def _sitk_load_world_for_resume(mat_path: Path) -> np.ndarray:
+    """Load the world-space affine for resume: the `.world.mat` sidecar (new FSL-primary
+    layout) if present, else the primary `.mat` (legacy runs that stored world there)."""
+    world = _sitk_world_mat_path(mat_path)
+    return np.loadtxt(world if world.is_file() else mat_path)
+
+
 def _sitk_save_transform_artifacts(
-    tx: sitk.Euler3DTransform, mat_path: Path, *, param_set: str | None = None
+    tx: sitk.Euler3DTransform,
+    mat_path: Path,
+    fixed: sitk.Image,
+    moving: sitk.Image,
+    *,
+    param_set: str | None = None,
 ) -> None:
-    """Save FLIRT-compatible 4x4 world affine (.mat only)."""
-    np.savetxt(mat_path, _sitk_tx_to_matrix(tx))
+    """Save the transform as a FLIRT-compatible FSL matrix (primary .mat) plus its inverse
+    (`_inverse.mat`), mirroring FLIRT's conform_scanner2native[/_inverse].mat outputs, and
+    the world-space affine as a `.world.mat` sidecar used to rebuild the tx on resume.
+    """
+    forward_fsl = _sitk_tx_to_fsl_matrix(tx, fixed, moving)
+    np.savetxt(mat_path, forward_fsl)
+    inverse_path = mat_path.with_name(f"{mat_path.stem}_inverse{mat_path.suffix}")
+    np.savetxt(inverse_path, np.linalg.inv(forward_fsl))
+    np.savetxt(_sitk_world_mat_path(mat_path), _sitk_tx_to_matrix(tx))
     if param_set is not None:
         _sitk_pipeline_rev_path(mat_path.parent).write_text(
             SITK_PIPELINE_REV + "\n", encoding="utf-8"
@@ -910,7 +978,7 @@ def _sitk_register(
 
     forward_transform = work_dir / f"{output_prefix}.mat"
     _sitk_save_transform_artifacts(
-        final_tx, forward_transform, param_set=label
+        final_tx, forward_transform, fixed, moving, param_set=label
     )
     validate_output_file(forward_transform, logger)
     logger.info("SimpleITK transform saved to %s", forward_transform)
@@ -973,7 +1041,7 @@ def run_sitk(
             )
         logger.info("SimpleITK (%s): apply-only resume (skip registration)", label)
         transform_obj = _sitk_transform_from_mat(
-            np.loadtxt(mat_path), preprocess.template_for_reg
+            _sitk_load_world_for_resume(mat_path), preprocess.template_for_reg
         )
         reg_time_s = 0.0
     else:
@@ -1066,7 +1134,7 @@ def _ensure_conformed_brain(
         if not xfm.is_file():
             raise FileNotFoundError(f"SimpleITK transform not found for brain apply: {xfm}")
         transform_obj = _sitk_transform_from_mat(
-            np.loadtxt(xfm), preprocess.template_for_reg
+            _sitk_load_world_for_resume(xfm), preprocess.template_for_reg
         )
         _sitk_apply_transforms(
             movingf=preprocess.brain_f,
@@ -1173,41 +1241,6 @@ def _benchmark_row_from_result(
         modality=modality,
         qc_snapshot_path=qc_snapshot_path,
     )
-
-
-def _print_summary_table(rows: list[BenchmarkRow]) -> None:
-    if not rows:
-        print("No results.")
-        return
-    headers = [
-        "modality",
-        "image",
-        "method",
-        "param_set",
-        "nmi",
-        "ncc",
-        "reg_time_s",
-        "total_time_s",
-    ]
-    col_widths = [
-        max(len(h), max(len(str(getattr(r, h))) for r in rows)) for h in headers
-    ]
-    fmt = "  ".join(f"{{:{w}}}" for w in col_widths)
-    print(fmt.format(*headers))
-    print("-" * (sum(col_widths) + 2 * (len(headers) - 1)))
-    for row in rows:
-        print(
-            fmt.format(
-                row.modality,
-                row.image,
-                row.method,
-                row.param_set,
-                f"{row.nmi:.4f}",
-                f"{row.ncc:.4f}",
-                f"{row.reg_time_s:.2f}",
-                f"{row.total_time_s:.2f}",
-            )
-        )
 
 
 def _fmt_float(val: float, decimals: int = 4) -> str:
