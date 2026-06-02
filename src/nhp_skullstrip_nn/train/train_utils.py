@@ -9,7 +9,6 @@ import logging
 import torch
 from pathlib import Path
 from torch.utils.data import DataLoader
-from sklearn.model_selection import train_test_split
 from datetime import datetime
 from typing import Tuple, Optional
 
@@ -65,6 +64,13 @@ def prepare_data_loaders(config, logger: Optional[logging.Logger] = None):
     """
     if logger is None:
         logger = get_logger()
+
+    # Lazy import: scikit-learn is a training-only dependency (the [train] extra) and is
+    # used solely for the data split below. Importing it here, not at module top, keeps it
+    # off the inference import path — nhp_skullstrip_nn/__init__ eagerly imports the train
+    # subpackage, so a top-level sklearn import would break lite/inference installs that
+    # omit [train] (see the conform->skullstrip path in operations/preprocessing.py).
+    from sklearn.model_selection import train_test_split
 
     # Always auto-detect HDF5 files (hdf5_dir is set in config.__post_init__)
     hdf5_dir = Path(config.hdf5_dir)
