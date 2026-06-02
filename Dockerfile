@@ -163,7 +163,6 @@ RUN apt-get update && \
       netpbm \
       perl \
       python3 \
-      python3-pip \
       python3-venv \
       tar \
       tcsh \
@@ -176,7 +175,9 @@ RUN apt-get update && \
       # CHOLMOD runtime for scikit-sparse (no build-essential in final image) \
       libcholmod3 \
       # graphics/openGL + X11 runtime for AFNI/FSL/FreeSurfer \
-      freeglut3-dev \
+      # libglut3.12 is the bookworm runtime package for freeglut (AFNI binaries link it); \
+      # other GL runtime libs (libgl1, libglu1-mesa) are installed separately below. \
+      libglut3.12 \
       libfontconfig1 \
       libfreetype6 \
       libgl1 \
