@@ -12,16 +12,64 @@ else
     echo "Resume mode: Will continue from previous run (use --no-resume to start fresh)"
 fi
 
-# Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT=/home/star/github/brainana
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Test parameters
+# ========================
+# Test parameters (edit paths/config here)
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
 output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_v1.1.0
 config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
 
+: "${ENABLE_GPU:=0}" # GPU visibility: 1 = expose GPU(s) to brainana, 0 = CPU-only (CUDA hidden)
+
+# ========================
+case "$ENABLE_GPU" in
+    0|1) ;;
+    *)
+        echo "Error: ENABLE_GPU must be 0 or 1, got: $ENABLE_GPU" >&2
+        exit 1
+        ;;
+esac
+
+output_dir=${output_dir}_gpu${ENABLE_GPU}
 working_dir=${output_dir}_wd
+
+# Temp CPU config (created only in CPU mode); removed on exit.
+CPU_CONFIG_F=""
+cleanup_cpu_config() { [ -n "$CPU_CONFIG_F" ] && [ -f "$CPU_CONFIG_F" ] && rm -f "$CPU_CONFIG_F"; }
+trap cleanup_cpu_config EXIT
+
+# Force CPU via the pipeline's DESIGNED switch: general.gpu_device=-1 makes main.nf set
+# use_gpu=false, so every GPU process receives gpu_id='none' and exports CUDA_VISIBLE_DEVICES="".
+# NOTE: exporting CUDA_VISIBLE_DEVICES="" in this shell alone is NOT enough — nextflow.config still
+# counts GPUs via nvidia-smi and the per-task wrapper re-exports a real GPU id, overriding it.
+if [ "$ENABLE_GPU" = "0" ]; then
+    export CUDA_VISIBLE_DEVICES=""   # also hides the GPU from any direct (non-wrapped) Python
+    if [ -n "$config_f" ]; then
+        CPU_CONFIG_F=$(mktemp /tmp/brainana_cpu_config.XXXXXX.yaml)
+        "${PYTHON:-python3}" - "$config_f" "$CPU_CONFIG_F" <<'PY'
+import sys, yaml
+with open(sys.argv[1]) as f:
+    cfg = yaml.safe_load(f) or {}
+cfg.setdefault("general", {})["gpu_device"] = -1  # force CPU: gpu_forced_cpu -> use_gpu=false
+with open(sys.argv[2], "w") as f:
+    yaml.dump(cfg, f, default_flow_style=False, sort_keys=False)
+PY
+        config_f="$CPU_CONFIG_F"
+        GPU_MODE="CPU-only (general.gpu_device=-1 via temp config; CUDA hidden)"
+    else
+        GPU_MODE="CPU-only (CUDA hidden) — WARNING: no config_f to set gpu_device=-1; CPU not guaranteed"
+        echo "WARNING: ENABLE_GPU=0 but no config_f; set general.gpu_device=-1 in a config to force CPU." >&2
+    fi
+else
+    if [ "${CUDA_VISIBLE_DEVICES-}" = "" ]; then
+        unset CUDA_VISIBLE_DEVICES
+        GPU_MODE="GPU enabled (all visible CUDA devices)"
+    else
+        GPU_MODE="GPU enabled (CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES)"
+    fi
+fi
 
 # Validate paths
 echo "============================================"
@@ -35,6 +83,7 @@ if [ -n "$config_f" ]; then
 else
     echo "Config file: default (not overridden)"
 fi
+echo "GPU mode: $GPU_MODE (ENABLE_GPU=$ENABLE_GPU)"
 echo "============================================"
 
 # Check if BIDS directory exists
@@ -62,30 +111,28 @@ echo "Starting Nextflow pipeline..."
 if [ -n "$RESUME_FLAG" ]; then
     echo "Resume enabled: $RESUME_FLAG"
     echo "Work directory: $working_dir"
-    if [ -d "$working_dir" ] && [ "$(ls -A $working_dir 2>/dev/null)" ]; then
+    if [ -d "$working_dir" ] && [ -n "$(ls -A "$working_dir" 2>/dev/null)" ]; then
         echo "Work directory contains previous tasks (resume should work)"
     else
-        echo "Work directory is empty (no previous run to resume)"
+        echo "Work directory is empty (no prior run for this GPU/CPU output path)"
     fi
 fi
 echo ""
 
+NF_ARGS=(
+    run main.nf
+    --no-docker
+    --bids_dir "$bids_dir"
+    --output_dir "$output_dir"
+    --work_dir "$working_dir"
+)
 if [ -n "$config_f" ]; then
-    "$PROJECT_ROOT/run_brainana.sh" run main.nf \
-        --no-docker \
-        --bids_dir "$bids_dir" \
-        --output_dir "$output_dir" \
-        --work_dir "$working_dir" \
-        --config_file "$config_f" \
-        $RESUME_FLAG
-else
-    "$PROJECT_ROOT/run_brainana.sh" run main.nf \
-        --no-docker \
-        --bids_dir "$bids_dir" \
-        --output_dir "$output_dir" \
-        --work_dir "$working_dir" \
-        $RESUME_FLAG
+    NF_ARGS+=(--config_file "$config_f")
 fi
+if [ -n "$RESUME_FLAG" ]; then
+    NF_ARGS+=("$RESUME_FLAG")
+fi
+"$PROJECT_ROOT/run_brainana.sh" "${NF_ARGS[@]}"
 
 echo ""
 echo "============================================"

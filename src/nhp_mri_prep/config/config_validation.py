@@ -357,6 +357,15 @@ def validate_registration_config(config: Dict[str, Any]) -> None:
             f"Please fix this in your configuration file."
         )
 
+    if "fireants_allow_cpu" in config and not isinstance(
+        config["fireants_allow_cpu"], bool
+    ):
+        raise ValueError(
+            f"Configuration error in registration: "
+            f"fireants_allow_cpu must be a boolean, got {type(config['fireants_allow_cpu']).__name__}. "
+            f"Please fix this in your configuration file."
+        )
+
     # Validate transform stages (if present)
     for stage in ["translation", "rigid", "affine", "syn"]:
         if stage in config:

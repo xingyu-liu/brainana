@@ -367,6 +367,7 @@ def anat_registration(
     reg_config = input.config.get("registration", {})
     xfm_type = reg_config.get("anat2template_xfm_type", "syn")
     enable_fireants = reg_config.get("enable_fireants", True)
+    fireants_allow_cpu = reg_config.get("fireants_allow_cpu", True)
 
     logger.info(
         f"Step: registering anatomical image to template {template_name} "
@@ -383,6 +384,7 @@ def anat_registration(
         logger=logger,
         xfm_type=xfm_type,
         enable_fireants=enable_fireants,
+        fireants_allow_cpu=fireants_allow_cpu,
     )
 
     output_file = Path(result["imagef_registered"])

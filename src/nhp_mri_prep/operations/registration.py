@@ -314,20 +314,23 @@ def ants_cpu_register(
     return outputs
 
 
-def _use_fireants(logger: logging.Logger) -> bool:
-    """Return True only when FireANTs can run on a real GPU.
+def _use_fireants(logger: logging.Logger, allow_cpu: bool = True) -> bool:
+    """Return True when FireANTs can run — on GPU, or on CPU when ``allow_cpu``.
 
-    FireANTs' deformable (greedy) registration requires CUDA: its fused Adam
-    optimizer is a compiled CUDA extension with no CPU fallback.  This function
-    acts as a single gate:
+    FireANTs 1.5.0 selects its optimizer per device: the compiled CUDA fused Adam
+    on a CUDA tensor, and a device-agnostic PyTorch baseline
+    (``adam_update_fused_baseline``) on CPU (see fireants optimizers/adam.py). The
+    rest of the greedy/affine path is likewise CPU-safe (non-FFT downsampling and the
+    non-fused interpolator/CC kernels are auto-selected on CPU). So FireANTs can run
+    on CPU — benchmarked faster and equal/better quality vs antspyx SyN — not "GPU only".
 
+    Gate logic:
     1. FireANTs importable?
-    2. A usable GPU exists? (basic tensor op probe)
-    3. FireANTs' fused Adam works on that GPU? (catches driver/runtime mismatches
-       where basic PyTorch CUDA succeeds but compiled extensions fail)
-
-    ``torch.cuda.synchronize()`` is called after the probe to force asynchronous
-    CUDA errors to surface immediately rather than mid-registration.
+    2. A usable GPU exists? → probe the fused Adam on a CUDA tensor (catches
+       driver/runtime mismatches where basic CUDA works but the compiled ext fails);
+       ``torch.cuda.synchronize()`` surfaces async errors immediately.
+    3. else, if ``allow_cpu`` → probe the baseline Adam on a CPU tensor. If False,
+       skip FireANTs and let the dispatcher fall back to ANTs/antspyx.
     """
     try:
         from .fireants_registration import fireants_registration  # noqa: F401
@@ -338,24 +341,39 @@ def _use_fireants(logger: logging.Logger) -> bool:
         return False
 
     from ..utils.gpu_device import _cuda_is_usable
+    import torch
 
-    if not _cuda_is_usable():
-        logger.debug("REGISTRATION: FireANTs skipped — no usable GPU")
-        return False
+    if _cuda_is_usable():
+        try:
+            from fireants.registration.optimizers.adam import adam_update_fused
 
-    try:
-        import torch
-        from fireants.registration.optimizers.adam import adam_update_fused
+            t = torch.zeros(4, device="cuda", dtype=torch.float32)
+            adam_update_fused(t, t.clone(), t.clone(), 1.0, 1.0, 1e-8)
+            torch.cuda.synchronize()
+        except Exception as e:
+            logger.debug(
+                f"REGISTRATION: FireANTs skipped — GPU fused ops probe failed: {e}"
+            )
+            return False
+        return True
 
-        t = torch.zeros(4, device="cuda", dtype=torch.float32)
-        adam_update_fused(t, t.clone(), t.clone(), 1.0, 1.0, 1e-8)
-        torch.cuda.synchronize()
-    except Exception as e:
+    # No usable GPU.
+    if not allow_cpu:
         logger.debug(
-            f"REGISTRATION: FireANTs skipped — GPU fused ops probe failed: {e}"
+            "REGISTRATION: FireANTs skipped — no usable GPU (fireants_allow_cpu=False)"
         )
         return False
+    try:
+        from fireants.registration.optimizers.adam import adam_update_fused_baseline
 
+        t = torch.zeros(4, dtype=torch.float32)  # CPU tensor
+        adam_update_fused_baseline(t, t.clone(), t.clone(), 1.0, 1.0, 1e-8)
+    except Exception as e:
+        logger.debug(
+            f"REGISTRATION: FireANTs CPU baseline probe failed: {e}"
+        )
+        return False
+    logger.info("REGISTRATION: no GPU — FireANTs will run on CPU (baseline optimizer)")
     return True
 
 
@@ -666,6 +684,7 @@ def ants_register(
     xfm_type: Optional[str] = "syn",
     compute_inverse: Optional[bool] = True,
     enable_fireants: bool = True,
+    fireants_allow_cpu: bool = True,
 ) -> Dict[str, Any]:
     """Run ANTs-style registration: FireANTs when available, otherwise ANTs CPU.
 
@@ -682,15 +701,21 @@ def ants_register(
         xfm_type: Type of transformation. Options: 'translation', 'rigid', 'affine', 'syn'
         compute_inverse: If True (default), compute and include inverse transform in outputs.
         enable_fireants: If True (default), allow FireANTs for syn registration.
+        fireants_allow_cpu: If True (default), allow FireANTs to run its syn (affine+greedy)
+            on CPU via the PyTorch baseline optimizer when no GPU is present (same algorithm
+            as the GPU path; benchmarked faster and equal/better quality than antspyx SyN).
+            Set False to fall back to ANTs/antspyx on CPU instead.
 
     Returns:
         Dictionary with output_path_prefix, imagef_registered, forward_transform, inverse_transform
     """
     if logger is None:
         logger = logging.getLogger(__name__)
-    # FireANTs is only used for syn; rigid/affine are done with ANTs (FireANTs is poor at linear transforms)
+    # FireANTs is only used for syn (affine+greedy); rigid/affine-only transforms use ANTs.
     fireants_available = (
-        _use_fireants(logger) if (enable_fireants and xfm_type == "syn") else False
+        _use_fireants(logger, allow_cpu=fireants_allow_cpu)
+        if (enable_fireants and xfm_type == "syn")
+        else False
     )
     use_fireants = enable_fireants and xfm_type == "syn" and fireants_available
     if use_fireants:
@@ -725,7 +750,7 @@ def ants_register(
         if xfm_type != "syn"
         else "fallback after FireANTs error"
         if use_fireants
-        else "FireANTs not installed or dependencies unavailable"
+        else "FireANTs unavailable (not installed, or no GPU with fireants_allow_cpu=False)"
     )
     # CPU backend: ANTs CLI if available, else antspyx (Python), else error.
     from .antspyx_ops import cli_available, antspyx_available, antspyx_register

@@ -555,6 +555,7 @@ def func_registration(
     config_key = f"func2{target_type}_xfm_type"
     xfm_type = reg_config.get(config_key, "syn")
     enable_fireants = reg_config.get("enable_fireants", True)
+    fireants_allow_cpu = reg_config.get("fireants_allow_cpu", True)
 
     # Resample target to functional resolution if requested
     fixedf = str(target_file)
@@ -590,6 +591,7 @@ def func_registration(
         logger=logger,
         xfm_type=xfm_type,
         enable_fireants=enable_fireants,
+        fireants_allow_cpu=fireants_allow_cpu,
     )
 
     output_file = Path(result["imagef_registered"])

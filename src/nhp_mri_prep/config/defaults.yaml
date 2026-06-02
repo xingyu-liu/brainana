@@ -87,4 +87,5 @@ registration:
   func2template_xfm_type: "syn"  # str: transform type for func->template ("translation", "rigid", "affine", or "syn")
   interpolation: "BSpline"  # str: interpolation method ("Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline", "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc", "LanczosWindowedSinc", "GenericLabel")
   enable_fireants: true  # bool: use FireANTs for syn registration if available, otherwise use ANTs
+  fireants_allow_cpu: true  # bool: when no GPU, run FireANTs syn (affine+greedy) on CPU via the PyTorch baseline (same algorithm as GPU; faster + equal/better quality than antspyx SyN). Set false to fall back to antspyx/ANTs SyN on CPU.
   keep_func_resolution: true  # bool: keep original functional image resolution after registration

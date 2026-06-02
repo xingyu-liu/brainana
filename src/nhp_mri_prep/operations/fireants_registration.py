@@ -1,8 +1,11 @@
 """
-FireANTs (GPU) registration for nhp_mri_prep.
+FireANTs registration for nhp_mri_prep (syn = affine + deformable).
 
-FireANTs is used only for syn (deformable); rigid and affine are delegated to
-ANTS, since FireANTs performs poorly on linear transforms.
+Used for syn (xfm_type="syn"): runs FireANTs AffineRegistration (affine init) followed by
+GreedyRegistration (deformable warp). Standalone rigid/affine-only transforms are handled by
+ANTs, not here. Runs on GPU when available; FireANTs 1.5.0 also ships a pure-PyTorch CPU
+baseline optimizer (selected automatically on CPU), so the SAME algorithm runs without a GPU
+— gated by _use_fireants() and the `registration.fireants_allow_cpu` config flag.
 
 Same interface and output contract as ants_cpu_register. Optional dependency:
 fireants, torch, scipy. When unavailable, use ants_cpu_register.
@@ -374,7 +377,8 @@ def fireants_registration(
         logger,
     )
 
-    # Only syn is done with FireANTs; rigid/affine are delegated to ANTs earlier
+    # syn here = FireANTs affine (init) + greedy (deformable). The preceding rigid conform
+    # (sitk/flirt) already coarsely aligned the input; this affine refines it before the warp.
     logger.info("Running forward registration (fixed → moving)...")
     affine = AffineRegistration(
         scales_affine,
