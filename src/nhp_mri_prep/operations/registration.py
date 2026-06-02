@@ -718,22 +718,19 @@ def ants_register(
                 f"Exception: {type(e).__name__}: {e}\n"
                 f"Traceback:\n{traceback.format_exc()}"
             )
-    if not use_fireants:
-        if not enable_fireants:
-            logger.info(
-                "REGISTRATION: using ANTs (CPU) — FireANTs disabled by configuration"
-            )
-        elif xfm_type != "syn":
-            logger.info(
-                f"REGISTRATION: using ANTs (CPU) — FireANTs only applies to syn, got xfm_type={xfm_type!r}"
-            )
-        else:
-            logger.info(
-                "REGISTRATION: using ANTs (CPU) — FireANTs not installed or dependencies unavailable"
-            )
-    else:
-        logger.info("REGISTRATION: using ANTs (CPU) — fallback after FireANTs error")
-    result = ants_cpu_register(
+    reason = (
+        "FireANTs disabled by configuration"
+        if not enable_fireants
+        else f"FireANTs only applies to syn, got xfm_type={xfm_type!r}"
+        if xfm_type != "syn"
+        else "fallback after FireANTs error"
+        if use_fireants
+        else "FireANTs not installed or dependencies unavailable"
+    )
+    # CPU backend: ANTs CLI if available, else antspyx (Python), else error.
+    from .antspyx_ops import cli_available, antspyx_available, antspyx_register
+
+    reg_kwargs = dict(
         fixedf=fixedf,
         movingf=movingf,
         working_dir=working_dir,
@@ -743,7 +740,20 @@ def ants_register(
         xfm_type=xfm_type,
         compute_inverse=compute_inverse,
     )
-    logger.info("REGISTRATION: completed with ANTs (CPU)")
+    if cli_available("antsRegistration"):
+        logger.info(f"REGISTRATION: using ANTs (CPU) — {reason}")
+        result = ants_cpu_register(**reg_kwargs)
+        logger.info("REGISTRATION: completed with ANTs (CPU)")
+    elif antspyx_available():
+        logger.info(
+            f"REGISTRATION: antsRegistration CLI not found — using antspyx backend ({reason})"
+        )
+        result = antspyx_register(**reg_kwargs)
+    else:
+        raise RuntimeError(
+            "Registration requires the ANTs CLI (antsRegistration) on PATH or the antspyx "
+            "package (`pip install antspyx`); neither is available."
+        )
     return result
 
 
@@ -797,6 +807,31 @@ def ants_apply_transforms(
     # Ensure transformf is a list
     if not isinstance(transformf, list):
         transformf = [transformf]
+
+    # Backend: ANTs CLI if available, else antspyx (Python), else error.
+    from .antspyx_ops import cli_available, antspyx_available, antspyx_apply_transforms
+
+    if not cli_available("antsApplyTransforms"):
+        if antspyx_available():
+            logger.info(
+                "antsApplyTransforms CLI not found — using antspyx backend"
+            )
+            return antspyx_apply_transforms(
+                movingf=movingf,
+                moving_type=moving_type,
+                interpolation=interpolation,
+                outputf_name=Path(outputf_name).name,
+                fixedf=fixedf,
+                working_dir=work_dir,
+                transformf=transformf,
+                logger=logger,
+                reff=reff,
+                generate_tmean=generate_tmean,
+            )
+        raise RuntimeError(
+            "antsApplyTransforms requires the ANTs CLI on PATH or the antspyx package "
+            "(`pip install antspyx`); neither is available."
+        )
 
     # Apply ANTs transformations
     cmd = [

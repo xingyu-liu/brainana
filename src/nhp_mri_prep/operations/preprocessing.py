@@ -1677,6 +1677,35 @@ def apply_mask(
     return outputs
 
 
+def _prepare_n4_intensities(
+    data: np.ndarray, logger: logging.Logger
+) -> tuple[np.ndarray, bool]:
+    """Clamp negative intensities to zero for N4 log-domain safety.
+
+    Background zeros are left unchanged; use a brain mask at N4 time to exclude them.
+    """
+    finite = np.isfinite(data)
+    if not finite.any():
+        logger.debug(
+            "Workflow: N4 input preparation — no finite voxels; skipping negative clamp"
+        )
+        return data, False
+    min_val = float(data[finite].min())
+    if min_val >= 0:
+        logger.debug("Workflow: N4 input preparation — no negative intensities")
+        return data, False
+    n_negative = int((data < 0).sum())
+    logger.warning(
+        "Workflow: N4 input preparation — clamping %d negative voxel(s) to 0 "
+        "(min intensity %.6g); N4 operates in log domain",
+        n_negative,
+        min_val,
+    )
+    out = np.asarray(data, dtype=np.float32, order="C")
+    out[out < 0] = 0
+    return out, True
+
+
 def bias_correction(
     imagef: Union[str, Path],
     working_dir: Union[str, Path],
@@ -1738,31 +1767,34 @@ def bias_correction(
     if not bias_cfg:
         raise ValueError("bias_correction configuration not found")
 
-    # Rescale image mean to 100 if configured
+    # Optional mean rescale + negative clamp before N4 (log-domain algorithm).
+    # Rescale: non-zero mean to 100 (FSL-free equivalent of fslstats -M + fslmaths -div).
+    # Clamp: negatives to 0 with warning; background zeros unchanged (anat mask excludes them).
     rescale_mean_to_100 = bias_cfg.get("rescale_mean_to_100")
+    img = nib.load(str(image_path))
+    data = np.asarray(img.get_fdata(), dtype=np.float32)
+    modified = False
+
     if rescale_mean_to_100:
-        image_path_rescaled = work_dir / "input_rescaled.nii.gz"
-
-        # Get mean value using fslstats
-        returncode, stdout, stderr = run_command(
-            ["fslstats", str(image_path), "-M"], step_logger=logger
-        )
-        mean_value = float(stdout.strip())
-
-        # Rescale image to mean intensity of 100 by multiplying by 100/mean_value
-        command_rescale = [
-            "fslmaths",
-            str(image_path),
-            "-div",
-            str(mean_value / 100),
-            str(image_path_rescaled),
-        ]
-        returncode, stdout, stderr = run_command(command_rescale, step_logger=logger)
-        if returncode != 0:
-            raise RuntimeError(f"fslmaths failed (exit code {returncode}): {stderr}")
-
+        nonzero = data[data != 0]
+        mean_value = float(nonzero.mean()) if nonzero.size else 0.0
+        if mean_value == 0:
+            raise RuntimeError(
+                "Cannot rescale to mean 100: image mean (non-zero voxels) is 0"
+            )
+        data = (data / (mean_value / 100)).astype(np.float32)
+        modified = True
         logger.info("Workflow: image rescaled to mean intensity of 100")
-        image_path = image_path_rescaled
+
+    data, clamp_modified = _prepare_n4_intensities(data, logger)
+    modified = modified or clamp_modified
+
+    if modified:
+        prepared_path = work_dir / "input_n4_prepared.nii.gz"
+        out_img = nib.Nifti1Image(data, img.affine, img.header)
+        out_img.header.set_data_dtype(np.float32)
+        nib.save(out_img, str(prepared_path))
+        image_path = prepared_path
 
     output_path = work_dir / output_name
     bias_field_path = work_dir / (output_name.split(".nii")[0] + "_bias_field.nii.gz")
@@ -1787,17 +1819,23 @@ def bias_correction(
             f"Workflow: using mask for bias correction - {os.path.basename(mask_path)}"
         )
 
-    # Build command
-    if bias_cfg.get("algorithm") == "N4BiasFieldCorrection":
-        logger.info(
-            "Workflow: starting bias field correction using N4BiasFieldCorrection algorithm"
+    # Produce the bias-corrected image + bias field via the available backend.
+    if bias_cfg.get("algorithm") != "N4BiasFieldCorrection":
+        # TODO: add other bias correction algorithms
+        raise ValueError(
+            f"Unsupported bias correction algorithm: {bias_cfg.get('algorithm')!r}"
         )
+
+    from .antspyx_ops import cli_available, antspyx_available, antspyx_n4_bias
+
+    logger.info(
+        f"Data: input image - {os.path.basename(image_path)}, dimension - {dimension}"
+    )
+    logger.info(f"System: output path - {output_path}")
+
+    if cli_available("N4BiasFieldCorrection"):
         logger.info(
-            f"Data: input image - {os.path.basename(image_path)}, dimension - {dimension}"
-        )
-        logger.info(f"System: output path - {output_path}")
-        logger.info(
-            f"System: using {num_threads} threads for ITK operations (capped at 32)"
+            "Workflow: starting bias field correction using N4BiasFieldCorrection (ANTs CLI)"
         )
         command = [
             "N4BiasFieldCorrection",
@@ -1812,24 +1850,35 @@ def bias_correction(
             "-b",
             str(bias_cfg.get("bspline_fitting")),
         ]
-        # Add mask if provided
         if mask_path:
             command.extend(["-x", str(mask_path)])
             logger.info("Workflow: using mask for bias correction")
-    else:
-        # TODO: add other bias correction algorithms
-        pass
-
-    # Execute command with thread-limited environment
-    try:
         returncode, stdout, stderr = run_command(command, env=env, step_logger=logger)
         if returncode != 0:
             raise RuntimeError(
                 f"N4BiasFieldCorrection failed (exit code {returncode}): {stderr}"
             )
-
         logger.info("Workflow: N4BiasFieldCorrection completed successfully")
+    elif antspyx_available():
+        logger.info(
+            "Workflow: N4BiasFieldCorrection CLI not found — using antspyx backend"
+        )
+        antspyx_n4_bias(
+            image_path=image_path,
+            output_path=output_path,
+            bias_field_path=bias_field_path,
+            shrink_factor=bias_cfg.get("shrink_factor"),
+            bspline_fitting=bias_cfg.get("bspline_fitting"),
+            mask_path=mask_path,
+            logger=logger,
+        )
+    else:
+        raise RuntimeError(
+            "Bias correction requires the ANTs CLI (N4BiasFieldCorrection) on PATH or the "
+            "antspyx package (`pip install antspyx`); neither is available."
+        )
 
+    try:
         # Validate outputs
         validate_output_file(output_path, logger)
         outputs = {"imagef_bias_corrected": output_path, "bias_field": bias_field_path}
