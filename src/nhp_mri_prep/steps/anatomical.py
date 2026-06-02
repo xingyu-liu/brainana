@@ -367,6 +367,11 @@ def anat_registration(
     xfm_type = reg_config.get("anat2template_xfm_type", "syn")
     enable_fireants = reg_config.get("enable_fireants", True)
 
+    logger.info(
+        f"Step: registering anatomical image to template {template_name} "
+        f"(xfm_type={xfm_type})"
+    )
+
     # Call operation
     result = ants_register(
         movingf=str(input.input_file),

@@ -746,7 +746,7 @@ def ants_register(
         logger.info("REGISTRATION: completed with ANTs (CPU)")
     elif antspyx_available():
         logger.info(
-            f"REGISTRATION: antsRegistration CLI not found — using antspyx backend ({reason})"
+            f"Workflow: antsRegistration CLI not found — using antspyx backend ({reason})"
         )
         result = antspyx_register(**reg_kwargs)
     else:
@@ -814,7 +814,7 @@ def ants_apply_transforms(
     if not cli_available("antsApplyTransforms"):
         if antspyx_available():
             logger.info(
-                "antsApplyTransforms CLI not found — using antspyx backend"
+                "Workflow: antsApplyTransforms CLI not found — using antspyx backend"
             )
             return antspyx_apply_transforms(
                 movingf=movingf,

@@ -11,6 +11,7 @@ module never requires antspyx to be installed.
 """
 
 import logging
+import os
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -190,7 +191,15 @@ def antspyx_register(
     work_dir = ensure_working_directory(working_dir, logger)
     output_path_prefix = str(Path(work_dir) / output_prefix)
 
-    logger.info(f"REGISTRATION: using antspyx ({xfm_type})")
+    num_threads = int(os.environ.get("OMP_NUM_THREADS", 8))
+    logger.info(f"Data: output prefix - {output_prefix}")
+    logger.info(
+        f"Data: fixed image - {fixed_path.name}, moving image - {moving_path.name}"
+    )
+    logger.info(f"Step: executing antspyx registration ({xfm_type})")
+    logger.info(
+        f"System: using {num_threads} threads for ITK operations (capped at 32)"
+    )
     reg_kwargs = _registration_kwargs(xfm_type)
     result = ants.registration(
         fixed=ants.image_read(str(fixed_path)),
@@ -199,8 +208,12 @@ def antspyx_register(
         **reg_kwargs,
     )
 
+    logger.info("Step: antspyx registration completed successfully")
+
     registered_image = f"{output_path_prefix}_registered.nii.gz"
     ants.image_write(result["warpedmovout"], registered_image)
+    validate_output_file(registered_image, logger)
+    logger.info(f"Output: registered image created - {registered_image}")
 
     def _single(t):
         return t[0] if isinstance(t, (list, tuple)) else t
@@ -209,6 +222,7 @@ def antspyx_register(
     fwd_src = _single(result["fwdtransforms"])
     if Path(fwd_src).resolve() != Path(forward_transform).resolve():
         shutil.copy(fwd_src, forward_transform)
+    logger.info(f"Output: forward transform created - {forward_transform}")
 
     outputs: Dict[str, str] = {
         "output_path_prefix": output_path_prefix,
@@ -223,8 +237,11 @@ def antspyx_register(
         if Path(inv_src).resolve() != Path(inverse_transform).resolve():
             shutil.copy(inv_src, inverse_transform)
         outputs["inverse_transform"] = inverse_transform
+        logger.info(f"Output: inverse transform created - {inverse_transform}")
 
-    logger.info("REGISTRATION: completed with antspyx")
+    logger.info(
+        f"Step: registration completed with {len(outputs)} output files - {list(outputs.keys())}"
+    )
     return outputs
 
 
@@ -265,6 +282,15 @@ def antspyx_apply_transforms(
     transformlist = [str(Path(t).resolve()) for t in reversed(transformf)]
 
     reference = reff if reff is not None else fixedf
+    num_threads = int(os.environ.get("OMP_NUM_THREADS", 8))
+    logger.info("Workflow: applying transforms using antspyx backend")
+    logger.info(
+        f"Data: moving image - {Path(movingf).name}, "
+        f"reference - {Path(reference).name}, interpolation - {interpolation}"
+    )
+    logger.info(
+        f"System: using {num_threads} threads for ITK operations (capped at 32)"
+    )
     out_img = ants.apply_transforms(
         fixed=ants.image_read(str(reference)),
         moving=ants.image_read(str(movingf)),
@@ -274,13 +300,16 @@ def antspyx_apply_transforms(
     )
     ants.image_write(out_img, str(outputf_name))
     validate_output_file(outputf_name, logger)
-    logger.info(f"Step: transform application completed (antspyx) - {outputf_name}")
+    logger.info(
+        f"Step: transform application completed successfully - {outputf_name}"
+    )
 
     outputs = {"imagef_registered": str(outputf_name)}
     if generate_tmean:
         tmean_file = work_dir / (Path(outputf_name).name.split(".nii")[0] + "_tmean.nii.gz")
         calculate_func_tmean(str(outputf_name), str(tmean_file), logger)
         outputs["imagef_registered_tmean"] = str(tmean_file)
+        logger.info(f"Output: tmean generated - {tmean_file}")
     return outputs
 
 
