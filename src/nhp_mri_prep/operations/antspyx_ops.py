@@ -23,8 +23,49 @@ from .validation import (
 from ..utils import calculate_func_tmean
 
 
+# Global ANTs backend selector. "auto" auto-detects per call (CLI if on PATH,
+# else antspyx); "antspyx" forces the Python backend (skips CLI detection);
+# "cli" forces the CLI. The "lite" notebook sets "antspyx" via set_ants_backend();
+# the full pipeline never overrides it, so its CLI behavior is unchanged.
+_ANTS_BACKEND = "auto"
+_VALID_BACKENDS = ("auto", "antspyx", "cli")
+
+
+def set_ants_backend(backend: str) -> None:
+    """Override the ANTs backend globally for this process.
+
+    Args:
+        backend: "antspyx" forces the antspyx Python backend (no CLI detection),
+            "cli" forces the ANTs command-line tools, "auto" (default) picks the
+            CLI when present and otherwise falls back to antspyx.
+
+    Raises:
+        ValueError: If `backend` is not one of "auto", "antspyx", "cli".
+    """
+    global _ANTS_BACKEND
+    if backend not in _VALID_BACKENDS:
+        raise ValueError(
+            f"Unknown ANTs backend {backend!r}; expected one of {_VALID_BACKENDS}."
+        )
+    _ANTS_BACKEND = backend
+
+
+def get_ants_backend() -> str:
+    """Return the current ANTs backend selector ("auto" | "antspyx" | "cli")."""
+    return _ANTS_BACKEND
+
+
 def cli_available(name: str) -> bool:
-    """Return True if an executable `name` is on PATH."""
+    """Return True if the ANTs CLI tool `name` should be used.
+
+    Honors the global backend selector (see `set_ants_backend`): "antspyx" always
+    returns False (so callers use the antspyx backend), "cli" always returns True,
+    and "auto" checks whether `name` is on PATH.
+    """
+    if _ANTS_BACKEND == "antspyx":
+        return False
+    if _ANTS_BACKEND == "cli":
+        return True
     return shutil.which(name) is not None
 
 

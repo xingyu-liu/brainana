@@ -19,7 +19,10 @@ import tempfile
 import shutil
 import subprocess
 
-from fastsurfer_surfrecon.io.surface import convert_fs_surface_to_gifti
+try:
+    from fastsurfer_surfrecon.io.surface import convert_fs_surface_to_gifti
+except Exception:
+    convert_fs_surface_to_gifti = None
 
 from .mri_plotting import (
     create_overlay_grid_3xN,
