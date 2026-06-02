@@ -63,8 +63,8 @@ COPY . .
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 RUN mkdir -p /opt/brainana/tmp && \
     uv venv /opt/venv && \
-    TMPDIR=/opt/brainana/tmp uv sync --python /opt/venv/bin/python --frozen --no-cache || \
-    TMPDIR=/opt/brainana/tmp uv pip install --no-cache -e . && \
+    TMPDIR=/opt/brainana/tmp uv sync --python /opt/venv/bin/python --extra full --frozen --no-cache || \
+    TMPDIR=/opt/brainana/tmp uv pip install --no-cache -e '.[full]' && \
     rm -rf /opt/brainana/tmp
 
 # Clean venv: remove caches and test dirs (~1-2 GB savings)
