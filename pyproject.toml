@@ -68,7 +68,8 @@ dependencies = [
     "requests>=2.31.0",
 ]
 # Note: tomli not needed since requires-python >= 3.11 (has built-in tomllib)
-# Removed from core (unused anywhere in src/): tensorboard, pyvista, joblib, typer, rich.
+# Removed from core (unused anywhere in src/): pyvista, joblib, typer, rich.
+# tensorboard is training-only (fastsurfer_nn/training/trainer.py, guarded import) -> moved to [train].
 # Moved to optional extras (not on the anatomical/lite import path): pybids -> [func];
 # scikit-learn, seaborn -> [train]; surfplot -> [surf]; psutil -> [full] (guarded/optional
 # resource reporting in environment.py — degrades gracefully when absent, e.g. in lite).
@@ -102,6 +103,9 @@ func = [
 train = [
     "scikit-learn>=1.3.0",
     "seaborn>=0.13.0",
+    # tensorboard: training-only run logging (torch.utils.tensorboard in fastsurfer_nn/training/trainer.py).
+    # The import there is guarded, so inference/lite work without it; training needs it installed.
+    "tensorboard>=2.0.0",
 ]
 # Full preprocessing pipeline runtime (the Nextflow/Docker image installs this): surfaces +
 # functional/BIDS + optional resource reporting. Deliberately EXCLUDES [train] (training-only).
