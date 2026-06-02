@@ -182,16 +182,6 @@ def run_segmentation(
     # Setup logger if not provided
     if logger is None:
         logger = logging.getLogger(__name__)
-        if not logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter(
-                "%(asctime)s | %(levelname)-8s | %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-            handler.setFormatter(formatter)
-            handler.setLevel(logging.INFO)
-            logger.addHandler(handler)
-            logger.setLevel(logging.INFO)
 
     logger.info(f"Segmentation (fastsurfer_nn): starting for {modal} modality")
 

@@ -1584,6 +1584,7 @@ def apply_skullstripping(
             modal=modal,
             output_path=str(brain_mask_path),
             device_id=device_id,
+            logger=logger,
         )
 
         # Extract brain mask path from result

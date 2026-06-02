@@ -27,6 +27,7 @@ from ..operations.sitk_rigid_registration import (
     conform_world_mat_path,
 )
 import SimpleITK as sitk
+from ..utils.bids import get_bids_prefix
 from ..utils.templates import discover_atlases_in_space
 from ..utils.mri import get_image_shape, shape_to_ants_input_type
 from fastsurfer_surfrecon.config import AtlasConfig, ReconSurfConfig
@@ -418,8 +419,10 @@ def anat_backproject_atlases(
 
     Discovers atlases in the template space (from config output_space), applies
     the inverse T1w->template transform to each, and writes outputs to
-    working_dir/atlas/ with naming: atlas-{atlas_name}_{t1w_stem}.nii.gz.
-    The t1w_stem is derived from bids_name by stripping _desc-preproc_T1w.
+    working_dir/atlas/ with naming:
+    atlas-{atlas_name}_space-T1w_{ses_prefix}.nii.gz.
+    ses_prefix is sub (+ ses when present), derived from bids_name via
+    get_bids_prefix (space/desc/modality entities are stripped).
 
     Args:
         inverse_xfm: Inverse transform (template -> T1w)
@@ -460,14 +463,7 @@ def anat_backproject_atlases(
             additional_files={},
         )
 
-    # Build output stem from bids_name: strip .nii then _desc-preproc_T1w or _T1w
-    bids_stem = Path(bids_name).stem
-    if bids_stem.endswith(".nii"):
-        bids_stem = bids_stem[:-4]
-    if bids_stem.endswith("_T1w"):
-        output_stem = bids_stem[: -len("_T1w")]
-    else:
-        output_stem = bids_stem
+    output_stem = get_bids_prefix(bids_name)
 
     atlas_dir = working_dir / "atlas"
     atlas_dir.mkdir(parents=True, exist_ok=True)

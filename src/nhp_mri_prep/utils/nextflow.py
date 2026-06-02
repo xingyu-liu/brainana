@@ -15,6 +15,7 @@ from typing import Dict, Any, Optional, Union
 
 from .bids import get_filename_stem
 from ..config.config_io import load_yaml_config
+from .logger import LOG_DATEFMT, LOG_FORMAT
 
 
 def ensure_stderr_logging_if_unconfigured(level: int = logging.INFO) -> None:
@@ -29,7 +30,8 @@ def ensure_stderr_logging_if_unconfigured(level: int = logging.INFO) -> None:
         return
     logging.basicConfig(
         level=level,
-        format="%(asctime)s | %(levelname)-8s | %(message)s",
+        format=LOG_FORMAT,
+        datefmt=LOG_DATEFMT,
         stream=sys.stderr,
     )
 

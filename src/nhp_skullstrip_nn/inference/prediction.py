@@ -625,20 +625,8 @@ def skullstripping(
         ValueError: If modality is invalid
     """
 
-    # Setup logger if not provided
     if logger is None:
         logger = logging.getLogger(__name__)
-        # Ensure the logger has a handler and is configured
-        if not logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter(
-                "%(asctime)s | %(levelname)-8s | %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-            handler.setFormatter(formatter)
-            handler.setLevel(logging.INFO)
-            logger.addHandler(handler)
-            logger.setLevel(logging.INFO)
 
     logger.info(f"Starting skullstripping for {modal} modality using nhp_skullstrip_nn")
 
