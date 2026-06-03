@@ -481,7 +481,7 @@ def run_segmentation(
                         roi_name=roi_name,
                         wm_thr=wm_thr,
                         backup_original=True,
-                        verbose=True,
+                        logger=logger,
                         registration_threads=registration_threads,
                     )
                     logger.info(
