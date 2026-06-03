@@ -24,7 +24,7 @@ docker run --rm -t --gpus all \
     -v "$bids_dir":/input \
     -v "$output_dir":/output \
     -v "$fs_license":/fs_license.txt \
-    liuxingyu987/brainana:${version} \
+    brainana:latest \
     /input /output/preprocessed \
     -w /output/preprocessed_wd \
     --freesurfer-license /fs_license.txt

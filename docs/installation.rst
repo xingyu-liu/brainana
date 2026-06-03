@@ -1,10 +1,15 @@
 Installation
 ============
 
+Brainana can be installed in two ways:
+
+- **Docker** (below) — full pipeline: anatomical and functional preprocessing, surface reconstruction, and HTML QC reports. This is the recommended path for most users.
+- **Brainana Lite** — lightweight volumetric T1w workflow via Jupyter or Colab; no Docker image. See `BrainanaLite.ipynb <https://github.com/xingyu-liu/brainana/blob/main/examples/BrainanaLite.ipynb>`_ notebook on GitHub and the :doc:`brainana_lite`.
+
 Docker
 ------
 
-The recommended way to run Brainana is with Docker. The image includes neuroimaging toolkits (FSL, ANTs, AFNI, FreeSurfer), Nextflow, and a pre-configured Python environment.
+The recommended way to run the **full** Brainana pipeline is with Docker. 
 
 System requirements
 ~~~~~~~~~~~~~~~~~~~
@@ -75,6 +80,6 @@ Set up Docker
 
    .. note::
 
-      Replace ``<version>`` with a published Brainana tag from Docker Hub, for example ``1.0.0``. See the `Brainana image tags on Docker Hub <https://hub.docker.com/r/liuxingyu987/brainana/tags>`_ for the list of available versions.
+      Replace ``<version>`` with a published Brainana tag from Docker Hub, for example ``1.1.0``. See the `Brainana image tags on Docker Hub <https://hub.docker.com/r/liuxingyu987/brainana/tags>`_ for the list of available versions.
 
 Once the image is ready, see :doc:`usage_notes` to run the pipeline.

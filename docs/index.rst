@@ -48,6 +48,12 @@ Contents
 
 .. toctree::
    :maxdepth: 1
+   :caption: BRAINANA LITE
+
+   brainana_lite
+
+.. toctree::
+   :maxdepth: 1
    :caption: PROCESS AND OUTPUTS
 
    processing

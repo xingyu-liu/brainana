@@ -16,17 +16,24 @@
 
 Brainana documentation is hosted on **[Read the Docs](https://brainana.readthedocs.io/en/stable/)**.
 
-- **Use [`stable`](https://brainana.readthedocs.io/en/stable/)** for the latest released behavior.
-- **Use [`latest`](https://brainana.readthedocs.io/en/latest/)** for in-development docs that may be ahead of release.
 
 Start with [Installation](https://brainana.readthedocs.io/en/stable/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/stable/usage_notes.html).
 
 Additional references:
+- [Brainana Lite](https://brainana.readthedocs.io/en/stable/brainana_lite.html) (Jupyter / Colab T1w workflow)
 - [Processing details](https://brainana.readthedocs.io/en/stable/processing.html)
 - [Outputs](https://brainana.readthedocs.io/en/stable/outputs.html)
 - [FAQ](https://brainana.readthedocs.io/en/stable/faq.html)
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
+
+## Brainana Lite
+
+Lightweight volumetric T1w preprocessing for a single subject (no functional MRI, no surfaces). Run interactively in Jupyter or Google Colab—no Docker required.
+
+- **Notebook:** [`examples/BrainanaLite.ipynb`](examples/BrainanaLite.ipynb)
+
+For the full multi-modality pipeline with surfaces and QC reports, use the installation above for docker.
 
 ## Citation
 
