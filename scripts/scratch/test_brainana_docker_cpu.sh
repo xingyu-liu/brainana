@@ -9,9 +9,10 @@ site=site-amu
 
 # bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/${site}
 # output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/cpu/${site}
+version=1.1.0
 
-bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_easy_downsampled
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_docker_cpu_v1
+bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_cpu_${version}
 
 docker run --rm -t \
     -v "$bids_dir":/input \

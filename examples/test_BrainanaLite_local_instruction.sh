@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# Local launcher for brainana_lite.ipynb
+# Local launcher for BriananaLite.ipynb
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # What this script does
@@ -11,12 +11,12 @@
 #   "Environment isolation guard" in the ENVIRONMENT SETUP cell.
 #
 # Before you run this script
-#   1. Open brainana_lite.ipynb and set WORKING_DIR in the USER SETTINGS cell.
+#   1. Open BriananaLite.ipynb and set WORKING_DIR in the USER SETTINGS cell.
 #   2. Put one or more T1w volumes directly in WORKING_DIR (any filename; .nii or .nii.gz):
 #        $WORKING_DIR/*.nii.gz
 #
 # In Jupyter Lab
-#   Open brainana_lite.ipynb → Run All. Inline QC images appear after each step.
+#   Open BriananaLite.ipynb → Run All. Inline QC images appear after each step.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ uv pip install jupyterlab
 # Blocks until you quit Jupyter Lab; then optional cleanup below runs.
 # source .venv/bin/activate again before running the notebook again.
 source .venv/bin/activate
-jupyter lab brainana_lite.ipynb
+jupyter lab BriananaLite.ipynb
 
 # ── Optional cleanup (runs after you exit Jupyter Lab) ───────────────────────
 # Removes only this Jupyter venv (.venv/). Pipeline outputs and the notebook-managed
