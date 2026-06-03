@@ -12,7 +12,7 @@ site=site-amu
 version=1.1.0
 
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_cpu_${version}
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_v${version}_cpu
 
 docker run --rm -t \
     -v "$bids_dir":/input \

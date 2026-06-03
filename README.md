@@ -39,7 +39,7 @@ For the full multi-modality pipeline with surfaces and QC reports, use the insta
 
 If you use **Brainana**, please cite:
 
-> Brainana: a unified preprocessing framework for macaque MRI (in preparation).
+> Brainana: an end-to-end preprocessing framework for macaque neuroimaging (in preparation).
 
 Please also cite the toolboxes **Brainana** uses (FSL, ANTs, AFNI, FreeSurfer, FastSurfer, FireANTs, and any macaque templates). Detailed references can be found in the QC report.
 

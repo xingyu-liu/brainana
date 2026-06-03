@@ -8,7 +8,7 @@ fs_license=/mnt/DataDrive3/xliu/prep_test/freesurfer_license.txt
 version=1.1.0
 
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_${version}
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_v${version}
 config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml
 
 # bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_example
