@@ -9,6 +9,7 @@ About
    :width: 100%
 
 |
+
 **Brainana** is a unified preprocessing framework for macaque MRI. It provides anatomical, functional preprocessing, and surface reconstruction.
 
 .. image:: _static/pipeline_details/pipeline_overview.png

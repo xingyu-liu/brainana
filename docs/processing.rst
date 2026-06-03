@@ -59,7 +59,7 @@ Brainana can synthesize a single anatomical reference.
 
 
 2.2 Conform to reference
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Purpose:** Align the brain to reference space (orientation and
   grid) so that subsequent registrations and resamplings are

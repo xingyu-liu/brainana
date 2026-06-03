@@ -149,7 +149,7 @@ See :ref:`command-line-arguments` for the full resource options.
 .. rst-class:: faq-question
 
 My pipeline run is hanging.
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This typically happens when Nextflow runs out of memory. Try one or more of the following:
 
