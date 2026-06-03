@@ -63,8 +63,8 @@ COPY . .
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 RUN mkdir -p /opt/brainana/tmp && \
     uv venv /opt/venv && \
-    TMPDIR=/opt/brainana/tmp uv sync --python /opt/venv/bin/python --frozen --no-cache || \
-    TMPDIR=/opt/brainana/tmp uv pip install --no-cache -e . && \
+    TMPDIR=/opt/brainana/tmp uv sync --python /opt/venv/bin/python --extra full --frozen --no-cache || \
+    TMPDIR=/opt/brainana/tmp uv pip install --no-cache -e '.[full]' && \
     rm -rf /opt/brainana/tmp
 
 # Clean venv: remove caches and test dirs (~1-2 GB savings)
@@ -163,7 +163,6 @@ RUN apt-get update && \
       netpbm \
       perl \
       python3 \
-      python3-pip \
       python3-venv \
       tar \
       tcsh \
@@ -176,7 +175,9 @@ RUN apt-get update && \
       # CHOLMOD runtime for scikit-sparse (no build-essential in final image) \
       libcholmod3 \
       # graphics/openGL + X11 runtime for AFNI/FSL/FreeSurfer \
-      freeglut3-dev \
+      # libglut3.12 is the bookworm runtime package for freeglut (AFNI binaries link it); \
+      # other GL runtime libs (libgl1, libglu1-mesa) are installed separately below. \
+      libglut3.12 \
       libfontconfig1 \
       libfreetype6 \
       libgl1 \

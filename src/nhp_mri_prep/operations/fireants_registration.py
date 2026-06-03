@@ -1,8 +1,11 @@
 """
-FireANTs (GPU) registration for nhp_mri_prep.
+FireANTs registration for nhp_mri_prep (syn = affine + deformable).
 
-FireANTs is used only for syn (deformable); rigid and affine are delegated to
-ANTS, since FireANTs performs poorly on linear transforms.
+Used for syn (xfm_type="syn"): runs FireANTs AffineRegistration (affine init) followed by
+GreedyRegistration (deformable warp). Standalone rigid/affine-only transforms are handled by
+ANTs, not here. Runs on GPU when available; FireANTs 1.5.0 also ships a pure-PyTorch CPU
+baseline optimizer (selected automatically on CPU), so the SAME algorithm runs without a GPU
+— gated by _use_fireants() and the `registration.fireants_allow_cpu` config flag.
 
 Same interface and output contract as ants_cpu_register. Optional dependency:
 fireants, torch, scipy. When unavailable, use ants_cpu_register.
@@ -28,6 +31,7 @@ from fireants.utils.globals import MIN_IMG_SIZE
 from .validation import validate_input_file, ensure_working_directory
 from ..utils.gpu_device import resolve_device
 from ..utils.mri import pad_image_to_min_size, crop_image_to_original
+from ..utils.logger import quiet_external_output
 
 try:
     from scipy.io import loadmat, savemat
@@ -374,68 +378,70 @@ def fireants_registration(
         logger,
     )
 
-    # Only syn is done with FireANTs; rigid/affine are delegated to ANTs earlier
+    # syn here = FireANTs affine (init) + greedy (deformable). The preceding rigid conform
+    # (sitk/flirt) already coarsely aligned the input; this affine refines it before the warp.
     logger.info("Running forward registration (fixed → moving)...")
-    affine = AffineRegistration(
-        scales_affine,
-        iters_affine,
-        batch_fixed,
-        batch_moving,
-        optimizer=params.optimizer_affine,
-        optimizer_lr=params.lr_affine,
-        cc_kernel_size=params.cc_kernel_size,
-    )
-    _run_affine_registration(affine, device, logger, reg_type="affine")
-    reg = GreedyRegistration(
-        scales=scales_deformable,
-        iterations=iters_deformable,
-        fixed_images=batch_fixed,
-        moving_images=batch_moving,
-        cc_kernel_size=params.cc_kernel_size,
-        deformation_type=params.deformation_type,
-        smooth_grad_sigma=params.smooth_grad_sigma,
-        optimizer=params.optimizer_deformable,
-        optimizer_lr=params.lr_deformable,
-        init_affine=affine.get_affine_matrix().detach(),
-    )
-    _run_greedy_registration(reg, device, logger, direction="forward")
-    forward_warp = output_paths["forward_transform"]
-    reg.save_as_ants_transforms(forward_warp)
-    logger.info(f"Saved forward warp: {forward_warp}")
-
-    if compute_inverse:
-        logger.info(
-            "Running inverse registration (moving → fixed) with full pipeline (affine + warp)..."
-        )
-        affine_inv = AffineRegistration(
+    with quiet_external_output(logger):
+        affine = AffineRegistration(
             scales_affine,
             iters_affine,
-            batch_moving,
             batch_fixed,
+            batch_moving,
             optimizer=params.optimizer_affine,
             optimizer_lr=params.lr_affine,
             cc_kernel_size=params.cc_kernel_size,
         )
-        _run_affine_registration(affine_inv, device, logger, reg_type="affine")
-        reg_inv = GreedyRegistration(
+        _run_affine_registration(affine, device, logger, reg_type="affine")
+        reg = GreedyRegistration(
             scales=scales_deformable,
             iterations=iters_deformable,
-            fixed_images=batch_moving,
-            moving_images=batch_fixed,
+            fixed_images=batch_fixed,
+            moving_images=batch_moving,
             cc_kernel_size=params.cc_kernel_size,
             deformation_type=params.deformation_type,
             smooth_grad_sigma=params.smooth_grad_sigma,
             optimizer=params.optimizer_deformable,
             optimizer_lr=params.lr_deformable,
-            init_affine=affine_inv.get_affine_matrix().detach(),
+            init_affine=affine.get_affine_matrix().detach(),
         )
-        _run_greedy_registration(reg_inv, device, logger, direction="inverse")
-        inverse_warp = output_paths["inverse_transform"]
-        reg_inv.save_as_ants_transforms(inverse_warp)
-        logger.info(f"Saved inverse warp: {inverse_warp}")
-    _save_registered_image(
-        reg, batch_fixed, batch_moving, output_paths["registered"], logger
-    )
+        _run_greedy_registration(reg, device, logger, direction="forward")
+        forward_warp = output_paths["forward_transform"]
+        reg.save_as_ants_transforms(forward_warp)
+        logger.info(f"Saved forward warp: {forward_warp}")
+
+        if compute_inverse:
+            logger.info(
+                "Running inverse registration (moving → fixed) with full pipeline (affine + warp)..."
+            )
+            affine_inv = AffineRegistration(
+                scales_affine,
+                iters_affine,
+                batch_moving,
+                batch_fixed,
+                optimizer=params.optimizer_affine,
+                optimizer_lr=params.lr_affine,
+                cc_kernel_size=params.cc_kernel_size,
+            )
+            _run_affine_registration(affine_inv, device, logger, reg_type="affine")
+            reg_inv = GreedyRegistration(
+                scales=scales_deformable,
+                iterations=iters_deformable,
+                fixed_images=batch_moving,
+                moving_images=batch_fixed,
+                cc_kernel_size=params.cc_kernel_size,
+                deformation_type=params.deformation_type,
+                smooth_grad_sigma=params.smooth_grad_sigma,
+                optimizer=params.optimizer_deformable,
+                optimizer_lr=params.lr_deformable,
+                init_affine=affine_inv.get_affine_matrix().detach(),
+            )
+            _run_greedy_registration(reg_inv, device, logger, direction="inverse")
+            inverse_warp = output_paths["inverse_transform"]
+            reg_inv.save_as_ants_transforms(inverse_warp)
+            logger.info(f"Saved inverse warp: {inverse_warp}")
+        _save_registered_image(
+            reg, batch_fixed, batch_moving, output_paths["registered"], logger
+        )
 
     # ------------------------------------------------------------------
     # Crop outputs back to original input grids if padding was applied.

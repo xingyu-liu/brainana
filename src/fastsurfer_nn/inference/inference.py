@@ -456,7 +456,10 @@ class Inference:
         with logging_redirect_tqdm():
             try:
                 for batch_idx, batch in tqdm(
-                    enumerate(val_loader), total=len(val_loader), unit="batch"
+                    enumerate(val_loader),
+                    total=len(val_loader),
+                    unit="batch",
+                    disable=not logger.isEnabledFor(logging.INFO),
                 ):
                     log_batch_idx = batch_idx
                     # move data to the model device

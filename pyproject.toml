@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "brainana"
-version = "1.0.0"
+version = "1.1.0"
 description = "A Python package for preprocessing and registration of macaque neuroimaging data with BIDS dataset support"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = {text = "AGPL-3.0"}
@@ -53,8 +53,8 @@ dependencies = [
     "Pillow>=8.0.0",
     "scikit-image>=0.20.0",
     "SimpleITK>=2.3.0",
-    # FireANTs for GPU-accelerated registration
-    "fireants",
+    # FireANTs for GPU-accelerated registration (pinned; v1.5.0 provides the API brainana imports)
+    "fireants==1.5.0",
     # fastsurfer_nn dependencies
     "yacs>=0.1.8",
     "h5py>=3.8.0",
@@ -62,27 +62,58 @@ dependencies = [
     "pydantic>=2.0.0",
     "lapy>=1.0.0",
     "pymeshfix>=0.16.0",
-    "pyvista>=0.43.0",
-    "scikit-sparse>=0.4.0",
-    "typer>=0.9.0",
-    "rich>=13.0.0",
-    # BIDS support
-    "pybids>=0.15.0",
-    # System utilities
-    "psutil>=5.0.0",
     # Utilities
-    "joblib>=1.5.1",
     "tqdm>=4.67.1",
     "pyyaml>=6.0",
     "requests>=2.31.0",
-    "scikit-learn>=1.3.0",
-    "seaborn>=0.13.0",
-    "surfplot>=0.2.0",
-    "tensorboard>=2.15.0",
 ]
 # Note: tomli not needed since requires-python >= 3.11 (has built-in tomllib)
+# Removed from core (unused anywhere in src/): pyvista, joblib, typer, rich.
+# tensorboard is training-only (fastsurfer_nn/training/trainer.py, guarded import) -> moved to [train].
+# Moved to optional extras (not on the anatomical/lite import path): pybids -> [func];
+# scikit-learn, seaborn -> [train]; surfplot -> [surf]; psutil -> [full] (guarded/optional
+# resource reporting in environment.py — degrades gracefully when absent, e.g. in lite).
+# The full preprocessing pipeline pulls the runtime extras via [full].
 
 [project.optional-dependencies]
+# Lightweight extra for the "lite" notebook: provides the ANTs operations via the antspyx
+# Python API, so no ANTs command-line install is needed (e.g. on Colab). The ops auto-fall
+# back to antspyx only when the ANTs CLI is absent; the full pipeline never installs this.
+lite = [
+    "antspyx",
+]
+# Surface-reconstruction acceleration: scikit-sparse (CHOLMOD) speeds up the spherical
+# projection in fastsurfer_surfrecon. It is OPTIONAL — the code falls back to a non-CHOLMOD
+# solver when it is absent (see fastsurfer_surfrecon/processing/spherical.py). It is NOT in
+# core deps because it has no wheels and must compile against SuiteSparse, which breaks on
+# hosts without it (e.g. the lite venv). The full pipeline installs it via the `surf` extra.
+# Cap below 0.5: scikit-sparse 0.5.x requires the newer SuiteSparse 7.x (single-precision
+# CHOLMOD); 0.4.x builds against both the common SuiteSparse 5.x (Ubuntu 22.04, Colab) and 7.x.
+surf = [
+    "scikit-sparse>=0.4.0,<0.5",
+    # surfplot: surface QC snapshots (imported under try/except in quality_control; never on the lite path)
+    "surfplot>=0.2.0",
+]
+# Functional pipeline: BIDS discovery (pybids) — used by steps/bids_discovery.py, not by lite.
+func = [
+    "pybids>=0.15.0",
+]
+# Model training / dev analysis ONLY (nhp_skullstrip_nn/fastsurfer_nn training, helper scripts).
+# NOT installed in the Docker pipeline image — the deployed image only preprocesses.
+train = [
+    "scikit-learn>=1.3.0",
+    "seaborn>=0.13.0",
+    # tensorboard: training-only run logging (torch.utils.tensorboard in fastsurfer_nn/training/trainer.py).
+    # The import there is guarded, so inference/lite work without it; training needs it installed.
+    "tensorboard>=2.0.0",
+]
+# Full preprocessing pipeline runtime (the Nextflow/Docker image installs this): surfaces +
+# functional/BIDS + optional resource reporting. Deliberately EXCLUDES [train] (training-only).
+full = [
+    "brainana[surf]",
+    "brainana[func]",
+    "psutil>=5.0.0",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -105,6 +136,12 @@ docs = [
 Homepage = "https://github.com/xingyu-liu/brainana"
 Documentation = "https://brainana.readthedocs.io"
 Repository = "https://github.com/xingyu-liu/brainana"
+
+[tool.uv]
+# fireants 1.5.0 hard-pins simpleitk==2.2.1, which isn't on PyPI for all platforms.
+# brainana standardizes on SimpleITK>=2.3.0 (verified working with fireants 1.5.0),
+# so override the transitive pin to let uv resolve. See the SimpleITK dependency note above.
+override-dependencies = ["simpleitk>=2.3.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

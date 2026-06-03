@@ -371,8 +371,15 @@ workflow FUNC_WF {
                 [sub, ses, run_id, conformed_tmean, bids_name]
             }
         
-        FUNC_COMPUTE_BRAIN_MASK(func_compute_mask_input, config_file, gpu_queue)
-        FUNC_COMPUTE_BRAIN_MASK.out.gpu_token.subscribe { gpu_queue << it }
+        // Use GPU token only when workflow-level GPU scheduling is enabled (use_gpu).
+        // Without this gate, brain-mask always pulls gpu_id=0 from gpu_queue and runs on
+        // GPU even in CPU mode (general.gpu_device=-1 / use_gpu=false).
+        def use_mask_gpu = params.use_gpu
+        def mask_gpu_input = use_mask_gpu ? gpu_queue : Channel.value('none')
+        FUNC_COMPUTE_BRAIN_MASK(func_compute_mask_input, config_file, mask_gpu_input)
+        if (use_mask_gpu) {
+            FUNC_COMPUTE_BRAIN_MASK.out.gpu_token.subscribe { gpu_queue << it }
+        }
         func_compute_mask_output = FUNC_COMPUTE_BRAIN_MASK.out.output
     } else {
         func_compute_mask_output = func_compute_conform_output

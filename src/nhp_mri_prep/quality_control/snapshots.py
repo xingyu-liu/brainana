@@ -19,7 +19,10 @@ import tempfile
 import shutil
 import subprocess
 
-from fastsurfer_surfrecon.io.surface import convert_fs_surface_to_gifti
+try:
+    from fastsurfer_surfrecon.io.surface import convert_fs_surface_to_gifti
+except Exception:
+    convert_fs_surface_to_gifti = None
 
 from .mri_plotting import (
     create_overlay_grid_3xN,
@@ -52,8 +55,6 @@ except (ImportError, ValueError, Exception):
     SURFPLOT_AVAILABLE = False
 
 # %%
-
-
 def create_conform_qc(
     conformed_file: str,
     template_file: str,

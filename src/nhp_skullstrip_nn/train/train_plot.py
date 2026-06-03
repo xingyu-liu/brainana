@@ -11,13 +11,20 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import torch
-import seaborn as sns
 from typing import Dict
 from datetime import datetime
 
 # Set style for better-looking plots
 plt.style.use("default")
-sns.set_palette("husl")
+# seaborn is a training-only dependency (the [train] extra) used here solely for the
+# cosmetic color palette. Guard it so importing this module (which the package __init__
+# pulls in eagerly, even on the inference/lite path) does not hard-require seaborn.
+try:
+    import seaborn as sns
+
+    sns.set_palette("husl")
+except ImportError:
+    pass
 
 
 class TrainingPlotter:

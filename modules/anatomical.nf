@@ -391,10 +391,14 @@ process ANAT_SKULLSTRIPPING {
     
     script:
     """
-    # GPU Assignment: Assign this job to GPU ${gpu_id} (round-robin distribution)
-    export CUDA_VISIBLE_DEVICES=${gpu_id}
-    echo "[GPU Assignment] Task ${task.index} -> GPU ${gpu_id} (of ${params.gpu_count} available)"
-    
+    # GPU Assignment (gpu_id is 'none' when workflow GPU scheduling is disabled, e.g. CPU mode)
+    if [ "${gpu_id}" != "none" ]; then
+        export CUDA_VISIBLE_DEVICES=${gpu_id}
+        echo "[GPU Assignment] Task ${task.index} -> GPU ${gpu_id} (of ${params.gpu_count} available)"
+    else
+        export CUDA_VISIBLE_DEVICES=""
+    fi
+
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.steps.anatomical import anat_skullstripping
 from nhp_mri_prep.steps.types import StepInput

@@ -59,7 +59,7 @@ Brainana can synthesize a single anatomical reference.
 
 
 2.2 Conform to reference
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Purpose:** Align the brain to reference space (orientation and
   grid) so that subsequent registrations and resamplings are
@@ -225,8 +225,14 @@ a session-averaged temporal mean.
   the original temporal signal for subsequent analyses.
 - **Method:** N4 bias field correction (ANTs
   ``N4BiasFieldCorrection``) is applied to the temporal mean of the
-  motion-corrected fMRI. An optional mask can be used, and
-  intensities may be rescaled (e.g. to mean 100) depending on config.
+  motion-corrected fMRI (and to anatomical images in the anatomical
+  workflow). Before N4, intensities may be rescaled to a non-zero mean
+  of 100 (configurable), and any negative voxels are clamped to zero
+  with a warning (N4 uses log-domain math). Anatomical bias correction
+  uses a brain mask from skull stripping so background zeros are
+  excluded from the histogram; functional bias correction runs earlier
+  in the pipeline (before conform/skull strip) and therefore has no
+  brain mask at this step—background zeros may remain in the image.
 
 
 3.7 Conform and skull stripping

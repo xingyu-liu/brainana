@@ -22,7 +22,10 @@ import numpy as np
 import torch
 import torch.optim.lr_scheduler as scheduler
 import yacs.config
-from torch.utils.tensorboard import SummaryWriter
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except ImportError:
+    SummaryWriter = None  # tensorboard is a training-only dependency; absent in lite/inference
 from tqdm import tqdm
 
 from fastsurfer_nn.atlas.atlas_manager import get_atlas_manager

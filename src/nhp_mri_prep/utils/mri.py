@@ -18,38 +18,81 @@ def calculate_func_tmean(
     outputf: str,
     logger: logging.Logger,
 ) -> Dict[str, str]:
-    """Calculate mean functional image.
+    """Calculate the temporal mean of a functional image (nibabel, FSL-free).
+
+    Equivalent to ``fslmaths <funcf> -Tmean <outputf>``: averages over the last
+    (time) axis for 4D inputs; a 3D input is written through unchanged. Implemented
+    with nibabel/numpy so it needs no FSL binary.
 
     Args:
         funcf: Input functional file
-        dir_working: Working directory
+        outputf: Output mean file path
         logger: Logger instance
-        output_name: Name for the output mean file
 
     Returns:
         Dictionary with output file path
     """
-
-    # Build command as list of strings
-    command_fslmaths = ["fslmaths", str(funcf), "-Tmean", str(outputf)]
-
     try:
-        returncode, stdout, stderr = run_command(command_fslmaths, step_logger=logger)
-        if returncode == 0:
-            logger.info(
-                f"Output: mean functional image created successfully - {outputf}"
-            )
-        else:
-            logger.error(
-                f"Step: mean functional image creation failed - return code {returncode}"
-            )
-            logger.error(f"System: stderr - {stderr}")
-            raise RuntimeError(f"Mean functional image creation failed: {stderr}")
+        img = nib.load(str(funcf))
+        data = img.get_fdata()
+        mean_data = data.mean(axis=-1) if data.ndim == 4 else data
+        out_img = nib.Nifti1Image(
+            mean_data.astype(np.float32), img.affine, img.header
+        )
+        out_img.header.set_data_dtype(np.float32)
+        nib.save(out_img, str(outputf))
+        logger.info(f"Output: mean functional image created successfully - {outputf}")
     except Exception as e:
         logger.error(f"Step: mean functional image creation failed - {str(e)}")
         raise
 
     return {"output": outputf}
+
+
+def apply_brain_mask(
+    imagef: Union[str, Path],
+    maskf: Union[str, Path],
+    outputf: Union[str, Path],
+    logger: Optional[logging.Logger] = None,
+    binarize: bool = True,
+) -> Dict[str, str]:
+    """Mask an image by a (brain) mask using nibabel (FSL-free).
+
+    Equivalent to ``fslmaths <image> -mas <mask> <output>``: zeroes out voxels where the
+    mask is zero, preserving the image's affine/header/dtype. Handles a 3D mask applied
+    to a 4D image by broadcasting over the time axis. ``binarize`` mirrors FSL's ``-mas``
+    semantics (mask treated as ``|mask| > 0``); set False to multiply by raw mask values.
+
+    Args:
+        imagef: Image to be masked (3D or 4D)
+        maskf: Mask image (3D)
+        outputf: Output file path
+        logger: Logger instance (optional)
+        binarize: Treat the mask as boolean (|mask| > 0); default True.
+
+    Returns:
+        Dictionary with the output file path under key 'output'.
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    img = nib.load(str(imagef))
+    mask_img = nib.load(str(maskf))
+    data = img.get_fdata()
+    mask = mask_img.get_fdata()
+    mask = (np.abs(mask) > 0).astype(data.dtype) if binarize else mask
+
+    if data.ndim == 4 and mask.ndim == 3:
+        masked = data * mask[..., np.newaxis]
+    else:
+        masked = data * mask
+
+    out_img = nib.Nifti1Image(
+        masked.astype(img.get_data_dtype()), img.affine, img.header
+    )
+    nib.save(out_img, str(outputf))
+    logger.info(f"Output: masked image created successfully - {outputf}")
+    return {"output": str(outputf)}
 
 
 def get_image_shape(
@@ -68,18 +111,18 @@ def get_image_shape(
     if logger is None:
         logger = logging.getLogger(__name__)
 
-    # use 3dinfo to get the shape of the image
-    command_3dinfo = ["3dinfo", "-n4", str(imagef)]
-    returncode, stdout, stderr = run_command(command_3dinfo, step_logger=logger)
-    if returncode == 0:
-        logger.info(f"Data: image shape - {stdout}")
-        # Parse the output and convert to integers
-        shape_values = stdout.strip().split()
-        return [int(dim) for dim in shape_values]
-    else:
-        logger.error(f"Step: image shape retrieval failed - return code {returncode}")
-        logger.error(f"System: stderr - {stderr}")
-        raise RuntimeError(f"Image shape retrieval failed: {stderr}")
+    # Read the shape via nibabel (FSL/AFNI-free). Mirrors ``3dinfo -n4`` by always
+    # returning 4 dims [x, y, z, t] (t = 1 for 3D), without loading voxel data.
+    try:
+        shape = list(nib.load(str(imagef)).shape)
+        while len(shape) < 4:
+            shape.append(1)
+        shape = [int(d) for d in shape[:4]]
+        logger.info(f"Data: image shape - {shape}")
+        return shape
+    except Exception as e:
+        logger.error(f"Step: image shape retrieval failed - {e}")
+        raise RuntimeError(f"Image shape retrieval failed: {e}")
 
 
 def shape_to_ants_input_type(shape: list) -> int:
@@ -121,20 +164,16 @@ def get_image_resolution(
     if logger is None:
         logger = logging.getLogger(__name__)
 
-    # use 3dinfo to get the resolution of the image
-    command_3dinfo = ["3dinfo", "-ad3", str(imagef)]
-    returncode, stdout, stderr = run_command(command_3dinfo, step_logger=logger)
-    if returncode == 0:
-        logger.info(f"Data: image resolution - {stdout}")
-        # Parse the output and convert to floats
-        resolution_values = stdout.strip().split()
-        return [float(res) for res in resolution_values]
-    else:
-        logger.error(
-            f"Step: image resolution retrieval failed - return code {returncode}"
-        )
-        logger.error(f"System: stderr - {stderr}")
-        raise RuntimeError(f"Image resolution retrieval failed: {stderr}")
+    # Read voxel sizes via nibabel (FSL/AFNI-free). Equivalent to ``3dinfo -ad3``
+    # (absolute |dx|,|dy|,|dz| in mm); magnitudes are orientation-convention independent.
+    try:
+        zooms = nib.load(str(imagef)).header.get_zooms()
+        resolution = [abs(float(z)) for z in zooms[:3]]
+        logger.info(f"Data: image resolution - {resolution}")
+        return resolution
+    except Exception as e:
+        logger.error(f"Step: image resolution retrieval failed - {e}")
+        raise RuntimeError(f"Image resolution retrieval failed: {e}")
 
 
 def get_image_orientation(

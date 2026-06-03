@@ -315,8 +315,15 @@ workflow ANAT_WF {
     def anat_skull_seg_lut = Channel.empty()
     
     if (anat_skullstripping_enabled) {
-        ANAT_SKULLSTRIPPING(anat_after_conform, config_file, gpu_queue)
-        ANAT_SKULLSTRIPPING.out.gpu_token.subscribe { gpu_queue << it }
+        // Use GPU token only when workflow-level GPU scheduling is enabled (use_gpu).
+        // Without this gate, skullstripping always pulls gpu_id=0 from gpu_queue and runs on
+        // GPU even in CPU mode (general.gpu_device=-1 / use_gpu=false).
+        def use_skull_gpu = params.use_gpu
+        def skull_gpu_input = use_skull_gpu ? gpu_queue : Channel.value('none')
+        ANAT_SKULLSTRIPPING(anat_after_conform, config_file, skull_gpu_input)
+        if (use_skull_gpu) {
+            ANAT_SKULLSTRIPPING.out.gpu_token.subscribe { gpu_queue << it }
+        }
         // Principle: anat_after_skull = full head (not skullstripped), anat_after_skull_brain = brain (skullstripped)
         anat_after_skull = ANAT_SKULLSTRIPPING.out.output  // Full head version (_T1w)
         anat_after_skull_brain = ANAT_SKULLSTRIPPING.out.brain  // Brain-only version (_T1w_brain)

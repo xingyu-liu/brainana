@@ -2,18 +2,24 @@
 .git
 .github
 .gitignore
+.gitattributes
 
 # Python artifacts
 .venv
 venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.egg-info/
+list/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.egg-info/
 dist/
 build/
 .eggs/
+
+# Local dev clones / venvs (not used by Dockerfile; can be hundreds of MB)
+.fireants-src/
+.rtd-venv/
 
 # Development
 .pytest_cache/
@@ -27,24 +33,39 @@ htmlcov/
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
+**/*.swp
+**/*.swo
+**/*~
 
 # Jupyter
-.ipynb_checkpoints/
-*.ipynb
+**/.ipynb_checkpoints/
+**/*.ipynb
 
 # Testing (not needed in runtime image)
 tests/
+
+# Examples / tutorials (not needed in runtime image)
+examples/
+
+# Dev / scratch scripts (repo-root scripts/; pipeline uses src/**/nextflow_scripts/)
+scripts/
+
+# Internal planning docs (tracked in git; not used at runtime)
+docs_temp/
 
 # Documentation (not needed in runtime image)
 docs/
 *.md
 !README.md
 
-# Docker files (don't copy Dockerfile into image)
+# CI / publishing config
+.readthedocs.yaml
+
+# Docker metadata (keep docker/files/ — FreeSurfer slim install stage copies freesurfer-exclude.txt)
 Dockerfile*
+docker/*
+!docker/files/
+!docker/files/**
 docker-compose*.yml
 .dockerignore
 
@@ -53,11 +74,17 @@ work/
 nextflow
 .nextflow/
 .nextflow.log*
+null/
+
+# Secrets / local licenses (never ship in image)
+.env
+.env.*
+license.txt
 
 # Misc
-.db
-.DS_Store
-*.log
-*.tmp
-*.bak
-
+**/.db
+**/.DS_Store
+**/Thumbs.db
+**/*.log
+**/*.tmp
+**/*.bak

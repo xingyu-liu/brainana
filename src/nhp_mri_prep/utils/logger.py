@@ -8,16 +8,31 @@ Usage:
     3. Use get_logger(__name__) in each module to get a logger
 """
 
-import os
+import contextlib
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Optional, Union, Any
 
-# Create the central logger with default configuration
+# Standard console/file format for brainana (no milliseconds in timestamps).
+LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(message)s"
+LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
+
+# In-repo sibling packages that ship their own loggers. When brainana sets up
+# logging we silence their stray handlers so notebook/IPython output isn't
+# duplicated or formatted with milliseconds. Keep this list in sync if the
+# bundled packages are renamed or new ones are added.
+_SIBLING_LOGGER_PREFIXES = (
+    "nhp_skullstrip_nn",
+    "fastsurfer_nn",
+    "fastsurfer_surfrecon",
+    "fireants",
+)
+
+# Central application logger; handlers are attached by setup_logging().
 _LOGGER = logging.getLogger("nhp_mri_prep")
-_LOGGER.setLevel(logging.WARNING)  # Default to WARNING level
-_LOGGER.addHandler(logging.StreamHandler())  # Default to console output
+_LOGGER.setLevel(logging.WARNING)  # Default to WARNING level until setup_logging()
 
 
 def normalize_verbose(value: Any, default: int = 1) -> int:
@@ -112,11 +127,130 @@ def verbose_to_log_level(verbose: int) -> str:
         return "DEBUG"  # Verbose mode - show everything
 
 
+class _LoggerWriter:
+    """File-like object that forwards writes to a logger, buffered by line."""
+
+    def __init__(self, log_func):
+        self._log_func = log_func
+        self._buffer = ""
+
+    def write(self, message: str) -> int:
+        self._buffer += message
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            if line.strip():
+                self._log_func(line)
+        return len(message)
+
+    def flush(self) -> None:
+        if self._buffer.strip():
+            self._log_func(self._buffer)
+        self._buffer = ""
+
+
+@contextlib.contextmanager
+def quiet_external_output(logger: logging.Logger):
+    """Route third-party stdout/stderr (and disable tqdm bars) when not verbose.
+
+    Third-party packages (e.g. fastsurfer_nn, FireANTs) emit progress via raw
+    ``print()`` and ``tqdm``, which bypass the logging level. When ``logger`` is
+    not enabled for INFO, this redirects raw stdout/stderr to ``logger.debug``
+    (suppressed at WARNING level) and sets ``TQDM_DISABLE`` so progress bars are
+    silenced. When verbose, it is a no-op pass-through.
+    """
+    if logger.isEnabledFor(logging.INFO):
+        yield
+        return
+
+    writer = _LoggerWriter(logger.debug)
+    prev_tqdm_disable = os.environ.get("TQDM_DISABLE")
+    os.environ["TQDM_DISABLE"] = "1"
+    try:
+        with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
+            yield
+    finally:
+        if prev_tqdm_disable is None:
+            os.environ.pop("TQDM_DISABLE", None)
+        else:
+            os.environ["TQDM_DISABLE"] = prev_tqdm_disable
+
+
+def _quiet_sibling_package_loggers() -> None:
+    """Remove stray handlers on sibling packages (avoids duplicate/ms lines in Jupyter)."""
+    for name in list(logging.Logger.manager.loggerDict.keys()):
+        if not name or name == "nhp_mri_prep" or name.startswith("nhp_mri_prep."):
+            continue
+        if not any(name.startswith(prefix) for prefix in _SIBLING_LOGGER_PREFIXES):
+            continue
+        log = logging.getLogger(name)
+        log.handlers.clear()
+        log.propagate = False
+
+
+def _build_handlers(
+    level: Union[str, int],
+    format_str: str,
+    log_file: Optional[Union[str, Path]] = None,
+    file_required: bool = False,
+) -> list:
+    """Build a console handler plus an optional file handler sharing one format.
+
+    Centralizes the handler-creation boilerplate used by the ``setup_*``
+    functions so the console/file formatters and level stay consistent.
+
+    Args:
+        level: Level applied to every handler (string name or int).
+        format_str: Format string for log messages (timestamps use LOG_DATEFMT).
+        log_file: If given, also create a FileHandler for this path. Parent
+            directories are created as needed.
+        file_required: If True, failing to create the file handler is fatal and
+            raises RuntimeError. If False, the failure is reported to stderr and
+            only the console handler is returned.
+
+    Returns:
+        List of handlers (console first, file second if it was created).
+
+    Raises:
+        RuntimeError: If ``file_required`` is True and the file handler cannot
+            be created.
+    """
+    # A single Formatter instance is safe to share across handlers — formatters
+    # are stateless. LOG_DATEFMT keeps timestamps free of milliseconds.
+    formatter = logging.Formatter(format_str, datefmt=LOG_DATEFMT)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(level)
+    handlers = [console_handler]
+
+    if log_file is not None:
+        log_file = Path(log_file)
+        try:
+            # parent is "." for a bare filename, so this is always safe.
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setFormatter(formatter)
+            file_handler.setLevel(level)
+            handlers.append(file_handler)
+        except Exception as e:
+            if file_required:
+                error_msg = f"CRITICAL: Failed to create log file {log_file}: {e}"
+                print(error_msg, file=sys.stderr)
+                raise RuntimeError(error_msg)
+            print(
+                f"Warning: Failed to setup file logging to {log_file}: {e}",
+                file=sys.stderr,
+            )
+
+    return handlers
+
+
 def setup_logging(
     log_file: Optional[str] = None,
     level: Union[str, int] = logging.INFO,
     name: str = "nhp_mri_prep",
-    format_str: str = "%(asctime)s | %(levelname)-8s | %(message)s",
+    format_str: str = LOG_FORMAT,
+    quiet_root: bool = True,
 ) -> None:
     """Set up main application logging configuration.
 
@@ -129,6 +263,9 @@ def setup_logging(
             'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
         name: Name of the logger (default: "nhp_mri_prep")
         format_str: Format string for log messages
+        quiet_root: If True (default), remove handlers from the root logger so
+            Jupyter/IPython or a prior ``basicConfig`` call cannot duplicate
+            ``nhp_mri_prep`` log lines.
     """
     global _LOGGER
 
@@ -136,39 +273,20 @@ def setup_logging(
     if isinstance(level, str):
         level = getattr(logging, level.upper())
 
-    # Create formatters (datefmt removes milliseconds from timestamp)
-    datefmt = "%Y-%m-%d %H:%M:%S"
-    console_formatter = logging.Formatter(format_str, datefmt=datefmt)
-    file_formatter = logging.Formatter(format_str, datefmt=datefmt)
+    if quiet_root:
+        root = logging.getLogger()
+        for handler in root.handlers[:]:
+            root.removeHandler(handler)
+        _quiet_sibling_package_loggers()
 
-    # Create handlers
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(console_formatter)
-    console_handler.setLevel(level)
+    # File handler failure is non-fatal here: console logging still works.
+    handlers = _build_handlers(level, format_str, log_file, file_required=False)
 
-    handlers = [console_handler]
-
-    # Add file handler if log_file is provided
-    if log_file:
-        try:
-            # Create log directory if it doesn't exist
-            log_dir = os.path.dirname(log_file)
-            if log_dir:
-                os.makedirs(log_dir, exist_ok=True)
-
-            file_handler = logging.FileHandler(log_file)
-            file_handler.setFormatter(file_formatter)
-            file_handler.setLevel(level)
-            handlers.append(file_handler)
-        except Exception as e:
-            print(
-                f"Warning: Failed to setup file logging to {log_file}: {e}",
-                file=sys.stderr,
-            )
-
-    # Configure the central logger
+    # Configure the central logger (do not propagate to root — avoids duplicate lines
+    # when the host app or Jupyter also configures root logging).
     _LOGGER.setLevel(level)
     _LOGGER.handlers = []  # Clear existing handlers
+    _LOGGER.propagate = False
     for handler in handlers:
         _LOGGER.addHandler(handler)
 
@@ -195,7 +313,7 @@ def setup_step_logging(
     logs_dir: Union[str, Path],
     step_name: str,
     level: Union[str, int] = logging.DEBUG,
-    format_str: str = "%(asctime)s | %(levelname)-8s | %(message)s",
+    format_str: str = LOG_FORMAT,
 ) -> logging.Logger:
     """Set up step-specific logging.
 
@@ -233,35 +351,15 @@ def setup_step_logging(
     # Clear any existing handlers to avoid duplicates
     step_logger.handlers.clear()
 
-    # Create formatters (datefmt removes milliseconds from timestamp)
-    datefmt = "%Y-%m-%d %H:%M:%S"
-    console_formatter = logging.Formatter(format_str, datefmt=datefmt)
-    file_formatter = logging.Formatter(format_str, datefmt=datefmt)
-
-    # Create console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(console_formatter)
-    console_handler.setLevel(level)
-    step_logger.addHandler(console_handler)
-
-    # Create file handler for step-specific log (directly in logs_dir)
+    # File handler is mandatory for step logs: failure to create it is fatal.
     log_file = logs_dir / f"{step_name}.log"
-    try:
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(file_formatter)
-        file_handler.setLevel(level)
-        step_logger.addHandler(file_handler)
+    for handler in _build_handlers(level, format_str, log_file, file_required=True):
+        step_logger.addHandler(handler)
 
-        # Log initialization to confirm logging is working
-        step_logger.info(f"Step logging initialized: {log_file}")
-        step_logger.info(f"Step name: {step_name}")
-        step_logger.info(f"Logging level: {logging.getLevelName(level)}")
-
-    except Exception as e:
-        # If we can't create the step log file, this is a critical error
-        error_msg = f"CRITICAL: Failed to create step log file {log_file}: {e}"
-        print(error_msg, file=sys.stderr)
-        raise RuntimeError(error_msg)
+    # Log initialization to confirm logging is working
+    step_logger.info(f"Step logging initialized: {log_file}")
+    step_logger.info(f"Step name: {step_name}")
+    step_logger.info(f"Logging level: {logging.getLevelName(level)}")
 
     return step_logger
 
@@ -270,7 +368,7 @@ def setup_workflow_logging(
     workflow_dir: Union[str, Path],
     workflow_name: str,
     level: Union[str, int] = logging.INFO,
-    format_str: str = "%(asctime)s | %(levelname)-8s | %(message)s",
+    format_str: str = LOG_FORMAT,
 ) -> logging.Logger:
     """Set up workflow-specific logging.
 
@@ -308,35 +406,15 @@ def setup_workflow_logging(
     # Clear any existing handlers to avoid duplicates
     workflow_logger.handlers.clear()
 
-    # Create formatters (datefmt removes milliseconds from timestamp)
-    datefmt = "%Y-%m-%d %H:%M:%S"
-    console_formatter = logging.Formatter(format_str, datefmt=datefmt)
-    file_formatter = logging.Formatter(format_str, datefmt=datefmt)
-
-    # Create console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(console_formatter)
-    console_handler.setLevel(level)
-    workflow_logger.addHandler(console_handler)
-
-    # Create file handler for workflow.log
+    # File handler is mandatory for workflow logs: failure to create it is fatal.
     log_file = workflow_dir / "workflow.log"
-    try:
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(file_formatter)
-        file_handler.setLevel(level)
-        workflow_logger.addHandler(file_handler)
+    for handler in _build_handlers(level, format_str, log_file, file_required=True):
+        workflow_logger.addHandler(handler)
 
-        # Log initialization to confirm logging is working
-        workflow_logger.info(f"Workflow logging initialized: {log_file}")
-        workflow_logger.info(f"Workflow name: {workflow_name}")
-        workflow_logger.info(f"Logging level: {logging.getLevelName(level)}")
-
-    except Exception as e:
-        # If we can't create the workflow log file, this is a critical error
-        error_msg = f"CRITICAL: Failed to create workflow log file {log_file}: {e}"
-        print(error_msg, file=sys.stderr)
-        raise RuntimeError(error_msg)
+    # Log initialization to confirm logging is working
+    workflow_logger.info(f"Workflow logging initialized: {log_file}")
+    workflow_logger.info(f"Workflow name: {workflow_name}")
+    workflow_logger.info(f"Logging level: {logging.getLevelName(level)}")
 
     return workflow_logger
 
