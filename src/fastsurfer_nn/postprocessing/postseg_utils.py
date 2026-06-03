@@ -10,6 +10,7 @@ Contains reusable functions for:
 Copyright 2024
 """
 
+import logging
 from pathlib import Path
 from typing import List, Optional
 
@@ -19,6 +20,9 @@ from numpy import typing as npt
 from skimage.measure import label
 
 from fastsurfer_nn.data_loader.data_utils import read_classes_from_lut
+
+
+logger = logging.getLogger(__name__)
 
 
 def flip_wm_islands(
@@ -45,10 +49,10 @@ def flip_wm_islands(
         Segmentation with WM islands flipped
     """
     if not lh_wm_labels and not rh_wm_labels:
-        print("No WM labels provided, skipping flip_wm_islands")
+        logger.debug("No WM labels provided, skipping flip_wm_islands")
         return aseg_data
 
-    print("Checking for disconnected WM islands...")
+    logger.info("Checking for disconnected WM islands...")
 
     # Process each hemisphere's WM labels
     for wm_labels, other_wm_labels, hemi in [
@@ -80,7 +84,9 @@ def flip_wm_islands(
             if num_components <= 1:
                 continue
 
-            print(f"  {hemi} WM (label={wm_label}) has {num_components} components")
+            logger.debug(
+                f"  {hemi} WM (label={wm_label}) has {num_components} components"
+            )
 
             # Find largest component
             unique, counts = np.unique(labeled_wm[labeled_wm > 0], return_counts=True)
@@ -119,12 +125,12 @@ def flip_wm_islands(
                 if dist_to_other < dist_to_main:
                     # Use the first other WM label as target
                     target_label = other_wm_labels[0]
-                    print(
+                    logger.debug(
                         f"    {i+1} / {len(unique)} island (size={island_size}) is closer to other hemisphere, flipping to label {target_label}"
                     )
                     aseg_data[island_mask] = target_label
                 else:
-                    print(
+                    logger.debug(
                         f"    {i+1} / {len(unique)} island (size={island_size}) is in the correct hemisphere"
                     )
 
@@ -163,8 +169,8 @@ def flip_wm_islands_auto(
             hemi_col = col
 
     if region_col is None or hemi_col is None:
-        print(
-            f"Warning: ColorLUT {lut_path.name} doesn't have extended format, skipping flip_wm_islands"
+        logger.warning(
+            f"ColorLUT {lut_path.name} doesn't have extended format, skipping flip_wm_islands"
         )
         return aseg_data
 
@@ -178,12 +184,12 @@ def flip_wm_islands_auto(
     ].tolist()
 
     if not lh_wm_labels and not rh_wm_labels:
-        print(
-            "Warning: No WM labels found in extended ColorLUT, skipping flip_wm_islands"
+        logger.warning(
+            "No WM labels found in extended ColorLUT, skipping flip_wm_islands"
         )
         return aseg_data
 
-    print("✓ Loaded WM labels from extended ColorLUT")
+    logger.debug("Loaded WM labels from extended ColorLUT")
     return flip_wm_islands(
         aseg_data, lh_wm_labels=lh_wm_labels, rh_wm_labels=rh_wm_labels
     )
@@ -290,47 +296,47 @@ def create_mask(
     if rounds < 1:
         raise ValueError(f"rounds must be >= 1, got {rounds}")
 
-    print(f"Creating mask (dilate {dnum}, erode {enum}, rounds {rounds})...")
+    logger.info(f"Creating mask (dilate {dnum}, erode {enum}, rounds {rounds})...")
 
     # Log input data statistics
     unique_vals = np.unique(seg_data)
     num_unique = len(unique_vals)
-    print(
+    logger.debug(
         f"  Input: shape={seg_data.shape}, dtype={seg_data.dtype}, "
         f"range=[{seg_data.min()}, {seg_data.max()}], "
         f"unique values={num_unique}"
     )
 
     if num_unique == 2 and set(unique_vals) == {0, 1}:
-        print("  Input is binary (0/1)")
+        logger.debug("  Input is binary (0/1)")
     elif num_unique <= 10:
-        print(f"  Input is multi-class with {num_unique} classes")
+        logger.debug(f"  Input is multi-class with {num_unique} classes")
     else:
-        print(
+        logger.debug(
             f"  Input has {num_unique} unique values (may be continuous/probability map)"
         )
 
     # Get initial mask (before dilation or erosion)
     mask = (seg_data != 0).astype(int)
     initial_voxels = np.sum(mask)
-    print(
+    logger.debug(
         f"  Initial mask: {initial_voxels:,} voxels ({100 * initial_voxels / mask.size:.2f}% of volume)"
     )
 
     for round_idx in range(rounds):
         if rounds > 1:
-            print(f"  Round {round_idx + 1}/{rounds}:")
+            logger.debug(f"  Round {round_idx + 1}/{rounds}:")
 
         # 1. Extract largest component and fill holes
         mask = extract_largest_component(mask)
         voxels_after_component = np.sum(mask)
-        print(
+        logger.debug(
             f"    After extracting largest component: {voxels_after_component:,} voxels"
         )
 
         mask = fill_label_holes(mask)
         voxels_after_holes = np.sum(mask)
-        print(f"    After filling holes: {voxels_after_holes:,} voxels")
+        logger.debug(f"    After filling holes: {voxels_after_holes:,} voxels")
 
         # 2. Apply morphological operations (dilation then erosion)
         # Use padding to avoid boundary effects where dilation is constrained
@@ -355,7 +361,7 @@ def create_mask(
                     padded_mask, iterations=dnum
                 )
                 voxels_after_dilate = np.sum(padded_mask)
-                print(
+                logger.debug(
                     f"    After dilation ({dnum} iterations): {voxels_after_dilate:,} voxels"
                 )
 
@@ -366,11 +372,11 @@ def create_mask(
                 )
                 voxels_after_erode = np.sum(padded_mask)
                 if round_idx < rounds - 1:
-                    print(
+                    logger.debug(
                         f"    After closing erosion ({enum_this_round} iterations): {voxels_after_erode:,} voxels"
                     )
                 else:
-                    print(
+                    logger.debug(
                         f"    After final erosion ({enum_this_round} iterations): {voxels_after_erode:,} voxels"
                     )
 
@@ -383,22 +389,19 @@ def create_mask(
 
     final_voxels = np.sum(mask)
     volume_pct = 100 * final_voxels / mask.size
-    print(
-        f"  Final mask: {final_voxels:,} voxels ({volume_pct:.2f}% of volume)", end=""
-    )
+    final_msg = f"  Final mask: {final_voxels:,} voxels ({volume_pct:.2f}% of volume)"
 
-    # Calculate and display brain volume in mL if voxel size is provided
+    # Append brain volume in mL if voxel size is provided
     if voxel_size is not None:
         voxel_volume_mm3 = np.prod(voxel_size)  # mm³ per voxel
         brain_volume_mL = (
             final_voxels * voxel_volume_mm3
         ) / 1000.0  # Convert mm³ to mL
-        print(f" ({brain_volume_mL:.2f} mL)")
-    else:
-        print()
+        final_msg += f" ({brain_volume_mL:.2f} mL)"
+    logger.info(final_msg)
 
     if final_voxels == 0:
-        print("  Warning: Final mask is empty!")
+        logger.warning("  Final mask is empty!")
 
     return mask.astype(int)
 
@@ -438,7 +441,7 @@ def create_hemisphere_masks(
     hemi_dict = {"rh": 1, "lh": 2}
     hemi_list = ["rh", "lh"]
 
-    print("Creating hemisphere masks...")
+    logger.info("Creating hemisphere masks...")
 
     # Step 1: Create initial hemisphere masks based on atlas segmentation
     # Read hemisphere info directly from ColorLUT for ALL labels (won't miss anything)
@@ -454,7 +457,7 @@ def create_hemisphere_masks(
     for hemi in hemi_list:
         if hemi_labels[hemi]:
             hemi_mask_definitive[hemi][np.isin(atlas_seg_data, hemi_labels[hemi])] = 1
-            print(
+            logger.debug(
                 f"  {hemi.upper()}: {np.sum(hemi_mask_definitive[hemi])} voxels from atlas labels (definitive)"
             )
 
@@ -466,13 +469,13 @@ def create_hemisphere_masks(
     # Find voxels in brain mask but NOT in atlas segmentation - these need hemisphere assignment
     needs_assignment = (mask_data == 1) & (has_atlas_label == 0)
     num_needs_assignment = np.sum(needs_assignment)
-    print(
+    logger.debug(
         f"  {num_needs_assignment} voxels in mask need hemisphere assignment (not in atlas)"
     )
 
     # Step 2: For voxels needing assignment, dilate from definitive hemisphere regions
     if num_needs_assignment > 0:
-        print("  Dilating from definitive regions (5 iterations)...")
+        logger.debug("  Dilating from definitive regions (5 iterations)...")
         hemi_mask_dilated = {}
         for hemi in hemi_list:
             hemi_mask_dilated[hemi] = scipy.ndimage.binary_dilation(
@@ -505,7 +508,7 @@ def create_hemisphere_masks(
     num_unassigned = np.sum(voxels_unassigned)
 
     if num_unassigned > 0:
-        print(
+        logger.debug(
             f"  Assigning {num_unassigned} unassigned voxels to nearest hemisphere (flood-fill)..."
         )
 
@@ -559,23 +562,23 @@ def create_hemisphere_masks(
                 if np.sum(new_rh_unassigned) == 0 and np.sum(new_lh_unassigned) == 0:
                     break
 
-            print(
+            logger.debug(
                 f"    Assigned {num_assigned_rh} to RH, {num_assigned_lh} to LH (after {iteration} iterations)"
             )
             if num_unassigned > 0:
-                print(f"    Warning: {num_unassigned} voxels remain unassigned")
+                logger.warning(f"    {num_unassigned} voxels remain unassigned")
         elif has_rh:
             # Only RH exists, assign all unassigned to RH
             hemi_mask[voxels_unassigned] = hemi_dict["rh"]
-            print(f"    Assigned all {num_unassigned} to RH (LH empty)")
+            logger.debug(f"    Assigned all {num_unassigned} to RH (LH empty)")
         elif has_lh:
             # Only LH exists, assign all unassigned to LH
             hemi_mask[voxels_unassigned] = hemi_dict["lh"]
-            print(f"    Assigned all {num_unassigned} to LH (RH empty)")
+            logger.debug(f"    Assigned all {num_unassigned} to LH (RH empty)")
 
     # Final statistics
     rh_count = np.sum(hemi_mask == hemi_dict["rh"])
     lh_count = np.sum(hemi_mask == hemi_dict["lh"])
-    print(f"  Final: RH={rh_count:,} voxels, LH={lh_count:,} voxels")
+    logger.info(f"  Final: RH={rh_count:,} voxels, LH={lh_count:,} voxels")
 
     return hemi_mask

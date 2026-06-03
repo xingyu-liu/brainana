@@ -7,6 +7,7 @@ including slice timing correction, motion correction, despike, skull stripping, 
 
 import os
 import shutil
+import contextlib
 import pandas as pd
 import numpy as np
 import logging
@@ -1278,6 +1279,60 @@ def despike(
         raise RuntimeError(f"Despiking failed: {e}") from e
 
 
+class _LoggerWriter:
+    """File-like object that forwards writes to a logger, buffered by line.
+
+    Used to capture raw ``stdout``/``stderr`` from third-party code (e.g. the
+    ``print()``-based ``fastsurfer_nn`` package) and re-emit it through the
+    logging system so it honors the configured log level.
+    """
+
+    def __init__(self, log_func):
+        self._log_func = log_func
+        self._buffer = ""
+
+    def write(self, message: str) -> int:
+        self._buffer += message
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            if line.strip():
+                self._log_func(line)
+        return len(message)
+
+    def flush(self) -> None:
+        if self._buffer.strip():
+            self._log_func(self._buffer)
+        self._buffer = ""
+
+
+@contextlib.contextmanager
+def _quiet_external_output(logger: logging.Logger):
+    """Route third-party ``stdout``/``stderr`` (and disable tqdm bars) when not verbose.
+
+    fastsurfer_nn emits progress via raw ``print()`` and ``tqdm``, which bypass the
+    logging level. When ``logger`` is not enabled for INFO (i.e. VERBOSE=False), this
+    redirects raw stdout/stderr to ``logger.debug`` (suppressed at WARNING level) and
+    sets ``TQDM_DISABLE`` so progress bars are silenced. When verbose, it is a no-op
+    pass-through. Note: logging handlers hold their own stream references captured at
+    setup time, so the logger's own output is unaffected by the redirect.
+    """
+    if logger.isEnabledFor(logging.INFO):
+        yield
+        return
+
+    writer = _LoggerWriter(logger.debug)
+    prev_tqdm_disable = os.environ.get("TQDM_DISABLE")
+    os.environ["TQDM_DISABLE"] = "1"
+    try:
+        with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
+            yield
+    finally:
+        if prev_tqdm_disable is None:
+            os.environ.pop("TQDM_DISABLE", None)
+        else:
+            os.environ["TQDM_DISABLE"] = prev_tqdm_disable
+
+
 def apply_segmentation(
     imagef: Union[str, Path],
     modal: str,
@@ -1395,7 +1450,10 @@ def apply_segmentation(
             segmentation_kwargs["roi_name"] = roi_name
             segmentation_kwargs["wm_thr"] = fscnn_cfg.get("wm_thr", 0.5)
 
-        result = run_segmentation(**segmentation_kwargs)
+        # fastsurfer_nn emits progress via raw print()/tqdm; route it through the
+        # logger (and disable tqdm) when not verbose so skullstripping honors VERBOSE.
+        with _quiet_external_output(logger):
+            result = run_segmentation(**segmentation_kwargs)
 
         # Extract brain mask path and atlas_name from result
         fastsurfercnn_mask_path = result.get("brain_mask")
