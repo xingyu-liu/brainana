@@ -8,7 +8,9 @@ Usage:
     3. Use get_logger(__name__) in each module to get a logger
 """
 
+import contextlib
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Optional, Union, Any
@@ -25,6 +27,7 @@ _SIBLING_LOGGER_PREFIXES = (
     "nhp_skullstrip_nn",
     "fastsurfer_nn",
     "fastsurfer_surfrecon",
+    "fireants",
 )
 
 # Central application logger; handlers are attached by setup_logging().
@@ -122,6 +125,54 @@ def verbose_to_log_level(verbose: int) -> str:
         return "INFO"  # Normal mode - standard information
     else:  # verbose == 2
         return "DEBUG"  # Verbose mode - show everything
+
+
+class _LoggerWriter:
+    """File-like object that forwards writes to a logger, buffered by line."""
+
+    def __init__(self, log_func):
+        self._log_func = log_func
+        self._buffer = ""
+
+    def write(self, message: str) -> int:
+        self._buffer += message
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            if line.strip():
+                self._log_func(line)
+        return len(message)
+
+    def flush(self) -> None:
+        if self._buffer.strip():
+            self._log_func(self._buffer)
+        self._buffer = ""
+
+
+@contextlib.contextmanager
+def quiet_external_output(logger: logging.Logger):
+    """Route third-party stdout/stderr (and disable tqdm bars) when not verbose.
+
+    Third-party packages (e.g. fastsurfer_nn, FireANTs) emit progress via raw
+    ``print()`` and ``tqdm``, which bypass the logging level. When ``logger`` is
+    not enabled for INFO, this redirects raw stdout/stderr to ``logger.debug``
+    (suppressed at WARNING level) and sets ``TQDM_DISABLE`` so progress bars are
+    silenced. When verbose, it is a no-op pass-through.
+    """
+    if logger.isEnabledFor(logging.INFO):
+        yield
+        return
+
+    writer = _LoggerWriter(logger.debug)
+    prev_tqdm_disable = os.environ.get("TQDM_DISABLE")
+    os.environ["TQDM_DISABLE"] = "1"
+    try:
+        with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
+            yield
+    finally:
+        if prev_tqdm_disable is None:
+            os.environ.pop("TQDM_DISABLE", None)
+        else:
+            os.environ["TQDM_DISABLE"] = prev_tqdm_disable
 
 
 def _quiet_sibling_package_loggers() -> None:
