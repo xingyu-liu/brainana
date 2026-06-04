@@ -4,6 +4,10 @@
 
 # Brainana: a unified preprocessing framework for macaque MRI
 
+[![Documentation](https://readthedocs.org/projects/brainana/badge/?version=stable)](https://brainana.readthedocs.io/en/stable/)
+[![Docker](https://img.shields.io/badge/docker-liuxingyu987%2Fbrainana-brightgreen.svg?logo=docker)](https://hub.docker.com/r/liuxingyu987/brainana/tags/)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL--v3-blue.svg)](LICENSE)
+
 <p align="center">
   <img src="docs/_static/pipeline_details/brainana_unified_framework.png" alt="Brainana pipeline overview schematic" width="100%">
 </p>
@@ -24,14 +28,14 @@ Additional references:
 - [Processing details](https://brainana.readthedocs.io/en/stable/processing.html)
 - [Outputs](https://brainana.readthedocs.io/en/stable/outputs.html)
 - [FAQ](https://brainana.readthedocs.io/en/stable/faq.html)
-- [Changelog](CHANGELOG.md)
-- [Contributing](CONTRIBUTING.md)
 
 ## Brainana Lite
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/xingyu-liu/brainana/blob/main/examples/BrainanaLite.ipynb)
+
 Lightweight volumetric T1w preprocessing for a single subject (no functional MRI, no surfaces). Run interactively in Jupyter or Google Colab—no Docker required.
 
-- **Notebook:** [`examples/BrainanaLite.ipynb`](examples/BrainanaLite.ipynb)
+- **Notebook:** [`examples/BrainanaLite.ipynb`](examples/BrainanaLite.ipynb) — on Colab, use **Run all**; the first pass may restart the runtime once, then run again.
 
 For the full multi-modality pipeline with surfaces and QC reports, use the installation above for docker.
 
