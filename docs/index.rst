@@ -26,7 +26,7 @@ Licensed under the GNU Affero General Public License v3 (AGPL-3.0).
 
 Citation
 ^^^^^^^^
-Brainana: an end-to-end preprocessing framework for macaque neuroimaging (in preparation).
+`Brainana: an end-to-end preprocessing framework for macaque neuroimaging <https://www.biorxiv.org/content/10.64898/2026.06.03.729972v1.abstract>`_
 
 Docs versions
 ^^^^^^^^^^^^^
