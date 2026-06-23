@@ -1868,7 +1868,7 @@ process FUNC_COMPUTE_TSNR {
     path config_file
 
     output:
-    tuple val(subject_id), val(session_id), val(run_identifier), path('*_stat-tsnr_boldmap.nii.gz', optional: true), val(bids_name), val(bold_space), emit: output
+    tuple val(subject_id), val(session_id), val(run_identifier), path('*_stat-tsnr_boldmap.nii.gz*'), val(bids_name), val(bold_space), emit: output
     path "*.json", emit: metadata
 
     script:
@@ -1908,6 +1908,9 @@ meta['bold_space'] = '${bold_space}'
 save_metadata(meta)
 
 if meta.get('skipped'):
+    # Nextflow output contract: a skipped run produces no tSNR map, so emit a .dummy
+    # sentinel that satisfies the process output and is filtered out downstream.
+    Path(out_name + '.dummy').write_text('')
     print('INFO: tSNR run skipped:', meta.get('reason', meta.get('error', '')), file=__import__('sys').stderr)
 PYTHON_EOF
     """

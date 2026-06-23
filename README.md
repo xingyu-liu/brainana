@@ -43,7 +43,7 @@ For the full multi-modality pipeline with surfaces and QC reports, use the insta
 
 If you use **Brainana**, please cite:
 
-> Brainana: an end-to-end preprocessing framework for macaque neuroimaging (in preparation).
+> [Brainana: an end-to-end preprocessing framework for macaque neuroimaging](https://www.biorxiv.org/content/10.64898/2026.06.03.729972v1.abstract)
 
 Please also cite the toolboxes **Brainana** uses (FSL, ANTs, AFNI, FreeSurfer, FastSurfer, FireANTs, and any macaque templates). Detailed references can be found in the QC report.
 

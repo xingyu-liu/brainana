@@ -767,7 +767,7 @@ workflow FUNC_WF {
         FUNC_COMPUTE_TSNR(tsnr_run_input, config_file)
 
         def tsnr_grouped = FUNC_COMPUTE_TSNR.out.output
-            .filter { sub, ses, run_id, tsnr_nii, bids_name, bold_space -> tsnr_nii }
+            .filter { sub, ses, run_id, tsnr_nii, bids_name, bold_space -> tsnr_nii && !"${tsnr_nii}".endsWith('.dummy') }
             .groupTuple(by: [0, 1])
             .map { sub, ses, run_ids, tsnr_files, bids_names, spaces ->
                 def session_space = spaces.every { it == 'T1w' } ? 'T1w' : spaces[0]
