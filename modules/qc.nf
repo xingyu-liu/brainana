@@ -1101,51 +1101,7 @@ PYTHON_EOF
 // ============================================
 // REPORT GENERATION
 // ============================================
-
-process QC_GENERATE_REPORT {
-    label 'cpu'
-    tag "${subject_id}"
-    errorStrategy 'ignore'
-    
-    publishDir "${params.output_dir}",
-        mode: 'copy',
-        pattern: '*.html'
-    
-    input:
-    tuple val(subject_id), path(snapshot_dir), path(config_file)
-    
-    output:
-    path "*.html", emit: report
-    path "*.json", emit: metadata
-    
-    script:
-    """
-    \${PYTHON:-python3} <<EOF
-from nhp_mri_prep.steps.qc import qc_generate_report
-from pathlib import Path
-
-# Load config
-from nhp_mri_prep.utils.nextflow import load_config, detect_modality, save_metadata
-config = load_config('${config_file}')
-
-# Set paths:
-# - snapshot_dir: use published directory path where snapshots are located
-# - report_path: write to work directory (Nextflow will copy to publishDir)
-# Note: organize_by_hierarchy will derive the published report path from snapshot_dir
-# for correct relative path calculation
-snapshot_dir = Path('${params.output_dir}/sub-${subject_id}/figures')
-report_path = Path('sub-${subject_id}.html')
-
-# Generate report
-result = qc_generate_report(
-    snapshot_dir=snapshot_dir,
-    report_path=report_path,
-    config=config,
-    snapshot_paths=None  # Auto-discover from directory
-)
-
-# Save metadata
-save_metadata(result.metadata)
-EOF
-    """
-}
+// QC report generation has moved out of the DAG into main.nf's
+// workflow.onComplete handler (driven by nextflow_scripts/generate_reports.py),
+// so a report is produced even when the run aborts early. There is intentionally
+// no QC_GENERATE_REPORT process here anymore.

@@ -260,6 +260,60 @@
         .hidden { display: none; }
         label.option-bold { font-weight: 600; }
     </style>
+<style id="bn-design-system">
+/* brainana design system — unify the config generator with the QC report / brand.
+   IBM Plex Sans everywhere (mono only for code/YAML), shared palette, modern controls. */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+:root{
+  --bn-bg:#fffeee; --bn-surface:#fffddd; --bn-inset:#ffffff;
+  --bn-ink:#1b1b16; --bn-text:#333333; --bn-muted:#6b6651;
+  --bn-border:#e6e1cd; --bn-border-mid:#cdc9b0;
+  --bn-accent:#fff27a; --bn-link:#8a7a00;
+  --bn-btn-bg:#1b1b16; --bn-btn-bg-hover:#333333;
+  --bn-ok:#3f6b46; --bn-ok-bg:#eef3ea; --bn-ok-border:#cdddc2;
+  --bn-r-card:10px; --bn-r-inset:8px;
+  --bn-font:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --bn-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --bn-fs:16px; --bn-lh:1.5;
+}
+body{font-family:var(--bn-font) !important;color:var(--bn-text);background:var(--bn-bg) !important;
+  font-size:var(--bn-fs) !important;line-height:var(--bn-lh) !important;}
+.nav-brand,.nav-section,.nav-section-title,.nav-search,button,input,select,textarea,h1,h2,h3,h4,.help-text,.advanced-toggle{
+  font-family:var(--bn-font) !important;}
+.yaml-output textarea,code,pre,kbd,samp{font-family:var(--bn-mono) !important;}
+.nav-sidebar{background:var(--bn-surface) !important;border-right:1px solid var(--bn-border) !important;}
+.nav-section-title{color:var(--bn-muted) !important;}
+.nav-section a{color:var(--bn-text) !important;border-radius:6px;padding:5px 10px !important;margin:1px 0;}
+.nav-section a:hover{background:var(--bn-bg) !important;color:var(--bn-ink) !important;text-decoration:none !important;}
+.main-content{max-width:760px !important;}
+h1{border-bottom:3px solid var(--bn-accent) !important;color:var(--bn-ink) !important;font-weight:600 !important;}
+h2{border-bottom:1px solid var(--bn-border) !important;color:var(--bn-ink) !important;font-weight:600 !important;text-transform:none !important;}
+h3,h4{color:var(--bn-ink) !important;}
+.param-control select,.param-control input[type="text"],.param-control input[type="number"],
+input[type="text"],textarea,select,.nav-search{
+  border:1px solid var(--bn-border-mid) !important;border-radius:var(--bn-r-inset) !important;
+  background:var(--bn-inset) !important;color:var(--bn-text);padding:8px 10px !important;
+  transition:border-color .12s, box-shadow .12s;}
+.param-control select:focus,input:focus,textarea:focus,.nav-search:focus{
+  outline:none !important;border-color:var(--bn-link) !important;
+  box-shadow:0 0 0 3px rgba(255,242,122,.55) !important;}
+.param-row label{color:var(--bn-ink) !important;}
+.help-text,.error,.advanced-toggle{color:var(--bn-muted) !important;}
+.step{border-bottom:1px solid var(--bn-border) !important;}
+.generator-section{border-top:3px solid var(--bn-accent) !important;}
+.save-location,.yaml-output{background:var(--bn-surface) !important;border:1px solid var(--bn-border) !important;
+  border-radius:var(--bn-r-card) !important;}
+.yaml-output textarea{border:1px solid var(--bn-border) !important;border-radius:var(--bn-r-inset) !important;}
+.success{background:var(--bn-ok-bg) !important;border:1px solid var(--bn-ok-border) !important;
+  color:var(--bn-ok) !important;border-radius:var(--bn-r-inset) !important;}
+button{background:var(--bn-btn-bg) !important;border:1px solid var(--bn-btn-bg) !important;color:#fff !important;
+  border-radius:var(--bn-r-inset) !important;}
+button:hover{background:var(--bn-btn-bg-hover) !important;border-color:var(--bn-btn-bg-hover) !important;}
+button#generate{color:var(--bn-ink) !important;background:var(--bn-accent) !important;border-color:var(--bn-accent) !important;}
+button#generate:hover{filter:brightness(.95);}
+.copy-button{background:var(--bn-muted) !important;border-color:var(--bn-muted) !important;color:#fff !important;}
+.copy-button:hover{background:var(--bn-ink) !important;}
+</style>
 </head>
 <body>
     <div class="app-layout">

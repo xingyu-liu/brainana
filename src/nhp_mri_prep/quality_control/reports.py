@@ -563,11 +563,14 @@ class HtmlGenerator:
     """Handles all HTML generation operations."""
 
     @staticmethod
-    def create_navigation_menu(organized_snapshots: Dict[str, Any]) -> str:
-        """Create navigation menu."""
-        nav_items = [
-            '<li class="nav-item"><a class="nav-link" href="#Summary">Summary</a></li>'
-        ]
+    def create_navigation_menu(
+        organized_snapshots: Dict[str, Any], has_run_status: bool = False
+    ) -> str:
+        """Create navigation menu (flat top bar; multi-group modalities get a dropdown)."""
+        nav_items = ['<a href="#Summary">Summary</a>']
+
+        if has_run_status:
+            nav_items.append('<a href="#Status">Run status</a>')
 
         # Add modality sections with dropdowns if they have content
         for modality, title in [
@@ -587,26 +590,24 @@ class HtmlGenerator:
                     for group_key in group_keys:
                         nav_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(group_key)}"
                         dropdown_items.append(
-                            f'<a class="dropdown-item" href="#{nav_id}">{group_key}</a>'
+                            f'<a href="#{nav_id}">{group_key}</a>'
                         )
                     dropdown_content = "\n".join(dropdown_items)
                     nav_items.append(
-                        f"""<li class="nav-item dropdown">
-<a class="nav-link dropdown-toggle" id="navbar{modality.title()}" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" href="#">{title}</a>
-<div class="dropdown-menu" aria-labelledby="navbar{modality.title()}">
+                        f"""<details class="nav-dd"><summary>{title} ▾</summary>
+<div class="menu">
 {dropdown_content}
-</div>
-</li>"""
+</div></details>"""
                     )
                 else:
                     nav_items.append(
-                        f'<li class="nav-item"><a class="nav-link" href="#{modality.title()}">{title}</a></li>'
+                        f'<a href="#{modality.title()}">{title}</a>'
                     )
 
         nav_items.extend(
             [
-                '<li class="nav-item"><a class="nav-link" href="#About">About</a></li>',
-                '<li class="nav-item"><a class="nav-link" href="#Methods">Methods</a></li>',
+                '<a href="#About">About</a>',
+                '<a href="#Methods">Methods</a>',
             ]
         )
 
@@ -615,7 +616,7 @@ class HtmlGenerator:
     @staticmethod
     def create_section(section_id: str, title: str, content: str) -> str:
         """Create a section with header and content."""
-        return f'<div id="{section_id}"><h1 class="sub-report-title">{title}</h1>{content}</div>'
+        return f'<div id="{section_id}"><h1 class="section">{title}</h1>{content}</div>'
 
     @staticmethod
     def create_summary_section(
@@ -658,7 +659,9 @@ class HtmlGenerator:
             "t2w_processed", subject_file_counts.get("t2w", 0)
         )
 
-        structural_li = HtmlGenerator._structural_images_summary_li(subject_file_counts)
+        structural_rows = HtmlGenerator._structural_images_summary_rows(
+            subject_file_counts
+        )
         func_count = subject_file_counts.get("functional", 0)
 
         # Standard output space: template.output_space (e.g. "NMT2Sym:res-05") -> display template name
@@ -675,19 +678,104 @@ class HtmlGenerator:
         has_surf = HtmlGenerator._has_surface_recon_snapshots(organized["anatomical"])
         freesurfer_text = "Run by Brainana" if has_surf else "Not applicable"
 
-        content = f"""<div class="boiler-html">
-<p><strong>Configuration:</strong> For detailed processing parameters and configuration settings,
-please refer to <code>./nextflow_reports/config.yaml</code> in your output directory.</p>
-</div>
-<ul class="elem-desc">
-<li>Subject ID: {subject_id}</li>
-{structural_li}
-<li>Functional images: {func_count}</li>
-<li>Output spaces: {output_space_display}</li>
-<li>Surface reconstruction: {freesurfer_text}</li>
-</ul>"""
+        rows = (
+            [("Subject ID", html.escape(str(subject_id)))]
+            + structural_rows
+            + [
+                ("Functional images", html.escape(str(func_count))),
+                ("Output spaces", html.escape(str(output_space_display))),
+                ("Surface reconstruction", html.escape(str(freesurfer_text))),
+            ]
+        )
+        kv = "".join(f"<dt>{k}</dt><dd>{v}</dd>" for k, v in rows)
+        content = (
+            f'<dl class="kv">{kv}</dl>'
+            '<p class="note">Detailed processing parameters: '
+            '<a href="nextflow_reports/config.yaml" target="_blank">'
+            "<code>./nextflow_reports/config.yaml</code></a>.</p>"
+        )
 
         return HtmlGenerator.create_section("Summary", "Summary", content)
+
+    @staticmethod
+    def create_status_section(report_data: Dict[str, Any]) -> str:
+        """Create run-status section (success vs early abort).
+
+        Renders nothing when no run status is available (e.g. report generated
+        outside the pipeline), so the report degrades gracefully.
+        """
+        run_status = report_data.get("run_status")
+        if not run_status:
+            return ""
+
+        success = bool(run_status.get("success"))
+        duration = run_status.get("duration")
+        succeeded = run_status.get("succeeded_count")
+        ignored = run_status.get("ignored_count")
+        failed = run_status.get("failed_count")
+
+        def _stat_line() -> str:
+            parts = []
+            if duration:
+                parts.append(f"Duration: <b>{html.escape(str(duration))}</b>")
+            if succeeded is not None:
+                parts.append(f"Tasks succeeded: <b>{succeeded}</b>")
+            if ignored:
+                parts.append(f"Tasks ignored: <b>{ignored}</b>")
+            if failed:
+                parts.append(f"Tasks failed: <b>{failed}</b>")
+            return (
+                '<ul class="meta"><li>' + "</li><li>".join(parts) + "</li></ul>"
+                if parts
+                else ""
+            )
+
+        if success:
+            content = f"""<div class="status ok">
+<p class="headline"><span class="badge">Pass</span>Completed successfully</p>
+{_stat_line()}
+</div>"""
+            return HtmlGenerator.create_section("Status", "Run status", content)
+
+        # Failure / early abort
+        error_text = (
+            run_status.get("error_report") or run_status.get("error_message") or ""
+        )
+        exit_status = run_status.get("exit_status")
+        failed_process = run_status.get("failed_process")
+        trace_file = run_status.get("trace_file")
+
+        detail_items = []
+        if failed_process:
+            detail_items.append(
+                f"<li>Failed process: <code>{html.escape(str(failed_process))}</code></li>"
+            )
+        if exit_status is not None:
+            detail_items.append(f"<li>Exit status: {html.escape(str(exit_status))}</li>")
+        if trace_file:
+            detail_items.append(
+                "<li>Execution trace: "
+                f"<code>{html.escape(str(trace_file))}</code></li>"
+            )
+        details = (
+            f'<ul class="meta">{"".join(detail_items)}</ul>' if detail_items else ""
+        )
+
+        error_block = (
+            f'<pre class="errlog">{html.escape(str(error_text))}</pre>'
+            if error_text
+            else ""
+        )
+
+        content = f"""<div class="status fail">
+<p class="headline"><span class="badge">Fail</span>Early abort &mdash; the pipeline did not finish</p>
+<p>This report was generated from the steps that completed before the failure;
+some sections may be missing or incomplete.</p>
+{_stat_line()}
+{details}
+{error_block}
+</div>"""
+        return HtmlGenerator.create_section("Status", "Run status", content)
 
     @staticmethod
     def create_modality_section(
@@ -702,6 +790,34 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
 
         content = HtmlGenerator._render_snapshots(data, section_id.lower())
         return HtmlGenerator.create_section(section_id, title, content)
+
+    @staticmethod
+    def _group_chips(group_key: str) -> str:
+        """Render a group label as BIDS-style chips (e.g. `ses-001` `run-1` `task-rest`).
+
+        `group_key` is the display text built by BidsEntityProcessor.create_display_text
+        (entity values wrapped in <span class="bids-entity">). The odd subject-level group
+        ("sub-level") renders as a single readable chip.
+        """
+        plain = re.sub(r"<[^>]+>", "", group_key).strip()
+        if plain.lower() == "sub-level":
+            return '<span class="gchip">subject-level</span>'
+        abbr = {"session": "ses", "run": "run", "task": "task", "acquisition": "acq"}
+        chips = []
+        for part in plain.split(", "):
+            part = part.strip()
+            if not part:
+                continue
+            bits = part.split(" ", 1)
+            if len(bits) == 2:
+                key, val = bits
+                tag = abbr.get(key.lower(), key.lower())
+                chips.append(
+                    f'<span class="gchip">{html.escape(tag)}-{html.escape(val)}</span>'
+                )
+            else:
+                chips.append(f'<span class="gchip">{html.escape(part)}</span>')
+        return "".join(chips)
 
     @staticmethod
     def _render_snapshots(data: Dict[str, Any], section_prefix: str) -> str:
@@ -719,21 +835,15 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
                     f"{section_prefix}-{snapshot_data['filename'].replace('.', '-')}"
                 )
                 title = snapshot_data.get("description", snapshot_data["filename"])
+                path = snapshot_data["path"]
                 fig_desc = snapshot_data.get("figure_description", "")
                 if fig_desc:
                     fig_desc = fig_desc[0].upper() + fig_desc[1:]
-                fig_desc_block = (
-                    f'\n<div class="elem-filename">\n    {fig_desc}\n</div>'
-                    if fig_desc
-                    else ""
-                )
+                cap = f'<div class="cap">{fig_desc}</div>' if fig_desc else ""
                 html_parts.append(
-                    f"""<div id="{snapshot_id}">
-<h3 class="run-title">{title}</h3>{fig_desc_block}
-<img class="svg-reportlet" src="{snapshot_data["path"]}" style="width: 100%" />
-</div>
-<div class="elem-filename">
-    Get figure file: <a href="{snapshot_data["path"]}" target="_blank">{snapshot_data["filename"]}</a>
+                    f"""<div class="fig" id="{snapshot_id}">
+<p class="ftitle"><a href="{path}" target="_blank">{title}</a></p>{cap}
+<a href="{path}" target="_blank"><img class="svg-reportlet" src="{path}" /></a>
 </div>"""
                 )
 
@@ -747,20 +857,18 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
                 if group_key:
                     header_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(group_key)}"
                     html_parts.append(
-                        f'<h2 class="sub-report-group" id="{header_id}">{group_key}</h2>'
+                        f'<h2 class="group-head" id="{header_id}">{HtmlGenerator._group_chips(group_key)}</h2>'
                     )
                 for modality in ("T1w", "T2w"):
                     if modality in modality_dict:
-                        html_parts.append(
-                            f'<h3 class="sub-report-group">{modality}</h3>'
-                        )
+                        html_parts.append(f'<div class="eyebrow">{modality}</div>')
                         render_snapshot_blocks(modality_dict[modality])
         else:
             for group_key, snapshots in snapshot_groups.items():
                 if group_key:
                     header_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(group_key)}"
                     html_parts.append(
-                        f'<h2 class="sub-report-group" id="{header_id}">{group_key}</h2>'
+                        f'<h2 class="group-head" id="{header_id}">{HtmlGenerator._group_chips(group_key)}</h2>'
                     )
                 render_snapshot_blocks(snapshots)
 
@@ -949,12 +1057,18 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
         return {"t1w": len(t1w_ids), "t2w": len(t2w_ids)}
 
     @staticmethod
-    def _structural_images_summary_li(subject_file_counts: Dict[str, Any]) -> str:
-        """Return one <li> for Summary: compact line or structured block (acquired vs after synthesis)."""
+    def _structural_images_summary_rows(
+        subject_file_counts: Dict[str, Any],
+    ) -> List[tuple]:
+        """Summary (key, value) rows for structural images.
+
+        Compact "Structural images: N T1w, N T2w" when acquired == processed; otherwise
+        one "<mod> images" row per modality showing acquired vs after-synthesis counts.
+        """
         t1a = subject_file_counts.get("t1w")
         t2a = subject_file_counts.get("t2w")
         if t1a == "N/A" or t2a == "N/A":
-            return "<li>Structural images: N/A</li>"
+            return [("Structural images", "N/A")]
 
         t1a_i = int(t1a) if t1a is not None else 0
         t2a_i = int(t2a) if t2a is not None else 0
@@ -962,37 +1076,20 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
         t2p_i = int(subject_file_counts.get("t2w_processed", t2a_i) or 0)
 
         if (t1a_i == t1p_i) and (t2a_i == t2p_i):
-            return f"<li>Structural images: {t1a_i} T1w, {t2a_i} T2w</li>"
+            return [("Structural images", f"{t1a_i} T1w, {t2a_i} T2w")]
 
-        def _modality_row(label: str, acquired: int, processed: int) -> str:
-            """One table row; shared column widths keep counts aligned (incl. multi-digit)."""
-            label_e = html.escape(label)
-            acq_e = html.escape(str(acquired))
-            lead = (
-                f'<tr><td class="qc-struct-lab">{label_e}:</td>'
-                f'<td class="qc-struct-k">Acquired</td>'
-                f'<td class="qc-struct-n">{acq_e}</td>'
-            )
+        rows: List[tuple] = []
+        for label, acquired, processed in (
+            ("T1w", t1a_i, t1p_i),
+            ("T2w", t2a_i, t2p_i),
+        ):
+            if not acquired and not processed:
+                continue
+            value = f"Acquired {acquired}"
             if acquired != processed:
-                proc_e = html.escape(str(processed))
-                return (
-                    f'{lead}<td class="qc-struct-pipe" aria-hidden="true">|</td>'
-                    f'<td class="qc-struct-k">After synthesis</td>'
-                    f'<td class="qc-struct-n">{proc_e}</td></tr>'
-                )
-            return f"{lead}<td></td><td></td><td></td></tr>"
-
-        t1_row = _modality_row("T1w", t1a_i, t1p_i)
-        t2_row = _modality_row("T2w", t2a_i, t2p_i)
-        return (
-            "<li>Structural images"
-            '<div class="qc-structural-block">'
-            '<table class="qc-struct-summary"><tbody>'
-            f"{t1_row}{t2_row}"
-            "</tbody></table>"
-            "</div>"
-            "</li>"
-        )
+                value += f" · After synthesis {processed}"
+            rows.append((f"{label} images", value))
+        return rows
 
     @staticmethod
     def _has_surface_recon_snapshots(data: Dict[str, Any]) -> bool:
@@ -1012,7 +1109,7 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
     def create_about_section(report_data: Dict[str, Any]) -> str:
         """Create about section."""
         metadata = report_data["metadata"]
-        content = f"""<div class="boiler-html">
+        content = f"""<div class="prose">
 <p>This report was generated by <strong>{metadata["pipeline_name"]}</strong> version <strong>{metadata["version"]}</strong>.</p>
 <p>Generated on: {metadata["generation_time"]}</p>
 </div>"""
@@ -1267,7 +1364,7 @@ please refer to <code>./nextflow_reports/config.yaml</code> in your output direc
         parts.append(f'<ul class="methods-refs">{items}</ul>')
 
         content = (
-            '<div class="boiler-html methods-structured">\n'
+            '<div class="prose methods-structured">\n'
             + "\n".join(parts)
             + "\n</div>"
         )
@@ -1326,6 +1423,7 @@ def generate_qc_report(
     logger: Optional[logging.Logger] = None,
     snapshot_paths: Optional[Dict[str, str]] = None,
     dataset_context: Optional[Dict[str, Any]] = None,
+    run_status: Optional[Dict[str, Any]] = None,
     **kwargs,
 ) -> Dict[str, str]:
     """Generate comprehensive HTML quality control report."""
@@ -1428,6 +1526,7 @@ def generate_qc_report(
             "organized_snapshots": organized_snapshots,
             "dataset_context": merged_context,
             "available_entities": snapshot_data["available_entities"],
+            "run_status": run_status,
         }
 
         # Generate HTML report
@@ -1449,11 +1548,12 @@ def _generate_html_report(
 
     # Generate all sections
     navigation = HtmlGenerator.create_navigation_menu(
-        report_data["organized_snapshots"]
+        report_data["organized_snapshots"], bool(report_data.get("run_status"))
     )
     summary = HtmlGenerator.create_summary_section(
         report_data, report_data["configuration"]
     )
+    status = HtmlGenerator.create_status_section(report_data)
     anatomical = HtmlGenerator.create_modality_section(
         "Anatomical", report_data["organized_snapshots"]["anatomical"], "Structural"
     )
@@ -1470,8 +1570,12 @@ def _generate_html_report(
 
     # Create complete HTML
     html_content = _create_html_template().format(
+        STYLE=_REPORT_CSS,
+        SCRIPT=_REPORT_JS,
+        SUBJECT=report_data["metadata"]["subject_id"],
         NAVIGATION_MENU=navigation,
         SUMMARY_SECTION=summary,
+        STATUS_SECTION=status,
         ANATOMICAL_SECTION=anatomical,
         FUNCTIONAL_SECTION=functional,
         FIELD_MAPPING_SECTION=field_mapping,
@@ -1486,165 +1590,126 @@ def _generate_html_report(
     logger.info(f"Output: HTML report written - {report_path}")
 
 
+# brainana design system — single source of truth for the QC report styling.
+# Inlined (not linked) so each report stays portable; the IBM Plex webfont loads from
+# Google Fonts with a system-sans fallback when offline.
+_REPORT_CSS = """
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+:root{
+  --bn-bg:#fffeee; --bn-surface:#fffddd; --bn-inset:#ffffff;
+  --bn-ink:#1b1b16; --bn-text:#333333; --bn-muted:#6b6651;
+  --bn-border:#e6e1cd; --bn-border-mid:#cdc9b0; --bn-code-bg:#f7f6ef;
+  --bn-accent:#fff27a; --bn-link:#8a7a00; --bn-link-hover:#6f6300;
+  --bn-ok:#3f6b46; --bn-ok-bg:#eef3ea; --bn-ok-border:#cdddc2;
+  --bn-fail:#9c4636; --bn-fail-bg:#f8ece8; --bn-fail-border:#e7c8bd;
+  --bn-r-card:10px; --bn-r-inset:8px; --bn-r-chip:6px; --bn-r-pill:999px;
+  --bn-font:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --bn-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --bn-fs:16px; --bn-lh:1.5; --bn-lh-heading:1.25; --bn-space-p:16px; --bn-measure:760px;
+  --bn-shadow-pop:0 8px 28px rgba(60,50,0,.14); --bar-h:54px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:var(--bn-font);color:var(--bn-text);background:var(--bn-inset);
+  font-size:var(--bn-fs);line-height:var(--bn-lh);-webkit-font-smoothing:antialiased}
+a{color:var(--bn-link);text-decoration:none}a:hover{color:var(--bn-link-hover);text-decoration:underline}
+code{font-family:var(--bn-mono);font-size:85%;background:var(--bn-code-bg);padding:.2em .4em;border-radius:var(--bn-r-chip)}
+.topbar{position:fixed;top:0;left:0;right:0;z-index:20;height:var(--bar-h);display:flex;align-items:center;
+  gap:8px;padding:0 24px;background:rgba(255,255,255,.93);backdrop-filter:blur(8px);border-bottom:1px solid var(--bn-border)}
+.topbar .brand{font-weight:700;font-size:14px;color:var(--bn-ink);background:var(--bn-accent);
+  padding:3px 9px;border-radius:6px;white-space:nowrap;letter-spacing:.01em}
+.topbar .brand-sep{color:var(--bn-border-mid);font-weight:400;margin:0 1px}
+.topbar .subject{font-weight:700;font-size:16px;color:var(--bn-ink);white-space:nowrap}
+.topbar nav{display:flex;align-items:center;gap:2px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+.topbar nav a{color:var(--bn-text);font-size:14px;padding:6px 10px;border-radius:6px}
+.topbar nav a:hover{background:var(--bn-surface);text-decoration:none}
+.nav-dd{position:relative}
+.nav-dd>summary{list-style:none;cursor:pointer;font-size:14px;padding:6px 10px;border-radius:6px;color:var(--bn-text);white-space:nowrap}
+.nav-dd>summary::-webkit-details-marker{display:none}
+.nav-dd>summary:hover,.nav-dd[open]>summary{background:var(--bn-surface)}
+.nav-dd .menu{position:absolute;top:calc(100% + 6px);right:0;min-width:260px;max-width:380px;max-height:72vh;
+  overflow:auto;background:var(--bn-inset);border:1px solid var(--bn-border-mid);border-radius:10px;box-shadow:var(--bn-shadow-pop);padding:6px}
+.nav-dd .menu a{display:block;color:var(--bn-text);font-size:14px;padding:7px 10px;border-radius:6px;white-space:normal;line-height:1.35}
+.nav-dd .menu a:hover{background:var(--bn-surface);text-decoration:none}
+.bids-entity{font-family:var(--bn-mono);font-size:.85em;background:var(--bn-surface);border:1px solid var(--bn-border-mid);
+  border-radius:var(--bn-r-chip);padding:0 5px;color:var(--bn-text)}
+main{max-width:1012px;margin:0 auto;padding:calc(var(--bar-h) + 32px) 48px 140px}
+main p{margin:0 0 var(--bn-space-p)}
+h1.section{font-size:1.75em;font-weight:600;line-height:var(--bn-lh-heading);color:var(--bn-ink);
+  margin:56px 0 16px;padding-bottom:.3em;border-bottom:2px solid var(--bn-border-mid);scroll-margin-top:calc(var(--bar-h) + 16px)}
+h1.section:first-of-type{margin-top:0}
+.group-head{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:32px 0 0;padding-top:18px;
+  border-top:1px solid var(--bn-border);scroll-margin-top:calc(var(--bar-h) + 16px)}
+h1.section + .group-head{border-top:none;padding-top:0;margin-top:20px}
+.group-head .gchip{font-family:var(--bn-mono);font-size:13px;font-weight:600;color:var(--bn-ink);
+  background:var(--bn-surface);border:1px solid var(--bn-border-mid);border-radius:var(--bn-r-chip);padding:2px 9px}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--bn-link);margin:24px 0 0}
+.fig{padding:22px 0 20px;border-top:1px solid var(--bn-border);scroll-margin-top:calc(var(--bar-h) + 16px)}
+.group-head + .fig,.eyebrow + .fig{border-top:none}
+.fig .ftitle{font-size:1.05em;font-weight:600;margin:0;line-height:var(--bn-lh-heading)}.fig .ftitle a{color:var(--bn-ink)}
+.fig .cap{color:var(--bn-muted);font-size:.9em;margin:4px 0 0}
+.fig img{display:block;width:100%;max-width:960px;height:auto;margin-top:14px;border:none;border-radius:var(--bn-r-inset);background:#0c0c0c}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:8px 24px;margin:0;font-size:1em}
+.kv dt{color:var(--bn-muted)}.kv dd{margin:0;font-weight:500}
+.note{color:var(--bn-muted);font-size:.9em;margin-top:16px}
+.prose{max-width:var(--bn-measure)}.prose p{margin:0 0 var(--bn-space-p)}
+.methods-subtitle{font-size:1.15em;font-weight:600;line-height:var(--bn-lh-heading);margin:24px 0 8px}
+.methods-subsubtitle{font-size:1em;font-weight:600;margin:16px 0 6px}
+.methods-intro{margin:0 0 var(--bn-space-p)}
+.methods-refs{margin:8px 0 var(--bn-space-p) 0;padding-left:2em;color:var(--bn-muted);font-size:.9em}
+.methods-refs li{margin-bottom:6px}
+.status{border:1px solid var(--bn-border-mid);border-left:3px solid var(--bn-border-mid);border-radius:var(--bn-r-card);padding:16px 20px;margin:16px 0;background:var(--bn-inset)}
+.status.ok{border-left-color:var(--bn-ok)}
+.status.fail{border-left-color:var(--bn-fail)}
+.status .headline{display:flex;align-items:center;gap:8px;font-weight:600;font-size:1.05em;margin:0 0 6px;color:var(--bn-ink)}
+.status .badge{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:var(--bn-r-pill);border:1px solid currentColor;color:var(--bn-muted)}
+.status.ok .badge{color:var(--bn-ok)}.status.fail .badge{color:var(--bn-fail)}
+.status p{margin:8px 0;font-size:.95em;color:var(--bn-text)}
+.status .meta{display:flex;flex-wrap:wrap;gap:6px 18px;list-style:none;padding:0;margin:10px 0 0;font-size:.9em;color:var(--bn-muted)}
+.status .meta li{white-space:nowrap}.status .meta b{color:var(--bn-text);font-weight:600}
+.status .errlog{margin:14px 0 0;padding:16px;background:var(--bn-code-bg);border:1px solid var(--bn-border);border-radius:var(--bn-r-inset);
+  color:var(--bn-text);font-family:var(--bn-mono);font-size:12.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;max-height:42vh;overflow:auto}
+"""
+
+# Closes any open nav dropdown on outside-click (capture phase) or Escape. No framework.
+_REPORT_JS = """
+<script>
+document.addEventListener('click', function (e) {
+  document.querySelectorAll('details.nav-dd[open]').forEach(function (d) {
+    if (!d.contains(e.target)) d.open = false;
+  });
+}, true);
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') document.querySelectorAll('details.nav-dd[open]').forEach(function (d) { d.open = false; });
+});
+</script>
+"""
+
+
 def _create_html_template() -> str:
     """Create base HTML template."""
-    return """<?xml version="1.0" encoding="utf-8" ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+    return """<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="generator" content="brainana {VERSION}" />
-<title>brainana Quality Control Report</title>
-<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
-<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
-<style type="text/css">
-.sub-report-title {{}}
-.run-title {{}}
-.sub-report-group {{}}
-
-h1 {{ padding-top: 35px; }}
-h2 {{ padding-top: 20px; }}
-h3 {{ padding-top: 15px; }}
-
-.elem-desc {{}}
-.elem-caption {{
-    margin-top: 15px;
-    margin-bottom: 0;
-}}
-.elem-filename {{}}
-
-div.elem-image {{
-  width: 100%;
-  page-break-before:always;
-}}
-
-.elem-image object.svg-reportlet {{
-    width: 100%;
-    padding-bottom: 5px;
-}}
-
-.svg-reportlet {{
-    width: 100%;
-}}
-
-body {{
-    padding: 65px 10px 10px;
-}}
-
-.boiler-html {{
-    font-family: "Bitstream Charter", "Georgia", Times;
-    margin: 20px 25px;
-    padding: 10px;
-    background-color: #F8F9FA;
-}}
-
-.methods-structured .methods-subtitle {{
-    font-size: 1.1em;
-    font-weight: 600;
-    margin-top: 1em;
-    margin-bottom: 0.4em;
-}}
-
-.methods-structured .methods-subtitle:first-of-type {{
-    margin-top: 0;
-}}
-
-.methods-structured .methods-subsubtitle {{
-    font-size: 1em;
-    font-weight: 600;
-    margin-top: 0.75em;
-    margin-bottom: 0.3em;
-}}
-
-.methods-structured .methods-intro {{
-    margin-bottom: 0.5em;
-}}
-
-.methods-structured .methods-refs {{
-    margin: 0.5em 0 1em 1.2em;
-    padding-left: 1.5em;
-}}
-
-.methods-structured .methods-refs li {{
-    margin-bottom: 0.35em;
-}}
-
-div#boilerplate pre {{
-    margin: 20px 25px;
-    padding: 10px;
-    background-color: #F8F9FA;
-}}
-
-#errors div, #errors p {{
-    padding-left: 1em;
-}}
-
-.bids-entity {{
-    background-color: #ddd;
-    padding: 1px 4px;
-    border-radius: 2px;
-    font-family: monospace;
-    font-size: 0.9em;
-}}
-
-.dropdown-menu {{
-    max-height: 70vh;
-    overflow-y: auto;
-}}
-
-.qc-structural-block {{
-    margin: 0;
-    padding-left: 1.25rem;
-}}
-table.qc-struct-summary {{
-    border-collapse: collapse;
-    border-spacing: 0;
-    margin: 0;
-    padding: 0;
-    font-weight: normal;
-}}
-table.qc-struct-summary td {{
-    padding: 0 0.5em 0 0;
-    vertical-align: baseline;
-    white-space: nowrap;
-}}
-table.qc-struct-summary td:last-child {{
-    padding-right: 0;
-}}
-table.qc-struct-summary .qc-struct-lab {{
-    padding-right: 0.35em;
-}}
-table.qc-struct-summary .qc-struct-pipe {{
-    padding-left: 0.15em;
-    padding-right: 0.35em;
-    text-align: center;
-}}
-table.qc-struct-summary .qc-struct-n {{
-    text-align: end;
-    font-variant-numeric: tabular-nums;
-}}
-</style>
+<title>{SUBJECT}</title>
+<style type="text/css">{STYLE}</style>
 </head>
 <body>
-
-<nav class="navbar fixed-top navbar-expand-lg navbar-light bg-light">
-<div class="collapse navbar-collapse">
-    <ul class="navbar-nav">
-        {NAVIGATION_MENU}
-    </ul>
-</div>
-</nav>
-<noscript>
-    <h1 class="text-danger"> The navigation menu uses Javascript. Without it this report might not work as expected </h1>
-</noscript>
-
+<header class="topbar"><span class="brand">brainana</span><span class="brand-sep">|</span><span class="subject">{SUBJECT}</span><nav>
+{NAVIGATION_MENU}
+</nav></header>
+<main>
 {SUMMARY_SECTION}
+{STATUS_SECTION}
 {ANATOMICAL_SECTION}
 {FUNCTIONAL_SECTION}
 {FIELD_MAPPING_SECTION}
 {ABOUT_SECTION}
 {METHODS_SECTION}
-
+</main>
+{SCRIPT}
 </body>
 </html>"""
