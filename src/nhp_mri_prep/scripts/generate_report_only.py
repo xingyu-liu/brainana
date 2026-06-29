@@ -16,7 +16,7 @@ except ImportError:
     )
 
 # %%
-dataset_dir = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_easy_downsampled_multianat_docker_v6/preprocessed"
+dataset_dir = "/home/star/github/brainana/docs/_static/QCreport_example"
 
 # %%
 # get sub dir list

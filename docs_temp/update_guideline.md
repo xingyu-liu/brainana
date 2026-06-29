@@ -195,7 +195,7 @@ git commit -m "Your message"
 git push -u origin HEAD
 
 # PR (edit body after --fill if needed; then edit description on GitHub)
-gh pr create --fill
+github pr create --fill
 
 # merge the PR on GitHub when CI is green
 ```

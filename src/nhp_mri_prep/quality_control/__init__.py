@@ -95,7 +95,7 @@ report_outputs = generate_qc_report(
     config=config,
     logger=logger,
     snapshot_paths=all_qc_outputs,  # Explicit snapshots
-    pipeline_state=pipeline_state
+    run_status=run_status
 )
 
 # Option 2: Auto-discover snapshots from directory
@@ -105,7 +105,7 @@ report_outputs = generate_qc_report(
     config=config,
     logger=logger,
     snapshot_paths=None,  # Auto-discover
-    pipeline_state=pipeline_state
+    run_status=run_status
 )
 ```
 """

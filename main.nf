@@ -18,8 +18,8 @@ import groovyx.gpars.dataflow.DataflowQueue
 include { ANAT_WF } from './workflows/anatomical_workflow.nf'
 include { FUNC_WF } from './workflows/functional_workflow.nf'
 
-// Include QC report generation
-include { QC_GENERATE_REPORT } from './modules/qc.nf'
+// QC reports are generated in workflow.onComplete (below) so that a report is
+// always produced, even when the run aborts early on an upstream failure.
 
 // Load parameter resolver
 def paramResolver = evaluate(new File("${projectDir}/workflows/param_resolver.groovy").text)
@@ -94,73 +94,71 @@ workflow {
     }
     
     // ============================================
-    // QC REPORT GENERATION (per subject)
+    // QC REPORT GENERATION
     // ============================================
-    // Read anat_only directly from config/params (cannot extract from async channel in workflow block)
-    def config_file_path = params.config_file ?: "${projectDir}/src/nhp_mri_prep/config/defaults.yaml"
-    def batch_script = "${projectDir}/src/nhp_mri_prep/nextflow_scripts/read_yaml_config.py"
-    def anat_only_from_config = false
-    try {
-        def cmd = ["python3", batch_script, config_file_path, "general.anat_only", "--defaults=false"]
-        def proc = cmd.execute()
-        def output = new StringBuffer()
-        proc.consumeProcessOutput(output, new StringBuffer())
-        proc.waitFor()
-        if (proc.exitValue() == 0) {
-            anat_only_from_config = output.toString().trim() == "true"
-        }
-    } catch (Exception e) {
-        // Use default if config read fails
-    }
-
-    // Wait for anatomical QC to complete (includes surface recon QC when enabled)
-    def anat_qc_completion = ANAT_WF.out.anat_qc_channels
-        .last()
-    
-    // Create completion signal: anat (+ surf recon), then optionally func
-    def qc_completion_signal = anat_qc_completion
-    if (!anat_only) {
-        def func_qc_completion = FUNC_WF.out.func_qc_channels
-            .last()
-        
-        qc_completion_signal = anat_qc_completion
-            .combine(func_qc_completion)
-            .map { anat_meta, func_meta -> true }
-    }
-    
-    // Get unique subjects
-    def all_subjects = ANAT_WF.out.anat_subjects_ch
-    if (!anat_only) {
-        all_subjects = all_subjects.mix(
-            FUNC_WF.out.func_jobs_ch_out
-                .map { sub, ses, run_identifier, file_path, bids_naming_template -> sub }
-                .unique()
-        )
-    }
-    
-    // Load config file (reuse config_file_path from above)
-    def config_file = file(config_file_path)
-    
-    // Create snapshot directory path for each subject
-    def qc_report_input = all_subjects
-        .unique()
-        .combine(qc_completion_signal)
-        .map { sub, completion_signal ->
-            def snapshot_dir = file("${params.output_dir}/sub-${sub}/figures")
-            [sub, snapshot_dir, config_file]
-        }
-    
-    QC_GENERATE_REPORT(qc_report_input)
+    // Reports are generated in workflow.onComplete (below) instead of as a DAG
+    // node, so they are produced on both success and early abort. See main.nf
+    // bottom for the handler.
 }
 
 // ============================================
 // WORKFLOW COMPLETION HANDLER
 // ============================================
-// Report additional info on failed tasks (Nextflow already prints summary)
+// Always runs (success OR early abort). Generates the per-subject QC reports so
+// the user gets a report even when the run aborts, and prints a failure summary.
 workflow.onComplete {
     def failedCount = workflow.stats.failedCount
     def ignoredCount = workflow.stats.ignoredCount
-    
+
+    // --- Always (re)generate QC reports, embedding the run status -------------
+    // QC snapshots are published incrementally, so a report built here contains
+    // whatever completed. Wrapped so report generation can never crash the run.
+    if (params.output_dir != null) {
+        try {
+            def traceFile = "${params.output_dir}/nextflow_reports/nextflow_trace.txt"
+            def status = [
+                success        : workflow.success,
+                exit_status    : workflow.exitStatus,
+                error_message  : workflow.errorMessage,
+                error_report   : workflow.errorReport,
+                duration       : workflow.duration?.toString(),
+                succeeded_count: workflow.stats.succeededCount,
+                failed_count   : failedCount,
+                ignored_count  : ignoredCount,
+                trace_file     : traceFile,
+            ]
+
+            def reportsDir = new File("${params.output_dir}/nextflow_reports")
+            reportsDir.mkdirs()
+            def statusFile = new File(reportsDir, "run_status.json")
+            statusFile.text = groovy.json.JsonOutput.toJson(status)
+
+            def config_file_path = params.config_file ?: "${projectDir}/src/nhp_mri_prep/config/defaults.yaml"
+            def python = System.getenv('PYTHON') ?: 'python3'
+            def gen_script = "${projectDir}/src/nhp_mri_prep/nextflow_scripts/generate_reports.py"
+            def cmd = [
+                python, gen_script,
+                "--output-dir", "${params.output_dir}",
+                "--config-file", config_file_path,
+                "--status-file", statusFile.toString(),
+            ]
+            def out = new StringBuffer()
+            def err = new StringBuffer()
+            def proc = cmd.execute()
+            proc.consumeProcessOutput(out, err)
+            proc.waitFor()
+            if (out.length() > 0) print out.toString()
+            if (proc.exitValue() != 0) {
+                println "WARNING: QC report generation exited with ${proc.exitValue()}."
+                if (err.length() > 0) println err.toString()
+            }
+        } catch (Exception e) {
+            println "WARNING: Could not generate QC report - ${e.message}"
+            println "  Check the trace file: ${params.output_dir}/nextflow_reports/nextflow_trace.txt"
+        }
+    }
+
+    // --- Failure summary ------------------------------------------------------
     // Report on failed/ignored tasks (typically surface reconstruction failures)
     if (ignoredCount > 0 || failedCount > 0) {
         println ""
@@ -173,6 +171,12 @@ workflow.onComplete {
         println "Filter for failed tasks with:"
         println "  grep -E 'FAILED|ABORTED' ${params.output_dir}/nextflow_reports/nextflow_trace.txt"
     }
-    
+
+    if (!workflow.success) {
+        println ""
+        println "Pipeline aborted early. A partial QC report (with the error in the"
+        println "Run status section) was written to: ${params.output_dir}/sub-*.html"
+    }
+
     println ""
 }

@@ -448,6 +448,7 @@ def qc_generate_report(
     report_path: Path,
     config: Dict[str, Any],
     snapshot_paths: Optional[list] = None,
+    run_status: Optional[Dict[str, Any]] = None,
 ) -> StepOutput:
     """
     Generate comprehensive QC report from snapshots.
@@ -457,6 +458,8 @@ def qc_generate_report(
         report_path: Output path for HTML report
         config: Configuration dictionary
         snapshot_paths: Optional list of specific snapshot paths (None = auto-discover)
+        run_status: Optional pipeline run status (success/abort + error info) rendered
+            into the report's "Run status" section.
 
     Returns:
         StepOutput with report file
@@ -474,7 +477,7 @@ def qc_generate_report(
             config=config,
             logger=logger,
             snapshot_paths=snapshot_paths,
-            pipeline_state=None,  # Can be enhanced later
+            run_status=run_status,
         )
 
         report_file = Path(result.get("report_file", report_path))
