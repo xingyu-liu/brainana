@@ -20,7 +20,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 version=1.1.1 
 
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_local_v${version}
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_local_v${version}_confounds
 config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
 
 : "${ENABLE_GPU:=1}" # GPU visibility: 1 = expose GPU(s) to brainana, 0 = CPU-only (CUDA hidden)

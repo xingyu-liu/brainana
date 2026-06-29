@@ -111,9 +111,31 @@ Session-level files omit task and run entities. Per-run files include them (see 
 
 *Per-run confounds*
 
-- ``<run_prefix>_desc-confounds_timeseries.tsv`` — Motion/confound table with columns:
-  ``rot_x``, ``rot_y``, ``rot_z`` (radians), ``trans_x``, ``trans_y``, ``trans_z`` (mm), and ``enorm``.
-  ``enorm`` is the L2 norm of backward frame-to-frame differences.
+- ``<run_prefix>_desc-confounds_timeseries.tsv`` — confound regressors, one row per
+  volume. 
+  Columns:
+
+  - **Motion (24-parameter expansion):** ``trans_x``, ``trans_y``, ``trans_z`` (mm), ``rot_x``, ``rot_y``,
+    ``rot_z`` (radians), each with ``_derivative1``, ``_power2`` and ``_derivative1_power2`` terms.
+  - **Framewise displacement:** ``framewise_displacement`` — Power et al. (2012) sum-of-absolute-differences,
+    using the macaque head radius (27 mm) to convert rotations to mm.
+  - **Relative RMS:** ``rmsd`` — frame-to-frame RMS head displacement, computed from the motion
+    parameters via the Jenkinson (1999) sphere formula (27 mm radius).
+  - **DVARS:** ``dvars`` (non-standardized) and ``std_dvars`` (standardized). Require a brain mask;
+    omitted (rather than computed over a whole-FOV mask) when no valid mask is available.
+  - **Global / tissue signals:** ``global_signal`` (+ ``_derivative1``/``_power2``/``_derivative1_power2``)
+    — also requires a brain mask. ``csf``, ``white_matter`` and ``csf_wm`` are added **only when a T1w
+    anatomical segmentation is available** (a later milestone); they are omitted otherwise. When a
+    mask-based column is skipped, the JSON sidecar records the reason.
+  - **Outliers (indicator columns):** ``motion_outlier##`` (FD or std-DVARS threshold crossings) and
+    ``non_steady_state_outlier##`` (initial dummy volumes).
+
+  Confounds are **regressors only** — the BOLD image is never scrubbed by this stage; columns are only 
+  indicators for optional user-customized downstream use. The first sample of differenced columns
+  (derivatives, FD, rmsd, DVARS) is ``n/a``.
+
+- ``<run_prefix>_desc-confounds_timeseries.json`` — Per-column metadata sidecar (method, FD radius, FD/DVARS
+  thresholds, and whether tissue regressors were produced).
 
 QC figures (``figures/``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^

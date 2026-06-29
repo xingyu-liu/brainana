@@ -252,6 +252,75 @@ def func_motion_correction(input: StepInput) -> StepOutput:
     )
 
 
+def func_compute_confounds(
+    input: StepInput,
+    motion_par_file: Optional[Path] = None,
+    brain_mask_file: Optional[Path] = None,
+    seg_file: Optional[Path] = None,
+    seg_lut_file: Optional[Path] = None,
+) -> StepOutput:
+    """
+    Compute fMRIPrep-compatible confound regressors for a preprocessed BOLD run.
+
+    Produces a ``*_desc-confounds_timeseries.tsv`` + JSON sidecar (regressors only — the BOLD image
+    is not modified). Tissue mean signals (csf / white_matter / csf_wm) are produced only when an
+    anatomical segmentation (``seg_file`` + ``seg_lut_file``) is available; otherwise motion-only
+    confounds are written.
+
+    Args:
+        input: StepInput with input_file = preprocessed BOLD (T1w space), working_dir, config, metadata
+        motion_par_file: FSL mcflirt ``.par`` motion parameters (6-column)
+        brain_mask_file: BOLD-space brain mask (for DVARS / global signal)
+        seg_file: Anatomical segmentation in the same space as the BOLD (T1w space)
+        seg_lut_file: Atlas LUT TSV (label index -> structure name) for tissue classification
+
+    Returns:
+        StepOutput with output_file = confounds TSV and additional_files['confounds_json'].
+    """
+    from ..operations.confounds import (
+        compute_confounds,
+        FD_OUTLIER_THRESHOLD_MM,
+        STD_DVARS_OUTLIER_THRESHOLD,
+    )
+
+    input.working_dir.mkdir(parents=True, exist_ok=True)
+    output_prefix = str(input.working_dir / "desc-confounds_timeseries")
+
+    # Treat any non-steady-state volumes the user asked despike to ignore as a lower bound.
+    n_dummy_min = (
+        input.config.get("func", {}).get("despike", {}).get("ignore_first_volumes", 0) or 0
+    )
+
+    # Outlier thresholds are configurable (func.confounds); defaults are macaque-scaled.
+    conf = input.config.get("func", {}).get("confounds", {}) or {}
+    fd_thresh = conf.get("fd_outlier_threshold_mm", FD_OUTLIER_THRESHOLD_MM)
+    dvars_thresh = conf.get("std_dvars_outlier_threshold", STD_DVARS_OUTLIER_THRESHOLD)
+
+    result = compute_confounds(
+        bold_file=str(input.input_file),
+        motion_par_file=str(motion_par_file) if motion_par_file else None,
+        working_dir=str(input.working_dir),
+        output_prefix=output_prefix,
+        brain_mask_file=str(brain_mask_file) if brain_mask_file else None,
+        seg_file=str(seg_file) if seg_file else None,
+        seg_lut_file=str(seg_lut_file) if seg_lut_file else None,
+        n_dummy_min=int(n_dummy_min),
+        fd_outlier_threshold=float(fd_thresh),
+        std_dvars_outlier_threshold=float(dvars_thresh),
+        logger=logger,
+    )
+
+    return StepOutput(
+        output_file=Path(result["confounds_tsv"]),
+        metadata={
+            "step": "compute_confounds",
+            "modality": "func",
+            "has_segmentation": bool(seg_file and seg_lut_file),
+        },
+        additional_files={"confounds_json": Path(result["confounds_json"])},
+    )
+
+
 def func_despike(input: StepInput) -> StepOutput:
     """
     Perform despiking on functional image.

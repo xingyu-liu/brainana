@@ -332,6 +332,69 @@ def qc_motion_correction(
         )
 
 
+def qc_confounds(
+    confounds_file: Path,
+    output_path: Path,
+    config: Optional[Dict[str, Any]] = None,
+) -> StepOutput:
+    """
+    Generate confounds QC figure: compact panels with color-coded stats.
+
+    Plots whichever of the following columns are present in the confounds TSV, one panel each
+    (fMRIPrep order): ``global_signal`` (GS), ``csf``, ``white_matter`` (WM), ``std_dvars``
+    (DVARS), ``framewise_displacement`` (FD). Tissue rows appear only when anatomical
+    segmentation was available. Visualizes confound regressors only — BOLD is unchanged.
+
+    Args:
+        confounds_file: ``*_desc-confounds_timeseries.tsv``.
+        output_path: Output PNG path.
+        config: Configuration dictionary (optional).
+    """
+    if not config or not config.get("quality_control", {}).get("enabled", True):
+        logger.info("QC: confounds QC skipped (disabled in configuration)")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_confounds", "skipped": True},
+        )
+
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import pandas as pd
+
+        from ..quality_control.mri_plotting import (
+            CONFOUND_PANEL_SPECS,
+            CONFOUNDS_QC_MARGINS,
+            create_confounds_plot,
+            save_timeseries_qc_figure,
+        )
+
+        df = pd.read_csv(str(confounds_file), sep="\t")
+        panels = [c for c, _, _ in CONFOUND_PANEL_SPECS if c in df.columns]
+        if not panels:
+            raise ValueError("no recognized confound columns to plot")
+
+        fig = create_confounds_plot(df)
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        save_timeseries_qc_figure(fig, output_path, margins=CONFOUNDS_QC_MARGINS)
+        plt.close(fig)
+
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_confounds", "panels": panels},
+            qc_files=[output_path],
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"QC: confounds QC failed - {e}")
+        return StepOutput(
+            output_file=output_path,
+            metadata={"step": "qc_confounds", "error": str(e)},
+        )
+
+
 def qc_surf_recon_tissue_seg(
     fs_subject_dir: Path,
     output_path: Path,

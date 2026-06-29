@@ -779,11 +779,280 @@ def create_overlay_grid_3xN(
     )
 
 
+# Timeseries QC plot constants (motion + confounds snapshots share these for x-axis alignment)
+TIMESERIES_QC_FIG_WIDTH = 15
+TIMESERIES_QC_MARGINS = {
+    "left": 0.10,
+    "right": 0.98,
+    "top": 0.92,
+    "bottom": 0.10,
+    "hspace": 0.35,
+}
+PLOT_VOL_DPI = 200
+# Left spine styling shared by motion and confounds for stacked-report alignment.
+TIMESERIES_QC_SPINE_COLOR = "0.25"
+TIMESERIES_QC_SPINE_WIDTH = 0.8
+
+
+def frame_xlim(n_frames: int) -> Tuple[float, float]:
+    """Return shared frame-index limits (frame 0 at left, half-step right pad for last frame)."""
+    if n_frames <= 0:
+        return (0.0, 0.0)
+    if n_frames == 1:
+        return (0.0, 0.0)
+    # Tight left (0) for frame-0 alignment; half-step right pad so the last sample
+    # is not glued to the axes edge (matches motion x-axis tick placement).
+    return (0.0, float(n_frames) - 0.5)
+
+
+def style_timeseries_left_spine(ax: plt.Axes) -> None:
+    """Show a faint left spine matching the motion QC figure."""
+    spine = ax.spines["left"]
+    spine.set_visible(True)
+    spine.set_color(TIMESERIES_QC_SPINE_COLOR)
+    spine.set_linewidth(TIMESERIES_QC_SPINE_WIDTH)
+
+
+def frame_xticks(n_frames: int) -> np.ndarray:
+    """Return integer frame indices for QC timeseries x-axis ticks."""
+    if n_frames <= 0:
+        return np.array([], dtype=int)
+    if n_frames > 10:
+        return np.linspace(0, n_frames - 1, 10).astype(int)
+    return np.arange(n_frames)
+
+
+def configure_frame_xaxis(
+    axes: Union[plt.Axes, List[plt.Axes], Tuple[plt.Axes, ...]],
+    n_frames: int,
+    *,
+    show_xlabel: bool = True,
+    xlabel: str = "Frame",
+    style_left_spine: bool = True,
+) -> None:
+    """Apply shared frame-index x-axis limits and ticks for QC timeseries figures."""
+    axes_list = list(axes) if not isinstance(axes, plt.Axes) else [axes]
+    xticks = frame_xticks(n_frames)
+    xlim = frame_xlim(n_frames)
+
+    for i, ax in enumerate(axes_list):
+        ax.set_xlim(*xlim)
+        ax.set_xticks(xticks)
+        ax.set_xticklabels([f"{tick:d}" for tick in xticks])
+        if show_xlabel and i == len(axes_list) - 1:
+            ax.set_xlabel(xlabel)
+        elif i < len(axes_list) - 1:
+            ax.set_xlabel("")
+        if style_left_spine:
+            style_timeseries_left_spine(ax)
+
+
+def save_timeseries_qc_figure(
+    fig: plt.Figure,
+    path: Union[str, Path],
+    *,
+    dpi: Optional[int] = None,
+    margins: Optional[dict] = None,
+) -> None:
+    """Save a timeseries QC figure with fixed margins for cross-figure x-axis alignment."""
+    fig.subplots_adjust(**(margins if margins is not None else TIMESERIES_QC_MARGINS))
+    fig.savefig(
+        str(path),
+        dpi=dpi if dpi is not None else PLOT_VOL_DPI,
+        bbox_inches=None,
+        facecolor="white",
+    )
+
+
+CONFOUNDS_QC_MARGINS = {
+    **TIMESERIES_QC_MARGINS,
+    "top": 0.98,
+    "hspace": 0.08,
+}
+
+# fMRIPrep-style confound panel order, labels, and colors (GS → FD).
+CONFOUND_PANEL_SPECS: List[Tuple[str, str, str]] = [
+    ("global_signal", "GS", "#D4577A"),
+    ("csf", "CSF", "#B08D57"),
+    ("white_matter", "WM", "#4A9B7F"),
+    ("std_dvars", "DVARS", "#5BA4B8"),
+    ("framewise_displacement", "FD", "#9B4D96"),
+]
+
+CONFOUND_PANEL_UNITS: dict[str, str] = {
+    "framewise_displacement": " mm",
+}
+
+# Annotation / reference-line styling (sizes chosen to match motion QC readability)
+CONFOUND_LABEL_BBOX_ALPHA = 0.35
+CONFOUND_STATS_BBOX_ALPHA = 0.35
+CONFOUND_LABEL_SIZE = 11
+CONFOUND_STATS_SIZE = 10
+CONFOUND_P95_LABEL_SIZE = 9
+CONFOUND_LINEWIDTH = 1.8
+CONFOUND_P95_LINEWIDTH = 0.75
+CONFOUND_P95_LINE_ALPHA = 1
+
+
+def plot_confound_panel(
+    ax: plt.Axes,
+    tseries: np.ndarray,
+    name: str,
+    color: str,
+    *,
+    units: Optional[str] = None,
+) -> None:
+    """Style a single fMRIPrep-like confound time-series panel on ``ax``."""
+    tseries = np.asarray(tseries, dtype=float)
+    ntsteps = len(tseries)
+
+    ax.grid(False)
+    ax.set_yticks([])
+    ax.set_yticklabels([])
+
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+
+    ax.annotate(
+        name,
+        xy=(0.0, 1.0),
+        xytext=(-3, -2),
+        xycoords="axes fraction",
+        textcoords="offset points",
+        va="top",
+        ha="right",
+        clip_on=False,
+        color=color,
+        size=CONFOUND_LABEL_SIZE,
+        bbox={
+            "boxstyle": "round",
+            "fc": "w",
+            "ec": "none",
+            "lw": 0,
+            "alpha": CONFOUND_LABEL_BBOX_ALPHA,
+        },
+    )
+
+    nonnan = tseries[~np.isnan(tseries)]
+    if nonnan.size > 0:
+        valrange = nonnan.max() - nonnan.min()
+        ylo = nonnan.min() - 0.1 * valrange
+        yhi = nonnan.max() + 0.1 * valrange
+        ylo -= 0.1 * (yhi - ylo)
+        ax.set_ylim(ylo, yhi)
+        maxv = float(nonnan.max())
+        mean = float(nonnan.mean())
+        stdv = float(nonnan.std())
+        p95 = float(np.percentile(nonnan, 95.0))
+    else:
+        maxv = mean = stdv = p95 = 0.0
+        ax.set_ylim(0.0, 1.0)
+
+    units_suffix = units or ""
+    stats_label = (
+        f"max: {maxv:.3f}{units_suffix} • mean: {mean:.3f}{units_suffix} • σ: {stdv:.3f}"
+    )
+    ax.annotate(
+        stats_label,
+        xy=(1.0, 1.0),
+        xytext=(-3, -2),
+        xycoords="axes fraction",
+        textcoords="offset points",
+        va="top",
+        ha="right",
+        color=color,
+        size=CONFOUND_STATS_SIZE,
+        bbox={
+            "boxstyle": "round",
+            "fc": "w",
+            "ec": "none",
+            "lw": 0,
+            "alpha": CONFOUND_STATS_BBOX_ALPHA,
+        },
+    )
+
+    x_end = max(ntsteps - 1, 0)
+    ax.plot(
+        [0, x_end],
+        [p95, p95],
+        linewidth=CONFOUND_P95_LINEWIDTH,
+        color="lightgray",
+        alpha=CONFOUND_P95_LINE_ALPHA,
+    )
+    # Place p95 value on the line inside the plot (not at the left margin) to avoid
+    # overlapping the top-left variable label on stable tissue signals.
+    p95_label_x = min(2.0, x_end * 0.03)
+    ax.annotate(
+        f"{p95:.2f}",
+        xy=(p95_label_x, p95),
+        xytext=(4, 0),
+        textcoords="offset points",
+        va="center",
+        ha="left",
+        color="lightgray",
+        size=CONFOUND_P95_LABEL_SIZE,
+        alpha=CONFOUND_P95_LINE_ALPHA,
+    )
+
+    ax.plot(
+        np.arange(ntsteps),
+        tseries,
+        color=color,
+        linewidth=CONFOUND_LINEWIDTH,
+    )
+
+
+def create_confounds_plot(
+    confounds_df,
+    figsize: Optional[Tuple[float, float]] = None,
+) -> plt.Figure:
+    """
+    Create an fMRIPrep-style confounds QC figure with one compact panel per regressor.
+
+    Panels appear in fMRIPrep order when present: GS, CSF, WM, DVARS, FD.
+    """
+    panels = [
+        (col, lbl, color)
+        for col, lbl, color in CONFOUND_PANEL_SPECS
+        if col in confounds_df.columns
+    ]
+    if not panels:
+        raise ValueError("no recognized confound columns to plot")
+
+    n = len(panels)
+    if figsize is None:
+        figsize = (TIMESERIES_QC_FIG_WIDTH, max(1 * n, 5))
+
+    fig, axes = plt.subplots(n, 1, figsize=figsize, sharex=True, squeeze=False)
+    axes = axes[:, 0]
+    n_frames = len(confounds_df)
+
+    for ax, (col, lbl, color) in zip(axes, panels):
+        plot_confound_panel(
+            ax,
+            confounds_df[col].to_numpy(),
+            lbl,
+            color,
+            units=CONFOUND_PANEL_UNITS.get(col),
+        )
+
+    # Same 0-based tight frame limits as motion QC.
+    configure_frame_xaxis(axes, n_frames, show_xlabel=False, style_left_spine=False)
+    for ax in axes:
+        ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+        ax.set_xticklabels([])
+        ax.set_xlabel("")
+        ax.spines["bottom"].set_visible(False)
+        ax.spines["left"].set_visible(False)
+
+    return fig
+
+
 def create_motion_plot(
     motion_data: np.ndarray,
     enorm_data: Optional[np.ndarray] = None,
     title: str = "Head Motion Parameters",
-    figsize: Tuple[int, int] = (15, 6),
+    figsize: Tuple[int, int] = (TIMESERIES_QC_FIG_WIDTH, 6),
 ) -> plt.Figure:
     """
     Create motion parameter plots.
@@ -857,17 +1126,7 @@ def create_motion_plot(
             ncol=3,
             frameon=True,
         )
-    ax2.set_xlabel("Frame")
-
-    # show 10 xticks if there are more than 10 timepoints, else all
-    nframes = motion_data.shape[0]
-    if nframes > 10:
-        xticks = np.linspace(0, nframes - 1, 10).astype(int)
-    else:
-        xticks = np.arange(nframes)
-    for ax in [ax1, ax2]:
-        ax.set_xticks(xticks)
-        ax.set_xticklabels([f"{i:d}" for i in xticks])
+    configure_frame_xaxis([ax1, ax2], motion_data.shape[0], show_xlabel=True)
 
     # add a horizontal line at 0 for the y-axis
     for ax in [ax1, ax2]:
@@ -876,9 +1135,6 @@ def create_motion_plot(
     # add grid
     for ax in [ax1, ax2]:
         ax.grid(True, alpha=0.1)
-
-    plt.tight_layout()
-    # sns.despine(right=True, top=True, trim=False, offset=0)
 
     return fig
 
@@ -1093,7 +1349,6 @@ SURFACE_SPACING = 2
 SURFACE_PLOT_SIZE = (400, 200)
 SURFACE_PLOT_ZOOM = 1.2
 PLOT_SURFACE_DPI = 200
-PLOT_VOL_DPI = 200
 PLOT_CBAR_DPI = 200
 CBAR_SPACING = 20
 CBAR_GRADIENT_WIDTH_RATIO = 0.5

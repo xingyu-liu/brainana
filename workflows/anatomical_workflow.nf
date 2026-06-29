@@ -302,8 +302,9 @@ workflow ANAT_WF {
         [sub, ses, dummy_brain, bids_name]
     }
     
-    // Always initialize with dummy segmentation to ensure consistent structure for joins/combines
-    def anat_skull_seg = anat_skull_seg_dummy
+    // Always initialize with dummy segmentation to ensure consistent structure for joins/combines.
+    // No `def`: workflow-scoped so it can be emitted (see surf_actual_subject_id below).
+    anat_skull_seg = anat_skull_seg_dummy
     def anat_after_skull = anat_after_skull_dummy
     def anat_after_skull_brain = anat_after_skull_brain_dummy
     
@@ -311,8 +312,9 @@ workflow ANAT_WF {
     // This ensures Nextflow can validate structure at parse time
     def anat_skull_mask = anat_skull_mask_dummy
     
-    // Atlas LUT (optional): only when skullstripping + multi-class atlas; empty when disabled
-    def anat_skull_seg_lut = Channel.empty()
+    // Atlas LUT (optional): only when skullstripping + multi-class atlas; empty when disabled.
+    // No `def`: workflow-scoped so it can be emitted.
+    anat_skull_seg_lut = Channel.empty()
     
     if (anat_skullstripping_enabled) {
         // Use GPU token only when workflow-level GPU scheduling is enabled (use_gpu).
@@ -1207,4 +1209,6 @@ workflow ANAT_WF {
     surf_actual_subject_id
     anat_subjects_ch
     anat_qc_channels
+    anat_skull_seg
+    anat_skull_seg_lut
 }

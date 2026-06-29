@@ -1098,6 +1098,56 @@ PYTHON_EOF
     """
 }
 
+process QC_CONFOUNDS {
+    label 'cpu'
+    tag "${subject_id}_${session_id}_${run_identifier}"
+    errorStrategy 'ignore'
+
+    publishDir "${params.output_dir}/sub-${subject_id}/figures",
+        mode: 'copy',
+        pattern: '*.png'
+
+    input:
+    tuple val(subject_id), val(session_id), val(run_identifier), path(confounds_tsv), val(bids_name)
+    path config_file
+
+    output:
+    path "*.png", optional: true, emit: qc_files
+    path "*.json", emit: metadata
+
+    script:
+    """
+    \${PYTHON:-python3} <<'PYTHON_EOF'
+from pathlib import Path
+
+from nhp_mri_prep.steps.qc import qc_confounds
+from nhp_mri_prep.utils.bids import create_bids_filename, parse_bids_entities
+from nhp_mri_prep.utils.nextflow import load_config, save_metadata
+
+config = load_config('${config_file}')
+bids_naming_template = Path('${bids_name}')
+confounds_tsv = Path('${confounds_tsv}')
+
+# BIDS-compliant PNG basename: sub/ses/task/run/space + desc-confounds + bold.png
+parsed_entities = parse_bids_entities(bids_naming_template.name)
+qc_filename_entities = {}
+for entity_key in ('sub', 'ses', 'task', 'run', 'space'):
+    if entity_key in parsed_entities:
+        qc_filename_entities[entity_key] = parsed_entities[entity_key]
+qc_filename_entities['desc'] = 'confounds'
+qc_output_png_filename = create_bids_filename(qc_filename_entities, 'bold', extension='.png')
+
+result = qc_confounds(
+    confounds_file=confounds_tsv,
+    output_path=Path(qc_output_png_filename),
+    config=config,
+)
+
+save_metadata(result.metadata)
+PYTHON_EOF
+    """
+}
+
 // ============================================
 // REPORT GENERATION
 // ============================================

@@ -59,6 +59,10 @@ SNAPSHOT_MAPPINGS = {
     },
     "tSNR": {"key": "tsnr_boldmap", "description": "tSNR map"},
     "motion": {"key": "motion_parameters", "description": "Motion parameters"},
+    "confounds": {
+        "key": "confounds_timeseries",
+        "description": "Confound regressors",
+    },
     "surfReconTissueSeg": {
         "key": "surf_recon_tissue_seg_overlay",
         "description": "Surface reconstruction tissue segmentation",
@@ -86,6 +90,7 @@ FIGURE_DESCRIPTIONS = {
     "func2target": "registered BOLD (underlaid); target space (contour)",
     "sescoreg": "within-session func run coregistration",
     "tSNR": "session-average temporal SNR map (volume; surface projection if available)",
+    "confounds": "Confound regressors: global signal (GS), CSF, white matter (WM), DVARS, and framewise displacement (FD). Note: DVARS and FD are undefined at frame 0.",
 }
 
 SNAPSHOT_ORDER = [
@@ -104,6 +109,7 @@ SNAPSHOT_ORDER = [
     "func2anat_registration_overlay",  # Functional to anatomical (intermediate step in sequential transforms)
     "func2target_registration_overlay",
     "motion_parameters",
+    "confounds_timeseries",
 ]
 
 SNAPSHOT_ORDER_INDEX = {key: index for index, key in enumerate(SNAPSHOT_ORDER)}
@@ -1627,16 +1633,16 @@ code{font-family:var(--bn-mono);font-size:85%;background:var(--bn-code-bg);paddi
   padding:3px 9px;border-radius:6px;white-space:nowrap;letter-spacing:.01em}
 .topbar .brand-sep{color:var(--bn-border-mid);font-weight:400;margin:0 1px}
 .topbar .subject{font-weight:700;font-size:16px;color:var(--bn-ink);white-space:nowrap}
-.topbar nav{display:flex;align-items:center;gap:2px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+.topbar nav{display:flex;align-items:center;gap:2px;margin-left:16px;flex-wrap:wrap}
 .topbar nav a{color:var(--bn-text);font-size:14px;padding:6px 10px;border-radius:6px}
 .topbar nav a:hover{background:var(--bn-surface);text-decoration:none}
 .nav-dd{position:relative}
 .nav-dd>summary{list-style:none;cursor:pointer;font-size:14px;padding:6px 10px;border-radius:6px;color:var(--bn-text);white-space:nowrap}
 .nav-dd>summary::-webkit-details-marker{display:none}
 .nav-dd>summary:hover,.nav-dd[open]>summary{background:var(--bn-surface)}
-.nav-dd .menu{position:absolute;top:calc(100% + 6px);right:0;min-width:260px;max-width:380px;max-height:72vh;
+.nav-dd .menu{position:absolute;top:calc(100% + 6px);left:0;min-width:260px;max-width:560px;width:max-content;max-height:72vh;
   overflow:auto;background:var(--bn-inset);border:1px solid var(--bn-border-mid);border-radius:10px;box-shadow:var(--bn-shadow-pop);padding:6px}
-.nav-dd .menu a{display:block;color:var(--bn-text);font-size:14px;padding:7px 10px;border-radius:6px;white-space:normal;line-height:1.35}
+.nav-dd .menu a{display:block;color:var(--bn-text);font-size:14px;padding:7px 10px;border-radius:6px;white-space:nowrap;line-height:1.35}
 .nav-dd .menu a:hover{background:var(--bn-surface);text-decoration:none}
 .bids-entity{font-family:var(--bn-mono);font-size:.85em;background:var(--bn-surface);border:1px solid var(--bn-border-mid);
   border-radius:var(--bn-r-chip);padding:0 5px;color:var(--bn-text)}
@@ -1673,7 +1679,9 @@ h1.section + .group-head{border-top:none;padding-top:0;margin-top:20px}
 .status.ok .badge{color:var(--bn-ok)}.status.fail .badge{color:var(--bn-fail)}
 .status p{margin:8px 0;font-size:.95em;color:var(--bn-text)}
 .status .meta{display:flex;flex-wrap:wrap;gap:6px 18px;list-style:none;padding:0;margin:10px 0 0;font-size:.9em;color:var(--bn-muted)}
-.status .meta li{white-space:nowrap}.status .meta b{color:var(--bn-text);font-weight:600}
+.status .meta li{min-width:0}.status .meta li:not(:has(code)){white-space:nowrap}
+.status .meta li:has(code){flex:1 1 100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+.status .meta code{word-break:break-all}.status .meta b{color:var(--bn-text);font-weight:600}
 .status .errlog{margin:14px 0 0;padding:16px;background:var(--bn-code-bg);border:1px solid var(--bn-border);border-radius:var(--bn-r-inset);
   color:var(--bn-text);font-family:var(--bn-mono);font-size:12.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;max-height:42vh;overflow:auto}
 """
