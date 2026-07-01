@@ -183,6 +183,7 @@ dependencies = [
 dev = [
     { name = "black" },
     { name = "mypy" },
+    { name = "nilearn" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -230,6 +231,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "myst-parser", marker = "extra == 'docs'", specifier = ">=2.0" },
     { name = "nibabel", specifier = ">=5.3.2" },
+    { name = "nilearn", marker = "extra == 'dev'", specifier = ">=0.9.0" },
     { name = "numpy", specifier = ">=2.3.0" },
     { name = "packaging", specifier = ">=20.0" },
     { name = "pandas", specifier = ">=2.3.0" },
@@ -1316,6 +1318,26 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d9/61/33036cb89f1ec1fedbc4039602345d830b27cbd8a5c7bf28c2e5b5de3ea2/nibabel-5.3.2.tar.gz", hash = "sha256:0bdca6503b1c784b446c745a4542367de7756cfba0d72143b91f9ffb78be569b", size = 4504842, upload_time = "2024-10-23T14:19:55.866Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/43/b2/dc384197be44e2a640bb43311850e23c2c30f3b82ce7c8cdabbf0e53045e/nibabel-5.3.2-py3-none-any.whl", hash = "sha256:52970a5a8a53b1b55249cba4d9bcfaa8cc57e3e5af35a29d7352237e8680a6f8", size = 3293839, upload_time = "2024-10-23T14:19:52.65Z" },
+]
+
+[[package]]
+name = "nilearn"
+version = "0.13.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jinja2" },
+    { name = "joblib" },
+    { name = "nibabel" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pandas" },
+    { name = "requests" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a6/c0/b06fa98658b9f43d7cd89c4b2527a637a2962d05838658f767d8dda8e790/nilearn-0.13.1.tar.gz", hash = "sha256:66d4a4f3f1dea9b8683806849ea8e91abfeac11e14f7e972a726f644e515bc2b", size = 46371538, upload_time = "2026-02-10T17:08:17.287Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/89/3d/91ff1823b291de709e92b01373ab9c1d582658ce4b795e443b76761cd2c8/nilearn-0.13.1-py3-none-any.whl", hash = "sha256:2543cea9e2b001c079b7f81d1bff3050576125eb906cf318a9992add9a63c19e", size = 10638666, upload_time = "2026-02-10T17:04:47.21Z" },
 ]
 
 [[package]]

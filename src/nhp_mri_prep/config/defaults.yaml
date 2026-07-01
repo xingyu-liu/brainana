@@ -72,6 +72,9 @@ func:
     c2: 10  # float: second cutoff parameter (> 0, must be > c1)
     localedit: true  # bool: use local editing for despiking
     ignore_first_volumes: 0  # int: number of initial volumes to ignore (>= 0)
+  confounds:  # fMRIPrep-style confound regressors (regressors only; the BOLD image is never modified)
+    fd_outlier_threshold_mm: 0.25  # float: FD above this flags motion_outlier## (macaque-scaled: human 0.5mm x 27/50 brain-radius ratio)
+    std_dvars_outlier_threshold: 1.5  # float: standardized DVARS above this flags motion_outlier## (dimensionless / species-independent)
   bias_correction:  # only done on tmean image for better registration, not on the functional images directly
     enabled: true  # bool: perform bias field correction
     algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")

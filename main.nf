@@ -89,6 +89,8 @@ workflow {
             ANAT_WF.out.anat_reg_transforms,
             ANAT_WF.out.anat_reg_reference,
             ANAT_WF.out.surf_actual_subject_id,
+            ANAT_WF.out.anat_skull_seg,       // T1w-space segmentation (for confounds tissue regressors)
+            ANAT_WF.out.anat_skull_seg_lut,   // atlas LUT (tissue classification)
             gpu_queue
         )
     }

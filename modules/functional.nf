@@ -188,19 +188,23 @@ process FUNC_SLICE_TIMING {
 process FUNC_MOTION_CORRECTION {
     label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
-    
+
+    // NOTE: the canonical *_desc-confounds_timeseries.tsv is published by FUNC_COMPUTE_CONFOUNDS
+    // (post-registration). Here we only stage motion params + relative-RMS as intermediate channel
+    // artifacts for that downstream stage. Publishing is disabled (but a non-null path is required
+    // because nextflow.config sets a pathless global publishDir default).
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.{tsv}'
-    
+        enabled: false
+
     input:
     tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_name)
     path config_file  // Effective config file with all resolved parameters
-    
+
     output:
     // Combined channel: [sub, ses, run_identifier, bold_file, tmean_file, bids_template]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-motion_bold.nii.gz"), path("*desc-motion_boldref.nii.gz"), val(bids_name), emit: output
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-confounds_timeseries.tsv"), emit: motion_params
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-motion_timeseries.tsv"), emit: motion_params
     path "*.json", emit: metadata
     
     script:
@@ -263,12 +267,12 @@ process FUNC_MOTION_CORRECTION {
             )
             create_output_link(f, tmean_bids_name)
         elif key == 'motion_params':
-            # Create BIDS-compliant name for motion parameters
-            # Keep as copy - small file, may need to be actual file for Nextflow
+            # Intermediate motion-parameter table (NOT the canonical confounds file).
+            # Consumed by FUNC_COMPUTE_CONFOUNDS, which publishes desc-confounds_timeseries.tsv.
             from nhp_mri_prep.utils.bids import get_filename_stem
             original_stem = get_filename_stem(bids_name)
             bids_prefix = original_stem.replace('_bold', '')
-            motion_bids_name = f"{bids_prefix}_desc-confounds_timeseries.tsv"
+            motion_bids_name = f"{bids_prefix}_desc-motion_timeseries.tsv"
             shutil.copy2(f, motion_bids_name)
         else:
             create_output_link(f, f.name)
@@ -1851,6 +1855,89 @@ create_output_link(result.output_file, bids_output_filename)
 
 # Save metadata
 save_metadata(result.metadata)
+PYTHON_EOF
+    """
+}
+
+process FUNC_COMPUTE_CONFOUNDS {
+    label 'cpu'
+    tag "${subject_id}_${session_id}_${run_identifier}"
+    // Confounds are an additive derivative; a failure on one run should not abort the dataset run.
+    errorStrategy 'ignore'
+
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
+        mode: 'copy',
+        pattern: '*_desc-confounds_timeseries.{tsv,json}'
+
+    input:
+    tuple val(subject_id), val(session_id), val(run_identifier), path(bold_4d), path(mask_file), path(motion_file), val(bids_name), path(seg_file), path(seg_lut_file)
+    path config_file
+
+    output:
+    // Optional: a degenerate run (e.g. a single-volume BOLD with no timeseries) is skipped as a
+    // clean success that emits nothing, rather than riding the errorStrategy 'ignore' failure path.
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*_desc-confounds_timeseries.tsv"), val(bids_name), optional: true, emit: output
+    path "*_desc-confounds_timeseries.json", optional: true, emit: sidecar
+
+    script:
+    """
+    \${PYTHON:-python3} <<'PYTHON_EOF'
+import sys
+from pathlib import Path
+import shutil
+
+import nibabel as nib
+
+from nhp_mri_prep.steps.functional import func_compute_confounds
+from nhp_mri_prep.steps.types import StepInput
+from nhp_mri_prep.utils.bids import get_filename_stem
+from nhp_mri_prep.utils.nextflow import load_config
+
+run_identifier = '${run_identifier}'
+config = load_config('${config_file}')
+bids_name = Path('${bids_name}')
+
+# Confounds require a timeseries. A degenerate run (not 4D, or < 2 volumes) has no FD/DVARS/
+# derivative columns to compute, so skip it as a clean success (no output) instead of erroring.
+_bold_shape = nib.load('${bold_4d}').shape
+if len(_bold_shape) < 4 or _bold_shape[3] < 2:
+    print(f"INFO: skipping confounds - single-volume / non-timeseries run (shape {_bold_shape})")
+    sys.exit(0)
+
+def _real(p):
+    # Treat dummy/empty sentinels as absent (mirrors TSNR's dummy-mask handling).
+    path = Path(p)
+    if (not path.exists()) or '.dummy' in str(path).lower() or path.stat().st_size == 0:
+        return None
+    return path
+
+input_obj = StepInput(
+    input_file=Path('${bold_4d}'),
+    working_dir=Path('work'),
+    config=config,
+    output_name='confounds',
+    metadata={
+        'subject_id': '${subject_id}',
+        'session_id': '${session_id}',
+        'run_identifier': run_identifier,
+    },
+)
+
+result = func_compute_confounds(
+    input_obj,
+    motion_par_file=_real('${motion_file}'),
+    brain_mask_file=_real('${mask_file}'),
+    seg_file=_real('${seg_file}'),          # T1w-space segmentation (None -> no tissue regressors)
+    seg_lut_file=_real('${seg_lut_file}'),  # atlas LUT for tissue classification
+)
+
+# Publish canonical fMRIPrep-style names: <prefix>_desc-confounds_timeseries.{tsv,json}
+bids_prefix = get_filename_stem(bids_name).replace('_bold', '')
+tsv_out = f"{bids_prefix}_desc-confounds_timeseries.tsv"
+json_out = f"{bids_prefix}_desc-confounds_timeseries.json"
+shutil.copy2(result.output_file, tsv_out)
+if result.additional_files.get('confounds_json'):
+    shutil.copy2(result.additional_files['confounds_json'], json_out)
 PYTHON_EOF
     """
 }

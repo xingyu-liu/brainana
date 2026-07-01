@@ -36,6 +36,8 @@ include { FUNC_COMPUTE_TSNR } from '../modules/functional.nf'
 include { FUNC_TSNR_SESSION_AVERAGE } from '../modules/functional.nf'
 include { FUNC_TSNR_SURF_PROJECTION } from '../modules/functional.nf'
 include { QC_TSNR } from '../modules/qc.nf'
+include { FUNC_COMPUTE_CONFOUNDS } from '../modules/functional.nf'
+include { QC_CONFOUNDS } from '../modules/qc.nf'
 
 // Load external Groovy files
 def channelHelpers = evaluate(new File("${projectDir}/workflows/channel_helpers.groovy").text)
@@ -53,8 +55,10 @@ workflow FUNC_WF {
     anat_reg_transforms  // channel from anatomical workflow
     anat_reg_reference  // channel from anatomical workflow (target_final.nii.gz from ANAT_REGISTRATION)
     surf_actual_subject_id  // [sub, ses, fastsurfer_dir_name] from surface recon; empty when surf recon skipped
+    anat_skull_seg      // [sub, ses, T1w-space segmentation] (for confounds tissue regressors)
+    anat_skull_seg_lut  // [sub, ses, atlas LUT tsv]
     gpu_queue
-    
+
     main:
     // ============================================
     // INITIALIZATION
@@ -842,6 +846,64 @@ workflow FUNC_WF {
         }
 
         QC_TSNR(tsnr_qc_input, config_file)
+
+        // ============================================
+        // CONFOUNDS (fMRIPrep-compatible)
+        // ============================================
+        // motion (24-param) + framewise_displacement + rmsd + dvars/std_dvars + global_signal +
+        // outliers, computed in the registered (preferably space-T1w) BOLD space. When a T1w
+        // anatomical segmentation is available, csf/white_matter/csf_wm tissue regressors are added too.
+        //
+        // Per-session segmentation + LUT, keyed to each func session via the matched anatomical
+        // session (`anat_ses` from func_anat_selection). anat_seg_lut covers only sessions with a real
+        // segmentation; we then make it total over all func sessions with dummy sentinels.
+        //
+        // Session keys must be normalized before matching: func_anat_selection emits anat_ses="" for
+        // subject-level anatomy while anat_skull_seg carries the native session (null). So we combine
+        // by subject only and filter on normalized-session equality (same idiom as the registration
+        // wiring above), instead of an exact combine(by:[0,1]) that would treat ""!=null and silently
+        // drop tissue regressors for subjects with subject-level anatomy.
+        def normSes = channelHelpers.normalizeSessionId
+        def anat_seg_lut = anat_skull_seg.join(anat_skull_seg_lut, by: [0, 1])  // [sub, anat_seg_ses, seg, lut]
+        def func_seg_lut_real = func_anat_selection
+            .map { sub, ses_func, anat_file, anat_ses -> [sub, ses_func, anat_ses] }
+            .combine(anat_seg_lut, by: 0)  // by subject: [sub, ses_func, anat_ses, anat_seg_ses, seg, lut]
+            .filter { sub, ses_func, anat_ses, anat_seg_ses, seg, lut -> normSes(anat_ses) == normSes(anat_seg_ses) }
+            .map { sub, ses_func, anat_ses, anat_seg_ses, seg, lut -> [sub, ses_func, seg, lut] }
+            .unique()
+        def dummy_seg = file("${workDir}/dummy_confounds_seg.dummy").tap { it.toFile().text = "" }
+        def dummy_lut = file("${workDir}/dummy_confounds_lut.dummy").tap { it.toFile().text = "" }
+        def func_seg_lut = func_anat_selection
+            .map { sub, ses_func, anat_file, anat_ses -> [sub, ses_func] }
+            .unique()
+            .join(func_seg_lut_real, by: [0, 1], remainder: true)
+            .map { row ->
+                def sub = row[0]; def ses = row[1]
+                def seg = (row.size() > 2 && row[2]) ? row[2] : dummy_seg
+                def lut = (row.size() > 3 && row[3]) ? row[3] : dummy_lut
+                [sub, ses, seg, lut]
+            }
+
+        // Reuse the TSNR bold+mask channel [sub,ses,run, bold, bids, mask, space], inner-join the
+        // per-run motion params (rmsd is derived in Python so no separate rel-RMS channel), then
+        // attach the session's seg+lut — gated to T1w-space runs since the seg is T1w-space.
+        def confounds_input = tsnr_run_input
+            .join(func_motion_params.map { sub, ses, run_id, motion_tsv -> [sub, ses, run_id, motion_tsv] }, by: [0, 1, 2])
+            .map { sub, ses, run_id, bold_sel, bids_name, mask_sel, space_label, motion_tsv ->
+                [sub, ses, run_id, bold_sel, mask_sel, motion_tsv, bids_name, space_label]
+            }
+            .combine(func_seg_lut, by: [0, 1])
+            .map { sub, ses, run_id, bold_sel, mask_sel, motion_tsv, bids_name, space_label, seg, lut ->
+                def use_seg = (space_label == 'T1w') ? seg : dummy_seg
+                def use_lut = (space_label == 'T1w') ? lut : dummy_lut
+                [sub, ses, run_id, bold_sel, mask_sel, motion_tsv, bids_name, use_seg, use_lut]
+            }
+
+        FUNC_COMPUTE_CONFOUNDS(confounds_input, config_file)
+
+        // QC: fMRIPrep-style confound line panels (reads only the confounds TSV).
+        // FUNC_COMPUTE_CONFOUNDS.out.output = [sub, ses, run_id, confounds_tsv, bids_name]
+        QC_CONFOUNDS(FUNC_COMPUTE_CONFOUNDS.out.output, config_file)
     }
 
     // ============================================

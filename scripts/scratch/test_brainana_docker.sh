@@ -7,12 +7,12 @@ fs_license=/mnt/DataDrive3/xliu/prep_test/freesurfer_license.txt
 # output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/${site}
 version=1.1.1
 
-bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_docker_v${version}
-config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml
+# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
+# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_docker_v${version}
+# config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml
 
-# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_example
-# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_example_v2
+bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_example
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_example
 
 # pet cropped
 # bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_pet_cropped

@@ -28,6 +28,7 @@ from .mri_plotting import (
     create_overlay_grid_3xN,
     create_motion_plot,
     create_grid_mri_image,
+    save_timeseries_qc_figure,
     _crop_white_space,
     _create_colorbar,
     _create_label_image,
@@ -159,15 +160,12 @@ def create_motion_correction_qc(
 
         # Load and analyze motion parameters
         # Handle both old .par format (no headers) and new .tsv format (with headers)
-        enorm_data = None
         if motion_params.endswith(".tsv"):
             motion_df = pd.read_csv(motion_params, sep="\t")
             # Ensure we have the expected columns in the right order
             expected_cols = ["rot_x", "rot_y", "rot_z", "trans_x", "trans_y", "trans_z"]
             if all(col in motion_df.columns for col in expected_cols):
                 motion_data = motion_df[expected_cols].values
-                if "enorm" in motion_df.columns:
-                    enorm_data = motion_df["enorm"].to_numpy(dtype=float)
             else:
                 logger.warning(
                     f"Data: expected columns {expected_cols} not found in {motion_params} - using all columns"
@@ -185,14 +183,13 @@ def create_motion_correction_qc(
             logger.info("QC: skipping motion plot - all-zero params (pass-through)")
             return {}
 
-        # Create motion plot
-        fig = create_motion_plot(motion_data, enorm_data=enorm_data, title="")
+        # Create motion plot (6 rigid-body params only; no Euclidean-norm twin axis —
+        # framewise displacement now lives in the separate confounds snapshot).
+        fig = create_motion_plot(motion_data, title="")
 
         # Ensure the parent directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(
-            output_path, dpi=PLOT_VOL_DPI, bbox_inches="tight", facecolor="white"
-        )
+        save_timeseries_qc_figure(fig, output_path, dpi=PLOT_VOL_DPI)
         plt.close(fig)
 
         logger.info(f"Output: motion QC plot saved - {output_path}")

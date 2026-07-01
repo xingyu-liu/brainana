@@ -1098,6 +1098,56 @@ PYTHON_EOF
     """
 }
 
+process QC_CONFOUNDS {
+    label 'cpu'
+    tag "${subject_id}_${session_id}_${run_identifier}"
+    errorStrategy 'ignore'
+
+    publishDir "${params.output_dir}/sub-${subject_id}/figures",
+        mode: 'copy',
+        pattern: '*.png'
+
+    input:
+    tuple val(subject_id), val(session_id), val(run_identifier), path(confounds_tsv), val(bids_name)
+    path config_file
+
+    output:
+    path "*.png", optional: true, emit: qc_files
+    path "*.json", emit: metadata
+
+    script:
+    """
+    \${PYTHON:-python3} <<'PYTHON_EOF'
+from pathlib import Path
+
+from nhp_mri_prep.steps.qc import qc_confounds
+from nhp_mri_prep.utils.bids import create_bids_output_filename
+from nhp_mri_prep.utils.nextflow import load_config, save_metadata
+
+config = load_config('${config_file}')
+bids_naming_template = Path('${bids_name}')
+confounds_tsv = Path('${confounds_tsv}')
+
+# BIDS-compliant per-run PNG basename derived from the full bold stem, so every distinguishing
+# entity (acq, dir, space, ...) is preserved -- matches QC_MOTION_CORRECTION and the other per-run
+# QC processes. (An allowlist subset would collapse acq-variant runs onto one colliding filename.)
+qc_output_png_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-confounds',
+    modality='bold',
+).replace('.nii.gz', '.png')
+
+result = qc_confounds(
+    confounds_file=confounds_tsv,
+    output_path=Path(qc_output_png_filename),
+    config=config,
+)
+
+save_metadata(result.metadata)
+PYTHON_EOF
+    """
+}
+
 // ============================================
 // REPORT GENERATION
 // ============================================
