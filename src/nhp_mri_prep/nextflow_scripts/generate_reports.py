@@ -28,6 +28,7 @@ if str(_src_dir) not in sys.path:
     sys.path.insert(0, str(_src_dir))
 
 from nhp_mri_prep.steps.qc import qc_generate_report
+from nhp_mri_prep.quality_control.run_status import run_status_log_label
 from nhp_mri_prep.utils.nextflow import load_config
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -102,7 +103,7 @@ def main() -> int:
 
     status_label = "unknown"
     if run_status is not None:
-        status_label = "success" if run_status.get("success") else "early abort"
+        status_label = run_status_log_label(run_status)
     logger.info(
         "Report: generating reports for %d subject(s) [run status: %s]",
         len(subjects),

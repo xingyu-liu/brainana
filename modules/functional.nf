@@ -1874,14 +1874,19 @@ process FUNC_COMPUTE_CONFOUNDS {
     path config_file
 
     output:
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*_desc-confounds_timeseries.tsv"), val(bids_name), emit: output
-    path "*_desc-confounds_timeseries.json", emit: sidecar
+    // Optional: a degenerate run (e.g. a single-volume BOLD with no timeseries) is skipped as a
+    // clean success that emits nothing, rather than riding the errorStrategy 'ignore' failure path.
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*_desc-confounds_timeseries.tsv"), val(bids_name), optional: true, emit: output
+    path "*_desc-confounds_timeseries.json", optional: true, emit: sidecar
 
     script:
     """
     \${PYTHON:-python3} <<'PYTHON_EOF'
+import sys
 from pathlib import Path
 import shutil
+
+import nibabel as nib
 
 from nhp_mri_prep.steps.functional import func_compute_confounds
 from nhp_mri_prep.steps.types import StepInput
@@ -1891,6 +1896,13 @@ from nhp_mri_prep.utils.nextflow import load_config
 run_identifier = '${run_identifier}'
 config = load_config('${config_file}')
 bids_name = Path('${bids_name}')
+
+# Confounds require a timeseries. A degenerate run (not 4D, or < 2 volumes) has no FD/DVARS/
+# derivative columns to compute, so skip it as a clean success (no output) instead of erroring.
+_bold_shape = nib.load('${bold_4d}').shape
+if len(_bold_shape) < 4 or _bold_shape[3] < 2:
+    print(f"INFO: skipping confounds - single-volume / non-timeseries run (shape {_bold_shape})")
+    sys.exit(0)
 
 def _real(p):
     # Treat dummy/empty sentinels as absent (mirrors TSNR's dummy-mask handling).

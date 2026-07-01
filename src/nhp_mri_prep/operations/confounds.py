@@ -28,11 +28,11 @@ import pandas as pd
 import nibabel as nib
 
 # Reuse the macaque head radius already defined for motion correction.
-from .preprocessing import MACAQUE_ENORM_RADIUS_MM
+from .preprocessing import MACAQUE_HEAD_RADIUS_MM
 
 # --- Fixed defaults (not exposed as config knobs, per design) ------------------------------------
 # Radius (mm) converting rotational deltas to mm-equivalent displacement for macaque brains.
-FD_RADIUS_MM: float = MACAQUE_ENORM_RADIUS_MM  # 27.0
+FD_RADIUS_MM: float = MACAQUE_HEAD_RADIUS_MM  # 27.0
 # Threshold (mm) above which a volume is FLAGGED in motion_outlier## (no data removed).
 # Macaque-scaled from the human Power-2012 default (0.5 mm): FD's rotation->mm conversion uses a
 # 50 mm sphere for humans vs FD_RADIUS_MM (27 mm) here, so the threshold scales by the radius ratio
@@ -642,12 +642,9 @@ def compute_confounds(
     if brain_mask_file is not None and Path(brain_mask_file).exists():
         mask_img = nib.load(str(brain_mask_file))
         if mask_img.shape[:3] == bold_img.shape[:3]:
-            mask_arr = np.asanyarray(mask_img.dataobj)
-            # Masks are sometimes stored 4D with a singleton time axis (x, y, z, 1); drop it so the
-            # boolean index is 3D and matches the BOLD's spatial axes.
-            if mask_arr.ndim == 4:
-                mask_arr = mask_arr[..., 0]
-            brain_mask = mask_arr > 0
+            # Masks are sometimes stored 4D with a singleton time axis (x, y, z, 1);
+            # _as_3d_bool_mask drops it and binarizes so the index matches the BOLD spatial axes.
+            brain_mask = _as_3d_bool_mask(np.asanyarray(mask_img.dataobj))
         else:
             mask_note = "brain mask grid does not match BOLD; global_signal/DVARS skipped"
             logger.warning(f"Confounds: {mask_note}")

@@ -1050,18 +1050,19 @@ def create_confounds_plot(
 
 def create_motion_plot(
     motion_data: np.ndarray,
-    enorm_data: Optional[np.ndarray] = None,
     title: str = "Head Motion Parameters",
     figsize: Tuple[int, int] = (TIMESERIES_QC_FIG_WIDTH, 6),
 ) -> plt.Figure:
     """
-    Create motion parameter plots.
+    Create motion parameter plots (6 rigid-body parameters).
+
+    Framewise displacement is no longer overlaid here — it is reported in the separate
+    confounds QC snapshot (see ``create_confounds_plot``).
 
     Args:
         motion_data: Motion parameters array (n_timepoints x 6)
                     First 3 columns: rotations (radians)
                     Last 3 columns: translations (mm)
-        enorm_data: Optional framewise displacement series in mm-equivalent units
         title: Plot title
         figsize: Figure size
 
@@ -1092,40 +1093,13 @@ def create_motion_plot(
     #     yrange = 1e-6
     # ax2.set_ylim(-yrange, yrange)
 
-    # Overlay enorm on twin y-axes for both panels
-    if enorm_data is not None:
-        plotted_enorm = np.asarray(enorm_data, dtype=float).copy()
-        if plotted_enorm.size > 0:
-            plotted_enorm[0] = np.nan
-        ax1_enorm = ax1.twinx()
-        ax2_enorm = ax2.twinx()
-        ax1_enorm.plot(plotted_enorm, color="k", lw=2, label="Euclidean norm")
-        ax2_enorm.plot(plotted_enorm, color="k", lw=2, label="Euclidean norm")
-        ax1_enorm.set_ylabel("Euclidean norm (mm)")
-        ax2_enorm.set_ylabel("Euclidean norm (mm)")
-        max_enorm = np.nanmax(plotted_enorm) if plotted_enorm.size > 0 else 0.0
-        ax1_enorm.set_ylim(0, max_enorm * 1.1 if max_enorm > 0 else 1e-6)
-        ax2_enorm.set_ylim(0, max_enorm * 1.1 if max_enorm > 0 else 1e-6)
-
     ax1.set_title(title)
-    if enorm_data is not None:
-        handles1, labels1 = ax1.get_legend_handles_labels()
-        handles1b, labels1b = ax1_enorm.get_legend_handles_labels()
-        ax1.legend(
-            handles1 + handles1b,
-            labels1 + labels1b,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.18),
-            ncol=4,
-            frameon=True,
-        )
-    else:
-        ax1.legend(
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.18),
-            ncol=3,
-            frameon=True,
-        )
+    ax1.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.18),
+        ncol=3,
+        frameon=True,
+    )
     configure_frame_xaxis([ax1, ax2], motion_data.shape[0], show_xlabel=True)
 
     # add a horizontal line at 0 for the y-axis

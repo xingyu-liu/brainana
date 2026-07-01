@@ -67,7 +67,6 @@ def _generate_pass_through_motion_params(
                 "trans_x": [0.0] * nvols,
                 "trans_y": [0.0] * nvols,
                 "trans_z": [0.0] * nvols,
-                "enorm": [0.0] * nvols,
             }
         )
         motion_params_path = work_dir / "func_motion_corrected.tsv"

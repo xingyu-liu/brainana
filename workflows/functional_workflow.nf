@@ -857,11 +857,19 @@ workflow FUNC_WF {
         // Per-session segmentation + LUT, keyed to each func session via the matched anatomical
         // session (`anat_ses` from func_anat_selection). anat_seg_lut covers only sessions with a real
         // segmentation; we then make it total over all func sessions with dummy sentinels.
-        def anat_seg_lut = anat_skull_seg.join(anat_skull_seg_lut, by: [0, 1])  // [sub, anat_ses, seg, lut]
+        //
+        // Session keys must be normalized before matching: func_anat_selection emits anat_ses="" for
+        // subject-level anatomy while anat_skull_seg carries the native session (null). So we combine
+        // by subject only and filter on normalized-session equality (same idiom as the registration
+        // wiring above), instead of an exact combine(by:[0,1]) that would treat ""!=null and silently
+        // drop tissue regressors for subjects with subject-level anatomy.
+        def normSes = channelHelpers.normalizeSessionId
+        def anat_seg_lut = anat_skull_seg.join(anat_skull_seg_lut, by: [0, 1])  // [sub, anat_seg_ses, seg, lut]
         def func_seg_lut_real = func_anat_selection
-            .map { sub, ses_func, anat_file, anat_ses -> [sub, anat_ses, ses_func] }
-            .combine(anat_seg_lut, by: [0, 1])
-            .map { sub, anat_ses, ses_func, seg, lut -> [sub, ses_func, seg, lut] }
+            .map { sub, ses_func, anat_file, anat_ses -> [sub, ses_func, anat_ses] }
+            .combine(anat_seg_lut, by: 0)  // by subject: [sub, ses_func, anat_ses, anat_seg_ses, seg, lut]
+            .filter { sub, ses_func, anat_ses, anat_seg_ses, seg, lut -> normSes(anat_ses) == normSes(anat_seg_ses) }
+            .map { sub, ses_func, anat_ses, anat_seg_ses, seg, lut -> [sub, ses_func, seg, lut] }
             .unique()
         def dummy_seg = file("${workDir}/dummy_confounds_seg.dummy").tap { it.toFile().text = "" }
         def dummy_lut = file("${workDir}/dummy_confounds_lut.dummy").tap { it.toFile().text = "" }

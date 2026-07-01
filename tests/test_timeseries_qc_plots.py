@@ -33,7 +33,7 @@ def _apply_confounds_margins(fig: plt.Figure) -> None:
 def test_motion_and_confounds_share_bottom_axis_geometry(n_frames: int) -> None:
     rng = np.random.RandomState(0)
     motion_data = np.cumsum(rng.normal(0, 0.01, size=(n_frames, 6)), axis=0)
-    motion_fig = create_motion_plot(motion_data, enorm_data=None, title="")
+    motion_fig = create_motion_plot(motion_data, title="")
     _apply_timeseries_margins(motion_fig)
 
     confounds_df = pd.DataFrame(
@@ -86,7 +86,7 @@ def test_frame_xticks_rule() -> None:
 
 def test_save_timeseries_qc_figure_writes_png(tmp_path: Path) -> None:
     motion_data = np.zeros((20, 6))
-    fig = create_motion_plot(motion_data, enorm_data=None, title="")
+    fig = create_motion_plot(motion_data, title="")
     out = tmp_path / "motion.png"
     save_timeseries_qc_figure(fig, out)
     plt.close(fig)

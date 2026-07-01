@@ -185,7 +185,7 @@ def create_motion_correction_qc(
 
         # Create motion plot (6 rigid-body params only; no Euclidean-norm twin axis —
         # framewise displacement now lives in the separate confounds snapshot).
-        fig = create_motion_plot(motion_data, enorm_data=None, title="")
+        fig = create_motion_plot(motion_data, title="")
 
         # Ensure the parent directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -125,8 +125,9 @@ Session-level files omit task and run entities. Per-run files include them (see 
     omitted (rather than computed over a whole-FOV mask) when no valid mask is available.
   - **Global / tissue signals:** ``global_signal`` (+ ``_derivative1``/``_power2``/``_derivative1_power2``)
     — also requires a brain mask. ``csf``, ``white_matter`` and ``csf_wm`` are added **only when a T1w
-    anatomical segmentation is available** (a later milestone); they are omitted otherwise. When a
-    mask-based column is skipped, the JSON sidecar records the reason.
+    anatomical segmentation is available** (i.e. skullstripping produced a multi-class segmentation
+    + LUT); they are omitted otherwise. When a mask-based column is skipped, the JSON sidecar records
+    the reason.
   - **Outliers (indicator columns):** ``motion_outlier##`` (FD or std-DVARS threshold crossings) and
     ``non_steady_state_outlier##`` (initial dummy volumes).
 

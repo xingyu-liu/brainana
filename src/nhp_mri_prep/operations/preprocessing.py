@@ -55,36 +55,9 @@ from fastsurfer_nn.inference.segmentation import run_segmentation
 DEFAULT_CONFORM_PADDING_PERCENTAGE = 0.1
 # Minimum voxel size threshold (mm) for template downsampling during conform
 DEFAULT_DOWNSAMPLE_VOXEL_SIZE_THRESHOLD = 0.5
-# Fixed macaque head radius (mm) for converting rotational deltas to displacement
-MACAQUE_ENORM_RADIUS_MM = 27.0
-
-
-def _compute_enorm_from_motion_params(
-    motion_params_df: pd.DataFrame,
-    rotation_radius_mm: float = MACAQUE_ENORM_RADIUS_MM,
-) -> pd.Series:
-    """Compute AFNI-style enorm from 6-column motion parameters.
-
-    Args:
-        motion_params_df: DataFrame with columns rot_x/rot_y/rot_z (radians) and
-            trans_x/trans_y/trans_z (mm).
-        rotation_radius_mm: Radius used to convert rotational deltas to mm-equivalent.
-
-    Returns:
-        A pandas Series containing framewise enorm values (first frame is 0).
-    """
-    required_cols = ["rot_x", "rot_y", "rot_z", "trans_x", "trans_y", "trans_z"]
-    missing_cols = [col for col in required_cols if col not in motion_params_df.columns]
-    if missing_cols:
-        raise ValueError(
-            f"Missing required motion columns for enorm calculation: {missing_cols}"
-        )
-
-    motion_diff = motion_params_df[required_cols].diff().fillna(0.0)
-    rot_diff_mm = motion_diff[["rot_x", "rot_y", "rot_z"]] * rotation_radius_mm
-    trans_diff_mm = motion_diff[["trans_x", "trans_y", "trans_z"]]
-    diff_mm = pd.concat([rot_diff_mm, trans_diff_mm], axis=1)
-    return np.sqrt((diff_mm**2).sum(axis=1))
+# Fixed macaque head radius (mm) for converting rotational deltas to displacement.
+# Reused by operations/confounds.py (as FD_RADIUS_MM) for framewise displacement and rmsd.
+MACAQUE_HEAD_RADIUS_MM = 27.0
 
 
 # %%
@@ -1139,11 +1112,8 @@ def motion_correction(
                 "trans_y",
                 "trans_z",
             ]
-            # AFNI-style enorm: L2 norm of backward differences in mm-equivalent space
-            motion_params_df["enorm"] = _compute_enorm_from_motion_params(
-                motion_params_df,
-                rotation_radius_mm=MACAQUE_ENORM_RADIUS_MM,
-            )
+            # Intermediate 6-column rigid-body table; consumed by FUNC_COMPUTE_CONFOUNDS,
+            # which derives framewise displacement / rmsd from these columns.
             tsv_path = output_prefix + ".tsv"
             motion_params_df.to_csv(tsv_path, sep="\t", index=False)
             outputs["motion_parameters"] = tsv_path

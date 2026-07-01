@@ -1121,21 +1121,21 @@ process QC_CONFOUNDS {
 from pathlib import Path
 
 from nhp_mri_prep.steps.qc import qc_confounds
-from nhp_mri_prep.utils.bids import create_bids_filename, parse_bids_entities
+from nhp_mri_prep.utils.bids import create_bids_output_filename
 from nhp_mri_prep.utils.nextflow import load_config, save_metadata
 
 config = load_config('${config_file}')
 bids_naming_template = Path('${bids_name}')
 confounds_tsv = Path('${confounds_tsv}')
 
-# BIDS-compliant PNG basename: sub/ses/task/run/space + desc-confounds + bold.png
-parsed_entities = parse_bids_entities(bids_naming_template.name)
-qc_filename_entities = {}
-for entity_key in ('sub', 'ses', 'task', 'run', 'space'):
-    if entity_key in parsed_entities:
-        qc_filename_entities[entity_key] = parsed_entities[entity_key]
-qc_filename_entities['desc'] = 'confounds'
-qc_output_png_filename = create_bids_filename(qc_filename_entities, 'bold', extension='.png')
+# BIDS-compliant per-run PNG basename derived from the full bold stem, so every distinguishing
+# entity (acq, dir, space, ...) is preserved -- matches QC_MOTION_CORRECTION and the other per-run
+# QC processes. (An allowlist subset would collapse acq-variant runs onto one colliding filename.)
+qc_output_png_filename = create_bids_output_filename(
+    original_file_path=bids_naming_template,
+    suffix='desc-confounds',
+    modality='bold',
+).replace('.nii.gz', '.png')
 
 result = qc_confounds(
     confounds_file=confounds_tsv,
