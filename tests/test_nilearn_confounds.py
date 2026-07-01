@@ -23,13 +23,21 @@ _N_VOLUMES = 20
 _TR = 2.0
 
 
-def _write_par(path: Path, n: int = _N_VOLUMES) -> None:
+def _write_par(path: Path, n: int = _N_VOLUMES, spike_frame: int = None) -> None:
     rng = np.random.RandomState(0)
-    arr = np.cumsum(rng.normal(0, 0.01, size=(n, 6)), axis=0)
+    if spike_frame is None:
+        arr = np.cumsum(rng.normal(0, 0.01, size=(n, 6)), axis=0)
+    else:
+        # FSL .par columns are rotations (rad) then translations (mm); brainana scales rotations by
+        # the 27 mm macaque radius, so even small base motion easily exceeds FD 0.25 mm. Use a tiny
+        # sub-threshold baseline and inject one large translation jump so exactly one frame crosses
+        # the threshold, forcing a single censored frame in nilearn's scrub strategy.
+        arr = np.cumsum(rng.normal(0, 0.0003, size=(n, 6)), axis=0)
+        arr[spike_frame:, 3] += 1.0  # trans_x jump of 1 mm at spike_frame
     np.savetxt(str(path), arr)
 
 
-def _write_bids_run(tmp_path: Path, *, with_seg: bool = False) -> Path:
+def _write_bids_run(tmp_path: Path, *, with_seg: bool = False, spike_frame: int = None) -> Path:
     """Write a minimal BIDS func derivative tree and return the BOLD path."""
     func_dir = tmp_path / "func"
     func_dir.mkdir(parents=True)
@@ -45,7 +53,7 @@ def _write_bids_run(tmp_path: Path, *, with_seg: bool = False) -> Path:
     sidecar.write_text(json.dumps({"RepetitionTime": _TR}))
 
     par = func_dir / "mc.par"
-    _write_par(par)
+    _write_par(par, spike_frame=spike_frame)
 
     mask_f = func_dir / f"{_BIDS_PREFIX}_space-T1w_desc-brain_mask.nii.gz"
     nib.save(nib.Nifti1Image(np.ones(shape[:3], dtype=np.uint8), affine), str(mask_f))
@@ -110,6 +118,35 @@ def test_load_confounds_wm_csf_full(tmp_path):
             assert f"{tissue}{suffix}" in confounds.columns
 
 
+def test_load_confounds_global_signal(tmp_path):
+    bold_f = _write_bids_run(tmp_path, with_seg=False)
+
+    confounds, _ = load_confounds(
+        str(bold_f),
+        strategy=["motion", "global_signal"],
+        motion="full",
+        global_signal="full",
+    )
+
+    assert confounds.shape == (_N_VOLUMES, 28)
+    for suffix in ("", "_derivative1", "_power2", "_derivative1_power2"):
+        assert f"global_signal{suffix}" in confounds.columns
+
+
+def test_load_confounds_wm_csf_without_seg_raises(tmp_path):
+    # Tissue regressors (csf/white_matter) are only produced when a T1w segmentation is given.
+    # Without it, requesting the wm_csf strategy must fail rather than silently return motion-only.
+    bold_f = _write_bids_run(tmp_path, with_seg=False)
+
+    with pytest.raises(ValueError, match="wm_csf"):
+        load_confounds(
+            str(bold_f),
+            strategy=["motion", "wm_csf"],
+            motion="full",
+            wm_csf="full",
+        )
+
+
 def test_clean_img_with_brainana_confounds(tmp_path):
     bold_f = _write_bids_run(tmp_path, with_seg=True)
 
@@ -132,10 +169,13 @@ def test_clean_img_with_brainana_confounds(tmp_path):
 
 
 def test_load_confounds_scrub_macaque_fd(tmp_path):
-    bold_f = _write_bids_run(tmp_path, with_seg=False)
+    spike_frame = 10
+    bold_f = _write_bids_run(tmp_path, with_seg=False, spike_frame=spike_frame)
 
     # Use macaque FD threshold with scrub=0; set DVARS threshold high so only FD drives
-    # outlier detection on the synthetic run (no segment-length censoring).
+    # outlier detection. The injected spike at `spike_frame` is the sole FD outlier, so nilearn
+    # censors exactly that frame (scrub recomputes from framewise_displacement, not the
+    # motion_outlier columns brainana writes).
     confounds, sample_mask = load_confounds(
         str(bold_f),
         strategy=["motion", "scrub"],
@@ -146,7 +186,6 @@ def test_load_confounds_scrub_macaque_fd(tmp_path):
     )
 
     assert confounds.shape[0] == _N_VOLUMES
-    assert confounds.shape[1] >= 24
     motion_cols = [
         c
         for c in confounds.columns
@@ -155,7 +194,9 @@ def test_load_confounds_scrub_macaque_fd(tmp_path):
     assert len(motion_cols) == 24
     outlier_cols = [c for c in confounds.columns if c.startswith("motion_outlier")]
     assert len(outlier_cols) == confounds.shape[1] - 24
-    # sample_mask is None when no volumes are censored; otherwise indices of kept frames.
-    if sample_mask is not None:
-        assert sample_mask.ndim == 1
-        assert len(sample_mask) <= _N_VOLUMES
+
+    # Censoring actually happened: the spiked frame is dropped, all others kept.
+    assert sample_mask is not None
+    assert sample_mask.ndim == 1
+    assert len(sample_mask) == _N_VOLUMES - 1
+    assert spike_frame not in sample_mask
