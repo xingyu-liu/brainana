@@ -13,7 +13,7 @@ Directory layout
 
 |
 
-The diagram above is the canonical layout. 
+The diagram above is the canonical layout.
 
 Subject directory (``sub-<id>/``)
 ---------------------------------
@@ -111,8 +111,11 @@ Session-level files omit task and run entities. Per-run files include them (see 
 
 *Per-run confounds*
 
+Written in BIDS layout; nilearn-compatible for scrubbing via
+``nilearn.interfaces.fmriprep.load_confounds``.
+
 - ``<run_prefix>_desc-confounds_timeseries.tsv`` — confound regressors, one row per
-  volume. 
+  volume.
   Columns:
 
   - **Motion (24-parameter expansion):** ``trans_x``, ``trans_y``, ``trans_z`` (mm), ``rot_x``, ``rot_y``,
@@ -131,29 +134,12 @@ Session-level files omit task and run entities. Per-run files include them (see 
   - **Outliers (indicator columns):** ``motion_outlier##`` (FD or std-DVARS threshold crossings) and
     ``non_steady_state_outlier##`` (initial dummy volumes).
 
-  Confounds are **regressors only** — the BOLD image is never scrubbed by this stage; columns are only 
+  Confounds are **regressors only** — the BOLD image is never scrubbed by this stage; columns are only
   indicators for optional user-customized downstream use. The first sample of differenced columns
   (derivatives, FD, rmsd, DVARS) is ``n/a``.
 
 - ``<run_prefix>_desc-confounds_timeseries.json`` — Per-column metadata sidecar (method, FD radius, FD/DVARS
   thresholds, and whether tissue regressors were produced).
-
-*Nilearn downstream use*
-
-Confounds are written in fMRIPrep BIDS layout so they can be loaded from the co-located
-``*_desc-preproc_bold.nii.gz`` with `nilearn.interfaces.fmriprep.load_confounds` and applied via
-``nilearn.image.clean_img``. Supported ``strategy`` components:
-
-- ``motion`` (``motion="full"`` → 24 head-motion parameters)
-- ``wm_csf`` (tissue mean signals; requires T1w segmentation)
-- ``global_signal`` (requires a brain mask)
-- ``scrub`` (uses ``framewise_displacement`` and ``std_dvars``; pass ``fd_threshold=0.25`` for the
-  macaque default rather than nilearn's human default of 0.5 mm)
-
-Not produced by brainana: ``compcor`` (aCompCor), ``high_pass`` (cosine regressors), ``ica_aroma``,
-and ``tedana``. For bandpass filtering, use ``clean_img``'s Butterworth ``high_pass`` / ``low_pass``
-arguments (with ``t_r`` from the BOLD JSON sidecar) instead of cosine regressors — the same pattern
-as dropping fMRIPrep cosines when high-passing with Butterworth in a custom postprocessing script.
 
 QC figures (``figures/``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^
