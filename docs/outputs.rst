@@ -138,6 +138,23 @@ Session-level files omit task and run entities. Per-run files include them (see 
 - ``<run_prefix>_desc-confounds_timeseries.json`` — Per-column metadata sidecar (method, FD radius, FD/DVARS
   thresholds, and whether tissue regressors were produced).
 
+*Nilearn downstream use*
+
+Confounds are written in fMRIPrep BIDS layout so they can be loaded from the co-located
+``*_desc-preproc_bold.nii.gz`` with `nilearn.interfaces.fmriprep.load_confounds` and applied via
+``nilearn.image.clean_img``. Supported ``strategy`` components:
+
+- ``motion`` (``motion="full"`` → 24 head-motion parameters)
+- ``wm_csf`` (tissue mean signals; requires T1w segmentation)
+- ``global_signal`` (requires a brain mask)
+- ``scrub`` (uses ``framewise_displacement`` and ``std_dvars``; pass ``fd_threshold=0.25`` for the
+  macaque default rather than nilearn's human default of 0.5 mm)
+
+Not produced by brainana: ``compcor`` (aCompCor), ``high_pass`` (cosine regressors), ``ica_aroma``,
+and ``tedana``. For bandpass filtering, use ``clean_img``'s Butterworth ``high_pass`` / ``low_pass``
+arguments (with ``t_r`` from the BOLD JSON sidecar) instead of cosine regressors — the same pattern
+as dropping fMRIPrep cosines when high-passing with Butterworth in a custom postprocessing script.
+
 QC figures (``figures/``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 

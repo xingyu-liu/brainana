@@ -1,7 +1,8 @@
 """Unit tests for fMRIPrep-compatible confound computation (operations/confounds.py).
 
 These cover the dependency-light numpy paths (motion expansion, FD, DVARS, outliers, non-steady
-detection, assembly + JSON). Tissue-mask tests that need nilearn are exercised separately.
+detection, assembly + JSON). Nilearn integration (load_confounds, clean_img) is in
+test_nilearn_confounds.py.
 """
 
 import json
