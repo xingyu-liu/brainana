@@ -22,7 +22,6 @@ These parameters can be set via command-line and have corresponding YAML keys:
 |-------------|----------|-------------|
 | `--output_space` | `template.output_space` | Template space (e.g., "NMT2Sym:res-05") |
 | `--anat_only` | `general.anat_only` | Process only anatomical data |
-| `--overwrite` | `general.overwrite` | Overwrite existing outputs |
 | `--subjects` | `bids_filtering.subjects` | Filter by subject IDs |
 | `--sessions` | `bids_filtering.sessions` | Filter by session IDs |
 | `--tasks` | `bids_filtering.tasks` | Filter by task names |

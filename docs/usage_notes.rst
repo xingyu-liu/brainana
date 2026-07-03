@@ -1,3 +1,9 @@
+:og:description: Run the Brainana macaque MRI preprocessing pipeline on a BIDS dataset: quick-start docker run command, output directory, and FreeSurfer license setup.
+
+.. meta::
+   :description: Run the Brainana macaque MRI preprocessing pipeline on a BIDS dataset: quick-start docker run command, output directory, and FreeSurfer license setup.
+   :keywords: run Brainana, BIDS dataset, docker run, macaque MRI pipeline, FreeSurfer license
+
 Usage notes
 ===========
 

@@ -89,6 +89,7 @@ workflow FUNC_WF {
     def func_bias_correction_enabled = paramResolver.getYamlBool("func.bias_correction.enabled")
     def func_conform_enabled = paramResolver.getYamlBool("func.conform.enabled")
     def func_skullstripping_enabled = paramResolver.getYamlBool("func.skullstripping.enabled")
+    def func_confounds_enabled = paramResolver.getYamlBool("func.confounds.enabled")
     def func_coreg_runs_within_session = paramResolver.getYamlBool("func.coreg_runs_within_session")
     def registration_enabled = paramResolver.getYamlBool("registration.enabled", true)
     
@@ -850,60 +851,79 @@ workflow FUNC_WF {
         // ============================================
         // CONFOUNDS (fMRIPrep-compatible)
         // ============================================
-        // motion (24-param) + framewise_displacement + rmsd + dvars/std_dvars + global_signal +
-        // outliers, computed in the registered (preferably space-T1w) BOLD space. When a T1w
-        // anatomical segmentation is available, csf/white_matter/csf_wm tissue regressors are added too.
-        //
-        // Per-session segmentation + LUT, keyed to each func session via the matched anatomical
-        // session (`anat_ses` from func_anat_selection). anat_seg_lut covers only sessions with a real
-        // segmentation; we then make it total over all func sessions with dummy sentinels.
-        //
-        // Session keys must be normalized before matching: func_anat_selection emits anat_ses="" for
-        // subject-level anatomy while anat_skull_seg carries the native session (null). So we combine
-        // by subject only and filter on normalized-session equality (same idiom as the registration
-        // wiring above), instead of an exact combine(by:[0,1]) that would treat ""!=null and silently
-        // drop tissue regressors for subjects with subject-level anatomy.
-        def normSes = channelHelpers.normalizeSessionId
-        def anat_seg_lut = anat_skull_seg.join(anat_skull_seg_lut, by: [0, 1])  // [sub, anat_seg_ses, seg, lut]
-        def func_seg_lut_real = func_anat_selection
-            .map { sub, ses_func, anat_file, anat_ses -> [sub, ses_func, anat_ses] }
-            .combine(anat_seg_lut, by: 0)  // by subject: [sub, ses_func, anat_ses, anat_seg_ses, seg, lut]
-            .filter { sub, ses_func, anat_ses, anat_seg_ses, seg, lut -> normSes(anat_ses) == normSes(anat_seg_ses) }
-            .map { sub, ses_func, anat_ses, anat_seg_ses, seg, lut -> [sub, ses_func, seg, lut] }
-            .unique()
-        def dummy_seg = file("${workDir}/dummy_confounds_seg.dummy").tap { it.toFile().text = "" }
-        def dummy_lut = file("${workDir}/dummy_confounds_lut.dummy").tap { it.toFile().text = "" }
-        def func_seg_lut = func_anat_selection
-            .map { sub, ses_func, anat_file, anat_ses -> [sub, ses_func] }
-            .unique()
-            .join(func_seg_lut_real, by: [0, 1], remainder: true)
-            .map { row ->
-                def sub = row[0]; def ses = row[1]
-                def seg = (row.size() > 2 && row[2]) ? row[2] : dummy_seg
-                def lut = (row.size() > 3 && row[3]) ? row[3] : dummy_lut
-                [sub, ses, seg, lut]
-            }
+        // Gated by func.confounds.enabled (default on). The confounds TSV is a derivative only
+        // (the BOLD image is never modified). Motion-derived columns (24-param, framewise_displacement,
+        // rmsd) are present only when motion correction ran; the remaining regressors (dvars/std_dvars,
+        // global_signal, tissue, DVARS outliers) are computed regardless, so confounds stay useful even
+        // with motion correction disabled.
+        if (func_confounds_enabled) {
+            // motion (24-param) + framewise_displacement + rmsd + dvars/std_dvars + global_signal +
+            // outliers, computed in the registered (preferably space-T1w) BOLD space. When a T1w
+            // anatomical segmentation is available, csf/white_matter/csf_wm tissue regressors are added too.
+            //
+            // Per-session segmentation + LUT, keyed to each func session via the matched anatomical
+            // session (`anat_ses` from func_anat_selection). anat_seg_lut covers only sessions with a real
+            // segmentation; we then make it total over all func sessions with dummy sentinels.
+            //
+            // Session keys must be normalized before matching: func_anat_selection emits anat_ses="" for
+            // subject-level anatomy while anat_skull_seg carries the native session (null). So we combine
+            // by subject only and filter on normalized-session equality (same idiom as the registration
+            // wiring above), instead of an exact combine(by:[0,1]) that would treat ""!=null and silently
+            // drop tissue regressors for subjects with subject-level anatomy.
+            def normSes = channelHelpers.normalizeSessionId
+            def anat_seg_lut = anat_skull_seg.join(anat_skull_seg_lut, by: [0, 1])  // [sub, anat_seg_ses, seg, lut]
+            def func_seg_lut_real = func_anat_selection
+                .map { sub, ses_func, anat_file, anat_ses -> [sub, ses_func, anat_ses] }
+                .combine(anat_seg_lut, by: 0)  // by subject: [sub, ses_func, anat_ses, anat_seg_ses, seg, lut]
+                .filter { sub, ses_func, anat_ses, anat_seg_ses, seg, lut -> normSes(anat_ses) == normSes(anat_seg_ses) }
+                .map { sub, ses_func, anat_ses, anat_seg_ses, seg, lut -> [sub, ses_func, seg, lut] }
+                .unique()
+            def dummy_seg = file("${workDir}/dummy_confounds_seg.dummy").tap { it.toFile().text = "" }
+            def dummy_lut = file("${workDir}/dummy_confounds_lut.dummy").tap { it.toFile().text = "" }
+            def dummy_motion = file("${workDir}/dummy_confounds_motion.dummy").tap { it.toFile().text = "" }
+            def func_seg_lut = func_anat_selection
+                .map { sub, ses_func, anat_file, anat_ses -> [sub, ses_func] }
+                .unique()
+                .join(func_seg_lut_real, by: [0, 1], remainder: true)
+                .map { row ->
+                    def sub = row[0]; def ses = row[1]
+                    def seg = (row.size() > 2 && row[2]) ? row[2] : dummy_seg
+                    def lut = (row.size() > 3 && row[3]) ? row[3] : dummy_lut
+                    [sub, ses, seg, lut]
+                }
 
-        // Reuse the TSNR bold+mask channel [sub,ses,run, bold, bids, mask, space], inner-join the
-        // per-run motion params (rmsd is derived in Python so no separate rel-RMS channel), then
-        // attach the session's seg+lut — gated to T1w-space runs since the seg is T1w-space.
-        def confounds_input = tsnr_run_input
-            .join(func_motion_params.map { sub, ses, run_id, motion_tsv -> [sub, ses, run_id, motion_tsv] }, by: [0, 1, 2])
-            .map { sub, ses, run_id, bold_sel, bids_name, mask_sel, space_label, motion_tsv ->
-                [sub, ses, run_id, bold_sel, mask_sel, motion_tsv, bids_name, space_label]
-            }
-            .combine(func_seg_lut, by: [0, 1])
-            .map { sub, ses, run_id, bold_sel, mask_sel, motion_tsv, bids_name, space_label, seg, lut ->
-                def use_seg = (space_label == 'T1w') ? seg : dummy_seg
-                def use_lut = (space_label == 'T1w') ? lut : dummy_lut
-                [sub, ses, run_id, bold_sel, mask_sel, motion_tsv, bids_name, use_seg, use_lut]
-            }
+            // Make motion params total over every TSNR run: drive a remainder join from the run keys so
+            // runs with no motion TSV (motion correction disabled -> func_motion_params is empty) get a
+            // .dummy sentinel that FUNC_COMPUTE_CONFOUNDS' _real() maps back to None (Python then omits
+            // the motion columns). Building it run-key-driven keeps this total, so the join below stays a
+            // plain inner join without ever dropping a run.
+            def motion_for_runs = tsnr_run_input
+                .map { sub, ses, run_id, bold_sel, bids_name, mask_sel, space_label -> [sub, ses, run_id] }
+                .unique()
+                .join(func_motion_params.map { sub, ses, run_id, motion_tsv -> [sub, ses, run_id, motion_tsv] }, by: [0, 1, 2], remainder: true)
+                .map { row -> [row[0], row[1], row[2], (row.size() > 3 && row[3]) ? row[3] : dummy_motion] }
 
-        FUNC_COMPUTE_CONFOUNDS(confounds_input, config_file)
+            // Reuse the TSNR bold+mask channel [sub,ses,run, bold, bids, mask, space], inner-join the
+            // per-run motion params (rmsd is derived in Python so no separate rel-RMS channel), then
+            // attach the session's seg+lut — gated to T1w-space runs since the seg is T1w-space.
+            def confounds_input = tsnr_run_input
+                .join(motion_for_runs, by: [0, 1, 2])
+                .map { sub, ses, run_id, bold_sel, bids_name, mask_sel, space_label, motion_tsv ->
+                    [sub, ses, run_id, bold_sel, mask_sel, motion_tsv, bids_name, space_label]
+                }
+                .combine(func_seg_lut, by: [0, 1])
+                .map { sub, ses, run_id, bold_sel, mask_sel, motion_tsv, bids_name, space_label, seg, lut ->
+                    def use_seg = (space_label == 'T1w') ? seg : dummy_seg
+                    def use_lut = (space_label == 'T1w') ? lut : dummy_lut
+                    [sub, ses, run_id, bold_sel, mask_sel, motion_tsv, bids_name, use_seg, use_lut]
+                }
 
-        // QC: fMRIPrep-style confound line panels (reads only the confounds TSV).
-        // FUNC_COMPUTE_CONFOUNDS.out.output = [sub, ses, run_id, confounds_tsv, bids_name]
-        QC_CONFOUNDS(FUNC_COMPUTE_CONFOUNDS.out.output, config_file)
+            FUNC_COMPUTE_CONFOUNDS(confounds_input, config_file)
+
+            // QC: fMRIPrep-style confound line panels (reads only the confounds TSV).
+            // FUNC_COMPUTE_CONFOUNDS.out.output = [sub, ses, run_id, confounds_tsv, bids_name]
+            QC_CONFOUNDS(FUNC_COMPUTE_CONFOUNDS.out.output, config_file)
+        }
     }
 
     // ============================================

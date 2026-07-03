@@ -1,0 +1,29 @@
+{# Extend the RTD theme and inject SEO metadata into the page <head>. #}
+{% extends "!layout.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+
+  {# Google Search Console is verified via the HTML file in html_extra_path #}
+  {# (docs/google49dbcea2a2cad90f.html), not a meta tag. #}
+
+  {# --- Structured data: describe Brainana as a scientific software entity --- #}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Brainana",
+    "applicationCategory": "Macaque MRI preprocessing pipeline",
+    "applicationSubCategory": "Neuroimaging",
+    "operatingSystem": "Linux, Docker",
+    "description": "Brainana is an end-to-end preprocessing framework for macaque (non-human primate) MRI: anatomical and functional (fMRI) preprocessing, registration, tissue segmentation, and surface reconstruction from BIDS data, reproducible via Docker and Nextflow.",
+    "url": "https://brainana.readthedocs.io/en/stable/",
+    "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+    "sameAs": [
+      "https://github.com/xingyu-liu/brainana",
+      "https://hub.docker.com/r/liuxingyu987/brainana",
+      "https://www.biorxiv.org/content/10.64898/2026.06.03.729972v1.abstract"
+    ]
+  }
+  </script>
+{% endblock %}

@@ -15,7 +15,6 @@ Nextflow to show proper job counts in progress.
 import argparse
 import json
 import sys
-import subprocess
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -25,61 +24,47 @@ if str(_src_dir) not in sys.path:
     sys.path.insert(0, str(_src_dir))
 
 from nhp_mri_prep.config.config_io import load_yaml_config
+from nhp_mri_prep.config.config_validation import validate_config
 from nhp_mri_prep.steps.bids_discovery import discover_bids_dataset
 
 
 def validate_bids(bids_dir: Path, skip_validation: bool) -> bool:
     """
-    Validate BIDS dataset using bids-validator.
+    Lightweight, dependency-free sanity check that ``bids_dir`` looks like a
+    BIDS dataset the pipeline can process.
+
+    This does not run the full bids-validator (the pipeline intentionally builds
+    its BIDSLayout with ``validate=False`` to tolerate benign, especially
+    macaque-specific, spec deviations). It only confirms the directory contains
+    at least one ``sub-*/`` subject directory, which is what discovery needs.
+    The main purpose is to turn the common "pointed at the wrong directory"
+    mistake into a clear, early error instead of a later, vaguer
+    "No jobs discovered".
 
     Args:
         bids_dir: Path to BIDS dataset
-        skip_validation: If True, skip validation
+        skip_validation: If True, skip the check
 
     Returns:
-        True if validation passed or was skipped, False otherwise
+        True if the check passed or was skipped, False otherwise
     """
     if skip_validation:
         print("INFO: BIDS validation skipped")
         return True
 
-    print("INFO: Running BIDS validation...")
-    try:
-        result = subprocess.run(
-            ["bids-validator", str(bids_dir)],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        if result.returncode == 0:
-            print("INFO: BIDS validation passed")
-            return True
-        else:
-            print("ERROR: BIDS validation failed", file=sys.stderr)
-            print(result.stderr[:1000], file=sys.stderr)
-            return False
-    except (FileNotFoundError, OSError) as e:
-        # Handle both "command not found" and permission errors
-        if isinstance(e, OSError) and e.errno == 13:
-            print(
-                "WARNING: bids-validator permission denied, skipping validation",
-                file=sys.stderr,
-            )
-        else:
-            print(
-                "WARNING: bids-validator not found or not executable, skipping validation",
-                file=sys.stderr,
-            )
-        return True
-    except subprocess.TimeoutExpired:
-        print("ERROR: BIDS validation timed out", file=sys.stderr)
-        return False
-    except Exception as e:
+    has_subject_dir = any(
+        p.is_dir() and p.name.startswith("sub-") for p in bids_dir.iterdir()
+    )
+    if not has_subject_dir:
         print(
-            f"WARNING: BIDS validation encountered an error ({e}), skipping validation",
+            f"ERROR: {bids_dir} does not look like a BIDS dataset: "
+            f"no 'sub-*/' subject directories found.",
             file=sys.stderr,
         )
-        return True  # Don't fail the pipeline if validation has issues
+        return False
+
+    print("INFO: BIDS structure check passed")
+    return True
 
 
 def print_summary(
@@ -229,6 +214,18 @@ def main():
         print(f"ERROR: Failed to load config file: {e}", file=sys.stderr)
         sys.exit(1)
 
+    # Validate the config up front so bad values (e.g. dof: 7, an unknown
+    # skullstripping method, an out-of-range weight) fail fast here with a
+    # clear message, rather than surfacing as an opaque error deep in a
+    # process after minutes of compute. validate_config() merges the user
+    # config over the defaults, so it checks the effective settings.
+    try:
+        validate_config(config)
+    except (ValueError, TypeError) as e:
+        print(f"ERROR: Invalid configuration in {args.config_file}:", file=sys.stderr)
+        print(f"  {e}", file=sys.stderr)
+        sys.exit(1)
+
     # Parse filtering parameters
     subjects_list = None
     if args.subjects:
@@ -246,10 +243,13 @@ def main():
     if args.runs:
         runs_list = [r.strip() for r in args.runs.split(",")]
 
-    # # Validate BIDS dataset
-    # if not validate_bids(args.bids_dir, args.skip_bids_validation):
-    #     print("ERROR: BIDS validation failed. Use --skip_bids_validation to skip.", file=sys.stderr)
-    #     sys.exit(1)
+    # Validate BIDS dataset structure (honors --skip_bids_validation)
+    if not validate_bids(args.bids_dir, args.skip_bids_validation):
+        print(
+            "Use --skip_bids_validation to bypass this check.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Create output directory
     try:

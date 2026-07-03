@@ -1,3 +1,9 @@
+:og:description: Brainana output directory layout — the BIDS-derivatives structure and file naming for preprocessed macaque MRI anatomical and functional results.
+
+.. meta::
+   :description: Brainana output directory layout — the BIDS-derivatives structure and file naming for preprocessed macaque MRI anatomical and functional results.
+   :keywords: BIDS derivatives, output layout, macaque MRI outputs, file naming, preprocessing results
+
 Outputs
 =======
 
@@ -150,6 +156,12 @@ Quality control report
 ----------------------
 
 - ``sub-<id>.html`` — Browsable HTML report at the **output directory root** (alongside ``sub-<id>/``, not inside it), with summaries, QC snapshots, and methods. View a `sample report for sub-example <_static/QCreport_example/sub-example.html>`_.
+
+The report is **always generated on completion**, even after a partial failure, and carries a status badge:
+
+- **Pass** — completed successfully.
+- **Pass with warnings** — completed, but one or more optional steps failed; some outputs may be missing.
+- **Fail** — the run aborted early.
 
 Surface reconstruction (``fastsurfer/``)
 ----------------------------------------

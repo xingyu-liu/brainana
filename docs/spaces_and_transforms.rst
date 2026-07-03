@@ -1,3 +1,9 @@
+:og:description: How Brainana tracks macaque MRI images across coordinate spaces (scanner, T1w, template) and writes an explicit transform file for every T1w/T2w/BOLD space transition.
+
+.. meta::
+   :description: How Brainana tracks macaque MRI images across coordinate spaces (scanner, T1w, template) and writes an explicit transform file for every T1w/T2w/BOLD space transition.
+   :keywords: coordinate spaces, image registration, transforms, macaque MRI, template space
+
 Space tracking and transforms
 =============================
 

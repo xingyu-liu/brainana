@@ -1,3 +1,9 @@
+:og:description: Non-human primate (NHP) templates and atlases supported by Brainana for macaque MRI registration and parcellation, including NMT2, used as the output_space.
+
+.. meta::
+   :description: Non-human primate (NHP) templates and atlases supported by Brainana for macaque MRI registration and parcellation, including NMT2, used as the output_space.
+   :keywords: NHP templates, macaque atlas, NMT2, parcellation, registration, output space
+
 Template and atlas zoo
 ======================
 
@@ -54,6 +60,9 @@ Download: `template_zoo/atlas <https://github.com/xingyu-liu/brainana/tree/main/
     the rhesus monkey brain.* San Diego, CA: Academic Press, 2007.
 
 - **Retinotopy** (`doi <https://doi.org/10.1523/JNEUROSCI.0569-17.2017>`_) — Group-average polar angle and eccentricity maps for mapping visual field representations (e.g. V1, V2, V3).
+
+- **Other atlases**
+  * See the download directory above for the full list and references.
 
 
 .. note::

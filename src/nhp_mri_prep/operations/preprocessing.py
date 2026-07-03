@@ -1682,6 +1682,23 @@ def _prepare_n4_intensities(
     return out, True
 
 
+def _format_bspline_fitting_arg(value: Any) -> str:
+    """Normalize the N4 B-spline fitting config to the ANTs ``-b`` argument string.
+
+    Accepts a plain integer mesh resolution (preferred, e.g. ``100``) and wraps it as
+    ``"[ 100 ]"``, or passes a legacy ANTs-format string (``"[ 100 ]"``) through verbatim
+    for backward compatibility. The emitted argument is kept byte-for-byte identical to the
+    historical value (internal spaces included) so N4 behavior is unchanged.
+    """
+    if isinstance(value, bool):
+        raise TypeError(
+            f"bspline_fitting must be an int or ANTs-format string, not bool ({value!r})"
+        )
+    if isinstance(value, (int, float)):
+        return f"[ {int(value)} ]"
+    return str(value)
+
+
 def bias_correction(
     imagef: Union[str, Path],
     working_dir: Union[str, Path],
@@ -1742,6 +1759,10 @@ def bias_correction(
     bias_cfg = config.get(modal, {}).get("bias_correction")
     if not bias_cfg:
         raise ValueError("bias_correction configuration not found")
+
+    # Normalize B-spline fitting (plain int, e.g. 100, or legacy "[ 100 ]" string) into the
+    # exact ANTs "-b" string once, so both backends receive the historical value unchanged.
+    bspline_arg = _format_bspline_fitting_arg(bias_cfg.get("bspline_fitting"))
 
     # Optional mean rescale + negative clamp before N4 (log-domain algorithm).
     # Rescale: non-zero mean to 100 (FSL-free equivalent of fslstats -M + fslmaths -div).
@@ -1824,7 +1845,7 @@ def bias_correction(
             "-s",
             str(bias_cfg.get("shrink_factor")),
             "-b",
-            str(bias_cfg.get("bspline_fitting")),
+            bspline_arg,
         ]
         if mask_path:
             command.extend(["-x", str(mask_path)])
@@ -1844,7 +1865,7 @@ def bias_correction(
             output_path=output_path,
             bias_field_path=bias_field_path,
             shrink_factor=bias_cfg.get("shrink_factor"),
-            bspline_fitting=bias_cfg.get("bspline_fitting"),
+            bspline_fitting=bspline_arg,
             mask_path=mask_path,
             logger=logger,
         )
