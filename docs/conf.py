@@ -1,5 +1,6 @@
 # Configuration file for the Sphinx documentation builder.
 # See https://www.sphinx-doc.org/en/master/usage/configuration.html
+import os
 from pathlib import Path
 import tomllib
 
@@ -21,6 +22,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx_copybutton",
     "sphinxcontrib.mermaid",
+    "sphinxext.opengraph",  # canonical/OG/Twitter tags + auto <meta description>
 ]
 
 templates_path = ["_templates"]
@@ -32,13 +34,16 @@ source_suffix = {
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+# Copied verbatim to the built output root (i.e. served at /en/<version>/...):
+# Google Search Console file-based verification.
+html_extra_path = ["google49dbcea2a2cad90f.html"]
 
 # Logo is optional so RTD (and local docs-only) builds succeed without the asset
 _logo = Path(__file__).resolve().parent / "_static" / "brainana_logo_side.png"
 html_logo = str(_logo) if _logo.exists() else None
 html_theme_options = {"logo_only": True} if html_logo else {}
 html_show_sourcelink = False
-html_title = "Brainana"
+html_title = "Brainana — macaque MRI preprocessing"
 html_short_title = "Brainana"
 
 myst_enable_extensions = ["deflist"]
@@ -48,3 +53,28 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
 }
+
+# --- SEO: canonical URLs, Open Graph / Twitter cards, auto meta descriptions ---
+# On RTD, READTHEDOCS_CANONICAL_URL points at the default (stable) version, so the
+# `latest`/`stable` duplicates all resolve to one canonical page. Falls back to the
+# stable docs root for local builds.
+html_baseurl = os.environ.get(
+    "READTHEDOCS_CANONICAL_URL", "https://brainana.readthedocs.io/en/stable/"
+)
+
+# sphinxext-opengraph
+ogp_site_url = html_baseurl
+ogp_type = "website"
+ogp_site_name = "Brainana"
+# Emit <meta name="description"> for every page from its first paragraph. Pages that
+# need a custom description override it with a `.. meta::` directive at the top.
+ogp_enable_meta_description = True
+ogp_description_length = 200
+# Absolute (resolved against ogp_site_url) social-preview image for shared links.
+ogp_image = "_static/pipeline_details/pipeline_overview.png"
+# Auto-generated per-page social cards need matplotlib, which the docs-only RTD
+# build intentionally omits; use the single static image above instead.
+ogp_social_cards = {"enable": False}
+ogp_custom_meta_tags = [
+    '<meta name="twitter:card" content="summary_large_image">',
+]

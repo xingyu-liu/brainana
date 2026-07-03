@@ -149,8 +149,34 @@ class Config:
 _global_config: Optional["Config"] = None
 
 
+def set_config(config_data: Union[str, Path, Dict[str, Any], "Config"]) -> Config:
+    """Seed the global configuration instance from user config.
+
+    Call this once, early, when you want ``get_config()`` to return the
+    effective (user-merged) configuration instead of bare defaults. In the
+    Nextflow pipeline this is not needed — each process loads the effective
+    ``config.yaml`` and passes ``config=`` explicitly into the operations — but
+    it makes the Python API safe to use directly without silently falling back
+    to defaults.
+
+    Args:
+        config_data: A ``Config``, a config dict, or a path to a config file.
+
+    Returns:
+        The global configuration instance.
+    """
+    global _global_config
+    _global_config = config_data if isinstance(config_data, Config) else Config(config_data)
+    return _global_config
+
+
 def get_config() -> Config:
-    """Get global configuration instance.
+    """Get the global configuration instance.
+
+    Returns bare defaults (``defaults.yaml``) unless :func:`set_config` has been
+    called to seed user config. Callers that already hold the effective config
+    (e.g. Nextflow processes) should pass it explicitly rather than relying on
+    this, since an unseeded global reflects defaults only.
 
     Returns:
         Global configuration instance

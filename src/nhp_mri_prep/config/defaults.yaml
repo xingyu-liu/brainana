@@ -5,7 +5,7 @@ _description: "Default configuration for brainana preprocessing pipeline"
 general:
   verbose: 2  # int or bool: verbosity level (0=quiet/ERROR, 1=normal/INFO, 2=verbose/DEBUG).
   anat_only: false  # bool: process only anatomical data
-  gpu_device: "auto"  # str | int: "auto", -1 (CPU), or GPU index (0..N). Used by skull stripping, segmentation, and registration.
+  gpu_device: "auto"  # str | int: "auto", -1/"cpu" (CPU), or GPU index (0..N). Global GPU policy: main.nf reads this to decide whether GPU scheduling is enabled at all (set -1/"cpu" to force the whole pipeline onto CPU). Per-model knobs (e.g. anat.skullstripping_segmentation.fastSurferCNN.gpu_device) select a specific device within that policy; if this is set to CPU, those are effectively CPU regardless.
 
 bids_filtering:
   subjects: null  # list of str (have to be quoted) or null: filter by subject IDs (e.g., ["01", "02"])
@@ -41,7 +41,7 @@ anat:
     enabled: true  # bool: perform bias field correction
     algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
     shrink_factor: 2  # float: shrink factor for faster processing (> 0)
-    bspline_fitting: "[ 150 ]"  # str: B-spline fitting parameters in ANTs format
+    bspline_fitting: 150  # int: N4 B-spline mesh resolution (ANTs -b), e.g. 150
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
   surface_reconstruction:
     enabled: true  # bool: perform surface reconstruction
@@ -72,14 +72,15 @@ func:
     c2: 10  # float: second cutoff parameter (> 0, must be > c1)
     localedit: true  # bool: use local editing for despiking
     ignore_first_volumes: 0  # int: number of initial volumes to ignore (>= 0)
-  confounds:  # fMRIPrep-style confound regressors (regressors only; the BOLD image is never modified)
+  confounds:  # regressors only; the BOLD image is never modified
+    enabled: true  # bool: compute the confounds regressor TSV (motion-derived columns require func.motion_correction)
     fd_outlier_threshold_mm: 0.25  # float: FD above this flags motion_outlier## (macaque-scaled: human 0.5mm x 27/50 brain-radius ratio)
     std_dvars_outlier_threshold: 1.5  # float: standardized DVARS above this flags motion_outlier## (dimensionless / species-independent)
   bias_correction:  # only done on tmean image for better registration, not on the functional images directly
     enabled: true  # bool: perform bias field correction
     algorithm: "N4BiasFieldCorrection"  # str: bias correction algorithm (currently only "N4BiasFieldCorrection")
     shrink_factor: 2  # float: shrink factor for faster processing (> 0)
-    bspline_fitting: "[ 100 ]"  # str: B-spline fitting parameters in ANTs format
+    bspline_fitting: 100  # int: N4 B-spline mesh resolution (ANTs -b), e.g. 100
     rescale_mean_to_100: true  # bool: rescale image mean intensity to 100
   skullstripping:
     enabled: true  # HIGILY RECOMMENDED: bool: perform brain extraction
@@ -90,5 +91,4 @@ registration:
   func2template_xfm_type: "syn"  # str: transform type for func->template ("translation", "rigid", "affine", or "syn")
   interpolation: "BSpline"  # str: interpolation method ("Linear", "NearestNeighbor", "MultiLabel", "Gaussian", "BSpline", "CosineWindowedSinc", "WelchWindowedSinc", "HammingWindowedSinc", "LanczosWindowedSinc", "GenericLabel")
   enable_fireants: true  # bool: use FireANTs for syn registration if available, otherwise use ANTs
-  fireants_allow_cpu: true  # bool: when no GPU, run FireANTs syn (affine+greedy) on CPU via the PyTorch baseline (same algorithm as GPU; faster + equal/better quality than antspyx SyN). Set false to fall back to antspyx/ANTs SyN on CPU.
   keep_func_resolution: true  # bool: keep original functional image resolution after registration

@@ -19,7 +19,7 @@ else
 fi
 
 echo "=== 2. Docs-only install (same as .readthedocs.yaml: Sphinx stack + package with --no-deps) ==="
-pip install "sphinx>=7.0" "myst-parser>=2.0" "sphinx-rtd-theme>=2.0" "sphinx-copybutton>=0.5.0" "sphinxcontrib-mermaid>=0.9"
+pip install "sphinx>=7.0" "myst-parser>=2.0" "sphinx-rtd-theme>=2.0" "sphinx-copybutton>=0.5.0" "sphinxcontrib-mermaid>=0.9" "sphinxext-opengraph>=0.9"
 pip install --no-deps -e .
 
 echo "=== 3. Building Sphinx docs (config: docs/conf.py) ==="

@@ -24,7 +24,7 @@ Examples:
 """
 # Import from available modules
 from .config_io import load_config, get_default_config, get_output_space
-from .config import Config, get_config
+from .config import Config, get_config, set_config
 from .config_validation import validate_config, validate_slice_timing_config
 from .bids_adapter import update_config_from_bids_metadata
 
@@ -36,6 +36,7 @@ __all__ = [
     "Config",
     "load_config",
     "get_config",
+    "set_config",
     "DEFAULT_CONFIG",
     "validate_config",
     "update_config_from_bids_metadata",

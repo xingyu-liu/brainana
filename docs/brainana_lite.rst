@@ -1,3 +1,9 @@
+:og:description: Brainana Lite is a notebook-based (Jupyter/Google Colab) volumetric T1w preprocessing workflow for a single macaque subject — no Docker or Nextflow required.
+
+.. meta::
+   :description: Brainana Lite is a notebook-based (Jupyter/Google Colab) volumetric T1w preprocessing workflow for a single macaque subject — no Docker or Nextflow required.
+   :keywords: Brainana Lite, macaque T1w preprocessing, Colab neuroimaging, Jupyter, single subject
+
 Brainana Lite
 =============
 

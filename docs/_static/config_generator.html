@@ -579,10 +579,10 @@ button#generate:hover{filter:brightness(.95);}
                             <span class="param-check"></span>
                             <label for="anat_bias_correction_bspline_fitting">bspline_fitting</label>
                             <span class="param-control">
-                                <input type="text" id="anat_bias_correction_bspline_fitting" name="anat_bias_correction_bspline_fitting" value="[ 150 ]">
+                                <input type="number" id="anat_bias_correction_bspline_fitting" name="anat_bias_correction_bspline_fitting" value="150" min="1" step="1">
                             </span>
                         </div>
-                        <span class="help-text">(B-spline fitting grid in ANTs format)</span>
+                        <span class="help-text">(N4 B-spline mesh resolution, integer)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -836,6 +836,37 @@ button#generate:hover{filter:brightness(.95);}
             </div>
             <div class="step">
                 <div class="param-row">
+                    <span class="param-check"><input type="checkbox" id="func_confounds_enabled" name="func_confounds_enabled" checked></span>
+                    <label for="func_confounds_enabled">confounds</label>
+                    <span class="param-control"></span>
+                </div>
+                <span class="help-text">(fMRIPrep-style nuisance regressors; regressors only, the BOLD image is never modified. Motion-derived columns require motion_correction)</span>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">advanced settings</div>
+                <div class="advanced-settings" id="func_confounds_advanced">
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_confounds_fd_outlier_threshold_mm">fd_outlier_threshold_mm</label>
+                            <span class="param-control">
+                                <input type="number" id="func_confounds_fd_outlier_threshold_mm" name="func_confounds_fd_outlier_threshold_mm" value="0.25" step="0.01" min="0">
+                            </span>
+                        </div>
+                        <span class="help-text">(framewise displacement above this flags a motion outlier; macaque-scaled)</span>
+                    </div>
+                    <div class="param-block">
+                        <div class="param-row">
+                            <span class="param-check"></span>
+                            <label for="func_confounds_std_dvars_outlier_threshold">std_dvars_outlier_threshold</label>
+                            <span class="param-control">
+                                <input type="number" id="func_confounds_std_dvars_outlier_threshold" name="func_confounds_std_dvars_outlier_threshold" value="1.5" step="0.1" min="0">
+                            </span>
+                        </div>
+                        <span class="help-text">(standardized DVARS above this flags a motion outlier)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="param-row">
                     <span class="param-check"><input type="checkbox" id="func_bias_correction_enabled" name="func_bias_correction_enabled" checked></span>
                     <label for="func_bias_correction_enabled">bias_correction</label>
                     <span class="param-control"></span>
@@ -870,10 +901,10 @@ button#generate:hover{filter:brightness(.95);}
                             <span class="param-check"></span>
                             <label for="func_bias_correction_bspline_fitting">bspline_fitting</label>
                             <span class="param-control">
-                                <input type="text" id="func_bias_correction_bspline_fitting" name="func_bias_correction_bspline_fitting" value="[ 100 ]">
+                                <input type="number" id="func_bias_correction_bspline_fitting" name="func_bias_correction_bspline_fitting" value="100" min="1" step="1">
                             </span>
                         </div>
-                        <span class="help-text">(B-spline fitting grid in ANTs format)</span>
+                        <span class="help-text">(N4 B-spline mesh resolution, integer)</span>
                     </div>
                     <div class="param-block">
                         <div class="param-row">
@@ -1036,7 +1067,7 @@ button#generate:hover{filter:brightness(.95);}
                     enabled: true,
                     algorithm: "N4BiasFieldCorrection",
                     shrink_factor: 2,
-                    bspline_fitting: "[ 150 ]",
+                    bspline_fitting: 150,
                     rescale_mean_to_100: true
                 },
                 surface_reconstruction: {
@@ -1071,11 +1102,16 @@ button#generate:hover{filter:brightness(.95);}
                     localedit: true,
                     ignore_first_volumes: 0
                 },
+                confounds: {
+                    enabled: true,
+                    fd_outlier_threshold_mm: 0.25,
+                    std_dvars_outlier_threshold: 1.5
+                },
                 bias_correction: {
                     enabled: true,
                     algorithm: "N4BiasFieldCorrection",
                     shrink_factor: 2,
-                    bspline_fitting: "[ 100 ]",
+                    bspline_fitting: 100,
                     rescale_mean_to_100: true
                 },
                 skullstripping: {
@@ -1439,7 +1475,7 @@ button#generate:hover{filter:brightness(.95);}
             config.anat.bias_correction.enabled = document.getElementById('anat_bias_correction_enabled').checked;
             config.anat.bias_correction.algorithm = document.getElementById('anat_bias_correction_algorithm').value;
             config.anat.bias_correction.shrink_factor = parseFloat(document.getElementById('anat_bias_correction_shrink_factor').value);
-            config.anat.bias_correction.bspline_fitting = document.getElementById('anat_bias_correction_bspline_fitting').value;
+            config.anat.bias_correction.bspline_fitting = parseInt(document.getElementById('anat_bias_correction_bspline_fitting').value);
             config.anat.bias_correction.rescale_mean_to_100 = document.getElementById('anat_bias_correction_rescale_mean_to_100').checked;
             
             config.anat.surface_reconstruction.enabled = document.getElementById('anat_surface_reconstruction_enabled').checked;
@@ -1474,14 +1510,18 @@ button#generate:hover{filter:brightness(.95);}
             config.func.despike.c2 = parseFloat(document.getElementById('func_despike_c2').value);
             config.func.despike.localedit = document.getElementById('func_despike_localedit').checked;
             config.func.despike.ignore_first_volumes = parseInt(document.getElementById('func_despike_ignore_first_volumes').value);
-            
+
+            config.func.confounds.enabled = document.getElementById('func_confounds_enabled').checked;
+            config.func.confounds.fd_outlier_threshold_mm = parseFloat(document.getElementById('func_confounds_fd_outlier_threshold_mm').value);
+            config.func.confounds.std_dvars_outlier_threshold = parseFloat(document.getElementById('func_confounds_std_dvars_outlier_threshold').value);
+
             config.func.skullstripping.enabled = document.getElementById('func_skullstripping_enabled').checked;
             // func.skullstripping only has 'enabled', no method or fastSurferCNN options
             
             config.func.bias_correction.enabled = document.getElementById('func_bias_correction_enabled').checked;
             config.func.bias_correction.algorithm = document.getElementById('func_bias_correction_algorithm').value;
             config.func.bias_correction.shrink_factor = parseFloat(document.getElementById('func_bias_correction_shrink_factor').value);
-            config.func.bias_correction.bspline_fitting = document.getElementById('func_bias_correction_bspline_fitting').value;
+            config.func.bias_correction.bspline_fitting = parseInt(document.getElementById('func_bias_correction_bspline_fitting').value);
             config.func.bias_correction.rescale_mean_to_100 = document.getElementById('func_bias_correction_rescale_mean_to_100').checked;
             
             // Registration

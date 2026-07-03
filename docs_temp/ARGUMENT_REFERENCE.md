@@ -200,4 +200,4 @@ Relevant for both Docker and local runs.
 | BIDS discovery | `src/nhp_mri_prep/nextflow_scripts/discover_bids_for_nextflow.py` (argparse: bids_dir, output_dir, config_file, skip_bids_validation, subjects, sessions, tasks, runs) |
 | Nextflow params | `nextflow.config` (`params { ... }`), `workflows/param_resolver.groovy` (CLI ↔ YAML mapping) |
 
-User-facing docs that mirror this reference: `docs/usage_local.rst` (includes command-line reference section).
+User-facing docs that mirror this reference: `docs/usage_notes.rst` (includes the command-line arguments reference section).

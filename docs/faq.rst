@@ -1,3 +1,9 @@
+:og:description: Brainana FAQ and troubleshooting: config files, FreeSurfer license, running without a GPU, network drives, non-root use, Windows paths, and out-of-memory errors.
+
+.. meta::
+   :description: Brainana FAQ and troubleshooting: config files, FreeSurfer license, running without a GPU, network drives, non-root use, Windows paths, and out-of-memory errors.
+   :keywords: Brainana FAQ, troubleshooting, FreeSurfer license, no GPU, network drive, out of memory
+
 FAQ and troubleshooting
 =======================
 

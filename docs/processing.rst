@@ -1,3 +1,9 @@
+:og:description: Detailed methods for every Brainana macaque MRI preprocessing stage: anatomical synthesis and segmentation, cortical surface reconstruction, and functional (fMRI/BOLD) preprocessing.
+
+.. meta::
+   :description: Detailed methods for every Brainana macaque MRI preprocessing stage: anatomical synthesis and segmentation, cortical surface reconstruction, and functional (fMRI/BOLD) preprocessing.
+   :keywords: macaque MRI preprocessing, anatomical processing, surface reconstruction, fMRI preprocessing, FreeSurfer, segmentation
+
 Processing details
 ==================
 
@@ -39,8 +45,8 @@ BIDS dataset and produces structured job descriptors.
 
 The anatomical branch turns raw (or synthesized) T1w/T2w images into
 bias-corrected, skull-stripped, and template-registered images, and
-optionally segmentations and cortical surfaces. These outputs provide
-the anatomical reference for T2w and functional workflows.
+optionally tissue segmentations. These outputs provide the anatomical
+reference for T2w, functional, and surface workflows.
 
 
 2.1 Anatomical synthesis (multiple T1w/T2w)
@@ -66,8 +72,8 @@ Brainana can synthesize a single anatomical reference.
   well-defined.
 - **Method:**
 
-  1. Skull-strip the input with ``nhp_skullstrip_nn`` (UNet) or use
-     an existing brain mask when skull stripping is disabled.
+  1. Skull-strip the input with a UNet-based skull-stripping model, or
+     use an existing brain mask when skull stripping is disabled.
   2. Resample the template to match the input resolution if needed.
   3. Run FSL FLIRT (rigid, 6 DOF) from the brain-extracted input to
      the template.
@@ -82,11 +88,10 @@ Brainana can synthesize a single anatomical reference.
 - **Purpose:** Provide brain mask and atlas/tissue segmentation for
   masking, bias correction, registration, and optional surface
   reconstruction.
-- **Method:** ``fastsurfer_nn`` (FastSurfer-style CNN segmentation)
-  is fine-tuned on macaque anatomical MRI with CHARM and SARM level 2
-  atlases (ARM2 parcellation). The network produces an atlas-labelled
-  segmentation, from which a brain mask and optional hemisphere masks
-  are derived.
+- **Method:** A FastSurfer-style CNN segmentation model, fine-tuned on
+  macaque anatomical MRI with CHARM and SARM level 2 atlases (ARM2
+  parcellation). The network produces an atlas-labelled segmentation,
+  from which a brain mask and optional hemisphere masks are derived.
 
 
 2.4 Bias field correction
@@ -124,24 +129,46 @@ preprocessed T1w:
 - **Method:** ANTs rigid registration from T2w to preprocessed T1w.
 
 
-2.7 Surface reconstruction
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+3. Surface reconstruction
+-------------------------
 
-Surface reconstruction is an optional and resource-intensive step.
+.. figure:: _static/pipeline_details/surf_workflow.png
+   :alt: Overview of surface reconstruction workflow.
+   :align: center
+   :width: 100%
 
-- **Purpose:** Build cortical surfaces and morphological measures (e.g.
-  thickness, area, curvature).
-- **Inputs:** Preprocessed anatomical, segmentation and brain mask. 
-- **Method:** ``fastsurfer_surfrecon`` is a modified version of
-  FastSurfer's ``recon_surf`` pipeline. It orchestrates FreeSurfer
-  volume stages (bias correction, Talairach transform, normalization,
-  WM segmentation) and surface stages (tessellation, smoothing,
-  inflation, topology fixing, atlas parcellation, morphometry).
-- **Requirements:** A valid FreeSurfer license is required when this
-  step is enabled.
+|
 
 
-3. Functional processing
+Surface reconstruction runs after anatomical preprocessing when enabled.
+It is an optional, compute-intensive step that extends segmentation
+outputs to build FreeSurfer-compatible cortical meshes and morphometric
+maps.
+
+- **When:** Controlled by ``anat.surface_reconstruction.enabled`` (enabled
+  by default). Requires a valid FreeSurfer license (see
+  :ref:`the-freesurfer-license-optional`).
+- **Purpose:** Reconstruct white-matter and pial cortical surfaces and
+  derive morphological measures (e.g. cortical thickness, surface area,
+  curvature).
+- **Inputs:** Preprocessed T1w, ARM2 atlas segmentation, and brain mask
+  from section 2 (skull stripping and segmentation).
+- **Method:** A FastSurfer-style workflow built on FreeSurfer, with
+  macaque-specific adaptations:
+
+  - Convert CNN-derived ARM2 labels into a FreeSurfer-compatible segmentation.
+  - Tune surface reconstruction parameters for submillimeter macaque MRI.
+  - Apply targeted segmentation refinements in error-prone regions,
+    including the occipital calcarine cortex, claustrum, and
+    orbitofrontal cortex.
+  - Run an additional topology correction step for surface defects that
+    commonly arise in macaque reconstructions and are not reliably
+    resolved by FreeSurfer alone.
+
+- **Outputs:** FreeSurfer-compatible subject directories under ``fastsurfer/``.
+
+
+4. Functional processing
 ------------------------
 
 .. figure:: _static/pipeline_details/func_workflow.png
@@ -168,7 +195,7 @@ The workflow is conceptually split into:
   4D fMRI and brain mask.
 
 
-3.1 Slice timing correction
+4.1 Slice timing correction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When slice timing information is available in BIDS metadata, Brainana
@@ -186,7 +213,7 @@ applies slice timing correction.
   when slice timing metadata are missing.
 
 
-3.2 Motion correction
+4.2 Motion correction
 ~~~~~~~~~~~~~~~~~~~~~
 
 - **Purpose:** Realign fMRI volumes to correct for subject motion.
@@ -201,7 +228,19 @@ applies slice timing correction.
   generated.
 
 
-3.3 Within-session coregistration
+4.3 Despike
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- **When:** Optional; controlled by ``func.despike.enabled`` (**off by
+  default**). Can ignore the first N volumes via
+  ``func.despike.ignore_first_volumes``.
+- **Purpose:** Remove transient intensity spikes from the fMRI time
+  series.
+- **Method:** AFNI ``3dDespike`` with local editing (cutoff parameters
+  ``c1``/``c2``, default 5/10).
+
+
+4.4 Within-session coregistration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When multiple fMRI runs exist per session, an optional within-session
@@ -216,7 +255,7 @@ a session-averaged temporal mean.
   mask.
 
 
-3.6 Bias correction
+4.5 Bias correction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Purpose:** Improve downstream registration by correcting low frequency 
@@ -235,21 +274,21 @@ a session-averaged temporal mean.
   brain mask at this step—background zeros may remain in the image.
 
 
-3.7 Conform and skull stripping
+4.6 Conform and skull stripping
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Conform:** The functional temporal mean is conformed to the
   chosen template using the same strategy as anatomical conform:
-  ``nhp_skullstrip_nn`` on the mean, FSL FLIRT rigid registration to
-  the template, resampling with AFNI ``3dresample``, and application
-  of the transform (optionally composed with anatomical transforms).
-- **Skull stripping:** A UNet-based functional skull-stripping model
-  (``nhp_skullstrip_nn`` EPI model, derived from
-  NHP-BrainExtraction/DeepBet) is run on the temporal mean to obtain
-  a brain mask, which is then applied to the 4D fMRI.
+  skull-stripping the mean, FSL FLIRT rigid registration to the
+  template, resampling with AFNI ``3dresample``, and application of the
+  transform (optionally composed with anatomical transforms).
+- **Skull stripping:** A UNet-based functional (EPI) skull-stripping
+  model, derived from NHP-BrainExtraction/DeepBet, is run on the
+  temporal mean to obtain a brain mask, which is then applied to the
+  4D fMRI.
 
 
-3.8 Registration
+4.7 Registration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Method:** ANTs registration (rigid, affine, or SyN as configured)
@@ -258,10 +297,64 @@ a session-averaged temporal mean.
   4D fMRI and brain mask with ``antsApplyTransforms`` (e.g. BSpline
   interpolation for fMRI).
 - **Outputs:** Preprocessed fMRI and mask in anatomical or template
-  space, plus motion and other confounds for downstream analysis.
+  space.
 
 
-4. Summary table
+4.8 Temporal SNR (tSNR)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- **Purpose:** Provide a quick functional-quality map for QC.
+- **Method:** Voxelwise temporal SNR (``|mean| / SD`` over time) of the
+  preprocessed 4D fMRI, saved as per-run and session-average maps
+  (``*_stat-tsnr_boldmap``) with optional projection to the surface.
+- **Control:** Skipped for runs that are not 4D or have fewer than 10
+  timepoints.
+
+
+4.9 Confound regressors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Brainana estimates fMRIPrep-compatible nuisance regressors for optional
+downstream denoising. These are **regressors only** — the fMRI image is
+never scrubbed or modified.
+
+- **When:** Controlled by ``func.confounds.enabled`` (**on by default**);
+  runs after registration whenever the required inputs are available.
+  Registration must be enabled, since the regressors are computed in the
+  registered BOLD space. The motion-derived columns (24-parameter motion,
+  ``framewise_displacement``, ``rmsd``) are produced only when
+  ``func.motion_correction.enabled`` is also true; with motion correction
+  off, those columns are omitted and the remaining regressors
+  (``dvars``/``std_dvars``, ``global_signal``, tissue, DVARS-based
+  outliers) are still computed. Two thresholds are configurable:
+  ``func.confounds.fd_outlier_threshold_mm`` (default 0.25) and
+  ``func.confounds.std_dvars_outlier_threshold`` (default 1.5).
+- **Inputs:** Preprocessed 4D fMRI (T1w space preferred), motion
+  parameters (when motion correction is enabled), and a brain mask
+  (required for DVARS and global signal). Tissue regressors additionally
+  require a T1w segmentation and its label lookup table.
+- **Method:** A dependency-light reimplementation (NumPy/pandas/nibabel)
+  of the standard Power/Jenkinson/nipype formulas — not nipype itself.
+  Output is compatible with
+  ``nilearn.interfaces.fmriprep.load_confounds``. CompCor and cosine
+  regressors are **not** produced.
+- **Regressors:**
+
+  - 24-parameter motion: ``trans_x/y/z`` and ``rot_x/y/z`` with their
+    derivatives and squared terms.
+  - ``framewise_displacement`` (Power et al. 2012) and ``rmsd``
+    (Jenkinson 1999), using the macaque head radius of 27 mm.
+  - ``dvars`` and ``std_dvars``.
+  - ``global_signal`` (with expansions); ``csf``, ``white_matter`` and
+    ``csf_wm`` are added **only when a T1w segmentation is available**.
+  - Outlier indicators: ``non_steady_state_outlier##`` and
+    ``motion_outlier##``.
+- **Outputs:** BIDS ``*_desc-confounds_timeseries.tsv`` plus a JSON
+  sidecar, and an fMRIPrep-style confounds panel in the QC report. See
+  :doc:`outputs` for the full column list.
+
+
+5. Summary table
 ----------------
 
 .. list-table::
@@ -278,19 +371,19 @@ a session-averaged temporal mean.
      - AFNI 3dresample
    * - Anatomical
      - Conform
-     - FLIRT + ``nhp_skullstrip_nn`` + 3dresample
+     - FLIRT + UNet skull-strip + 3dresample
    * - Anatomical
      - Skull strip & segment
-     - ``fastsurfer_nn`` (FastSurferCNN fine-tuned)
+     - FastSurfer-style CNN (fine-tuned)
    * - Anatomical
      - Bias correction
      - ANTs N4BiasFieldCorrection
    * - Anatomical
      - Registration
      - ANTs (optional FireANTs for SyN)
-   * - Anatomical
+   * - Surface
      - Surface recon
-     - ``fastsurfer_surfrecon`` + FreeSurfer
+     - FastSurfer-style workflow + FreeSurfer
    * - Functional
      - Slice timing
      - AFNI 3dTshift
@@ -301,6 +394,9 @@ a session-averaged temporal mean.
      - Motion correction
      - FSL mcflirt
    * - Functional
+     - Despike
+     - AFNI 3dDespike (optional)
+   * - Functional
      - Within-session coreg
      - ANTs or FLIRT
    * - Functional
@@ -308,10 +404,16 @@ a session-averaged temporal mean.
      - ANTs N4BiasFieldCorrection
    * - Functional
      - Conform / skull strip
-     - FLIRT + ``nhp_skullstrip_nn`` + 3dresample
+     - FLIRT + UNet skull-strip + 3dresample
    * - Functional
      - Registration
      - ANTs (optional FireANTs for SyN)
+   * - Functional
+     - tSNR
+     - nibabel (``|mean| / SD`` over time)
+   * - Functional
+     - Confounds
+     - Custom fMRIPrep-style regressors
 
 For outputs and directory layout, see :doc:`outputs`.
 

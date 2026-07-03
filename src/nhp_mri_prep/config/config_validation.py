@@ -34,9 +34,11 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
     anat_config = validated_config.get("anat", {})
 
     validate_func_config(func_config)
+    validate_anat_config(anat_config)
     validate_slice_timing_config(func_config.get("slice_timing_correction", {}))
     validate_motion_correction_config(func_config.get("motion_correction", {}))
     validate_despike_config(func_config.get("despike", {}))
+    validate_confounds_config(func_config.get("confounds", {}))
     validate_skullstripping_config(func_config.get("skullstripping", {}))
     validate_skullstripping_config(anat_config.get("skullstripping_segmentation", {}))
     validate_surface_reconstruction_config(
@@ -69,6 +71,27 @@ def validate_func_config(config: Dict[str, Any]) -> None:
             raise ValueError(
                 f"Configuration error in func: "
                 f"coreg_runs_within_session must be a boolean, got {type(coreg_enabled).__name__}. "
+                f"Please fix this in your configuration file."
+            )
+
+
+def validate_anat_config(config: Dict[str, Any]) -> None:
+    """Validate top-level anatomical configuration parameters.
+
+    Args:
+        config: Anatomical configuration dictionary
+
+    Raises:
+        ValueError: If configuration is invalid
+    """
+    # synthesis_level selects cross-session ("subject") vs within-session
+    # ("session") T1w/T2w synthesis; no other values are supported.
+    if "synthesis_level" in config:
+        level = config["synthesis_level"]
+        if level not in ["subject", "session"]:
+            raise ValueError(
+                f"Configuration error in anat: "
+                f"synthesis_level must be 'subject' or 'session', got {level!r}. "
                 f"Please fix this in your configuration file."
             )
 
@@ -200,6 +223,25 @@ def validate_despike_config(config: Dict[str, Any]) -> None:
             )
 
 
+def validate_confounds_config(config: Dict[str, Any]) -> None:
+    """Validate confounds configuration.
+
+    Args:
+        config: Confounds configuration
+
+    Raises:
+        ValueError: If configuration is invalid
+    """
+    if "enabled" in config:
+        enabled = config["enabled"]
+        if not isinstance(enabled, bool):
+            raise ValueError(
+                f"Configuration error in func.confounds: "
+                f"enabled must be a boolean, got {type(enabled).__name__}. "
+                f"Please fix this in your configuration file."
+            )
+
+
 def validate_skullstripping_config(config: Dict[str, Any]) -> None:
     """Validate skullstripping configuration.
 
@@ -318,6 +360,21 @@ def validate_bias_correction_config(config: Dict[str, Any]) -> None:
                 f"Please fix this in your configuration file."
             )
 
+    if "bspline_fitting" in config:
+        # Preferred form is a plain positive int (N4 B-spline mesh resolution, e.g. 100).
+        # A legacy ANTs-format string (e.g. "[ 100 ]") is still accepted for backward
+        # compatibility and passed through verbatim by the operation layer.
+        bspline = config["bspline_fitting"]
+        if not (
+            (isinstance(bspline, int) and not isinstance(bspline, bool) and bspline > 0)
+            or isinstance(bspline, str)
+        ):
+            raise ValueError(
+                f"Configuration error in bias_correction: "
+                f"bspline_fitting must be a positive integer (e.g. 100), got {bspline!r}. "
+                f"Please fix this in your configuration file."
+            )
+
 
 def validate_registration_config(config: Dict[str, Any]) -> None:
     """Validate registration configuration.
@@ -340,6 +397,33 @@ def validate_registration_config(config: Dict[str, Any]) -> None:
         "LanczosWindowedSinc",
         "GenericLabel",
     ]
+
+    # Transform type for each registration direction must be one of the
+    # supported ANTs/FireANTs stages.
+    valid_xfm_types = ["translation", "rigid", "affine", "syn"]
+    for xfm_key in [
+        "anat2template_xfm_type",
+        "func2anat_xfm_type",
+        "func2template_xfm_type",
+    ]:
+        if xfm_key in config:
+            xfm_value = config[xfm_key]
+            if xfm_value not in valid_xfm_types:
+                raise ValueError(
+                    f"Configuration error in registration: "
+                    f"{xfm_key} must be one of {valid_xfm_types}, got {xfm_value!r}. "
+                    f"Please fix this in your configuration file."
+                )
+
+    if "keep_func_resolution" in config and not isinstance(
+        config["keep_func_resolution"], bool
+    ):
+        raise ValueError(
+            f"Configuration error in registration: "
+            f"keep_func_resolution must be a boolean, got "
+            f"{type(config['keep_func_resolution']).__name__}. "
+            f"Please fix this in your configuration file."
+        )
 
     if "interpolation" in config:
         interp = config["interpolation"]

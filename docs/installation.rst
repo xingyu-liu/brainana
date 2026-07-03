@@ -1,3 +1,9 @@
+:og:description: Install Brainana for macaque MRI preprocessing via Docker (full anatomical + functional pipeline) or the Colab/Jupyter-based Brainana Lite T1w workflow.
+
+.. meta::
+   :description: Install Brainana for macaque MRI preprocessing via Docker (full anatomical + functional pipeline) or the Colab/Jupyter-based Brainana Lite T1w workflow.
+   :keywords: install Brainana, macaque MRI Docker, NHP neuroimaging, Brainana Lite Colab
+
 Installation
 ============
 
