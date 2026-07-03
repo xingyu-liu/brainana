@@ -67,6 +67,3 @@ null/
 # Sphinx build output
 doc/_build/
 docs/_build/
-
-# Internal planning / draft documents (not for publication)
-docs_temp/

@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+/* brainana design tokens — single source of truth.
+   Web surfaces link this file; the notebook (Colab can't link CSS) and reports.py
+   (portable single file) inline the same values. */
+:root{
+  /* surfaces */
+  --bn-bg:#fffeee; --bn-surface:#fffddd; --bn-inset:#ffffff;
+  /* ink */
+  --bn-ink:#1b1b16; --bn-text:#333333; --bn-muted:#6b6651;
+  /* line — airy GitHub-like hairline + a mid tone for chips/inputs/frames */
+  --bn-border:#e6e1cd; --bn-border-mid:#cdc9b0;
+  /* code surface (calm, warm) */
+  --bn-code-bg:#f7f6ef;
+  /* brand */
+  --bn-accent:#fff27a;        /* signature yellow — decorative only (underlines, rails, tints) */
+  --bn-link:#8a7a00; --bn-link-hover:#6f6300;   /* interactive text (accessible mustard) */
+  /* buttons (brand keeps black primary) */
+  --bn-btn-bg:#111111; --bn-btn-bg-hover:#333333; --bn-btn-fg:#ffffff;
+  /* status — earthy tones tuned to the warm palette */
+  --bn-ok:#3f6b46;   --bn-ok-bg:#eef3ea;   --bn-ok-border:#cdddc2;
+  --bn-fail:#9c4636; --bn-fail-bg:#f8ece8; --bn-fail-border:#e7c8bd;
+  --bn-warn:#8a6400; --bn-warn-bg:#fdf3d6; --bn-warn-border:#e6d8a0;
+  /* radius / type / elevation */
+  --bn-r-card:10px; --bn-r-inset:8px; --bn-r-chip:6px; --bn-r-pill:999px;
+  --bn-font:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --bn-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  /* GitHub-calibrated reading rhythm */
+  --bn-fs:16px; --bn-lh:1.5; --bn-lh-heading:1.25;
+  --bn-space-p:16px;            /* paragraph gap */
+  --bn-h-mt:24px; --bn-h-mb:16px;  /* heading margins */
+  --bn-measure:760px;           /* comfortable prose width */
+  --bn-shadow:0 1px 2px rgba(60,50,0,.06); --bn-shadow-pop:0 8px 28px rgba(60,50,0,.14);
+}
+
+/* ---- base + component recipes (GitHub-calibrated rhythm) ---- */
+.bn-root{font-family:var(--bn-font);color:var(--bn-text);background:var(--bn-bg);
+  font-size:var(--bn-fs);line-height:var(--bn-lh)}
+.bn-root a{color:var(--bn-link);text-decoration:none}
+.bn-root a:hover{color:var(--bn-link-hover);text-decoration:underline}
+.bn-root p{margin:0 0 var(--bn-space-p)}
+.bn-root ul,.bn-root ol{padding-left:2em;margin:0 0 var(--bn-space-p)}
+.bn-root li+li{margin-top:.25em}
+
+.bn-h1{font-size:1.75em;font-weight:600;line-height:var(--bn-lh-heading);color:var(--bn-ink);
+  border-bottom:3px solid var(--bn-accent);padding-bottom:.3em;margin:var(--bn-h-mt) 0 var(--bn-h-mb)}
+.bn-h2{font-size:1.4em;font-weight:600;line-height:var(--bn-lh-heading);color:var(--bn-ink);
+  border-bottom:1px solid var(--bn-border);padding-bottom:.3em;margin:var(--bn-h-mt) 0 var(--bn-h-mb)}
+
+.bn-card{background:var(--bn-inset);border:1px solid var(--bn-border-mid);
+  border-radius:var(--bn-r-card);padding:1em 1.2em;box-shadow:var(--bn-shadow)}
+.bn-callout{background:var(--bn-bg);border:1px solid var(--bn-border-mid);
+  border-left:3px solid var(--bn-accent);border-radius:var(--bn-r-card);padding:.9em 1.15em;color:var(--bn-text)}
+
+/* inline code = GitHub feel (subtle, borderless); tags/chips stay bordered */
+.bn-code{font-family:var(--bn-mono);font-size:85%;background:var(--bn-code-bg);
+  border-radius:var(--bn-r-chip);padding:.2em .4em;color:var(--bn-text)}
+.bn-tag{font-family:var(--bn-mono);font-size:.85em;background:var(--bn-surface);
+  border:1px solid var(--bn-border-mid);border-radius:var(--bn-r-chip);padding:.08em .4em;color:var(--bn-text)}
+
+.bn-btn{font-family:inherit;font-size:.95rem;background:var(--bn-btn-bg);color:var(--bn-btn-fg);
+  border:1px solid var(--bn-btn-bg);border-radius:var(--bn-r-inset);padding:.5em 1.1em;cursor:pointer}
+.bn-btn:hover{background:var(--bn-btn-bg-hover);border-color:var(--bn-btn-bg-hover)}
+.bn-btn.ghost{background:var(--bn-muted);border-color:var(--bn-muted)}
+
+.bn-badge{display:inline-block;font-size:.7rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  padding:2px 8px;border-radius:var(--bn-r-pill);border:1px solid currentColor;line-height:1.5}
+.bn-badge.ok{color:var(--bn-ok)} .bn-badge.fail{color:var(--bn-fail)} .bn-badge.warn{color:var(--bn-warn)}
+
+.bn-status{border:1px solid var(--bn-border-mid);border-left:3px solid var(--bn-border-mid);
+  border-radius:var(--bn-r-card);padding:.9em 1.15em;background:var(--bn-inset)}
+.bn-status.ok{border-left-color:var(--bn-ok)}
+.bn-status.warn{border-left-color:var(--bn-warn)}
+.bn-status.fail{border-left-color:var(--bn-fail)}
+.bn-status .head{display:flex;align-items:center;gap:8px;font-weight:600;margin:0 0 .4em;color:var(--bn-ink)}
+.bn-status .meta{display:flex;flex-wrap:wrap;gap:6px 18px;list-style:none;padding:0;margin:10px 0 0;
+  font-size:.9em;color:var(--bn-muted)}
+.bn-status .meta b{color:var(--bn-text);font-weight:600}
+.bn-status .note{margin:8px 0 0;font-size:.95em;color:var(--bn-text)}
