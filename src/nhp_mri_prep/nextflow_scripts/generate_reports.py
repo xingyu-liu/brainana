@@ -58,9 +58,7 @@ def discover_subjects(output_dir: Path) -> list:
         try:
             with open(jobs_path, encoding="utf-8") as jf:
                 jobs = json.load(jf)
-            subjects.update(
-                str(j["subject_id"]) for j in jobs if j.get("subject_id")
-            )
+            subjects.update(str(j["subject_id"]) for j in jobs if j.get("subject_id"))
         except (OSError, json.JSONDecodeError, TypeError) as e:
             logger.warning("Report: could not read %s - %s", jobs_path, e)
 
@@ -88,17 +86,25 @@ def main() -> int:
             with open(args.status_file, encoding="utf-8") as sf:
                 run_status = json.load(sf)
         except (OSError, json.JSONDecodeError) as e:
-            logger.warning("Report: could not read status file %s - %s", args.status_file, e)
+            logger.warning(
+                "Report: could not read status file %s - %s", args.status_file, e
+            )
 
     try:
         config = load_config(str(args.config_file))
     except Exception as e:
-        logger.error("Report: could not load config %s - %s; skipping reports", args.config_file, e)
+        logger.error(
+            "Report: could not load config %s - %s; skipping reports",
+            args.config_file,
+            e,
+        )
         return 0
 
     subjects = discover_subjects(output_dir)
     if not subjects:
-        logger.warning("Report: no subjects found under %s; nothing to generate", output_dir)
+        logger.warning(
+            "Report: no subjects found under %s; nothing to generate", output_dir
+        )
         return 0
 
     status_label = "unknown"

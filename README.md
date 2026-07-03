@@ -12,7 +12,7 @@
   <img src="docs/_static/pipeline_details/brainana_unified_framework.png" alt="Brainana pipeline overview schematic" width="100%">
 </p>
 
-**Brainana** provides anatomical and functional processing, image registration, and surface reconstruction for macaque neuroimaging data in a reproducible workflow (FSL, ANTs, AFNI, FreeSurfer, Nextflow).
+**Brainana** provides anatomical and functional (fMRI) processing, image registration, surface reconstruction, fMRIPrep-compatible confound regressors, and HTML QC reports for macaque neuroimaging data in a reproducible workflow (FSL, ANTs, AFNI, FreeSurfer, Nextflow).
 
 > **Status:** Research software, beta stage – feature-complete for main workflows; bugs and edge cases are still possible.
 

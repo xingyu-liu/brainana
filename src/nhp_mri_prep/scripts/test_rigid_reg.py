@@ -114,7 +114,9 @@ class MethodResult:
 def conformed_brain_path(conformed_f: Path) -> Path:
     """Path for skull-stripped conformed volume (metrics), sibling of full-head output."""
     if conformed_f.name.endswith(".nii.gz"):
-        return conformed_f.with_name(conformed_f.name.replace(".nii.gz", "_brain.nii.gz"))
+        return conformed_f.with_name(
+            conformed_f.name.replace(".nii.gz", "_brain.nii.gz")
+        )
     return conformed_f.with_name(f"{conformed_f.stem}_brain{conformed_f.suffix}")
 
 
@@ -240,10 +242,11 @@ def _variant_transform_paths(
     raise ValueError(f"Unknown method for transform paths: {method}")
 
 
-def _transform_artifacts_valid(
-    method: str, work_dir: Path, param_set: str
-) -> bool:
-    return all(_is_valid_output(p) for p in _variant_transform_paths(method, work_dir, param_set))
+def _transform_artifacts_valid(method: str, work_dir: Path, param_set: str) -> bool:
+    return all(
+        _is_valid_output(p)
+        for p in _variant_transform_paths(method, work_dir, param_set)
+    )
 
 
 def _sitk_pipeline_rev_ok(variant_dir: Path) -> bool:
@@ -421,7 +424,9 @@ def shared_preprocess(
     image_for_strip = image_path
     input_img = nib.load(image_path)
     if input_img.ndim == 4:
-        logger.warning("4D input image detected; averaging time dimension (tmean) before skullstrip.")
+        logger.warning(
+            "4D input image detected; averaging time dimension (tmean) before skullstrip."
+        )
         mean_input = np.mean(input_img.get_fdata(), axis=-1)
         image_for_strip = work_dir / "_input_3d.nii.gz"
         nib.save(
@@ -628,7 +633,6 @@ def run_flirt(
     )
 
 
-
 def run_sitk(
     preprocess: PreprocessResult,
     work_dir: Path,
@@ -742,7 +746,9 @@ def _ensure_conformed_brain(
         prefix = f"conform_scanner2native_sitk_{param_set}"
         xfm = work_dir / f"{prefix}.mat"
         if not xfm.is_file():
-            raise FileNotFoundError(f"SimpleITK transform not found for brain apply: {xfm}")
+            raise FileNotFoundError(
+                f"SimpleITK transform not found for brain apply: {xfm}"
+            )
         transform_obj = _sitk_transform_from_mat(
             _sitk_load_world_for_resume(xfm), preprocess.template_for_reg
         )
@@ -1009,7 +1015,9 @@ def _html_card_stats_table(row: BenchmarkRow) -> str:
     )
 
 
-def _html_summary_row(summary: ParamSummary, row_class: str, show_modality: bool = True) -> str:
+def _html_summary_row(
+    summary: ParamSummary, row_class: str, show_modality: bool = True
+) -> str:
     vis_key = html.escape(f"{summary.modality}::{summary.param_set}")
     vis_cell = (
         f'<td class="vis-inspec-cell">'
@@ -1242,7 +1250,9 @@ def generate_html_report(
         if mod_list:
             mod_rows_html = [
                 _html_summary_row(
-                    summary, "best" if idx in best_summary_idxs else "", show_modality=False
+                    summary,
+                    "best" if idx in best_summary_idxs else "",
+                    show_modality=False,
                 )
                 for idx, summary in mod_list
             ]
@@ -1567,7 +1577,9 @@ def run_benchmark_for_image(
     logger.info("=== Image: %s (fixed: %s) ===", imagef.name, template_file.name)
     if modality == "t2w":
         preprocess = t2w_preprocess(imagef, template_file)
-    elif resume and (cached := _try_load_preprocess_cache(shared_dir, imagef.resolve())):
+    elif resume and (
+        cached := _try_load_preprocess_cache(shared_dir, imagef.resolve())
+    ):
         logger.info("Preprocess: skip (cached) %s", shared_dir)
         preprocess = cached
     else:
@@ -1657,9 +1669,7 @@ def run_modality_benchmark(
     if not pairs:
         raise FileNotFoundError(f"No moving_*.nii.gz files found in {input_dir}")
 
-    needs_fallback = any(
-        _find_matched_fixed(input_dir, p.stem) is None for p in pairs
-    )
+    needs_fallback = any(_find_matched_fixed(input_dir, p.stem) is None for p in pairs)
     if needs_fallback and not default_fixed.is_file():
         raise FileNotFoundError(
             f"Fallback fixed image required but not found: {default_fixed}"
@@ -1696,9 +1706,7 @@ def run_modality_benchmark(
                 report_auto_refresh_sec=report_auto_refresh_sec,
             )
         except Exception:
-            logger.exception(
-                "Failed on %s image %s", modality, pair.moving.name
-            )
+            logger.exception("Failed on %s image %s", modality, pair.moving.name)
 
     if not metrics_store:
         raise RuntimeError(f"No successful benchmark runs for modality {modality}.")

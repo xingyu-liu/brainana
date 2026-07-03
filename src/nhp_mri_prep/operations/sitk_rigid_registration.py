@@ -78,7 +78,9 @@ def _set_sitk_metric(
     schedule_stage: bool = False,
 ) -> None:
     if schedule_stage:
-        metric = sitk_config.get("schedule_metric", sitk_config.get("search_metric", "Correlation"))
+        metric = sitk_config.get(
+            "schedule_metric", sitk_config.get("search_metric", "Correlation")
+        )
     elif search_stage:
         metric = sitk_config.get("search_metric", sitk_config["metric"])
     else:
@@ -121,7 +123,9 @@ def _sitk_apply_sampling(
     reg.SetMetricSamplingStrategy(reg.RANDOM)
 
 
-def _sitk_rotation_samples_deg(deg_min: float, deg_max: float, step_deg: float) -> np.ndarray:
+def _sitk_rotation_samples_deg(
+    deg_min: float, deg_max: float, step_deg: float
+) -> np.ndarray:
     """Rotation grid CENTERED on 0 (identity): samples 0, +/-step, +/-2*step, ... in range.
 
     A rotation search must always try identity. The old linspace(deg_min, deg_max, n)
@@ -148,7 +152,9 @@ def _sitk_image_cog_mm(img: sitk.Image) -> np.ndarray:
     total = float(weights.sum())
     if total <= 0:
         idx = [(float(s) - 1.0) / 2.0 for s in img.GetSize()]
-        return np.array(img.TransformContinuousIndexToPhysicalPoint(idx), dtype=np.float64)
+        return np.array(
+            img.TransformContinuousIndexToPhysicalPoint(idx), dtype=np.float64
+        )
     z_idx, y_idx, x_idx = np.indices(weights.shape)
     cz = float((weights * z_idx).sum() / total)
     cy = float((weights * y_idx).sum() / total)
@@ -206,7 +212,13 @@ def _sitk_flirt_cog_seed(
     c = np.array(center, dtype=np.float64)
     t_param = mov_cog - rotation @ (ref_cog - c) - c
     return _sitk_euler_from_rot_trans(
-        center, rx_rad, ry_rad, rz_rad, float(t_param[0]), float(t_param[1]), float(t_param[2])
+        center,
+        rx_rad,
+        ry_rad,
+        rz_rad,
+        float(t_param[0]),
+        float(t_param[1]),
+        float(t_param[2]),
     )
 
 
@@ -341,7 +353,9 @@ def _sitk_corratio_cost(
     ~2x larger margin), which is what NCC's thin margin cannot do once the coarse pose
     is only crudely positioned.
     """
-    resampled = sitk.Resample(moving, fixed, tx, sitk.sitkLinear, 0.0, moving.GetPixelID())
+    resampled = sitk.Resample(
+        moving, fixed, tx, sitk.sitkLinear, 0.0, moving.GetPixelID()
+    )
     x = sitk.GetArrayViewFromImage(fixed).astype(np.float64).ravel()
     y = sitk.GetArrayViewFromImage(resampled).astype(np.float64).ravel()
     ymin, ymax = float(y.min()), float(y.max())
@@ -375,8 +389,12 @@ def _sitk_rank_cost(
     metric, which has no corratio). Opt-in: the func/MattesMI path is unaffected.
     """
     if sitk_config.get("search_rank_metric") == "CorrelationRatio":
-        return _sitk_corratio_cost(fixed, moving, tx, int(sitk_config.get("corratio_bins", 32)))
-    return _sitk_eval_metric(fixed, moving, tx, sitk_config, modality, full_sampling=full_sampling)
+        return _sitk_corratio_cost(
+            fixed, moving, tx, int(sitk_config.get("corratio_bins", 32))
+        )
+    return _sitk_eval_metric(
+        fixed, moving, tx, sitk_config, modality, full_sampling=full_sampling
+    )
 
 
 def _sitk_copy_euler(tx: sitk.Euler3DTransform) -> sitk.Euler3DTransform:
@@ -527,7 +545,12 @@ def _sitk_flirt_search_cost(
         for ry in ry_c:
             for rz in rz_c:
                 seed = _sitk_seed_transform(
-                    fixed_8, moving_8, center, np.deg2rad(rx), np.deg2rad(ry), np.deg2rad(rz)
+                    fixed_8,
+                    moving_8,
+                    center,
+                    np.deg2rad(rx),
+                    np.deg2rad(ry),
+                    np.deg2rad(rz),
                 )
                 refined = _sitk_refine_translation_only(
                     fixed_8,
@@ -559,8 +582,16 @@ def _sitk_flirt_search_cost(
     scored: list[tuple[float, sitk.Euler3DTransform]] = []
     for _, rot in retained:
         score, tx = _sitk_fine_rotation_search(
-            fixed_8, moving_8, center, rot, fine_offsets,
-            sitk_config, modality, lr_tx, tx_iters, _rank4,
+            fixed_8,
+            moving_8,
+            center,
+            rot,
+            fine_offsets,
+            sitk_config,
+            modality,
+            lr_tx,
+            tx_iters,
+            _rank4,
         )
         if tx is not None:
             scored.append((score, tx))
@@ -572,8 +603,14 @@ def _sitk_flirt_search_cost(
     results: list[tuple[float, sitk.Euler3DTransform]] = []
     for _, tx in scored[:_SITK_FLIRT_TOP_K]:
         refined = _sitk_refine_translation_only(
-            fixed_4, moving_4, tx, sitk_config, modality,
-            learning_rate_mm=lr_tx4, iters=tx_iters, full_sampling=True,
+            fixed_4,
+            moving_4,
+            tx,
+            sitk_config,
+            modality,
+            learning_rate_mm=lr_tx4,
+            iters=tx_iters,
+            full_sampling=True,
         )
         results.append((_rank4(refined), refined))
     results.sort(key=lambda r: r[0])
@@ -653,9 +690,19 @@ def _sitk_flirt_schedule(
 
     best_tx = _sitk_copy_euler(rescored[0][1])
     for scale_mm in scales:
-        logger.info("FLIRT schedule: rigid optimise @ %.1f mm (%d iters)", scale_mm, schedule_iters)
+        logger.info(
+            "FLIRT schedule: rigid optimise @ %.1f mm (%d iters)",
+            scale_mm,
+            schedule_iters,
+        )
         best_tx = _sitk_rigid_refine_at_scale(
-            fixed, moving, best_tx, sitk_config, modality, float(scale_mm), schedule_iters
+            fixed,
+            moving,
+            best_tx,
+            sitk_config,
+            modality,
+            float(scale_mm),
+            schedule_iters,
         )
     return best_tx
 
@@ -669,7 +716,9 @@ def _sitk_euler_params(
     return tx
 
 
-def _sitk_find_cost_minima(grid: np.ndarray, thresh: float) -> list[tuple[int, int, int]]:
+def _sitk_find_cost_minima(
+    grid: np.ndarray, thresh: float
+) -> list[tuple[int, int, int]]:
     """Local minima (26-neighbour) of the cost-vs-rotation grid, below `thresh`.
 
     Port of FLIRT find_cost_minima: refining every basin (not just the global best)
@@ -682,7 +731,9 @@ def _sitk_find_cost_minima(grid: np.ndarray, thresh: float) -> list[tuple[int, i
             for k in range(nz):
                 if grid[i, j, k] > thresh:
                     continue
-                sub = grid[max(0, i - 1) : i + 2, max(0, j - 1) : j + 2, max(0, k - 1) : k + 2]
+                sub = grid[
+                    max(0, i - 1) : i + 2, max(0, j - 1) : j + 2, max(0, k - 1) : k + 2
+                ]
                 if grid[i, j, k] <= float(sub.min()) + 1e-9:
                     minima.append((i, j, k))
     return minima
@@ -715,7 +766,10 @@ def _sitk_corratio_powell_refine(
             return _sitk_corratio_cost(fs, ms, _sitk_euler_params(center, q), nbins)
 
         p = minimize(
-            _cost, p, method="Powell", options={"maxiter": maxiter, "xtol": 1e-3, "ftol": 1e-4}
+            _cost,
+            p,
+            method="Powell",
+            options={"maxiter": maxiter, "xtol": 1e-3, "ftol": 1e-4},
         ).x
     return p
 
@@ -762,11 +816,22 @@ def _sitk_corratio_register(
         for j, ry in enumerate(rs):
             for k, rz in enumerate(rs):
                 seed = _sitk_seed_transform(
-                    fixed_8, moving_8, center, np.deg2rad(rx), np.deg2rad(ry), np.deg2rad(rz)
+                    fixed_8,
+                    moving_8,
+                    center,
+                    np.deg2rad(rx),
+                    np.deg2rad(ry),
+                    np.deg2rad(rz),
                 )
                 refined = _sitk_refine_translation_only(
-                    fixed_8, moving_8, seed, sitk_config, modality,
-                    learning_rate_mm=lr_tx, iters=tx_iters, full_sampling=True,
+                    fixed_8,
+                    moving_8,
+                    seed,
+                    sitk_config,
+                    modality,
+                    learning_rate_mm=lr_tx,
+                    iters=tx_iters,
+                    full_sampling=True,
                 )
                 grid[i, j, k] = _corratio4(refined)
 
@@ -779,11 +844,19 @@ def _sitk_corratio_register(
     # (fine_step within +/-coarse_step/2) before corratio+Powell.
     fine_offsets = _sitk_fine_offsets_deg(coarse_step, fine_step)
     seeds: list[np.ndarray] = []
-    for (i, j, k) in minima:
+    for i, j, k in minima:
         base = (float(rs[i]), float(rs[j]), float(rs[k]))
         _, tx = _sitk_fine_rotation_search(
-            fixed_8, moving_8, center, base, fine_offsets,
-            sitk_config, modality, lr_tx, tx_iters, _corratio4,
+            fixed_8,
+            moving_8,
+            center,
+            base,
+            fine_offsets,
+            sitk_config,
+            modality,
+            lr_tx,
+            tx_iters,
+            _corratio4,
         )
         if tx is not None:
             seeds.append(np.array(tx.GetParameters(), dtype=np.float64))
@@ -793,7 +866,10 @@ def _sitk_corratio_register(
     logger.info(
         "FLIRT corratio search: %d coarse cells, %d minima (thresh=%.6f) + identity "
         "seed (%.1f s)",
-        grid.size, len(minima), thresh, time.perf_counter() - t0,
+        grid.size,
+        len(minima),
+        thresh,
+        time.perf_counter() - t0,
     )
 
     scales = sitk_config.get("powell_scales_mm", _SITK_POWELL_SCALES_MM)
@@ -801,14 +877,18 @@ def _sitk_corratio_register(
     best_cost = float("inf")
     best_params = seeds[-1]
     for p0 in seeds:
-        p = _sitk_corratio_powell_refine(fixed, moving, center, p0, scales, nbins, maxiter)
+        p = _sitk_corratio_powell_refine(
+            fixed, moving, center, p0, scales, nbins, maxiter
+        )
         cost = _sitk_corratio_cost(fixed, moving, _sitk_euler_params(center, p), nbins)
         if cost < best_cost:
             best_cost = cost
             best_params = p
     logger.info(
         "FLIRT corratio refine: %d seeds, best corratio cost=%.6f (total %.1f s)",
-        len(seeds), best_cost, time.perf_counter() - t0,
+        len(seeds),
+        best_cost,
+        time.perf_counter() - t0,
     )
     return _sitk_euler_params(center, best_params)
 
@@ -925,7 +1005,9 @@ def _sitk_param_label(
     include_learning_rate: bool = False,
 ) -> str:
     coarse_part = f"cs{coarse_step_deg:02d}_" if include_coarse else ""
-    bins_part = f"_b{histogram_bins}" if include_bins and histogram_bins is not None else ""
+    bins_part = (
+        f"_b{histogram_bins}" if include_bins and histogram_bins is not None else ""
+    )
     lr_part = f"_{_sitk_lr_tag(learning_rate)}" if include_learning_rate else ""
     ct = _sitk_cost_thresh_tag(cost_thresh_fraction)
     return (
@@ -985,7 +1067,9 @@ def _build_sitk_param_grid(profile: SitkModalityProfile) -> list[dict[str, Any]]
                                 if histogram_bin is not None:
                                     entry["number_of_histogram_bins"] = histogram_bin
                                 if profile.search_rank_metric is not None:
-                                    entry["search_rank_metric"] = profile.search_rank_metric
+                                    entry[
+                                        "search_rank_metric"
+                                    ] = profile.search_rank_metric
                                 grid.append(entry)
     return grid
 
@@ -1018,9 +1102,7 @@ def _sitk_ensure_3d(img: sitk.Image) -> sitk.Image:
     out = sitk.GetImageFromArray(mean_arr)
     out.SetSpacing(img.GetSpacing()[:3])
     out.SetOrigin(img.GetOrigin()[:3])
-    out.SetDirection(
-        [img.GetDirection()[i] for i in (0, 1, 2, 4, 5, 6, 8, 9, 10)]
-    )
+    out.SetDirection([img.GetDirection()[i] for i in (0, 1, 2, 4, 5, 6, 8, 9, 10)])
     return out
 
 
@@ -1101,7 +1183,8 @@ def conform_world_mat_path(conform_xfm: "Path | str") -> Path:
 
 def _sitk_load_world_for_resume(mat_path: Path) -> np.ndarray:
     """Load the world-space affine for resume: the `.world.mat` sidecar (new FSL-primary
-    layout) if present, else the primary `.mat` (legacy runs that stored world there)."""
+    layout) if present, else the primary `.mat` (legacy runs that stored world there).
+    """
     world = _sitk_world_mat_path(mat_path)
     return np.loadtxt(world if world.is_file() else mat_path)
 
@@ -1134,7 +1217,9 @@ def _sitk_transform_from_mat(
 ) -> sitk.Euler3DTransform:
     """Rebuild centered Euler3DTransform from saved 4x4 affine + registration fixed image."""
     fixed = _sitk_ensure_3d(
-        sitk.ReadImage(str(validate_input_file(registration_fixedf, logger)), sitk.sitkFloat32)
+        sitk.ReadImage(
+            str(validate_input_file(registration_fixedf, logger)), sitk.sitkFloat32
+        )
     )
     center = _sitk_fixed_geometric_center(fixed)
     rotation = mat[:3, :3].astype(np.float64)

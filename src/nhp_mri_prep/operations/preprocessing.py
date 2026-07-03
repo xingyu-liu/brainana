@@ -7,7 +7,6 @@ including slice timing correction, motion correction, despike, skull stripping, 
 
 import os
 import shutil
-import contextlib
 import pandas as pd
 import numpy as np
 import logging
@@ -1895,9 +1894,7 @@ def bias_correction(
             logger.info(f"System: brain output path - {brain_output_path}")
 
             # Apply mask (nibabel, FSL-free)
-            apply_brain_mask(
-                output_path, mask_path, brain_output_path, logger=logger
-            )
+            apply_brain_mask(output_path, mask_path, brain_output_path, logger=logger)
 
             validate_output_file(brain_output_path, logger)
             outputs["imagef_brain"] = brain_output_path

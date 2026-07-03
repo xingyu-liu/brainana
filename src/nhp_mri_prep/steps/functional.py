@@ -287,7 +287,8 @@ def func_compute_confounds(
 
     # Treat any non-steady-state volumes the user asked despike to ignore as a lower bound.
     n_dummy_min = (
-        input.config.get("func", {}).get("despike", {}).get("ignore_first_volumes", 0) or 0
+        input.config.get("func", {}).get("despike", {}).get("ignore_first_volumes", 0)
+        or 0
     )
 
     # Outlier thresholds are configurable (func.confounds); defaults are macaque-scaled.

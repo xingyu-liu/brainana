@@ -102,9 +102,7 @@ def render_run_status_content(run_status: Optional[Dict[str, Any]]) -> str:
                 f"<code>{html.escape(str(trace_file))}</code></li>"
             )
         details = (
-            f'<ul class="meta">{"".join(detail_items)}</ul>'
-            if detail_items
-            else ""
+            f'<ul class="meta">{"".join(detail_items)}</ul>' if detail_items else ""
         )
 
         error_block = (

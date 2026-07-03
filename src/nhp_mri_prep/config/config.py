@@ -166,7 +166,9 @@ def set_config(config_data: Union[str, Path, Dict[str, Any], "Config"]) -> Confi
         The global configuration instance.
     """
     global _global_config
-    _global_config = config_data if isinstance(config_data, Config) else Config(config_data)
+    _global_config = (
+        config_data if isinstance(config_data, Config) else Config(config_data)
+    )
     return _global_config
 
 

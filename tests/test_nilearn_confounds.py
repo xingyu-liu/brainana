@@ -37,7 +37,9 @@ def _write_par(path: Path, n: int = _N_VOLUMES, spike_frame: int = None) -> None
     np.savetxt(str(path), arr)
 
 
-def _write_bids_run(tmp_path: Path, *, with_seg: bool = False, spike_frame: int = None) -> Path:
+def _write_bids_run(
+    tmp_path: Path, *, with_seg: bool = False, spike_frame: int = None
+) -> Path:
     """Write a minimal BIDS func derivative tree and return the BOLD path."""
     func_dir = tmp_path / "func"
     func_dir.mkdir(parents=True)
@@ -72,7 +74,11 @@ def _write_bids_run(tmp_path: Path, *, with_seg: bool = False, spike_frame: int 
         pd.DataFrame(
             {
                 "index": [0, 2, 4],
-                "name": ["Background", "Left-Cerebral-White-Matter", "Left-Lateral-Ventricle"],
+                "name": [
+                    "Background",
+                    "Left-Cerebral-White-Matter",
+                    "Left-Lateral-Ventricle",
+                ],
             }
         ).to_csv(seg_lut, sep="\t", index=False)
 
@@ -91,7 +97,9 @@ def _write_bids_run(tmp_path: Path, *, with_seg: bool = False, spike_frame: int 
 def test_load_confounds_motion_full(tmp_path):
     bold_f = _write_bids_run(tmp_path, with_seg=False)
 
-    confounds, sample_mask = load_confounds(str(bold_f), strategy=["motion"], motion="full")
+    confounds, sample_mask = load_confounds(
+        str(bold_f), strategy=["motion"], motion="full"
+    )
 
     assert sample_mask is None
     assert confounds.shape == (_N_VOLUMES, 24)

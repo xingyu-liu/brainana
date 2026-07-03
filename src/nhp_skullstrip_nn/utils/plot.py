@@ -219,12 +219,17 @@ def _get_slice_orientations(
 
         # Create slice function based on which axis we're slicing
         if slice_axis == 0:
+
             def slice_func(i):
                 return data[i, :, :]
+
         elif slice_axis == 1:
+
             def slice_func(i):
                 return data[:, i, :]
+
         else:  # slice_axis == 2
+
             def slice_func(i):
                 return data[:, :, i]
 

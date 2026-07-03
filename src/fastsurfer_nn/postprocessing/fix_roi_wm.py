@@ -471,9 +471,7 @@ def fix_roi_wm(
         if "general" not in config:
             config["general"] = {}
         if "verbose" not in config.get("general", {}):
-            config["general"]["verbose"] = (
-                2 if logger.isEnabledFor(logging.INFO) else 1
-            )
+            config["general"]["verbose"] = 2 if logger.isEnabledFor(logging.INFO) else 1
     except Exception:
         # Fallback: create minimal config with reasonable thread count
         num_threads = registration_threads if registration_threads is not None else 32

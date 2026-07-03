@@ -25,9 +25,7 @@ def _write_par(path: Path, n: int = 20) -> np.ndarray:
 
 
 def test_motion_expansion_naming_and_order():
-    df = pd.DataFrame(
-        {c: np.arange(5, dtype=float) for c in C._MOTION_ORDER}
-    )
+    df = pd.DataFrame({c: np.arange(5, dtype=float) for c in C._MOTION_ORDER})
     cols = C.expand_motion_params(df)
     # 6 params x 4 terms = 24 columns
     assert len(cols) == 24
@@ -152,7 +150,9 @@ def test_load_motion_params_named_tsv(tmp_path):
 def test_load_motion_params_scientific_notation_no_header(tmp_path):
     # Raw .par with scientific notation must NOT be mistaken for a header (the 'e').
     p = tmp_path / "mc.par"
-    p.write_text("1.0e-05 2.0e-03 -1.0e-04 0.5 -0.5 0.25\n2.0e-05 3.0e-03 -2.0e-04 0.6 -0.4 0.20\n")
+    p.write_text(
+        "1.0e-05 2.0e-03 -1.0e-04 0.5 -0.5 0.25\n2.0e-05 3.0e-03 -2.0e-04 0.6 -0.4 0.20\n"
+    )
     df = C.load_motion_params(p)
     assert list(df.columns) == C._MOTION_ORDER
     assert df["trans_x"].iloc[0] == 0.5
@@ -164,12 +164,24 @@ def test_classify_labels_uses_region_column_arm2_style():
     lut = pd.DataFrame(
         {
             "ID": [0, 2, -1, -1001, -2, -1002],
-            "LabelName": ["Background", "cortex-rh-ACgG", "WM-rh-ctxWM", "WM-lh-ctxWM",
-                          "CSF-rh-latVent", "CSF-lh-latVent"],
+            "LabelName": [
+                "Background",
+                "cortex-rh-ACgG",
+                "WM-rh-ctxWM",
+                "WM-lh-ctxWM",
+                "CSF-rh-latVent",
+                "CSF-lh-latVent",
+            ],
             "region": ["", "cortex", "WM", "WM", "CSF", "CSF"],
             "name": ["", "ACgG", "ctxWM", "ctxWM", "latVent", "latVent"],
-            "name_full": ["", "anterior_cingulate_gyrus", "cerebral_white_matter",
-                          "cerebral_white_matter", "lateral_ventricle", "lateral_ventricle"],
+            "name_full": [
+                "",
+                "anterior_cingulate_gyrus",
+                "cerebral_white_matter",
+                "cerebral_white_matter",
+                "lateral_ventricle",
+                "lateral_ventricle",
+            ],
         }
     )
     csf, wm = C._classify_labels(lut)
@@ -189,12 +201,22 @@ def test_build_tissue_masks_with_segmentation(tmp_path):
     lut = tmp_path / "lut.tsv"
     # name-only LUT (no 'region' col) exercises the substring fallback classifier.
     pd.DataFrame(
-        {"index": [0, 2, 4], "name": ["Background", "Left-Cerebral-White-Matter", "Left-Lateral-Ventricle"]}
+        {
+            "index": [0, 2, 4],
+            "name": [
+                "Background",
+                "Left-Cerebral-White-Matter",
+                "Left-Lateral-Ventricle",
+            ],
+        }
     ).to_csv(lut, sep="\t", index=False)
 
     # Reference BOLD on the same grid (4D), passed as a file path.
     ref_file = tmp_path / "bold.nii.gz"
-    nib.save(nib.Nifti1Image(np.zeros((10, 10, 10, 5), dtype=np.float32), affine), str(ref_file))
+    nib.save(
+        nib.Nifti1Image(np.zeros((10, 10, 10, 5), dtype=np.float32), affine),
+        str(ref_file),
+    )
     masks = C.build_tissue_masks(seg_file, lut, ref_file, erode_iterations=1)
     assert "white_matter" in masks and masks["white_matter"].any()
     assert "csf" in masks
@@ -212,7 +234,9 @@ def test_compute_confounds_motion_only_end_to_end(tmp_path):
     bold_file = tmp_path / "bold.nii.gz"
     nib.save(bold, str(bold_file))
     mask_file = tmp_path / "mask.nii.gz"
-    nib.save(nib.Nifti1Image(np.ones((6, 6, 6), dtype=np.uint8), np.eye(4)), str(mask_file))
+    nib.save(
+        nib.Nifti1Image(np.ones((6, 6, 6), dtype=np.uint8), np.eye(4)), str(mask_file)
+    )
 
     out = C.compute_confounds(
         bold_file=bold_file,
@@ -225,9 +249,16 @@ def test_compute_confounds_motion_only_end_to_end(tmp_path):
     assert len(df) == n
     # Core fMRIPrep columns present (mask supplied -> global/DVARS computed).
     for col in [
-        "trans_x", "trans_x_derivative1", "trans_x_power2", "trans_x_derivative1_power2",
-        "rot_z", "global_signal", "global_signal_derivative1",
-        "framewise_displacement", "dvars", "std_dvars",
+        "trans_x",
+        "trans_x_derivative1",
+        "trans_x_power2",
+        "trans_x_derivative1_power2",
+        "rot_z",
+        "global_signal",
+        "global_signal_derivative1",
+        "framewise_displacement",
+        "dvars",
+        "std_dvars",
     ]:
         assert col in df.columns, f"missing {col}"
     # Tissue columns absent without segmentation.
@@ -253,7 +284,9 @@ def test_compute_confounds_accepts_4d_singleton_mask(tmp_path):
     _write_par(par, n=n)
     rng = np.random.RandomState(7)
     nib.save(
-        nib.Nifti1Image(rng.normal(100, 5, size=(5, 5, 5, n)).astype(np.float32), np.eye(4)),
+        nib.Nifti1Image(
+            rng.normal(100, 5, size=(5, 5, 5, n)).astype(np.float32), np.eye(4)
+        ),
         str(tmp_path / "bold.nii.gz"),
     )
     # 4D mask with a singleton time axis (the shape that crashed FUNC_COMPUTE_CONFOUNDS).
@@ -311,7 +344,8 @@ def test_compute_confounds_single_volume_raises_and_writes_nothing(tmp_path):
     # A 1-volume BOLD has no timeseries -> refuse to write a degenerate file.
     bold_file = tmp_path / "bold.nii.gz"
     nib.save(
-        nib.Nifti1Image(np.ones((4, 4, 4, 1), dtype=np.float32), np.eye(4)), str(bold_file)
+        nib.Nifti1Image(np.ones((4, 4, 4, 1), dtype=np.float32), np.eye(4)),
+        str(bold_file),
     )
     prefix = str(tmp_path / "sub-S_desc-confounds_timeseries")
     with pytest.raises(ValueError, match="volume"):
@@ -334,7 +368,9 @@ def test_compute_confounds_dummy_frame_not_double_flagged(tmp_path):
     _write_par(par, n=n)
     rng = np.random.RandomState(11)
     data = rng.normal(100, 5, size=(6, 6, 6, n)).astype(np.float32)
-    data[..., 0] += 400  # strong T1-saturation spike -> dummy + huge DVARS at frame 1 boundary
+    data[
+        ..., 0
+    ] += 400  # strong T1-saturation spike -> dummy + huge DVARS at frame 1 boundary
     nib.save(nib.Nifti1Image(data, np.eye(4)), str(tmp_path / "bold.nii.gz"))
     nib.save(
         nib.Nifti1Image(np.ones((6, 6, 6), dtype=np.uint8), np.eye(4)),
@@ -362,10 +398,12 @@ def test_compute_confounds_configurable_fd_threshold(tmp_path):
     # Lowering the FD threshold flags more frames, and the JSON reports the value actually used.
     n = 20
     par = tmp_path / "mc.par"
-    arr = _write_par(par, n=n)
+    _write_par(par, n=n)
     rng = np.random.RandomState(12)
     nib.save(
-        nib.Nifti1Image(rng.normal(100, 5, size=(5, 5, 5, n)).astype(np.float32), np.eye(4)),
+        nib.Nifti1Image(
+            rng.normal(100, 5, size=(5, 5, 5, n)).astype(np.float32), np.eye(4)
+        ),
         str(tmp_path / "bold.nii.gz"),
     )
     nib.save(

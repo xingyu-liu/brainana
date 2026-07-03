@@ -9,7 +9,9 @@ _RUN_STATUS_PATH = (
     Path(__file__).resolve().parents[1]
     / "src/nhp_mri_prep/quality_control/run_status.py"
 )
-_spec = importlib.util.spec_from_file_location("_run_status_under_test", _RUN_STATUS_PATH)
+_spec = importlib.util.spec_from_file_location(
+    "_run_status_under_test", _RUN_STATUS_PATH
+)
 _run_status = importlib.util.module_from_spec(_spec)
 assert _spec.loader is not None
 _spec.loader.exec_module(_run_status)
@@ -18,6 +20,7 @@ resolve_run_status = _run_status.resolve_run_status
 run_status_log_label = _run_status.run_status_log_label
 format_run_status_stats = _run_status.format_run_status_stats
 render_run_status_content = _run_status.render_run_status_content
+
 
 @pytest.mark.parametrize(
     "run_status,expected_tier,expected_css",

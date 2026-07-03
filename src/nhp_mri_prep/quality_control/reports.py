@@ -596,9 +596,7 @@ class HtmlGenerator:
                     dropdown_items = []
                     for group_key in group_keys:
                         nav_id = f"{section_prefix}-{BidsEntityProcessor.clean_header_id(group_key)}"
-                        dropdown_items.append(
-                            f'<a href="#{nav_id}">{group_key}</a>'
-                        )
+                        dropdown_items.append(f'<a href="#{nav_id}">{group_key}</a>')
                     dropdown_content = "\n".join(dropdown_items)
                     nav_items.append(
                         f"""<details class="nav-dd"><summary>{title} ▾</summary>
@@ -607,9 +605,7 @@ class HtmlGenerator:
 </div></details>"""
                     )
                 else:
-                    nav_items.append(
-                        f'<a href="#{modality.title()}">{title}</a>'
-                    )
+                    nav_items.append(f'<a href="#{modality.title()}">{title}</a>')
 
         nav_items.extend(
             [
@@ -1310,11 +1306,7 @@ class HtmlGenerator:
         items = "".join(f"<li>{html.escape(ref)}</li>" for ref in refs_list)
         parts.append(f'<ul class="methods-refs">{items}</ul>')
 
-        content = (
-            '<div class="methods-structured">\n'
-            + "\n".join(parts)
-            + "\n</div>"
-        )
+        content = '<div class="methods-structured">\n' + "\n".join(parts) + "\n</div>"
         return HtmlGenerator.create_prose_section("Methods", "Methods", content)
 
 

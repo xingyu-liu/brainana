@@ -780,9 +780,7 @@ def check_cortex_detection(label_array: np.ndarray, atlas_name: str = "arm3"):
     # Voxel counts
     total_voxels = len(label_array.flatten())
     cortex_voxels = sum([np.sum(label_array == label) for label in cortex_found])
-    subcortex_voxels = sum(
-        [np.sum(label_array == label) for label in subcortex_found]
-    )
+    subcortex_voxels = sum([np.sum(label_array == label) for label in subcortex_found])
     wm_voxels = sum([np.sum(label_array == label) for label in wm_found])
 
     print("\n" + "=" * 70)

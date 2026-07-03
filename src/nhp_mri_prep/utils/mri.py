@@ -36,9 +36,7 @@ def calculate_func_tmean(
         img = nib.load(str(funcf))
         data = img.get_fdata()
         mean_data = data.mean(axis=-1) if data.ndim == 4 else data
-        out_img = nib.Nifti1Image(
-            mean_data.astype(np.float32), img.affine, img.header
-        )
+        out_img = nib.Nifti1Image(mean_data.astype(np.float32), img.affine, img.header)
         out_img.header.set_data_dtype(np.float32)
         nib.save(out_img, str(outputf))
         logger.info(f"Output: mean functional image created successfully - {outputf}")

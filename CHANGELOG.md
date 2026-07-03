@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [1.2.0] - 2026-07-03
+
+### Added
+
+- **Functional confound regressors** — fMRIPrep-compatible nuisance regressors written per run as `*_desc-confounds_timeseries.tsv` (+ JSON sidecar), compatible with `nilearn...load_confounds`: 24-parameter motion, framewise displacement (macaque 27 mm radius) and RMSD, DVARS/std-DVARS, global-signal and (when a T1w segmentation is available) CSF/WM tissue regressors, plus non-steady-state and motion-outlier indicators. Regressors only — the BOLD image is never scrubbed ([docs](https://brainana.readthedocs.io/en/stable/processing.html))
+- **Confounds QC** — fMRIPrep-style confounds panel (global signal, CSF, WM, DVARS, FD) in the HTML report
+- **QC run-status badge** — reports are now always generated on completion and carry a status badge: **Pass**, **Pass with warnings** (an optional step failed; partial outputs), or **Fail** (early abort)
+- `func.confounds.enabled` toggle and support for runs without motion correction
+- Config-validation hardening with defaults/config-generator consistency tests
+
+### Changed
+
+- Confound computation is gated behind `func.confounds.enabled`
+
+### Fixed
+
+- Functional pipeline emits a dummy sentinel for skipped tSNR runs
+- QC report: About/Methods headings wrapped in prose measure; confounds pipeline fixes
+
+### Docs
+
+- **SEO metadata** — canonical URLs, Open Graph / Twitter cards, per-page meta descriptions, `SoftwareApplication` JSON-LD, and Google Search Console verification
+- Restructured functional processing docs: added confound-regressors, tSNR, and despike method sections and renumbered the functional steps
+- Template/atlas zoo note that more atlases are bundled; documented the QC status badge
+
+### Notes
+
+- Install: `pip install "brainana[lite]"` (Lite); full pipeline: `docker pull liuxingyu987/brainana:1.2.0` ([Installation](https://brainana.readthedocs.io/en/stable/installation.html))
+
 ## [1.1.0] - 2026-06-03
 
 ### Added

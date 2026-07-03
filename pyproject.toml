@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "brainana"
-version = "1.1.0"
+version = "1.2.0"
 description = "A Python package for preprocessing and registration of macaque neuroimaging data with BIDS dataset support"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = {text = "AGPL-3.0"}
@@ -171,13 +171,21 @@ include = ["nhp_mri_prep*", "fastsurfer_nn*", "fastsurfer_surfrecon*", "nhp_skul
 
 [tool.ruff]
 target-version = "py311"
+# Throwaway dev/debug scripts are not held to lint/format standards.
+extend-exclude = ["scripts/scratch"]
 
 [tool.ruff.lint.per-file-ignores]
-# Notebooks run setup (paths, installs) before imports in later cells.
+# Notebooks run setup (paths, installs) before imports in later cells, and
+# define config vars (e.g. USE_GPU) across cells that per-cell analysis can't see.
 "scripts/*.ipynb" = ["E402"]
-# Standalone entrypoints prepend src/ before importing brainana packages.
-"src/**/scripts/**/*.py" = ["E402"]
+"examples/*.ipynb" = ["E402", "F821"]
+# Standalone debug/entrypoint scripts prepend src/ before imports and keep
+# demo/optional imports around; exempt import-ordering and unused-import rules.
+"src/**/scripts/**/*.py" = ["E402", "F401", "F541"]
 "src/**/training/**/*.py" = ["E402"]
 "src/**/train/**/*.py" = ["E402"]
 "src/**/nextflow_scripts/**/*.py" = ["E402"]
 "tests/surf_recon/redo_*.py" = ["E402"]
+
+[tool.black]
+extend-exclude = "scripts/scratch"

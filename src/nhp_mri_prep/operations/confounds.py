@@ -82,12 +82,14 @@ def _expand_regressor(values: np.ndarray) -> Dict[str, np.ndarray]:
     return {
         "": values,
         "_derivative1": deriv,
-        "_power2": values ** 2,
-        "_derivative1_power2": deriv ** 2,
+        "_power2": values**2,
+        "_derivative1_power2": deriv**2,
     }
 
 
-def _add_expanded(columns: "Dict[str, np.ndarray]", name: str, values: np.ndarray) -> None:
+def _add_expanded(
+    columns: "Dict[str, np.ndarray]", name: str, values: np.ndarray
+) -> None:
     """Insert ``name`` and its three expansion terms into ``columns`` (fMRIPrep naming)."""
     for suffix, col in _expand_regressor(values).items():
         columns[f"{name}{suffix}"] = col
@@ -184,7 +186,9 @@ def _euler_rotation_matrix(angles: np.ndarray) -> np.ndarray:
     return rot_x @ rot_y @ rot_z
 
 
-def compute_rmsd(motion_df: pd.DataFrame, radius_mm: float = FD_RADIUS_MM) -> np.ndarray:
+def compute_rmsd(
+    motion_df: pd.DataFrame, radius_mm: float = FD_RADIUS_MM
+) -> np.ndarray:
     """Relative RMS head displacement (the fMRIPrep ``rmsd`` column).
 
     Reimplements FSL's frame-to-frame RMS deviation (Jenkinson, 1999) directly from the motion
@@ -424,7 +428,9 @@ def _resample_label_to_reference(
         seg, ref, sitk.Transform(), sitk.sitkNearestNeighbor, 0.0, seg.GetPixelIDValue()
     )
     arr = sitk.GetArrayFromImage(resampled)  # (z, y, x)
-    return np.transpose(arr, (2, 1, 0)).astype(np.int32)  # -> (x, y, z) to match nibabel
+    return np.transpose(arr, (2, 1, 0)).astype(
+        np.int32
+    )  # -> (x, y, z) to match nibabel
 
 
 def build_tissue_masks(
@@ -465,7 +471,11 @@ def build_tissue_masks(
         raw = np.isin(seg, labels)
         if not raw.any():
             return None
-        eroded = binary_erosion(raw, iterations=erode_iterations) if erode_iterations else raw
+        eroded = (
+            binary_erosion(raw, iterations=erode_iterations)
+            if erode_iterations
+            else raw
+        )
         if not eroded.any():
             logger.warning(
                 "Confounds: tissue mask empty after erosion; using un-eroded mask "
@@ -504,6 +514,7 @@ def mean_signal(bold_data: np.ndarray, mask: np.ndarray) -> np.ndarray:
 # =================================================================================================
 def _ordered_columns(columns: "Dict[str, np.ndarray]") -> List[str]:
     """Order columns to roughly mirror fMRIPrep (cosmetic only; nilearn loads by name)."""
+
     def base_blocks(prefixes: List[str]) -> List[str]:
         out = []
         for p in prefixes:
@@ -514,7 +525,11 @@ def _ordered_columns(columns: "Dict[str, np.ndarray]") -> List[str]:
 
     order: List[str] = []
     order += base_blocks(["global_signal", "csf", "white_matter", "csf_wm"])
-    order += [c for c in ("std_dvars", "dvars", "framewise_displacement", "rmsd") if c in columns]
+    order += [
+        c
+        for c in ("std_dvars", "dvars", "framewise_displacement", "rmsd")
+        if c in columns
+    ]
     order += base_blocks(_MOTION_ORDER)
     order += sorted(c for c in columns if c.startswith("non_steady_state_outlier"))
     order += sorted(c for c in columns if c.startswith("motion_outlier"))
@@ -629,7 +644,9 @@ def compute_confounds(
         # rmsd is derived directly from the motion parameters (no external mcflirt _rel.rms file).
         columns["rmsd"] = compute_rmsd(motion_df, radius_mm=radius_mm)
     else:
-        logger.warning("Confounds: no motion parameters available; motion columns omitted")
+        logger.warning(
+            "Confounds: no motion parameters available; motion columns omitted"
+        )
         fd = np.full(n_volumes, np.nan)
 
     # --- Brain mask (required for DVARS + global signal) -----------------------------------------
@@ -646,7 +663,9 @@ def compute_confounds(
             # _as_3d_bool_mask drops it and binarizes so the index matches the BOLD spatial axes.
             brain_mask = _as_3d_bool_mask(np.asanyarray(mask_img.dataobj))
         else:
-            mask_note = "brain mask grid does not match BOLD; global_signal/DVARS skipped"
+            mask_note = (
+                "brain mask grid does not match BOLD; global_signal/DVARS skipped"
+            )
             logger.warning(f"Confounds: {mask_note}")
     else:
         mask_note = "no brain mask available; global_signal/DVARS skipped"
@@ -672,7 +691,9 @@ def compute_confounds(
             masks = build_tissue_masks(seg_file, seg_lut_file, bold_file, logger=logger)
             for tissue in ("csf", "white_matter", "csf_wm"):
                 if tissue in masks:
-                    _add_expanded(columns, tissue, mean_signal(bold_data, masks[tissue]))
+                    _add_expanded(
+                        columns, tissue, mean_signal(bold_data, masks[tissue])
+                    )
                     has_tissue = True
             if not has_tissue:
                 tissue_note = "Segmentation provided but no CSF/WM labels resolved."
@@ -680,7 +701,9 @@ def compute_confounds(
             logger.warning(f"Confounds: tissue regressors skipped ({exc})")
             tissue_note = f"Tissue regressors skipped: {exc}"
     else:
-        tissue_note = "No anatomical segmentation available; tissue regressors not produced."
+        tissue_note = (
+            "No anatomical segmentation available; tissue regressors not produced."
+        )
         logger.info(f"Confounds: {tissue_note}")
 
     # --- Outliers --------------------------------------------------------------------------------

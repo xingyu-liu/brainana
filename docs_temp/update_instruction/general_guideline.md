@@ -98,12 +98,18 @@ Use one `VERSION` (e.g. `1.1.0`) and update these **together on `main` before pr
 | **RTD build (local)** | `sphinx-build` or `bash docs/build_rtd_local.sh` | Run **after** `pyproject.toml` bump so built HTML shows the new `release` version. |
 | **RTD (hosted)** | No manual upload | After you push tag `v${VERSION}`, RTD builds **stable** from that tag; confirm green on [RTD builds](https://readthedocs.org/projects/brainana/builds/). |
 
+**Docs / RTD gotchas:**
+
+- **Sphinx extensions are pinned in FOUR places.** When you add or bump one, update all of them or CI/RTD fail with `No module named ...`: `.readthedocs.yaml`, `.github/workflows/docs.yml` (the PR check), `docs/build_rtd_local.sh`, and the `[docs]` extra in `pyproject.toml`.
+- **Docs only reach `stable` via a release tag.** RTD `stable` = highest semver tag; edits merged to `main` appear on `latest`/`dev` immediately but **not** on `stable` until you cut a new `v${VERSION}` tag. (This is why a docs-only change may still warrant a patch/minor release.)
+- **Google Search Console** ownership is verified by the static file `docs/google49dbcea2a2cad90f.html`, copied to each version's site root via `html_extra_path` in `docs/conf.py`. It is reachable at `/en/<version>/google…html` and only appears under `/en/stable/` after a release tag — do **not** delete or rename it. SEO metadata (canonical, Open Graph, JSON-LD) lives in `docs/conf.py` + `docs/_templates/layout.html`; preserve them when editing docs config.
+
 **Dev PRs (before release):** only edit `CHANGELOG.md` under `[Unreleased]` for anything users should see in the next release. Do not change `pyproject.toml` version until release day on `main`.
 
 **Quick grep before build:**
 
 ```bash
-export VERSION=1.1.0
+export VERSION=1.2.0
 grep '^version' pyproject.toml
 rg -n "${VERSION}|1\\.0\\.0|<version>" pyproject.toml CHANGELOG.md README.md docs/
 ```
@@ -115,6 +121,8 @@ rg -n "${VERSION}|1\\.0\\.0|<version>" pyproject.toml CHANGELOG.md README.md doc
 All must pass **before** `git commit` and **before** `git tag`:
 
 1. `black --check . && ruff check . && pytest`
+   - **`ruff check .` passes** — dev/scratch helpers are excluded via `[tool.ruff] extend-exclude` + per-file `E402/F401/F541` ignores in `pyproject.toml`; keep new throwaway scripts under `scripts/scratch/`.
+   - **`black --check .` has ~22 files of pre-existing formatting drift** in real source (whitespace only, no logic). Green it with a **dedicated** `chore: black format` commit (`black .`), kept **out of** the release commit — never fold a repo-wide reformat into a release. No CI enforces black/ruff (only the Sphinx PR check exists), so this gate is self-discipline.
 2. `sphinx-build -b html -W --keep-going -c docs docs docs/_build` (or `bash docs/build_rtd_local.sh`)
 3. `docker build --build-arg BRAINANA_VERSION=${VERSION} ...` + pipeline smoke (`scripts/scratch/test_brainana_docker.sh` or `_cpu.sh`)
 4. **Lite local** — `examples/test_BrainanaLite_local_instruction.sh`:
@@ -162,7 +170,7 @@ If a previous run left `WORKING_DIR/brainana_lite_env/` at an old ref, set `FORC
 
 ```bash
 cd ~/github/brainana
-export VERSION=1.1.0
+export VERSION=1.2.0
 export IMAGE=liuxingyu987/brainana
 
 # branch
@@ -207,7 +215,7 @@ github pr create --fill
 cd ~/github/brainana
 git checkout main && git pull origin main
 
-export VERSION=1.1.0          # set to your release
+export VERSION=1.2.0          # set to your release
 export IMAGE=liuxingyu987/brainana
 
 git status   # working tree should be clean before edits

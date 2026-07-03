@@ -57,7 +57,9 @@ def test_generator_covers_every_default_key():
     """
     html = GENERATOR.read_text()
     missing = sorted(
-        path for path, name in _leaf_keys(load_yaml_config(DEFAULTS)) if name not in html
+        path
+        for path, name in _leaf_keys(load_yaml_config(DEFAULTS))
+        if name not in html
     )
     assert not missing, (
         "config_generator.html is missing parameters present in defaults.yaml: "

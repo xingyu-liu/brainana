@@ -17,10 +17,10 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # ========================
 # Test parameters (edit paths/config here)
-version=1.1.1 
+version=1.2.0
 
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_local_v${version}_config
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_local_v${version}
 config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
 
 # bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_example

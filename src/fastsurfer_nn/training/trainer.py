@@ -22,10 +22,13 @@ import numpy as np
 import torch
 import torch.optim.lr_scheduler as scheduler
 import yacs.config
+
 try:
     from torch.utils.tensorboard import SummaryWriter
 except ImportError:
-    SummaryWriter = None  # tensorboard is a training-only dependency; absent in lite/inference
+    SummaryWriter = (
+        None  # tensorboard is a training-only dependency; absent in lite/inference
+    )
 from tqdm import tqdm
 
 from fastsurfer_nn.atlas.atlas_manager import get_atlas_manager
@@ -605,10 +608,13 @@ class Trainer:
             # Initialize early stopping state
             if early_stopping_mode == "min":
                 best_metric = float("inf")
+
                 def is_better(current, best):
                     return current < best - early_stopping_delta
+
             else:  # mode == 'max'
                 best_metric = float("-inf")
+
                 def is_better(current, best):
                     return current > best + early_stopping_delta
 

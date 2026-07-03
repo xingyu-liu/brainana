@@ -133,7 +133,9 @@ def _registration_kwargs(xfm_type: str) -> Dict[str, Any]:
         "syn": "SyN",
     }
     if xfm not in type_map:
-        raise ValueError(f"Invalid xfm_type {xfm_type!r}; expected one of {list(type_map)}")
+        raise ValueError(
+            f"Invalid xfm_type {xfm_type!r}; expected one of {list(type_map)}"
+        )
 
     # Linear-stage params come from the affine defaults (antspyx runs an internal
     # rigid+affine before SyN, controlled by the aff_* args).
@@ -300,13 +302,13 @@ def antspyx_apply_transforms(
     )
     ants.image_write(out_img, str(outputf_name))
     validate_output_file(outputf_name, logger)
-    logger.info(
-        f"Step: transform application completed successfully - {outputf_name}"
-    )
+    logger.info(f"Step: transform application completed successfully - {outputf_name}")
 
     outputs = {"imagef_registered": str(outputf_name)}
     if generate_tmean:
-        tmean_file = work_dir / (Path(outputf_name).name.split(".nii")[0] + "_tmean.nii.gz")
+        tmean_file = work_dir / (
+            Path(outputf_name).name.split(".nii")[0] + "_tmean.nii.gz"
+        )
         calculate_func_tmean(str(outputf_name), str(tmean_file), logger)
         outputs["imagef_registered_tmean"] = str(tmean_file)
         logger.info(f"Output: tmean generated - {tmean_file}")
@@ -335,10 +337,18 @@ def antspyx_n4_bias(
     spline_param = spline_param[0] if len(spline_param) == 1 else list(spline_param)
 
     logger.info("Workflow: N4 bias correction using antspyx backend")
-    common = dict(image=img, mask=mask, shrink_factor=int(shrink_factor), spline_param=spline_param)
+    common = dict(
+        image=img,
+        mask=mask,
+        shrink_factor=int(shrink_factor),
+        spline_param=spline_param,
+    )
     corrected = ants.n4_bias_field_correction(**common)
     bias_field = ants.n4_bias_field_correction(**common, return_bias_field=True)
 
     ants.image_write(corrected, str(output_path))
     ants.image_write(bias_field, str(bias_field_path))
-    return {"imagef_bias_corrected": str(output_path), "bias_field": str(bias_field_path)}
+    return {
+        "imagef_bias_corrected": str(output_path),
+        "bias_field": str(bias_field_path),
+    }

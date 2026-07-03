@@ -369,9 +369,7 @@ def _use_fireants(logger: logging.Logger, allow_cpu: bool = True) -> bool:
         t = torch.zeros(4, dtype=torch.float32)  # CPU tensor
         adam_update_fused_baseline(t, t.clone(), t.clone(), 1.0, 1.0, 1e-8)
     except Exception as e:
-        logger.debug(
-            f"REGISTRATION: FireANTs CPU baseline probe failed: {e}"
-        )
+        logger.debug(f"REGISTRATION: FireANTs CPU baseline probe failed: {e}")
         return False
     logger.info("REGISTRATION: no GPU — FireANTs will run on CPU (baseline optimizer)")
     return True

@@ -118,12 +118,17 @@ def _get_slice_orientations(
 
         # Create slice function based on which axis we're slicing
         if slice_axis == 0:
+
             def slice_func(i):
                 return data[i, :, :]
+
         elif slice_axis == 1:
+
             def slice_func(i):
                 return data[:, i, :]
+
         else:  # slice_axis == 2
+
             def slice_func(i):
                 return data[:, :, i]
 
@@ -949,9 +954,7 @@ def plot_confound_panel(
         ax.set_ylim(0.0, 1.0)
 
     units_suffix = units or ""
-    stats_label = (
-        f"max: {maxv:.3f}{units_suffix} • mean: {mean:.3f}{units_suffix} • σ: {stdv:.3f}"
-    )
+    stats_label = f"max: {maxv:.3f}{units_suffix} • mean: {mean:.3f}{units_suffix} • σ: {stdv:.3f}"
     ax.annotate(
         stats_label,
         xy=(1.0, 1.0),

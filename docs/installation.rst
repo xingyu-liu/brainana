@@ -86,6 +86,6 @@ Set up Docker
 
    .. note::
 
-      Replace ``<version>`` with a published Brainana tag from Docker Hub, for example ``1.1.0``. See the `Brainana image tags on Docker Hub <https://hub.docker.com/r/liuxingyu987/brainana/tags>`_ for the list of available versions.
+      Replace ``<version>`` with a published Brainana tag from Docker Hub, for example ``1.2.0``. See the `Brainana image tags on Docker Hub <https://hub.docker.com/r/liuxingyu987/brainana/tags>`_ for the list of available versions.
 
 Once the image is ready, see :doc:`usage_notes` to run the pipeline.
