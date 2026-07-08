@@ -177,7 +177,11 @@ workflow.onComplete {
             def statusFile = new File(reportsDir, "run_status.json")
             statusFile.text = groovy.json.JsonOutput.toJson(status)
 
-            def config_file_path = params.config_file ?: "${projectDir}/src/nhp_mri_prep/config/defaults.yaml"
+            // Prefer the effective config (merged CLI + YAML + defaults) so the report
+            // reflects actual run params — e.g. a CLI --output_space custom template path.
+            // Fall back to the raw config/defaults if the effective config is absent.
+            def effective_cfg = "${params.output_dir}/nextflow_reports/config.yaml"
+            def config_file_path = new File(effective_cfg).exists() ? effective_cfg : (params.config_file ?: "${projectDir}/src/nhp_mri_prep/config/defaults.yaml")
             def python = System.getenv('PYTHON') ?: 'python3'
             def gen_script = "${projectDir}/src/nhp_mri_prep/nextflow_scripts/generate_reports.py"
             def cmd = [
