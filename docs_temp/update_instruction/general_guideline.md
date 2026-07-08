@@ -85,16 +85,20 @@ flowchart TB
 
 ## Version & docs sync (release prep)
 
+For version architecture, resolution chain, sidecar stamping, and the full release checklist, see [update_version.md](update_version.md).
+
 Use one `VERSION` (e.g. `1.1.0`) and update these **together on `main` before pre-tag gates** (leave changes uncommitted until tests pass).
 
 | File / area | What to update | Notes |
 | ----------- | -------------- | ----- |
 | **pyproject.toml** | `version = "${VERSION}"` | Single source of truth; Docker `BRAINANA_VERSION`, Python `get_version()`, and RTD `release` in `docs/conf.py` all follow this. |
+| **`.venv` editable install** | `uv pip install -e .` | Refreshes dist-info so `importlib.metadata` matches; `get_version()` reads `pyproject.toml` directly in the source tree, but pytest still checks dist-info alignment. |
 | **CHANGELOG.md** | Rename `[Unreleased]` → `[${VERSION}] - YYYY-MM-DD`; add empty `[Unreleased]` | Copy the new section into `gh release create --notes-file`. |
 | **README.md** | New features, links, status, Brainana Lite, install pointers | No pinned version required (uses RTD `stable` / `latest`), but README should describe what ships in this release. |
 | **docs/** (RTD) | Pages with old example versions (e.g. `1.0.0`) | `rg -n "${VERSION}\|1\\.0\\.0\|<version>" docs/` |
 | **docs/** (RTD) | New/changed behavior | Add or edit RST pages so **stable** matches the release. |
 | **examples/BrainanaLite.ipynb** | `BRAINANA_REF = "v${VERSION}"` | Git tag uses `v` prefix (e.g. `v1.1.0`). Docker image tag is `${VERSION}` without `v`. Colab tests this ref **after** tag push. |
+| **`scripts/scratch/test_brainana_*.sh`** | `version=${VERSION}` | Output-dir naming only; does not affect stamped sidecar version but avoids confusion. |
 | **RTD build (local)** | `sphinx-build` or `bash docs/build_rtd_local.sh` | Run **after** `pyproject.toml` bump so built HTML shows the new `release` version. |
 | **RTD (hosted)** | No manual upload | After you push tag `v${VERSION}`, RTD builds **stable** from that tag; confirm green on [RTD builds](https://readthedocs.org/projects/brainana/builds/). |
 
@@ -120,6 +124,7 @@ rg -n "${VERSION}|1\\.0\\.0|<version>" pyproject.toml CHANGELOG.md README.md doc
 
 All must pass **before** `git commit` and **before** `git tag`:
 
+0. After bumping `pyproject.toml`, refresh the editable install: `uv pip install -e .` (from repo root, in `.venv`). Sidecar stamping uses `get_version()` which reads `pyproject.toml` directly, but `pytest tests/test_version.py` also asserts dist-info alignment.
 1. `black --check . && ruff check . && pytest`
    - **`ruff check .` passes** — dev/scratch helpers are excluded via `[tool.ruff] extend-exclude` + per-file `E402/F401/F541` ignores in `pyproject.toml`; keep new throwaway scripts under `scripts/scratch/`.
    - **`black --check .` has ~22 files of pre-existing formatting drift** in real source (whitespace only, no logic). Green it with a **dedicated** `chore: black format` commit (`black .`), kept **out of** the release commit — never fold a repo-wide reformat into a release. No CI enforces black/ruff (only the Sphinx PR check exists), so this gate is self-discipline.

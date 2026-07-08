@@ -682,9 +682,9 @@ class HtmlGenerator:
             or config.get("output_spaces")
             or "NMT2Sym"
         )
-        output_space_display = (
-            str(output_space_raw).split(":")[0] if output_space_raw else "NMT2Sym"
-        )
+        # Show the output_space as given: the full spec incl. resolution (e.g.
+        # "NMT2Sym:res-05") for a bundled template, or the raw file path for a custom one.
+        output_space_display = str(output_space_raw) if output_space_raw else "NMT2Sym"
 
         # Surface reconstruction: show "Run by Brainana" if this report includes surface reconstruction QC
         has_surf = HtmlGenerator._has_surface_recon_snapshots(organized["anatomical"])

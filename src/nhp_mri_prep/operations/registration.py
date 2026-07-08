@@ -732,6 +732,8 @@ def ants_register(
                 compute_inverse=compute_inverse,
             )
             logger.info("REGISTRATION: completed with FireANTs")
+            if isinstance(result, dict):
+                result["engine"] = "fireants"
             return result
         except Exception as e:
             import traceback
@@ -767,16 +769,22 @@ def ants_register(
         logger.info(f"REGISTRATION: using ANTs (CPU) — {reason}")
         result = ants_cpu_register(**reg_kwargs)
         logger.info("REGISTRATION: completed with ANTs (CPU)")
+        engine = "ants"
     elif antspyx_available():
         logger.info(
             f"Workflow: antsRegistration CLI not found — using antspyx backend ({reason})"
         )
         result = antspyx_register(**reg_kwargs)
+        engine = "antspyx"
     else:
         raise RuntimeError(
             "Registration requires the ANTs CLI (antsRegistration) on PATH or the antspyx "
             "package (`pip install antspyx`); neither is available."
         )
+    # Record the actual engine used (survives the FireANTs->CPU fallback above) so
+    # transform sidecars can attribute GeneratedBy to the real backend.
+    if isinstance(result, dict):
+        result["engine"] = engine
     return result
 
 

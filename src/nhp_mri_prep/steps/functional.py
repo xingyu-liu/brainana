@@ -498,6 +498,8 @@ def func_conform(
             "modality": "func",
             "target_file": str(target_file),
             "bold_4d_conformed": str(bold_4d_file) if bold_4d_file else None,
+            # Real backend that produced the transform (for the xfm sidecar GeneratedBy).
+            "engine": result.get("engine"),
         },
         additional_files=additional_files,
     )
@@ -679,6 +681,8 @@ def func_registration(
             "target_type": target_type,
             "xfm_type": xfm_type,
             "fireants_requested": enable_fireants,
+            # Real backend used (fireants/ants/antspyx) after any runtime fallback.
+            "engine": result.get("engine"),
         },
         additional_files=additional_files,
     )

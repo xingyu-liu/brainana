@@ -22,10 +22,13 @@ version=1.2.0
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
 output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_local_v${version}
 config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
+custom_template_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/tpl-MEBRAINS_res-1_T1w_brain.nii.gz"
 
 # bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_example
 # output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_example_local_v${version}
 
+# bids_dir=/mnt/DataDrive3/swap/test_brainana/raw/frosty
+# output_dir=/mnt/DataDrive3/swap/test_brainana/preproc/frosty
 
 : "${ENABLE_GPU:=1}" # GPU visibility: 1 = expose GPU(s) to brainana, 0 = CPU-only (CUDA hidden)
 
@@ -89,6 +92,11 @@ if [ -n "$config_f" ]; then
 else
     echo "Config file: default (not overridden)"
 fi
+if [ -n "$custom_template_f" ]; then
+    echo "Custom template: $custom_template_f"
+else
+    echo "Custom template: default (from config)"
+fi
 echo "GPU mode: $GPU_MODE (ENABLE_GPU=$ENABLE_GPU)"
 echo "============================================"
 
@@ -101,6 +109,12 @@ fi
 # Check config file if explicitly provided
 if [ -n "$config_f" ] && [ ! -f "$config_f" ]; then
     echo "Error: Config file not found: $config_f" >&2
+    exit 1
+fi
+
+# Check custom template file if explicitly provided
+if [ -n "$custom_template_f" ] && [ ! -f "$custom_template_f" ]; then
+    echo "Error: Custom template file not found: $custom_template_f" >&2
     exit 1
 fi
 
@@ -134,6 +148,9 @@ NF_ARGS=(
 )
 if [ -n "$config_f" ]; then
     NF_ARGS+=(--config_file "$config_f")
+fi
+if [ -n "$custom_template_f" ]; then
+    NF_ARGS+=(--output_space "$custom_template_f")
 fi
 if [ -n "$RESUME_FLAG" ]; then
     NF_ARGS+=("$RESUME_FLAG")

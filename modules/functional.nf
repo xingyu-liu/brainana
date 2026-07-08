@@ -23,7 +23,7 @@ process FUNC_REORIENT {
     \${PYTHON:-python3} <<EOF
     from nhp_mri_prep.steps.functional import func_reorient
     from nhp_mri_prep.steps.types import StepInput
-    from nhp_mri_prep.utils.templates import resolve_template
+    from nhp_mri_prep.utils.templates import resolve_template, space_label_for
     from nhp_mri_prep.utils.bids import create_bids_output_filename
     from nhp_mri_prep.utils.nextflow import load_config, save_metadata, create_output_link
     from pathlib import Path
@@ -534,13 +534,13 @@ process FUNC_COMPUTE_CONFORM {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.{mat}',
+        pattern: '*_xfm.{mat,json}',
         saveAs: { filename -> filename == 'template_resampled.nii.gz' ? null : filename }
 
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*_space-bold_boldref.nii.gz'
-    
+        pattern: '*_space-bold_boldref.{nii.gz,json}'
+
     input:
     // Input: [sub, ses, run_identifier, tmean_file, bids_template]
     tuple val(subject_id), val(session_id), val(run_identifier), path(tmean_file), val(bids_name)
@@ -563,8 +563,9 @@ process FUNC_COMPUTE_CONFORM {
     \${PYTHON:-python3} <<EOF
     from nhp_mri_prep.steps.functional import func_conform
     from nhp_mri_prep.steps.types import StepInput
-    from nhp_mri_prep.utils.templates import resolve_template
+    from nhp_mri_prep.utils.templates import resolve_template, space_label_for
     from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem, parse_bids_entities, create_bids_filename, get_bids_prefix
+    from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
     from pathlib import Path
     import shutil
     import os
@@ -623,9 +624,11 @@ process FUNC_COMPUTE_CONFORM {
     # Published alias: BOLD reference in bold (conformed) space (session- or run-level prefix)
     bids_bold_space_name = f"{bids_prefix}_space-bold_boldref.nii.gz"
     create_output_link(result.output_file, bids_bold_space_name)
-    
+    # Sidecar (boldref in native bold space -> no template block)
+    write_derivative_sidecar(bids_bold_space_name, sources=[str(Path('${tmean_file}'))])
+
     # Copy transform files with BIDS-compliant names
-    
+
     conform_forward_transform_path = None
     conform_inverse_transform_path = None
     for key, f in result.additional_files.items():
@@ -634,11 +637,14 @@ process FUNC_COMPUTE_CONFORM {
             bids_transform_name = f"{bids_prefix}_from-scanner_to-bold_mode-image_xfm.mat"
             shutil.copy2(f, bids_transform_name)
             conform_forward_transform_path = Path(bids_transform_name)
+            # Sidecar (scanner<->bold conform transform; native, no template block)
+            write_derivative_sidecar(bids_transform_name, engine=result.metadata.get('engine'), sources=[str(Path('${tmean_file}')), str(target_file)])
         elif key == 'inverse_transform':
             # Inverse transform: from-bold_to-scanner
             bids_transform_name = f"{bids_prefix}_from-bold_to-scanner_mode-image_xfm.mat"
             shutil.copy2(f, bids_transform_name)
             conform_inverse_transform_path = Path(bids_transform_name)
+            write_derivative_sidecar(bids_transform_name, engine=result.metadata.get('engine'), sources=[str(Path('${tmean_file}')), str(target_file)])
         elif key == 'template_resampled':
             # Create symlink at root level for Nextflow output pattern
             # Use create_output_link() for consistency and proper symlink resolution
@@ -670,27 +676,28 @@ process FUNC_APPLY_CONFORM {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*desc-preproc*.nii.gz'
-    
+        pattern: '*desc-preproc*.{nii.gz,json}'
+
     input:
     // Input: [sub, ses, run_identifier, bold_file, conform_transform, conformed_tmean_ref, bids_template]
     // Stage conformed_tmean_ref as reg_reference.nii.gz to avoid output pattern collision
     tuple val(subject_id), val(session_id), val(run_identifier), path(bold_file), path(conform_transform), path(conformed_tmean_ref, stageAs: 'reg_reference.nii.gz'), val(bids_name)
     path config_file
-    
+
     output:
     // Output: [sub, ses, run_identifier, conformed_bold, conformed_tmean_ref, bids_template]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-conform_bold.nii.gz"), path("*desc-conform_boldref.nii.gz"), val(bids_name), emit: output
     // Phase 1 preproc output: [sub, ses, run_identifier, preproc_bold, preproc_boldref, bids_template]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-preproc_bold.nii.gz"), path("*desc-preproc_boldref.nii.gz"), val(bids_name), emit: preproc_output
     path "*.json", emit: metadata
-    
+
     script:
     """
     \${PYTHON:-python3} <<EOF
     from nhp_mri_prep.operations.registration import flirt_apply_transforms
     from nhp_mri_prep.utils.bids import create_bids_output_filename
     from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata
+    from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
     from pathlib import Path
     import sys
     import os
@@ -834,12 +841,17 @@ process FUNC_APPLY_CONFORM {
     # Verify the output file was created
     if not target_preproc_path.exists():
         raise FileNotFoundError(f"Failed to create preproc output file: {target_preproc_path}")
-    
+
     # Debug: Print the created filename to verify it matches the pattern *desc-preproc_boldref.nii.gz
     print(f"DEBUG: Created preproc output file: {target_preproc_path} (exists: {target_preproc_path.exists()})", file=sys.stderr)
     if not str(target_preproc_path).endswith('desc-preproc_boldref.nii.gz'):
         print(f"WARNING: Preproc output filename does not end with 'desc-preproc_boldref.nii.gz': {target_preproc_path}", file=sys.stderr)
-    
+
+    # Sidecars for the published preproc bold + boldref (native bold space -> no template block)
+    _apply_conform_sources = [str(Path('${bold_file}')), str(Path('${conform_transform}'))]
+    write_derivative_sidecar(bids_preproc_filename_bold, skull_stripped=False, sources=_apply_conform_sources)
+    write_derivative_sidecar(bids_preproc_filename_boldref, skull_stripped=False, sources=_apply_conform_sources)
+
     # Save metadata
     save_metadata({
         "step": "apply_conform",
@@ -857,8 +869,8 @@ process FUNC_COMPUTE_BRAIN_MASK {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*desc-brain_mask.nii.gz'
-    
+        pattern: '*desc-brain_mask.{nii.gz,json}'
+
     input:
     // Input: [sub, ses, run_identifier, conformed_tmean, bids_template]
     tuple val(subject_id), val(session_id), val(run_identifier), path(conformed_tmean), val(bids_name)
@@ -883,6 +895,7 @@ process FUNC_COMPUTE_BRAIN_MASK {
     from nhp_mri_prep.steps.functional import func_skullstripping
     from nhp_mri_prep.steps.types import StepInput
     from nhp_mri_prep.utils.bids import get_filename_stem, get_bids_prefix
+    from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
     from pathlib import Path
     import shutil
     import os
@@ -920,6 +933,8 @@ process FUNC_COMPUTE_BRAIN_MASK {
     # Create symlink for mask with BIDS-compliant name
     if "brain_mask" in result.additional_files:
         create_output_link(result.additional_files["brain_mask"], bids_additional_name)
+        # Sidecar (brain mask, native bold space -> no template block)
+        write_derivative_sidecar(bids_additional_name, roi_type="Brain", sources=[str(Path('${conformed_tmean}'))])
     
     # Create symlink for brain file (masked tmean)
     if result.output_file.exists():
@@ -938,9 +953,9 @@ process FUNC_COMPUTE_REGISTRATION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.{nii.gz,h5,mat}',
-        saveAs: { filename -> filename.contains('ref_from_func_reg.nii.gz') ? null : filename }
-    
+        pattern: '*.{nii.gz,h5,mat,json}',
+        saveAs: { filename -> (filename.contains('ref_from_func_reg.nii.gz') || filename == 'metadata.json') ? null : filename }
+
     input:
     // Input: [sub, ses, run_identifier, masked_tmean, bids_template] + anatomical selection
     tuple val(subject_id), val(session_id), val(run_identifier), path(masked_tmean), val(bids_name), val(anat_session_id)
@@ -952,7 +967,7 @@ process FUNC_COMPUTE_REGISTRATION {
     // Output: [sub, ses, run_identifier, registered_tmean, bids_template, anat_session_id]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*space-*boldref.nii.gz"), val(bids_name), val(anat_session_id), emit: output
     // Transforms: [sub, ses, run_identifier, forward_transform, inverse_transform]
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*from-bold_to-*_mode-image_xfm*"), path("*from-*_to-bold_mode-image_xfm*"), emit: transforms
+    tuple val(subject_id), val(session_id), val(run_identifier), path("*from-bold_to-*_mode-image_xfm.{h5,mat,nii.gz}"), path("*from-*_to-bold_mode-image_xfm.{h5,mat,nii.gz}"), emit: transforms
     // Reference: [sub, ses, run_identifier, reference_file]
     tuple val(subject_id), val(session_id), val(run_identifier), path("*ref_from_func_reg.nii.gz"), emit: reference
     path "*.json", emit: metadata
@@ -969,9 +984,10 @@ process FUNC_COMPUTE_REGISTRATION {
     \${PYTHON:-python3} <<EOF
     from nhp_mri_prep.steps.functional import func_registration
     from nhp_mri_prep.steps.types import StepInput
-    from nhp_mri_prep.utils.templates import resolve_template
+    from nhp_mri_prep.utils.templates import resolve_template, space_label_for
     from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem, parse_bids_entities, create_bids_filename, get_bids_prefix
     from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata
+    from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
     from nhp_mri_prep.utils import get_image_resolution, run_command
     from pathlib import Path
     import shutil
@@ -1027,7 +1043,7 @@ process FUNC_COMPUTE_REGISTRATION {
     # Determine space name based on target_type:
     # - If target_type == 'anat': space is T1w (func registered to anatomical space)
     # - If target_type == 'template': space is template_name (func registered directly to template)
-    template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
+    template_name = space_label_for(effective_output_space)
     if target_type == 'anat':
         space_name = "T1w"
     else:
@@ -1041,12 +1057,20 @@ process FUNC_COMPUTE_REGISTRATION {
     
     # Create symlink for registered tmean
     create_output_link(result.output_file, bids_output_filename)
-    
+    # Sidecar (registered boldref; TemplateSource auto-added when target is template space)
+    write_derivative_sidecar(
+        bids_output_filename,
+        output_space=effective_output_space,
+        resolved_template_path=str(target_file),
+        skull_stripped=True,
+        sources=[str(Path('${masked_tmean}'))],
+    )
+
     # Create symlinks for transform files with BIDS-compliant names (both forward and inverse)
     # .h5 files can be large, so use symlinks until published - saves storage
     # Use get_bids_prefix helper to determine session-level vs run-level naming
     bids_prefix = get_bids_prefix(bids_name, run_identifier)
-    
+
     def _xfm_ext(p):
         r = Path(p).resolve()
         return ''.join(r.suffixes) if r.suffixes else r.suffix
@@ -1055,10 +1079,24 @@ process FUNC_COMPUTE_REGISTRATION {
             ext = _xfm_ext(f)
             bids_transform_name = f"{bids_prefix}_from-bold_to-{space_name}_mode-image_xfm{ext}"
             create_output_link(f, bids_transform_name)
+            write_derivative_sidecar(
+                bids_transform_name,
+                output_space=effective_output_space,
+                resolved_template_path=str(target_file),
+                engine=result.metadata.get('engine'),
+                sources=[str(Path('${masked_tmean}')), str(target_file)],
+            )
         elif key == 'inverse_transform':
             ext = _xfm_ext(f)
             bids_transform_name = f"{bids_prefix}_from-{space_name}_to-bold_mode-image_xfm{ext}"
             create_output_link(f, bids_transform_name)
+            write_derivative_sidecar(
+                bids_transform_name,
+                output_space=effective_output_space,
+                resolved_template_path=str(target_file),
+                engine=result.metadata.get('engine'),
+                sources=[str(Path('${masked_tmean}')), str(target_file)],
+            )
         else:
             create_output_link(f, f.name)
     
@@ -1096,12 +1134,13 @@ process FUNC_APPLY_TRANSFORMS {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.{nii.gz,h5}',
-        saveAs: { filename -> 
-            // Exclude intermediate QC files and internal files:
-            if (filename.contains('target_final.nii.gz') || 
-                filename.contains('_dup') || 
-                filename.contains('desc-func2anat')) {
+        pattern: '*.{nii.gz,h5,json}',
+        saveAs: { filename ->
+            // Exclude intermediate QC files, internal files, and the generic metadata.json:
+            if (filename.contains('target_final.nii.gz') ||
+                filename.contains('_dup') ||
+                filename.contains('desc-func2anat') ||
+                filename == 'metadata.json') {
                 return null
             }
             return filename
@@ -1136,6 +1175,8 @@ from nhp_mri_prep.steps.functional import func_apply_transforms
 from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem, get_bids_prefix
 from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, load_config
+from nhp_mri_prep.utils.templates import space_label_for, resolve_template
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
 from pathlib import Path
 import glob
 import shutil
@@ -1147,7 +1188,29 @@ import logging
 # Get effective_output_space from effective config file
 config = load_config('${config_file}')
 effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
-template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
+template_name = space_label_for(effective_output_space)
+
+# Resolve the template path once for template-space sidecars (best-effort)
+try:
+    _resolved_template = str(resolve_template(effective_output_space)) if effective_output_space else None
+except Exception:
+    _resolved_template = None
+
+# The applied moving image; sources for every produced derivative below.
+_apply_input = str(Path('${input_file}'))
+_apply_is_mask = '${data_type}' == 'mask'
+
+def _apply_sidecar(name, *, template_space, extra_sources=None):
+    # Write a sidecar for a FUNC_APPLY_TRANSFORMS output. template_space=True passes the
+    # template source so the TemplateSource block is populated on space-<template> files.
+    sources = [_apply_input] + (list(extra_sources) if extra_sources else [])
+    write_derivative_sidecar(
+        name,
+        output_space=effective_output_space if template_space else None,
+        resolved_template_path=_resolved_template if template_space else None,
+        roi_type="Brain" if _apply_is_mask else None,
+        sources=sources,
+    )
 
 # Create logger early for use in parsing
 logger = logging.getLogger(__name__)
@@ -1269,7 +1332,7 @@ if target_space == 'T1w' and (is_dummy_anat2template or is_dummy_anat_reg):
 
 # Import additional modules needed for sequential transforms
 from nhp_mri_prep.operations.registration import ants_apply_transforms as ants_apply_transforms_op
-from nhp_mri_prep.utils.templates import resolve_template
+from nhp_mri_prep.utils.templates import resolve_template, space_label_for
 from nhp_mri_prep.utils import get_image_resolution, run_command
 import numpy as np
 
@@ -1348,7 +1411,8 @@ if is_sequential:
             modality=modality
         )
     create_output_link(func_all_anat, func_anat_output_name)
-    
+    _apply_sidecar(func_anat_output_name, template_space=False, extra_sources=[str(func2target_transform)])
+
     # Save boldref in anat space (only for BOLD)
     if data_type == "bold":
         func_anat_boldref_name = create_bids_output_filename(
@@ -1357,6 +1421,7 @@ if is_sequential:
             modality='boldref'
         )
         create_output_link(func_tmean_anat, func_anat_boldref_name)
+        _apply_sidecar(func_anat_boldref_name, template_space=False, extra_sources=[str(func2target_transform)])
     
     # Create intermediate output files for QC (func2anat step)
     # These are only needed for QC snapshots, not for the pipeline
@@ -1429,7 +1494,8 @@ if is_sequential:
             modality='bold'
         )
     create_output_link(func_all_template, func_template_output_name)
-    
+    _apply_sidecar(func_template_output_name, template_space=True, extra_sources=[str(func2target_transform), str(anat2template_transform_path)])
+
     # Save boldref in template space (final output) - only for BOLD
     # For mask, create a duplicate symlink to match BOLD output structure
     if data_type == "bold":
@@ -1439,6 +1505,7 @@ if is_sequential:
             modality='boldref'
         )
         create_output_link(func_tmean_template, func_template_boldref_name)
+        _apply_sidecar(func_template_boldref_name, template_space=True, extra_sources=[str(func2target_transform), str(anat2template_transform_path)])
     else:
         # For mask, create a second symlink (duplicate) to match BOLD output structure [bold, boldref]
         mask_second_name = str(func_template_output_name).replace('_mask.nii.gz', '_mask_dup.nii.gz')
@@ -1542,7 +1609,9 @@ else:
             modality='bold'
         )
     create_output_link(result.output_file, bids_output_filename)
-    
+    # Sidecar; TemplateSource auto-added only when space-<template> (target_name != T1w)
+    _apply_sidecar(bids_output_filename, template_space=True, extra_sources=[str(func2target_transform)])
+
     # Generate BIDS-compliant output filename for tmean (boldref) - only for BOLD
     if data_type == "bold" and "tmean" in result.additional_files:
         bids_boldref_filename = create_bids_output_filename(
@@ -1551,6 +1620,7 @@ else:
             modality='boldref'
         )
         create_output_link(result.additional_files["tmean"], bids_boldref_filename)
+        _apply_sidecar(bids_boldref_filename, template_space=True, extra_sources=[str(func2target_transform)])
     elif data_type == "mask":
         # For mask, create a second symlink (duplicate) to match BOLD output structure [bold, boldref]
         mask_second_name = str(bids_output_filename).replace('_mask.nii.gz', '_mask_dup.nii.gz')
@@ -1627,7 +1697,7 @@ process FUNC_WITHIN_SES_COREG {
     
     output:
     tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-coreg_bold.nii.gz"), path("*desc-coreg_boldref.nii.gz"), val(bids_name), emit: output
-    tuple val(subject_id), val(session_id), val(run_identifier), path("from-${run_identifier}_to-${reference_run_identifier}_mode-image_xfm*"), emit: transforms
+    tuple val(subject_id), val(session_id), val(run_identifier), path("from-${run_identifier}_to-${reference_run_identifier}_mode-image_xfm.{h5,mat,nii.gz}"), emit: transforms
     path "*.json", emit: metadata
     val gpu_id, emit: gpu_token
     
@@ -1738,9 +1808,9 @@ process FUNC_AVERAGE_TMEAN {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*desc-coreg_boldref.nii.gz',
+        pattern: '*desc-coreg_boldref.{nii.gz,json}',
         saveAs: { filename -> filename }
-    
+
     input:
     val(tmean_files)  // List of tmean file paths (as strings) - direct input, avoids staging name collisions and file list overhead
     val(subject_id)
@@ -1761,6 +1831,7 @@ from nhp_mri_prep.utils.bids import create_bids_output_filename, parse_bids_enti
 from nhp_mri_prep.utils.nextflow import (
     load_config, save_metadata, create_output_link
 )
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
 from pathlib import Path
 import shutil
 import os
@@ -1852,6 +1923,8 @@ bids_output_filename = create_bids_filename(filtered_entities, 'boldref', extens
 
 # Create symlink with BIDS-compliant name (this matches the output pattern)
 create_output_link(result.output_file, bids_output_filename)
+# Sidecar (session-averaged coreg boldref, native scanner space -> no template block)
+write_derivative_sidecar(bids_output_filename, sources=[str(p) for p in tmean_file_paths])
 
 # Save metadata
 save_metadata(result.metadata)
@@ -1948,7 +2021,7 @@ process FUNC_COMPUTE_TSNR {
 
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.nii.gz'
+        pattern: '*_stat-tsnr_boldmap.{nii.gz,json}'
 
     input:
     tuple val(subject_id), val(session_id), val(run_identifier), path(bold_4d), val(bids_name), path(mask_file), val(bold_space)
@@ -1964,7 +2037,9 @@ process FUNC_COMPUTE_TSNR {
 from pathlib import Path
 
 from nhp_mri_prep.steps.tsnr import compute_tsnr_run
-from nhp_mri_prep.utils.nextflow import save_metadata
+from nhp_mri_prep.utils.nextflow import save_metadata, load_config
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
+from nhp_mri_prep.utils.templates import resolve_template
 
 bids_name = Path('${bids_name}')
 run_identifier = '${run_identifier}'
@@ -1994,6 +2069,20 @@ meta['bids_name'] = str(bids_name)
 meta['bold_space'] = '${bold_space}'
 save_metadata(meta)
 
+# Sidecar for the tSNR map (TemplateSource auto-added when the map is in template space).
+if not meta.get('skipped') and Path(out_name).exists():
+    _tsnr_output_space = load_config('${config_file}').get('template', {}).get('output_space')
+    try:
+        _tsnr_template = str(resolve_template(_tsnr_output_space)) if _tsnr_output_space else None
+    except Exception:
+        _tsnr_template = None
+    write_derivative_sidecar(
+        Path(out_name),
+        output_space=_tsnr_output_space,
+        resolved_template_path=_tsnr_template,
+        sources=[str(bold_4d)] + ([str(mask)] if mask else []),
+    )
+
 if meta.get('skipped'):
     # Nextflow output contract: a skipped run produces no tSNR map, so emit a .dummy
     # sentinel that satisfies the process output and is filtered out downstream.
@@ -2009,7 +2098,7 @@ process FUNC_TSNR_SESSION_AVERAGE {
 
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
-        pattern: '*.nii.gz'
+        pattern: '*_stat-tsnr_boldmap.{nii.gz,json}'
 
     input:
     tuple val(subject_id), val(session_id), val(run_identifier), val(tsnr_paths_json), val(bids_name), val(bold_space)
@@ -2028,7 +2117,9 @@ import json
 import re
 
 from nhp_mri_prep.steps.tsnr import compute_tsnr_session_avg
-from nhp_mri_prep.utils.nextflow import save_metadata
+from nhp_mri_prep.utils.nextflow import save_metadata, load_config
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
+from nhp_mri_prep.utils.templates import resolve_template
 
 bids_name = Path('${bids_name}')
 run_identifier = '${run_identifier}'
@@ -2078,6 +2169,20 @@ meta['run_identifier'] = run_identifier
 meta['bids_name'] = str(bids_name)
 meta['bold_space'] = '${bold_space}'
 save_metadata(meta)
+
+# Sidecar for the session-average tSNR map (TemplateSource auto-added in template space).
+if Path(out_name).exists():
+    _tsnr_output_space = load_config('${config_file}').get('template', {}).get('output_space')
+    try:
+        _tsnr_template = str(resolve_template(_tsnr_output_space)) if _tsnr_output_space else None
+    except Exception:
+        _tsnr_template = None
+    write_derivative_sidecar(
+        Path(out_name),
+        output_space=_tsnr_output_space,
+        resolved_template_path=_tsnr_template,
+        sources=[str(p) for p in paths_from_json if p],
+    )
 PYTHON_EOF
     """
 }

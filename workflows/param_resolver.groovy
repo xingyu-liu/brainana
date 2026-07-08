@@ -111,20 +111,28 @@ def getNestedValue = { config, keyPath, defaultValue = null ->
 
 /**
  * Validate output_space format
- * Valid formats: "T1w", "TEMPLATE_NAME", or "TEMPLATE_NAME:DESCRIPTION"
+ * Valid formats: "T1w", "TEMPLATE_NAME", "TEMPLATE_NAME:DESCRIPTION",
+ * or a custom template file path (contains '/' or ends in .nii/.nii.gz).
+ * Custom template paths resolve to the literal 'template' space downstream;
+ * mirror is_custom_template_path() in src/nhp_mri_prep/utils/templates.py.
  */
 def validateOutputSpace = { value ->
     if (value == null || value.toString().trim().isEmpty()) {
         return false
     }
-    
+
     def str = value.toString().trim()
-    
+
     // Allow "T1w"
     if (str == "T1w") {
         return true
     }
-    
+
+    // Allow a custom template file path (validated for existence in Python at resolve time)
+    if (str.contains("/") || str.endsWith(".nii") || str.endsWith(".nii.gz")) {
+        return true
+    }
+
     // Check for TEMPLATE_NAME:DESCRIPTION format
     // Template name should be alphanumeric with underscores/hyphens
     // Description is optional and can contain alphanumeric, underscores, hyphens, colons

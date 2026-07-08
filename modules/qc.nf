@@ -903,12 +903,14 @@ reference_file = Path('${reference_file}')
 if ' ' in registered_file_str:
     # Split by space to get individual file paths
     file_paths = registered_file_str.split()
-    # Get template name from output_space (e.g., "NMT2Sym:res-1" -> "NMT2Sym")
+    # Get template name from output_space (e.g., "NMT2Sym:res-1" -> "NMT2Sym";
+    # a custom template file path -> "template", matching the space-<label> outputs)
     # Get effective_output_space from effective config file
     from nhp_mri_prep.utils.nextflow import load_config
+    from nhp_mri_prep.utils.templates import space_label_for
     config = load_config('${config_file}')
     effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
-    template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
+    template_name = space_label_for(effective_output_space)
     # Find the file in template space (final registered file)
     registered_file = None
     for fp in file_paths:

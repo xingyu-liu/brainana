@@ -30,7 +30,28 @@ workflow {
     // ============================================
     // Initialize parameter resolver with priority: CLI params → YAML config → defaults.yaml
     paramResolver.initialize(params, projectDir)
-    
+
+    // ============================================
+    // VALIDATE CUSTOM TEMPLATE (fail fast, no silent fallback)
+    // ============================================
+    // When output_space is a custom template file path, reject it up front if the
+    // extension is not .nii/.nii.gz or the file does not exist, so the run aborts
+    // immediately with a clear message rather than failing deep inside a process.
+    // Mirrors is_custom_template_path()/resolve_template() in utils/templates.py.
+    def _output_space = paramResolver.getParamOutputSpace(params, 'output_space')
+    if (_output_space) {
+        def _os = _output_space.toString().trim()
+        def _looks_like_path = _os.contains('/') || _os.endsWith('.nii') || _os.endsWith('.nii.gz')
+        if (_looks_like_path) {
+            if (!(_os.endsWith('.nii') || _os.endsWith('.nii.gz'))) {
+                error "Custom template must be a .nii or .nii.gz file, got: '${_os}'"
+            }
+            if (!new File(_os).isFile()) {
+                error "Custom template file not found: '${_os}'"
+            }
+        }
+    }
+
     // ============================================
     // GENERATE EFFECTIVE CONFIG FILE
     // ============================================
@@ -46,7 +67,28 @@ workflow {
     }
     
     def effective_config_file = file(effective_config_path)
-    
+
+    // ============================================
+    // WRITE dataset_description.json (BIDS derivatives root)
+    // ============================================
+    // Records brainana + version and the run's template source (bundled spec or
+    // custom template file path) once for the whole dataset. Best-effort: never
+    // aborts the run (the script always exits 0).
+    if (params.output_dir) {
+        def ddScript = "${projectDir}/src/nhp_mri_prep/nextflow_scripts/write_dataset_description.py"
+        try {
+            def ddProc = [params.python_exe ?: 'python3', ddScript,
+                          '--output-dir', params.output_dir.toString(),
+                          '--config-file', effective_config_path.toString()].execute()
+            ddProc.waitFor()
+            if (ddProc.exitValue() != 0) {
+                log.warn "dataset_description.json generation exited ${ddProc.exitValue()}: ${ddProc.err.text}"
+            }
+        } catch (Exception e) {
+            log.warn "Could not write dataset_description.json: ${e.message}"
+        }
+    }
+
     // ============================================
     // RESOLVE PARAMETERS (for workflow logic)
     // ============================================
@@ -135,7 +177,11 @@ workflow.onComplete {
             def statusFile = new File(reportsDir, "run_status.json")
             statusFile.text = groovy.json.JsonOutput.toJson(status)
 
-            def config_file_path = params.config_file ?: "${projectDir}/src/nhp_mri_prep/config/defaults.yaml"
+            // Prefer the effective config (merged CLI + YAML + defaults) so the report
+            // reflects actual run params — e.g. a CLI --output_space custom template path.
+            // Fall back to the raw config/defaults if the effective config is absent.
+            def effective_cfg = "${params.output_dir}/nextflow_reports/config.yaml"
+            def config_file_path = new File(effective_cfg).exists() ? effective_cfg : (params.config_file ?: "${projectDir}/src/nhp_mri_prep/config/defaults.yaml")
             def python = System.getenv('PYTHON') ?: 'python3'
             def gen_script = "${projectDir}/src/nhp_mri_prep/nextflow_scripts/generate_reports.py"
             def cmd = [

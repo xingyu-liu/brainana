@@ -8,8 +8,9 @@ process ANAT_SYNTHESIS {
     
     publishDir "${params.output_dir}/sub-${subject_id}${(session_id && session_id != '') ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.nii.gz'
-    
+        pattern: '*.{nii.gz,json}',
+        saveAs: { filename -> filename == 'metadata.json' ? null : filename }
+
     input:
     tuple val(subject_id), val(session_id), path(anat_files)
     path config_file
@@ -30,6 +31,7 @@ from nhp_mri_prep.utils.bids import create_synthesized_bids_filename
 from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, normalize_session_id, save_metadata, create_output_link
 )
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
 
 # Load config
 config = load_config('${config_file}')
@@ -64,6 +66,14 @@ bids_output_filename, bids_name_for_downstream = create_synthesized_bids_filenam
 
 create_output_link(result.output_file, bids_output_filename)
 
+# JSON sidecar (synthesized anatomical, native scanner space -> no template block)
+write_derivative_sidecar(
+    bids_output_filename,
+    skull_stripped=False,
+    sources=[str(f) for f in anat_files],
+    extra={"Synthesized": synthesized},
+)
+
 # Save metadata
 save_metadata(result.metadata)
 
@@ -95,7 +105,7 @@ process ANAT_REORIENT {
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.steps.anatomical import anat_reorient
 from nhp_mri_prep.steps.types import StepInput
-from nhp_mri_prep.utils.templates import resolve_template
+from nhp_mri_prep.utils.templates import resolve_template, space_label_for
 from nhp_mri_prep.utils.bids import create_bids_output_filename
 from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, save_metadata, create_output_link
@@ -157,10 +167,12 @@ process ANAT_CONFORM {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.{mat,nii.gz}',
-        saveAs: { filename -> 
-            // Exclude template_resampled.nii.gz (QC reference) and desc-conform files (intermediate, not for publication)
-            if (filename == 'template_resampled.nii.gz' || filename.contains('desc-conform')) {
+        pattern: '*.{mat,nii.gz,json}',
+        saveAs: { filename ->
+            // Exclude template_resampled.nii.gz (QC reference), desc-conform files (intermediate,
+            // not for publication) and the generic per-step metadata.json (sidecars are published,
+            // metadata.json is not).
+            if (filename == 'template_resampled.nii.gz' || filename.contains('desc-conform') || filename == 'metadata.json') {
                 return null
             }
             return filename
@@ -173,7 +185,7 @@ process ANAT_CONFORM {
     output:
     tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(bids_name), emit: output
     // Transforms: [sub, ses, forward_transform, inverse_transform]
-    tuple val(subject_id), val(session_id), path("*from-scanner_to-*_mode-image_xfm*"), path("*from-*_to-scanner_mode-image_xfm*"), emit: transforms
+    tuple val(subject_id), val(session_id), path("*from-scanner_to-*_mode-image_xfm.{h5,mat,nii.gz}"), path("*from-*_to-scanner_mode-image_xfm.{h5,mat,nii.gz}"), emit: transforms
     // Reference: [sub, ses, reference]
     tuple val(subject_id), val(session_id), path("template_resampled.nii.gz"), emit: reference
     path "*.json", emit: metadata
@@ -183,11 +195,12 @@ process ANAT_CONFORM {
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.steps.anatomical import anat_conform
 from nhp_mri_prep.steps.types import StepInput
-from nhp_mri_prep.utils.templates import resolve_template
+from nhp_mri_prep.utils.templates import resolve_template, space_label_for
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, save_metadata, create_output_link
 )
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
 from pathlib import Path
 import shutil
 import os
@@ -242,11 +255,14 @@ if "forward_transform" in result.additional_files:
     # Forward transform: from-scanner_to-{modality}
     bids_transform_name = f"{bids_prefix}_from-scanner_to-{modality}_mode-image_xfm.mat"
     shutil.copy2(result.additional_files["forward_transform"], bids_transform_name)
+    # Sidecar (scanner<->native transform; no template block)
+    write_derivative_sidecar(bids_transform_name, engine=result.metadata.get('engine'), sources=[str(Path('${input_file}'))])
 
 if "inverse_transform" in result.additional_files:
     # Inverse transform: from-{modality}_to-scanner
     bids_transform_name = f"{bids_prefix}_from-{modality}_to-scanner_mode-image_xfm.mat"
     shutil.copy2(result.additional_files["inverse_transform"], bids_transform_name)
+    write_derivative_sidecar(bids_transform_name, engine=result.metadata.get('engine'), sources=[str(Path('${input_file}'))])
 
 # Create symlink to reference file for QC (file is in work/ subdirectory, needs to be at root for Nextflow output)
 # Use create_output_link() for consistency and proper symlink resolution
@@ -406,6 +422,7 @@ from nhp_mri_prep.utils.bids import create_bids_output_filename
 from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, save_metadata, create_output_link
 )
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
 from pathlib import Path
 import shutil
 import os
@@ -465,6 +482,8 @@ atlas_name = result.metadata.get('atlas_name')
 if "brain_mask" in result.additional_files:
     bids_additional_name = f"{bids_prefix_wo_modality}_space-T1w_desc-brain_mask.nii.gz"
     create_output_link(result.additional_files["brain_mask"], bids_additional_name)
+    # Sidecar (brain mask, native T1w space -> no template block)
+    write_derivative_sidecar(bids_additional_name, roi_type="Brain", sources=[str(Path('${input_file}'))])
 
 if "segmentation" in result.additional_files:
     if atlas_name:
@@ -472,10 +491,16 @@ if "segmentation" in result.additional_files:
     else:
         bids_additional_name = f"{bids_prefix_wo_modality}_space-T1w_desc-brain_segmentation.nii.gz"
     create_output_link(result.additional_files["segmentation"], bids_additional_name)
+    write_derivative_sidecar(
+        bids_additional_name,
+        sources=[str(Path('${input_file}'))],
+        extra={"Atlas": atlas_name} if atlas_name else None,
+    )
 
 if "hemimask" in result.additional_files:
     bids_additional_name = f"{bids_prefix_wo_modality}_space-T1w_desc-brain_hemimask.nii.gz"
     create_output_link(result.additional_files["hemimask"], bids_additional_name)
+    write_derivative_sidecar(bids_additional_name, roi_type="ROI", sources=[str(Path('${input_file}'))])
 
 if "input_cropped" in result.additional_files:
     # Keep original name for input_cropped (or define BIDS name if needed)
@@ -645,8 +670,8 @@ process ANAT_REGISTRATION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.{nii.gz,h5,mat}',
-        saveAs: { filename -> filename.contains('ref_from_anat_reg.nii.gz') ? null : filename }
+        pattern: '*.{nii.gz,h5,mat,json}',
+        saveAs: { filename -> (filename.contains('ref_from_anat_reg.nii.gz') || filename == 'metadata.json') ? null : filename }
     
     input:
     tuple val(subject_id), val(session_id), path(input_file), val(bids_name), path(unskullstripped_file)
@@ -658,7 +683,7 @@ process ANAT_REGISTRATION {
     tuple val(subject_id), val(session_id), path("*space-*.nii.gz"), val(bids_name), emit: output
     // Transforms: [sub, ses, bids_name, forward_transform, inverse_transform]
     // Use patterns that match the actual naming: forward starts with from-T1w_to- or from-T2w_to-, inverse ends with _to-T1w or _to-T2w
-    tuple val(subject_id), val(session_id), val(bids_name), path("*from-T1w_to-*_mode-image_xfm*"), path("*from-*_to-T1w_mode-image_xfm*"), emit: transforms
+    tuple val(subject_id), val(session_id), val(bids_name), path("*from-T1w_to-*_mode-image_xfm.{h5,mat,nii.gz}"), path("*from-*_to-T1w_mode-image_xfm.{h5,mat,nii.gz}"), emit: transforms
     // Reference: [sub, ses, reference_file]
     tuple val(subject_id), val(session_id), path("*ref_from_anat_reg.nii.gz"), emit: reference
     path "*.json", emit: metadata
@@ -688,11 +713,12 @@ PYTHON_OUTPUT_SPACE
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.steps.anatomical import anat_registration
 from nhp_mri_prep.steps.types import StepInput
-from nhp_mri_prep.utils.templates import resolve_template
+from nhp_mri_prep.utils.templates import resolve_template, space_label_for
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, save_metadata, create_output_link
 )
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
 from pathlib import Path
 import shutil
 import os
@@ -708,7 +734,7 @@ modality = detect_modality(bids_name)
 
 # Get effective_output_space from effective config file
 effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
-template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
+template_name = space_label_for(effective_output_space)
 
 # Resolve template
 template_file = Path(resolve_template(effective_output_space))
@@ -772,6 +798,16 @@ bids_output_filename = create_bids_output_filename(
 # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
 create_output_link(result.output_file, bids_output_filename)
 
+# Sidecar for the registered image (template space -> TemplateSource auto-added from filename)
+_reg_source = str(unskullstripped_path if use_unskullstripped else input_path)
+write_derivative_sidecar(
+    bids_output_filename,
+    output_space=effective_output_space,
+    resolved_template_path=str(template_file),
+    skull_stripped=(not use_unskullstripped),
+    sources=[_reg_source],
+)
+
 # Get filename stem for BIDS-compliant transform naming
 original_stem = get_filename_stem(bids_name)
 
@@ -786,10 +822,24 @@ if "forward_transform" in result.additional_files:
     ext = _xfm_ext(result.additional_files["forward_transform"])
     bids_transform_name = f"{bids_prefix_wo_modality}_from-{modality}_to-{template_name}_mode-image_xfm{ext}"
     create_output_link(result.additional_files["forward_transform"], bids_transform_name)
+    write_derivative_sidecar(
+        bids_transform_name,
+        output_space=effective_output_space,
+        resolved_template_path=str(template_file),
+        engine=result.metadata.get('engine'),
+        sources=[str(input_path), str(template_file)],
+    )
 if "inverse_transform" in result.additional_files:
     ext = _xfm_ext(result.additional_files["inverse_transform"])
     bids_transform_name = f"{bids_prefix_wo_modality}_from-{template_name}_to-{modality}_mode-image_xfm{ext}"
     create_output_link(result.additional_files["inverse_transform"], bids_transform_name)
+    write_derivative_sidecar(
+        bids_transform_name,
+        output_space=effective_output_space,
+        resolved_template_path=str(template_file),
+        engine=result.metadata.get('engine'),
+        sources=[str(input_path), str(template_file)],
+    )
 
 # Create ref_from_anat_reg.nii.gz for QC reference
 # This is the template file used as the reference for registration
@@ -819,7 +869,7 @@ process ANAT_BACKPROJECT_ATLASES_TO_T1W {
 
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat/atlas_space-T1w",
         mode: 'copy',
-        pattern: 'atlas/*.nii.gz',
+        pattern: 'atlas/*.{nii.gz,json}',
         saveAs: { f -> new File(f.toString()).name }
 
     input:
@@ -827,14 +877,16 @@ process ANAT_BACKPROJECT_ATLASES_TO_T1W {
     path config_file
 
     output:
-    // optional: true allows zero matches when no atlases exist for the template space
-    tuple val(subject_id), val(session_id), path("atlas/*.nii.gz", optional: true), val(bids_name), emit: output
+    // arity '0..*' allows zero matches (custom templates have no bundled atlases);
+    // unlike a tuple `path(..., optional: true)`, which still errors on zero files.
+    tuple val(subject_id), val(session_id), path("atlas/*.nii.gz", arity: '0..*'), val(bids_name), emit: output
 
     script:
     """
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.steps.anatomical import anat_backproject_atlases
 from nhp_mri_prep.utils.nextflow import load_config
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
 from pathlib import Path
 
 config = load_config('${config_file}')
@@ -846,7 +898,13 @@ result = anat_backproject_atlases(
     config=config,
     template_dir=None,
 )
-# Outputs written to ./atlas/ (task work dir)
+# Outputs written to ./atlas/ (task work dir); atlases are ROIs in native T1w space
+for _atlas in Path('atlas').glob('*.nii.gz'):
+    write_derivative_sidecar(
+        _atlas,
+        roi_type="ROI",
+        sources=[str(Path('${inverse_xfm}')), str(Path('${t1w_reference}'))],
+    )
 EOF
     """
 }
@@ -857,7 +915,7 @@ process ANAT_BACKPROJECT_ATLASES_TO_SCANNER {
 
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat/atlas_space-scanner",
         mode: 'copy',
-        pattern: 'atlas/*.nii.gz',
+        pattern: 'atlas/*.{nii.gz,json}',
         saveAs: { f -> new File(f.toString()).name }
 
     input:
@@ -865,13 +923,15 @@ process ANAT_BACKPROJECT_ATLASES_TO_SCANNER {
     path config_file
 
     output:
-    // optional: true allows zero matches when upstream T1w atlas backprojection has no atlases
-    tuple val(subject_id), val(session_id), path("atlas/*.nii.gz", optional: true), val(bids_name), emit: output
+    // arity '0..*' allows zero matches when upstream T1w atlas backprojection has no atlases
+    // (custom templates); a tuple `path(..., optional: true)` still errors on zero files.
+    tuple val(subject_id), val(session_id), path("atlas/*.nii.gz", arity: '0..*'), val(bids_name), emit: output
 
     script:
     """
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.steps.anatomical import anat_reproject_atlases_to_scanner
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
 from pathlib import Path
 
 atlas_files = sorted(Path('atlas_input').glob('*.nii.gz'))
@@ -881,7 +941,13 @@ result = anat_reproject_atlases_to_scanner(
     scanner_reference=Path('${scanner_reference}'),
     working_dir=Path('.'),
 )
-# Outputs written to ./atlas/ (task work dir)
+# Outputs written to ./atlas/ (task work dir); atlases are ROIs in native scanner space
+for _atlas in Path('atlas').glob('*.nii.gz'):
+    write_derivative_sidecar(
+        _atlas,
+        roi_type="ROI",
+        sources=[str(Path('${conform_inverse_xfm}')), str(Path('${scanner_reference}'))],
+    )
 EOF
     """
 }
@@ -892,8 +958,9 @@ process ANAT_T2W_TO_T1W_REGISTRATION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.{nii.gz,h5,mat}'
-    
+        pattern: '*.{nii.gz,h5,mat,json}',
+        saveAs: { filename -> filename == 'metadata.json' ? null : filename }
+
     input:
     tuple val(subject_id), val(session_id), path(t2w_file), val(bids_name)
     path(t1w_reference)
@@ -903,7 +970,7 @@ process ANAT_T2W_TO_T1W_REGISTRATION {
     tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_name), emit: output
     // Transforms: [sub, ses, forward_transform, inverse_transform]
     // Note: T1w is in scanner (pre-conformed) space at registration time
-    tuple val(subject_id), val(session_id), path("*from-T2wScanner_to-scanner_mode-image_xfm*"), path("*from-scanner_to-T2wScanner_mode-image_xfm*"), emit: transforms
+    tuple val(subject_id), val(session_id), path("*from-T2wScanner_to-scanner_mode-image_xfm.{h5,mat,nii.gz}"), path("*from-scanner_to-T2wScanner_mode-image_xfm.{h5,mat,nii.gz}"), emit: transforms
     path "*.json", emit: metadata
     
     script:
@@ -918,6 +985,7 @@ from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_st
 from nhp_mri_prep.utils.nextflow import (
     load_config, detect_modality, save_metadata, create_output_link
 )
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
 from pathlib import Path
 import shutil
 import os
@@ -965,6 +1033,12 @@ bids_output_filename = create_bids_output_filename(
 # Use symlink to avoid duplication - Nextflow publishDir will handle final copy
 create_output_link(result.output_file, bids_output_filename)
 
+# Sidecar (registered T2w in scanner space -> native, no template block)
+write_derivative_sidecar(
+    bids_output_filename,
+    sources=[str(Path('${t2w_file}')), str(Path('${t1w_reference}'))],
+)
+
 # Generate BIDS prefix (filename stem without modality)
 bids_prefix_wo_modality = original_stem.replace(f"_{modality}", "")
 
@@ -977,10 +1051,12 @@ if "forward_transform" in result.additional_files:
     ext = _xfm_ext(result.additional_files["forward_transform"])
     bids_transform_name = f"{bids_prefix_wo_modality}_from-T2wScanner_to-scanner_mode-image_xfm{ext}"
     create_output_link(result.additional_files["forward_transform"], bids_transform_name)
+    write_derivative_sidecar(bids_transform_name, engine=result.metadata.get('engine'), sources=[str(Path('${t2w_file}')), str(Path('${t1w_reference}'))])
 if "inverse_transform" in result.additional_files:
     ext = _xfm_ext(result.additional_files["inverse_transform"])
     bids_transform_name = f"{bids_prefix_wo_modality}_from-scanner_to-T2wScanner_mode-image_xfm{ext}"
     create_output_link(result.additional_files["inverse_transform"], bids_transform_name)
+    write_derivative_sidecar(bids_transform_name, engine=result.metadata.get('engine'), sources=[str(Path('${t2w_file}')), str(Path('${t1w_reference}'))])
 
 # Save metadata
 save_metadata(result.metadata)
@@ -1007,7 +1083,7 @@ process ANAT_CONFORM_PASSTHROUGH {
     output:
     tuple val(subject_id), val(session_id), path("*desc-conform*.nii.gz"), val(bids_name), emit: output
     // Transforms: [sub, ses, forward_transform, inverse_transform]
-    tuple val(subject_id), val(session_id), path("*from-scanner_to-*_mode-image_xfm*"), path("*from-*_to-scanner_mode-image_xfm*"), emit: transforms
+    tuple val(subject_id), val(session_id), path("*from-scanner_to-*_mode-image_xfm.{h5,mat,nii.gz}"), path("*from-*_to-scanner_mode-image_xfm.{h5,mat,nii.gz}"), emit: transforms
     // Reference: [sub, ses, reference]
     tuple val(subject_id), val(session_id), path("reference.nii.gz"), emit: reference
     path "*.json", emit: metadata
@@ -1157,7 +1233,7 @@ process ANAT_REGISTRATION_PASSTHROUGH {
     // Forward: from-{modality}_to-{template} (e.g., from-T1w_to-NMT2Sym)
     // Inverse: from-{template}_to-{modality} (e.g., from-NMT2Sym_to-T1w)
     // Use patterns that match the actual naming: forward starts with from-T1w_to- or from-T2w_to-, inverse ends with _to-T1w or _to-T2w
-    tuple val(subject_id), val(session_id), val(bids_name), path("*from-T1w_to-*_mode-image_xfm*"), path("*from-*_to-T1w_mode-image_xfm*"), emit: transforms
+    tuple val(subject_id), val(session_id), val(bids_name), path("*from-T1w_to-*_mode-image_xfm.{h5,mat,nii.gz}"), path("*from-*_to-T1w_mode-image_xfm.{h5,mat,nii.gz}"), emit: transforms
     // Reference: [sub, ses, reference_file]
     tuple val(subject_id), val(session_id), path("*ref_from_anat_reg.nii.gz"), emit: reference
     path "*.json", emit: metadata
@@ -1176,7 +1252,7 @@ PYTHON_OUTPUT_SPACE
     
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
-from nhp_mri_prep.utils.templates import resolve_template
+from nhp_mri_prep.utils.templates import resolve_template, space_label_for
 from nhp_mri_prep.utils.nextflow import detect_modality, save_metadata, create_output_link, load_config
 from pathlib import Path
 import os
@@ -1193,7 +1269,7 @@ original_stem = get_filename_stem(bids_name)
 # Get effective_output_space from effective config file
 config = load_config('${config_file}')
 effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
-template_name = effective_output_space.split(':')[0] if effective_output_space else 'NMT2Sym'
+template_name = space_label_for(effective_output_space)
 
 # Pass through input file (create symlink with space entity)
 # Use create_output_link() for consistency and proper symlink resolution
@@ -1289,14 +1365,14 @@ process ANAT_APPLY_CONFORM {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*desc-preproc*.nii.gz'
-    
+        pattern: '*desc-preproc*.{nii.gz,json}'
+
     input:
     // Input: [sub, ses, t2w_file, t2w_bids_name, conform_transform, conformed_reference, anat_ses]
     // Stage conformed_reference as reg_reference.nii.gz to avoid output pattern collision
     tuple val(subject_id), val(session_id), path(t2w_file), val(bids_name), path(conform_transform), path(conformed_reference, stageAs: 'reg_reference.nii.gz'), val(anatomical_session)
     path config_file
-    
+
     output:
     // Output: [sub, ses, conformed_t2w, t2w_bids_name, anat_ses]
     tuple val(subject_id), val(session_id), path("*desc-conform_T2w.nii.gz"), val(bids_name), val(anatomical_session), emit: output
@@ -1304,13 +1380,14 @@ process ANAT_APPLY_CONFORM {
     // T2w is in preprocessed T1w space (after applying conform transform)
     tuple val(subject_id), val(session_id), path("*space-T1w_desc-preproc_T2w.nii.gz"), val(bids_name), val(anatomical_session), emit: preproc_output
     path "*.json", emit: metadata
-    
+
     script:
     """
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.operations.registration import flirt_apply_transforms
 from nhp_mri_prep.utils.bids import create_bids_output_filename
 from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, load_config
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
 from pathlib import Path
 
 # Load config
@@ -1360,6 +1437,12 @@ if not t2w_source.exists():
 
 create_output_link(t2w_source, bids_preproc_filename)
 
+# Sidecar for preproc T2w (native space-T1w -> no template block)
+write_derivative_sidecar(
+    bids_preproc_filename,
+    sources=[str(Path('${t2w_file}')), str(Path('${conform_transform}'))],
+)
+
 # Verify the file exists and is accessible (Nextflow needs to see it)
 preproc_path = Path(bids_preproc_filename)
 if not preproc_path.exists():
@@ -1394,9 +1477,9 @@ process ANAT_APPLY_TRANSFORMATION {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.{nii.gz,h5}',
-        saveAs: { filename -> filename.contains('target_final.nii.gz') ? null : filename }
-    
+        pattern: '*.{nii.gz,h5,json}',
+        saveAs: { filename -> (filename.contains('target_final.nii.gz') || filename == 'metadata.json') ? null : filename }
+
     input:
     // Input: [sub, ses, masked_t2w, t2w_bids_name, registration_transform, registration_reference]
     tuple val(subject_id), val(session_id), path(masked_t2w), val(bids_name), path(registration_transform), path(registration_reference)
@@ -1416,6 +1499,8 @@ process ANAT_APPLY_TRANSFORMATION {
 from nhp_mri_prep.operations.registration import ants_apply_transforms
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem
 from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, load_config
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
+from nhp_mri_prep.utils.templates import resolve_template
 from pathlib import Path
 import re
 import shutil
@@ -1465,6 +1550,19 @@ bids_output_filename = create_bids_output_filename(
 # Create symlink
 create_output_link(Path(t2w_result["imagef_registered"]), bids_output_filename)
 
+# Sidecar (T2w in template space -> TemplateSource from config output_space)
+_apply_output_space = config.get('template', {}).get('output_space')
+try:
+    _apply_template_path = str(resolve_template(_apply_output_space)) if _apply_output_space else None
+except Exception:
+    _apply_template_path = None
+write_derivative_sidecar(
+    bids_output_filename,
+    output_space=_apply_output_space,
+    resolved_template_path=_apply_template_path,
+    sources=[str(Path('${masked_t2w}')), str(Path('${registration_transform}')), str(Path('${registration_reference}'))],
+)
+
 # Create reference file for QC (copy of registration_reference)
 ref_from_reg_path = Path(f"{get_filename_stem(bids_output_filename)}_target_final.nii.gz")
 shutil.copy2(Path('${registration_reference}'), ref_from_reg_path)
@@ -1487,24 +1585,26 @@ process ANAT_APPLY_TRANSFORM_MASK {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*.nii.gz'
-    
+        pattern: '*desc-brain_mask.{nii.gz,json}'
+
     input:
     // Input: [sub, ses, mask_file, registration_transform, registration_reference]
     tuple val(subject_id), val(session_id), path(mask_file), path(registration_transform), path(registration_reference)
     path config_file
-    
+
     output:
     // Output: [sub, ses, transformed_mask]
     tuple val(subject_id), val(session_id), path("*space-*desc-brain_mask.nii.gz"), emit: output
     path "*.json", emit: metadata
-    
+
     script:
     """
     \${PYTHON:-python3} <<EOF
 from nhp_mri_prep.operations.registration import ants_apply_transforms
 from nhp_mri_prep.utils.bids import get_filename_stem, replace_bids_space
 from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, load_config
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
+from nhp_mri_prep.utils.templates import resolve_template
 from pathlib import Path
 import re
 
@@ -1550,6 +1650,20 @@ bids_output_filename = f"{replace_bids_space(mask_stem, template_name)}.nii.gz"
 # Create symlink
 create_output_link(Path(mask_result["imagef_registered"]), bids_output_filename)
 
+# Sidecar (brain mask in template space -> TemplateSource from config output_space)
+_mask_output_space = config.get('template', {}).get('output_space')
+try:
+    _mask_template_path = str(resolve_template(_mask_output_space)) if _mask_output_space else None
+except Exception:
+    _mask_template_path = None
+write_derivative_sidecar(
+    bids_output_filename,
+    output_space=_mask_output_space,
+    resolved_template_path=_mask_template_path,
+    roi_type="Brain",
+    sources=[str(mask_file), str(transform_path), str(Path('${registration_reference}'))],
+)
+
 # Save metadata
 save_metadata({
     "step": "apply_mask_transform",
@@ -1568,24 +1682,24 @@ process ANAT_PUBLISH_PHASE1 {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*desc-preproc*.nii.gz',
-        saveAs: { filename -> 
-            // Only publish files matching desc-preproc pattern (exclude other files)
+        pattern: '*desc-preproc*.{nii.gz,json}',
+        saveAs: { filename ->
+            // Only publish files matching desc-preproc pattern (excludes the generic metadata.json)
             if (filename.contains('desc-preproc')) {
                 return filename
             }
             return null
         }
-    
+
     input:
     tuple val(subject_id), val(session_id), path(anat_file), path(brain_file), val(bids_name)
     path config_file
-    
+
     output:
     tuple val(subject_id), val(session_id), path("*desc-preproc_T*w.nii.gz"), val(bids_name), emit: output
-    tuple val(subject_id), val(session_id), path("*desc-preproc_*_brain.nii.gz", optional: true), emit: brain
+    tuple val(subject_id), val(session_id), path("*desc-preproc_*_brain.nii.gz", arity: '0..*'), emit: brain
     path "*.json", emit: metadata
-    
+
     script:
     """
     \${PYTHON:-python3} <<EOF
@@ -1593,6 +1707,7 @@ from pathlib import Path
 import re
 import sys
 from nhp_mri_prep.utils.nextflow import save_metadata, create_output_link
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
 
 # Get input files
 anat_file = Path('${anat_file}')
@@ -1633,6 +1748,8 @@ if '.dummy' not in str(anat_file):
     # Verify the symlink was created and is accessible
     if not Path(anat_preproc_filename).exists():
         raise FileNotFoundError(f"Failed to create symlink: {anat_preproc_filename}")
+    # Sidecar (preproc full head, native T1w space, not skull-stripped)
+    write_derivative_sidecar(anat_preproc_filename, skull_stripped=False, sources=[str(anat_file)])
     created_files.append(anat_preproc_filename)
     print(f"Created symlink: {anat_preproc_filename} -> {anat_file}", file=sys.stderr)
     print(f"Symlink exists: {Path(anat_preproc_filename).exists()}, is_symlink: {Path(anat_preproc_filename).is_symlink()}", file=sys.stderr)
@@ -1645,6 +1762,8 @@ if '.dummy' not in str(brain_file):
     # Verify the symlink was created and is accessible
     if not Path(brain_preproc_filename).exists():
         raise FileNotFoundError(f"Failed to create symlink: {brain_preproc_filename}")
+    # Sidecar (preproc brain, native T1w space, skull-stripped)
+    write_derivative_sidecar(brain_preproc_filename, skull_stripped=True, sources=[str(brain_file)])
     created_files.append(brain_preproc_filename)
     print(f"Created symlink: {brain_preproc_filename} -> {brain_file}", file=sys.stderr)
     print(f"Symlink exists: {Path(brain_preproc_filename).exists()}, is_symlink: {Path(brain_preproc_filename).is_symlink()}", file=sys.stderr)
@@ -1673,22 +1792,23 @@ process ANAT_T1WT2W_COMBINED {
     
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
         mode: 'copy',
-        pattern: '*T1wT2wCombined*.nii.gz'
-    
+        pattern: '*T1wT2wCombined*.{nii.gz,json}'
+
     input:
     tuple val(subject_id), val(session_id), path(t1w_file), val(t1w_bids_name), path(t2w_file), path(segmentation_file), path(segmentation_lut)
     path config_file
-    
+
     output:
     tuple val(subject_id), val(session_id), path("*T1wT2wCombined.nii.gz"), val(t1w_bids_name), emit: output
     path "*.json", emit: metadata
-    
+
     script:
     """
     \${PYTHON:-python3} <<EOF
 from pathlib import Path
 from nhp_mri_prep.steps.anatomical import anat_t1wt2wcombined
 from nhp_mri_prep.utils.nextflow import save_metadata, create_output_link
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
 # Get input files
 t1w_file = Path('${t1w_file}')
 t2w_file = Path('${t2w_file}')
@@ -1721,6 +1841,13 @@ result = anat_t1wt2wcombined(
 # should match output_filename. Verify and create link if needed for Nextflow pattern matching
 if result.output_file.name != output_filename:
     create_output_link(result.output_file, output_filename)
+
+# Sidecar (combined T1w/T2w, native space-T1w -> no template block); anchor on the
+# published name since create_output_link above is conditional.
+write_derivative_sidecar(
+    output_filename,
+    sources=[str(t1w_file), str(t2w_file), str(segmentation_file), str(segmentation_lut_file)],
+)
 
 # Save metadata
 save_metadata(result.metadata)

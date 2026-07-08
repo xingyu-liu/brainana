@@ -28,7 +28,7 @@ from ..operations.sitk_rigid_registration import (
 )
 import SimpleITK as sitk
 from ..utils.bids import get_bids_prefix
-from ..utils.templates import discover_atlases_in_space
+from ..utils.templates import discover_atlases_in_space, space_label_for
 from ..utils.mri import get_image_shape, shape_to_ants_input_type
 from fastsurfer_surfrecon.config import AtlasConfig, ReconSurfConfig
 from fastsurfer_surfrecon.pipeline import ReconSurfPipeline
@@ -226,6 +226,8 @@ def anat_conform(input: StepInput, template_file: Path) -> StepOutput:
             "modality": "anat",
             "template_file": str(template_file),
             "rigid_method": rigid_method,
+            # Real backend that produced the transform (for the xfm sidecar GeneratedBy).
+            "engine": result.get("engine", rigid_method),
         },
         additional_files=additional_files,
     )
@@ -403,6 +405,8 @@ def anat_registration(
             "target": template_name,
             "xfm_type": xfm_type,
             "fireants_requested": enable_fireants,
+            # Real backend used (fireants/ants/antspyx) after any runtime fallback.
+            "engine": result.get("engine"),
         },
         additional_files=additional_files,
     )
@@ -440,8 +444,10 @@ def anat_backproject_atlases(
     effective_output_space = config.get("template", {}).get(
         "output_space", "NMT2Sym:res-05"
     )
+    # A custom template file path resolves to the literal 'template' space, which has no
+    # bundled atlases (discover_atlases_in_space returns [] below and the step no-ops).
+    space_name = space_label_for(effective_output_space)
     parts = effective_output_space.split(":")
-    space_name = parts[0] if parts else "NMT2Sym"
     template_res = parts[1] if len(parts) > 1 else None
 
     atlases = discover_atlases_in_space(
@@ -647,6 +653,8 @@ def anat_t2w_to_t1w_registration(input: StepInput, t1w_reference: Path) -> StepO
             "modality": "T2w",
             "target": "T1w",
             "xfm_type": "rigid",
+            # Real backend used (ants/antspyx; rigid never uses FireANTs).
+            "engine": registration_result.get("engine"),
         },
         additional_files=additional_files,
     )

@@ -5,6 +5,7 @@ This module provides functionality to manage and resolve template specifications
 from a predefined pool of templates.
 """
 
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
@@ -12,6 +13,51 @@ from typing import List, Dict, Optional, Tuple
 from .logger import get_logger
 
 logger = get_logger(__name__)
+
+
+# Accepted NIfTI extensions for a custom template file.
+CUSTOM_TEMPLATE_EXTENSIONS = (".nii", ".nii.gz")
+
+
+def has_nifti_extension(value: str) -> bool:
+    """True if ``value`` ends in an accepted NIfTI extension (``.nii`` / ``.nii.gz``)."""
+    return str(value).strip().endswith(CUSTOM_TEMPLATE_EXTENSIONS)
+
+
+def is_custom_template_path(value: Optional[str]) -> bool:
+    """Return True when ``value`` is *intended* as a custom template file path.
+
+    A registered spec looks like ``NMT2Sym`` or ``NMT2Sym:res-05:brain`` — it never
+    contains a path separator and never ends in a NIfTI extension. A custom template is
+    a filesystem path (contains a separator) or a bare NIfTI filename.
+
+    This is a string-shape check only (no filesystem access). It deliberately returns
+    True for a path with a *wrong* extension (e.g. ``/data/tpl.mgz``) so that resolution
+    rejects it loudly rather than falling through to registered-spec lookup — see
+    ``TemplateManager.resolve_template``.
+    """
+    if not value:
+        return False
+    text = str(value).strip()
+    if not text:
+        return False
+    if os.sep in text or (os.altsep and os.altsep in text):
+        return True
+    return has_nifti_extension(text)
+
+
+def space_label_for(output_space: Optional[str]) -> str:
+    """Resolve the BIDS ``space-<label>`` string for a given ``output_space`` value.
+
+    - Custom template file path -> the literal label ``"template"``.
+    - Empty / None -> ``"NMT2Sym"`` (preserves the pipeline's historic fallback).
+    - Registered spec (e.g. ``NMT2Sym:res-05:brain``) -> the first ``:``-token.
+    """
+    if is_custom_template_path(output_space):
+        return "template"
+    if not output_space:
+        return "NMT2Sym"
+    return str(output_space).split(":")[0]
 
 
 def _parse_resolution(res_str: Optional[str]) -> float:
@@ -233,6 +279,22 @@ class TemplateManager:
         # Use default if none provided
         if template_spec is None:
             template_spec = f"{self.defaults['template']}:{self.defaults['res']}:{self.defaults['desc']}"
+
+        # Custom template: a filesystem path to a NIfTI file. Bypass the spec-lookup
+        # machinery entirely and return the resolved absolute path (outputs land in the
+        # 'template' space; see space_label_for). Fail loudly (never fall back to spec
+        # lookup) when the extension is wrong or the file is missing.
+        if is_custom_template_path(template_spec):
+            if not has_nifti_extension(template_spec):
+                raise ValueError(
+                    f"Custom template must be a .nii or .nii.gz file, got: '{template_spec}'"
+                )
+            custom_path = Path(template_spec)
+            if not custom_path.is_file():
+                raise ValueError(f"Custom template file not found: '{template_spec}'")
+            resolved = str(custom_path.resolve())
+            logger.debug(f"System: using custom template file - {resolved}")
+            return resolved
 
         logger.debug(f"System: resolving template spec - {template_spec}")
 
