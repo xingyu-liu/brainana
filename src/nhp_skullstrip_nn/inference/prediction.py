@@ -3,8 +3,12 @@ Prediction module for nhp_skullstrip_nn.
 """
 
 import os
+import shutil
+import tempfile
 import torch
 import numpy as np
+import nibabel as nib
+from nibabel.processing import resample_to_output, resample_from_to
 from typing import Optional, Dict, Union, Any
 import logging
 from pathlib import Path
@@ -27,6 +31,41 @@ from ..train.metrics import create_metrics_tracker
 
 
 # %%
+def _is_anisotropic(zooms, decimals: int = 2) -> bool:
+    """Return True if the voxel spacings are not equal at ``decimals`` precision.
+
+    The 2.5D U-Net rescales a volume by a single scalar ``256/max(voxel_count)``
+    applied to all three axes (see ``data/datasets.py`` ``BlockDataset``), which
+    implicitly assumes isotropic voxels. Anisotropic input therefore reaches the
+    network with a distorted aspect ratio and produces a broken mask.
+
+    We are deliberately lenient: spacings that agree once rounded to ``decimals``
+    (default 2, matching conform's ``np.round(voxel, 2)`` convention) are treated as
+    isotropic and skip resampling, so near-isotropic acquisitions (e.g. 0.499 vs
+    0.501) keep the exact current behavior with no needless reinterpolation.
+    """
+    z = np.round(np.asarray(zooms[:3], dtype=float), decimals)
+    if not np.all(np.isfinite(z)) or z.max() <= 0:
+        return False
+    return bool(z.max() - z.min() > 1e-9)
+
+
+def _resample_file_to_native(path: str, native_ref_img, order: int) -> None:
+    """Resample a NIfTI written on the isotropic inference grid back onto the
+    native grid (shape + affine of ``native_ref_img``) and overwrite it in place.
+
+    ``resample_from_to`` returns an image that already carries the native affine and
+    preserves the source dtype (the float32 the mask/prob maps were written with), so
+    it can be saved directly.
+    """
+    img = nib.load(path)
+    resampled = resample_from_to(
+        img, (native_ref_img.shape[:3], native_ref_img.affine), order=order
+    )
+    nib.save(resampled, path)
+
+
+# %%
 def predict_volumes(
     model: torch.nn.Module,
     rescale_dim: int = 256,
@@ -42,6 +81,7 @@ def predict_volumes(
     erosion_dilation_iterations: Optional[int] = 0,
     plot_QC_snaps: Optional[bool] = True,
     verbose: Optional[bool] = False,
+    resample_anisotropic_mm: Optional[float] = 0.5,
 ):
     """
     Predict brain labels for input volumes using a trained model.
@@ -114,6 +154,40 @@ def predict_volumes(
     if compute_metrics and input_label is not None:
         # Create metrics tracker with per-slice computation for 3D volumes
         create_metrics_tracker(compute_per_slice=True)
+
+    # ------------------------------------------------------------------
+    # Anisotropic input guard: the network assumes isotropic voxels, so an
+    # anisotropic image is fed with a distorted aspect ratio and yields a broken
+    # mask. When the input is a NIfTI path with anisotropic spacing, resample it
+    # to isotropic (resample_anisotropic_mm, default 0.5 mm = training/res-05) for
+    # inference, then map the prediction back to the native grid before saving so
+    # the output contract (mask on the native grid) is unchanged. Isotropic or
+    # tensor inputs are left untouched -> exact previous behavior.
+    native_ref_img = None  # native geometry to restore predictions onto
+    iso_tmp_dir = None
+    if (
+        resample_anisotropic_mm
+        and resample_anisotropic_mm > 0
+        and isinstance(input_image, (str, Path))
+        # Only in pure-prediction mode: a paired label would stay on the native grid
+        # and mismatch the resampled image (validation/metrics callers pass a label).
+        and input_label is None
+    ):
+        native_ref_img = nib.load(str(input_image))
+        if _is_anisotropic(native_ref_img.header.get_zooms()):
+            iso_mm = float(resample_anisotropic_mm)
+            print(
+                f"Anisotropic voxels {tuple(np.round(native_ref_img.header.get_zooms()[:3], 3))} mm "
+                f"detected; resampling to {iso_mm} mm isotropic for inference."
+            )
+            iso_img = resample_to_output(native_ref_img, [iso_mm, iso_mm, iso_mm], order=3)
+            iso_tmp_dir = tempfile.mkdtemp(prefix="nhp_skullstrip_iso_")
+            iso_path = os.path.join(iso_tmp_dir, "input_isotropic.nii.gz")
+            nib.save(iso_img, iso_path)
+            input_image = iso_path
+        else:
+            # Isotropic at 2-decimal precision: no resampling, no back-mapping.
+            native_ref_img = None
 
     volume_dataset = VolumeDataset(
         input_image=input_image,
@@ -585,6 +659,27 @@ def predict_volumes(
                     f"QC snapshot saved to: {output_path.split('.nii')[0] + '_QC.png'}"
                 )
 
+    # Map saved predictions back to the native grid if we resampled the input to
+    # isotropic for inference above. This restores the output contract (mask/prob on
+    # the native input grid) so downstream consumers see no geometry change. The QC
+    # PNG is left on the isotropic grid (it overlays iso mask on iso input, which is
+    # internally consistent and diagnostic only).
+    if native_ref_img is not None:
+        try:
+            if save_label and output_path and os.path.exists(output_path):
+                # Brain mask: nearest-neighbor to keep labels crisp.
+                _resample_file_to_native(output_path, native_ref_img, order=0)
+            if save_prob_map and output_path:
+                base_path = output_path.split(".nii")[0]
+                prob_dir = os.path.dirname(base_path) or os.curdir
+                prob_prefix = os.path.basename(base_path)
+                for prob_f in Path(prob_dir).glob(prob_prefix + "_prob*.nii.gz"):
+                    # Probability maps: trilinear.
+                    _resample_file_to_native(str(prob_f), native_ref_img, order=1)
+        finally:
+            if iso_tmp_dir and os.path.isdir(iso_tmp_dir):
+                shutil.rmtree(iso_tmp_dir, ignore_errors=True)
+
     # Return metrics if computed
     if metrics_dict:
         return metrics_dict
@@ -686,6 +781,11 @@ def skullstripping(
             else 0,
             plot_QC_snaps=False,  # No QC plots for this use case
             verbose=False,
+            # Resample anisotropic input to isotropic for inference (mask returned on
+            # the native grid). Default 0.5 mm; set to None/0 in config to disable.
+            resample_anisotropic_mm=config.get("resample_anisotropic_mm", 0.5)
+            if config
+            else 0.5,
         )
 
         logger.info("Skullstripping completed successfully")
