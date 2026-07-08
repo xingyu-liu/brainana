@@ -20,7 +20,7 @@ from nhp_skullstrip_nn.model import ModelLoader
 
 # %%
 # anat
-input_f = "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_pet_noss/preprocessed/sub-NM745/ses-112days/func/sub-NM745_ses-112days_acq-FDG_desc-preproc_boldref.nii.gz"
+input_f = "/mnt/DataDrive3/swap/test_brainana/preproc/frosty/preprocessed_wd/work/6a/8a27d1712df2ff97ec2a68d8458003/sub-frostyT1_run-1_space-scanner_T1w.nii.gz"
 model_f = "/home/star/github/brainana/src/nhp_skullstrip_nn/pretrained_model/T1w_brainmask.pth"
 
 # # func

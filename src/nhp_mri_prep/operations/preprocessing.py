@@ -682,6 +682,8 @@ def conform_to_template(
             "imagef_conformed": str(conformed_f),
             "template_f": str(template_f_for_xfm),
             "forward_xfm": str(xfm_forward_f),
+            # Rigid backend that produced the transform: 'flirt' (FSL) or 'sitk' (SimpleITK).
+            "engine": rigid_method,
         }
 
         # Add inverse transform if available

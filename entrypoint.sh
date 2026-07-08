@@ -18,6 +18,11 @@
 # With custom config:
 #   docker run ... liuxingyu987/brainana:<version> /input /output --work-dir /output_wd --config /config.yaml ...
 #
+# With a custom template (mount the .nii/.nii.gz and pass the in-container path;
+# outputs are labelled space-template):
+#   docker run ... -v <path/to/template.nii.gz>:/template.nii.gz \
+#     liuxingyu987/brainana:<version> /input /output --work-dir /output_wd --output_space /template.nii.gz
+#
 # For interactive shell:
 #   docker run -it ... liuxingyu987/brainana:<version> bash
 #

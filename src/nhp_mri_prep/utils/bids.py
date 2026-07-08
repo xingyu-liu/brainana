@@ -129,6 +129,48 @@ def get_filename_stem(file_path: Union[str, Path]) -> str:
     return stem
 
 
+# Data-file extensions a derivative sidecar may pair with, longest-match first so that
+# compound extensions (e.g. ``.surf.gii``, ``.nii.gz``) are stripped whole.
+_SIDECAR_DATA_EXTENSIONS = [
+    ".nii.gz",
+    ".surf.gii",
+    ".shape.gii",
+    ".label.gii",
+    ".func.gii",
+    ".gii",
+    ".nii",
+    ".mat",
+    ".h5",
+    ".txt",
+    ".tsv",
+]
+
+
+def create_bids_sidecar_filename(image_filename: Union[str, Path]) -> str:
+    """Return the JSON sidecar basename paired with a derivative data file.
+
+    Follows the BIDS pairing rule used by fMRIPrep: the sidecar basename is identical to
+    the data file's basename with only the data extension replaced by ``.json`` (all BIDS
+    entities preserved). Only the basename is returned — callers write it next to the data
+    file.
+
+    Examples:
+        >>> create_bids_sidecar_filename('sub-01_space-NMT2Sym_desc-preproc_T1w.nii.gz')
+        'sub-01_space-NMT2Sym_desc-preproc_T1w.json'
+        >>> create_bids_sidecar_filename('sub-01_from-T1w_to-template_mode-image_xfm.txt')
+        'sub-01_from-T1w_to-template_mode-image_xfm.json'
+        >>> create_bids_sidecar_filename('sub-01_hemi-L_desc-cortex_mask.label.gii')
+        'sub-01_hemi-L_desc-cortex_mask.json'
+    """
+    name = Path(image_filename).name
+    for ext in _SIDECAR_DATA_EXTENSIONS:
+        if name.endswith(ext):
+            return name[: -len(ext)] + ".json"
+    # Unknown/extensionless: fall back to replacing the final suffix, else append.
+    stem = Path(name).stem
+    return (stem if stem != name else name) + ".json"
+
+
 def parse_bids_entities(filename: str) -> Dict[str, str]:
     """
     Parse all BIDS entities from a filename.
