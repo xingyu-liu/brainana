@@ -54,6 +54,14 @@ and BOLD modalities.
 - **Fastsurfer** space is reached from T1w (conformed) space by
   resampling only — no transform file is produced.
 
+  When surface reconstruction is enabled, the T1w-space atlases are also
+  projected into Fastsurfer space and onto the cortical surface (nearest
+  neighbour throughout).  These outputs use the ``space-fsnative`` entity
+  (individual Fastsurfer/FreeSurfer surface space): resampled label volumes
+  ``atlas-<name>_space-fsnative_<prefix>.nii.gz`` and per-hemisphere surface
+  maps ``atlas-<name>_space-fsnative_hemi-<L|R>_<prefix>.func.gii``, published
+  under ``anat/atlas_space-fsnative/``.
+
 
 Transform file reference
 ------------------------

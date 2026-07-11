@@ -24,7 +24,7 @@ Quick start
           -v <path/to/work_dir>:/output_wd \
           -v <path/to/license.txt>:/fs_license.txt \
           liuxingyu987/brainana:<version> /input /output \
-          --work-dir /output_wd --freesurfer-license /fs_license.txt
+          --work_dir /output_wd --freesurfer_license /fs_license.txt
 
 .. note::
 
@@ -131,7 +131,7 @@ Example commands
        -v <path/to/work_dir>:/output_wd \
        -v <path/to/license.txt>:/fs_license.txt \
        liuxingyu987/brainana:<version> /input /output \
-       --work-dir /output_wd --freesurfer-license /fs_license.txt
+       --work_dir /output_wd --freesurfer_license /fs_license.txt
 
 **With default config (surface reconstruction disabled)**
 
@@ -142,7 +142,7 @@ Example commands
        -v <path/to/output_dir>:/output \
        -v <path/to/work_dir>:/output_wd \
        liuxingyu987/brainana:<version> /input /output \
-       --work-dir /output_wd
+       --work_dir /output_wd
 
 **With a custom config**
 
@@ -155,7 +155,7 @@ Example commands
        -v <path/to/license.txt>:/fs_license.txt \
        -v <path/to/config.yaml>:/config.yaml \
        liuxingyu987/brainana:<version> /input /output \
-       --work-dir /output_wd --freesurfer-license /fs_license.txt \
+       --work_dir /output_wd --freesurfer_license /fs_license.txt \
        --config /config.yaml
 
 
@@ -164,16 +164,23 @@ Example commands
 Command-line arguments
 ~~~~~~~~~~~~~~~~~~~~~~
 
-The following options can be passed after the image name (or after ``bids_dir`` and ``output_dir``). 
+The following options can be passed after the image name (or after ``bids_dir`` and ``output_dir``).
+
+.. note::
+
+   Flag connectors are interchangeable: the canonical form uses underscores
+   (e.g. ``--work_dir``, ``--no_resume``, ``--freesurfer_license``), and the
+   hyphenated spellings (``--work-dir``, ``--no-resume``, ``--freesurfer-license``)
+   remain accepted as aliases.
 
 .. code-block:: text
 
    docker run ... liuxingyu987/brainana:<version> [bids_dir] [output_dir] \
-       [--freesurfer-license PATH] [--config PATH | --config_file PATH] \
-       [-w PATH | --work-dir PATH] [--no-resume] \
+       [--freesurfer_license PATH] [--config PATH | --config_file PATH] \
+       [-w PATH | --work_dir PATH] [--no_resume] \
        [--subjects SUBJECT [SUBJECT ...]] [--sessions SESSION [SESSION ...]] \
        [--tasks TASK [TASK ...]] [--runs RUN [RUN ...]] \
-       [--anat_only] [--output_space SPACE] [-profile PROFILE]
+       [--anat_only] [--output_space SPACE] [-profile PROFILE] [-h | --help]
 
 **Positional arguments**
 
@@ -185,7 +192,7 @@ The following options can be passed after the image name (or after ``bids_dir`` 
 
 **Entrypoint options**
 
-``--freesurfer-license PATH``
+``--freesurfer_license PATH``
    Path to the FreeSurfer license file *inside the container* (required when surface
    reconstruction is enabled). Use the same path as your volume mount,
    e.g. ``/fs_license.txt``.
@@ -198,15 +205,18 @@ The following options can be passed after the image name (or after ``bids_dir`` 
 
    Default: (built-in)
 
-``-w PATH``, ``--work-dir PATH``
+``-w PATH``, ``--work_dir PATH``
    Nextflow work directory (path inside the container).
 
    Default: ``/output_wd``. Mount a host directory here to persist the work
    directory across runs and enable resume, e.g. ``-v <path/to/work_dir>:/output_wd``.
    Without this mount the work directory is lost when the container exits.
 
-``--no-resume``
+``--no_resume``
    Disable Nextflow resume; restart the pipeline from scratch.
+
+``-h``, ``--help``
+   Print the full argument listing and exit (no processing).
 
 **Options for filtering BIDS queries**
 

@@ -16,7 +16,7 @@ About
 
 |
 
-**Brainana** is a unified, end-to-end preprocessing framework for **macaque (non-human primate) MRI**. It provides anatomical and functional (fMRI/BOLD) preprocessing, image registration, tissue segmentation, and cortical surface reconstruction from BIDS data — reproducible with Docker and Nextflow, built on FSL, ANTs, AFNI, FreeSurfer, and FastSurfer.
+**Brainana** is a unified, end-to-end preprocessing framework for **macaque (non-human primate) MRI**. It provides anatomical and functional preprocessing, registration, tissue segmentation, and cortical surface reconstruction from BIDS data — reproducible with Docker and Nextflow, built on FSL, ANTs, AFNI, FreeSurfer, and FastSurfer.
 
 .. image:: _static/pipeline_details/pipeline_overview.png
    :alt: Brainana pipeline overview schematic

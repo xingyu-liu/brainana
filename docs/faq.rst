@@ -47,7 +47,7 @@ Can I run without a FreeSurfer license?
 
 Anatomical and functional preprocessing will still run, but surface reconstruction will be skipped. The container will warn if the license is missing.
 
-Get a free license at https://surfer.nmr.mgh.harvard.edu/registration.html, then mount it with ``-v <path/to/license.txt>:/fs_license.txt`` and pass ``--freesurfer-license /fs_license.txt``.
+Get a free license at https://surfer.nmr.mgh.harvard.edu/registration.html, then mount it with ``-v <path/to/license.txt>:/fs_license.txt`` and pass ``--freesurfer_license /fs_license.txt``.
 
 .. rst-class:: faq-question
 
@@ -79,7 +79,7 @@ Can I use a network drive for input or output?
 I don't want Brainana to run as root. I want it to run as my own user. What should I do?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Before ``docker run``, ensure the **output** directory on your host already exists and is owned by your user. If you pass ``--work-dir`` (with a matching ``-v`` mount for the work directory), do the same for that host path. Mount those directories into the container with ``-v``.
+Before ``docker run``, ensure the **output** directory on your host already exists and is owned by your user. If you pass ``--work_dir`` (with a matching ``-v`` mount for the work directory), do the same for that host path. Mount those directories into the container with ``-v``.
 
 That way Docker does not create those directories as root inside the container. 
 
@@ -116,7 +116,7 @@ Full example:
        -v C:/Users/me/output:/output `
        -v C:/Users/me/work:/output_wd `
        liuxingyu987/brainana:<version> /input /output `
-       --work-dir /output_wd
+       --work_dir /output_wd
 
 .. note::
 
@@ -133,7 +133,7 @@ Use the ``/mnt/c/`` prefix to reference Windows drives:
        -v /mnt/c/Users/me/output:/output \
        -v /mnt/c/Users/me/work:/output_wd \
        liuxingyu987/brainana:<version> /input /output \
-       --work-dir /output_wd
+       --work_dir /output_wd
 
 ----
 

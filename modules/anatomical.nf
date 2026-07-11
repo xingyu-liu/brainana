@@ -869,7 +869,7 @@ process ANAT_BACKPROJECT_ATLASES_TO_T1W {
 
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat/atlas_space-T1w",
         mode: 'copy',
-        pattern: 'atlas/*.{nii.gz,json}',
+        pattern: 'atlas/*.{nii.gz,json,tsv,md,bib}',
         saveAs: { f -> new File(f.toString()).name }
 
     input:
@@ -880,6 +880,10 @@ process ANAT_BACKPROJECT_ATLASES_TO_T1W {
     // arity '0..*' allows zero matches (custom templates have no bundled atlases);
     // unlike a tuple `path(..., optional: true)`, which still errors on zero files.
     tuple val(subject_id), val(session_id), path("atlas/*.nii.gz", arity: '0..*'), val(bids_name), emit: output
+    // Associated sidecars (LUT/docs/refs + JSON provenance) must be DECLARED outputs to be
+    // published — publishDir only publishes declared outputs, not arbitrary work-dir files.
+    // Kept out of `emit: output` so they never flow into scanner/surface or the ARM6 filter.
+    path "atlas/*.{json,tsv,md,bib}", arity: '0..*', emit: sidecars
 
     script:
     """
@@ -915,7 +919,7 @@ process ANAT_BACKPROJECT_ATLASES_TO_SCANNER {
 
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat/atlas_space-scanner",
         mode: 'copy',
-        pattern: 'atlas/*.{nii.gz,json}',
+        pattern: 'atlas/*.{nii.gz,json,tsv,md,bib}',
         saveAs: { f -> new File(f.toString()).name }
 
     input:
@@ -926,6 +930,9 @@ process ANAT_BACKPROJECT_ATLASES_TO_SCANNER {
     // arity '0..*' allows zero matches when upstream T1w atlas backprojection has no atlases
     // (custom templates); a tuple `path(..., optional: true)` still errors on zero files.
     tuple val(subject_id), val(session_id), path("atlas/*.nii.gz", arity: '0..*'), val(bids_name), emit: output
+    // Sidecars are space-independent; carried into scanner space and DECLARED so publishDir
+    // publishes them (declared outputs only). Separate from `emit: output` on purpose.
+    path "atlas/*.{json,tsv,md,bib}", arity: '0..*', emit: sidecars
 
     script:
     """
@@ -948,6 +955,76 @@ for _atlas in Path('atlas').glob('*.nii.gz'):
         roi_type="ROI",
         sources=[str(Path('${conform_inverse_xfm}')), str(Path('${scanner_reference}'))],
     )
+EOF
+    """
+}
+
+process ANAT_PROJECT_ATLASES_TO_SURFACE {
+    label 'cpu'
+    tag "${subject_id}_${session_id}"
+
+    // Surface projection only runs when surf recon succeeded; a subject whose FastSurfer
+    // outputs are missing simply drops out (mirrors ANAT_SURFACE_RECONSTRUCTION).
+    errorStrategy 'ignore'
+
+    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat/atlas_space-fsnative",
+        mode: 'copy',
+        pattern: 'atlas/*.{nii.gz,func.gii,json,tsv,md,bib}',
+        saveAs: { f -> new File(f.toString()).name }
+
+    input:
+    // fs_subject_dir is the FastSurfer subject tree staged as a task input (not read from
+    // output_dir), so Nextflow guarantees it is present and complete before we run.
+    tuple val(subject_id), val(session_id), val(bids_name), path(t1w_atlas_files, stageAs: 'atlas_input/*'), path(fs_subject_dir)
+    path config_file
+
+    output:
+    // arity '0..*' allows zero matches (custom templates have no bundled atlases, or the
+    // subject had no surface projection); unlike a tuple `path(..., optional: true)`, which
+    // still errors on zero files and would drop the subject under errorStrategy 'ignore'.
+    tuple val(subject_id), val(session_id), path("atlas/*.{nii.gz,func.gii}", arity: '0..*'), val(bids_name), emit: output
+    // Sidecars + status/provenance JSON must be DECLARED to be published (publishDir only
+    // publishes declared outputs). Separate emit so they don't affect downstream consumers.
+    path "atlas/*.{json,tsv,md,bib}", arity: '0..*', emit: sidecars
+
+    script:
+    """
+    \${PYTHON:-python3} <<EOF
+import json
+from nhp_mri_prep.steps.anatomical import (
+    anat_project_atlases_to_surface,
+    _atlas_name_from_filename,
+)
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
+from pathlib import Path
+
+atlas_files = sorted(Path('atlas_input').glob('*.nii.gz'))
+
+# fs_subject_dir is staged into the work dir; the function skips cleanly if it is empty.
+result = anat_project_atlases_to_surface(
+    atlas_files=atlas_files,
+    fs_subject_dir=Path('${fs_subject_dir}'),
+    bids_name=Path('${bids_name}'),
+    working_dir=Path('.'),
+)
+
+# Provenance: map each output back to the T1w-space atlas its labels came from (staged
+# basename, portable), matched by the atlas- entity. The fsnative grid is a resample target,
+# not the label source, so it is not recorded as a source.
+atlas_input_by_name = {
+    _atlas_name_from_filename(p.name): p.name for p in atlas_files
+}
+# Outputs written to ./atlas/ (task work dir): fsnative-space ROI volumes + per-hemi surfaces
+for _out in list(Path('atlas').glob('*.nii.gz')) + list(Path('atlas').glob('*.func.gii')):
+    _src = atlas_input_by_name.get(_atlas_name_from_filename(_out.name))
+    write_derivative_sidecar(_out, roi_type="ROI", sources=[_src] if _src else [])
+
+# Always publish a status record so a silent skip (errorStrategy 'ignore' + arity '0..*')
+# is distinguishable from a template that legitimately had no atlases.
+Path('atlas').mkdir(parents=True, exist_ok=True)
+(Path('atlas') / 'desc-atlasSurfaceProjection_status.json').write_text(
+    json.dumps(result.metadata, indent=2)
+)
 EOF
     """
 }

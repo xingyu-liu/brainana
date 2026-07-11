@@ -13,15 +13,18 @@
 #     -v <path/to/work_dir>:/output_wd \
 #     -v <path/to/license.txt>:/fs_license.txt \
 #     liuxingyu987/brainana:<version> /input /output \
-#     --work-dir /output_wd --freesurfer-license /fs_license.txt
+#     --work_dir /output_wd --freesurfer_license /fs_license.txt
+#
+# (Connectors: underscore is canonical; the hyphenated spellings --work-dir,
+#  --freesurfer-license, --no-resume are still accepted as aliases.)
 #
 # With custom config:
-#   docker run ... liuxingyu987/brainana:<version> /input /output --work-dir /output_wd --config /config.yaml ...
+#   docker run ... liuxingyu987/brainana:<version> /input /output --work_dir /output_wd --config /config.yaml ...
 #
 # With a custom template (mount the .nii/.nii.gz and pass the in-container path;
 # outputs are labelled space-template):
 #   docker run ... -v <path/to/template.nii.gz>:/template.nii.gz \
-#     liuxingyu987/brainana:<version> /input /output --work-dir /output_wd --output_space /template.nii.gz
+#     liuxingyu987/brainana:<version> /input /output --work_dir /output_wd --output_space /template.nii.gz
 #
 # For interactive shell:
 #   docker run -it ... liuxingyu987/brainana:<version> bash
@@ -189,6 +192,33 @@ export NXF_MAX_MEMORY="${NXF_MAX_MEMORY:-20g}"
 DEFAULT_CONFIG="/opt/brainana/src/nhp_mri_prep/config/defaults.yaml"
 PROJECT_ROOT="/opt/brainana"
 
+# Shared CLI-flag helpers: KNOWN_FLAGS (from known_flags.txt), normalize_flag,
+# validate_flags, print_usage. Single source of truth shared with run_brainana.sh + main.nf.
+# Guarded so a missing flags.sh degrades gracefully instead of aborting under `set -e`.
+# shellcheck source=flags.sh
+if [ -f "$PROJECT_ROOT/flags.sh" ]; then
+    . "$PROJECT_ROOT/flags.sh"
+else
+    echo "WARNING: flags.sh not found; --help and unknown-argument validation are disabled." >&2
+    validate_flags() { UNKNOWN_FLAGS=(); return 0; }
+    normalize_flag() { printf '%s' "$1"; }
+    print_usage() { echo "brainana — see docs/usage_notes.rst"; }
+fi
+
+# Show usage for -h/--help appearing anywhere in the arguments, before any heavy setup
+# (GPU/Xvfb/Nextflow). Handles both `image --help` and `image /in /out --help`. Skipped
+# when the first arg requests an interactive shell (bash/sh), handled further below.
+case "${1:-}" in
+    bash|sh|-bash|-sh) ;;
+    *)
+        for _a in "$@"; do
+            case "$_a" in
+                -h|--help) print_usage; exit 0 ;;
+            esac
+        done
+        ;;
+esac
+
 INPUT_DIR="${1:-/input}"
 OUTPUT_DIR="${2:-/output}"
 
@@ -200,23 +230,28 @@ FS_LICENSE_PATH=""
 i=3
 while [ $i -le $# ]; do
     arg="${!i}"
-    if [[ "$arg" == --config=* ]]; then
+    # Underscore is the canonical connector; hyphenated spellings are accepted as
+    # aliases for backward compatibility (see run_brainana.sh for the general
+    # normalizer that covers flags forwarded to Nextflow).
+    if [[ "$arg" == --config=* ]] || [[ "$arg" == --config_file=* ]]; then
         CONFIG="${arg#*=}"
-    elif [[ "$arg" == --config ]]; then
+    elif [[ "$arg" == --config ]] || [[ "$arg" == --config_file ]]; then
         ((i++))
         [ $i -le $# ] && CONFIG="${!i}"
-    elif [[ "$arg" == -w ]] || [[ "$arg" == --work-dir ]]; then
+    elif [[ "$arg" == --work_dir=* ]] || [[ "$arg" == --work-dir=* ]]; then
+        WORK_DIR="${arg#*=}"
+    elif [[ "$arg" == -w ]] || [[ "$arg" == --work_dir ]] || [[ "$arg" == --work-dir ]]; then
         ((i++))
         [ $i -le $# ] && WORK_DIR="${!i}"
-    elif [[ "$arg" == --no-resume ]]; then
+    elif [[ "$arg" == --no_resume ]] || [[ "$arg" == --no-resume ]]; then
         RESUME_BY_DEFAULT=0
-    elif [[ "$arg" == --freesurfer-license=* ]]; then
+    elif [[ "$arg" == --freesurfer_license=* ]] || [[ "$arg" == --freesurfer-license=* ]]; then
+        # Consumed here into FS_LICENSE (below); NOT forwarded to Nextflow, which has
+        # no freesurfer_license param — forwarding it would only create an unused param.
         FS_LICENSE_PATH="${arg#*=}"
-        EXTRA_ARGS+=("$arg")
-    elif [[ "$arg" == --freesurfer-license ]]; then
-        EXTRA_ARGS+=("$arg")
+    elif [[ "$arg" == --freesurfer_license ]] || [[ "$arg" == --freesurfer-license ]]; then
         ((i++))
-        [ $i -le $# ] && FS_LICENSE_PATH="${!i}" && EXTRA_ARGS+=("${!i}")
+        [ $i -le $# ] && FS_LICENSE_PATH="${!i}"
     else
         EXTRA_ARGS+=("$arg")
     fi
@@ -227,6 +262,18 @@ if [ -n "$FS_LICENSE_PATH" ]; then
     export FS_LICENSE="$FS_LICENSE_PATH"
 else
     unset FS_LICENSE
+fi
+
+# Fail fast on unrecognized arguments BEFORE any heavy setup (FS-license probe, GPU
+# detection, Xvfb, Nextflow). EXTRA_ARGS holds the flags this entrypoint did not consume;
+# a typo like --output_space__ is rejected here in ~1s. run_brainana.sh + main.nf re-check.
+if [ ${#EXTRA_ARGS[@]} -gt 0 ] && ! validate_flags "${EXTRA_ARGS[@]}"; then
+    echo "Unknown argument(s): ${UNKNOWN_FLAGS[*]}" >&2
+    echo "" >&2
+    print_usage >&2
+    echo "" >&2
+    echo "Hint: custom templates use --output_space <file>, not --custom-template." >&2
+    exit 2
 fi
 
 if [ $# -gt 0 ]; then
@@ -322,13 +369,13 @@ PY
 
 if [ "$SURF_RECON_ENABLED" = "true" ]; then
     if [ -z "$FS_LICENSE_PATH" ]; then
-        echo "ERROR: Surface reconstruction is enabled but --freesurfer-license was not provided." >&2
-        echo "       Pass --freesurfer-license /path/to/license.txt (mount with -v /host/license.txt:/path/to/license.txt)" >&2
+        echo "ERROR: Surface reconstruction is enabled but --freesurfer_license was not provided." >&2
+        echo "       Pass --freesurfer_license /path/to/license.txt (mount with -v /host/license.txt:/path/to/license.txt)" >&2
         exit 1
     fi
     if [ ! -f "$FS_LICENSE" ]; then
         echo "ERROR: Surface reconstruction is enabled but FreeSurfer license file was not found at $FS_LICENSE." >&2
-        echo "       Ensure the license file is mounted and the path matches --freesurfer-license." >&2
+        echo "       Ensure the license file is mounted and the path matches --freesurfer_license." >&2
         exit 1
     fi
     freesurfer_license_probe

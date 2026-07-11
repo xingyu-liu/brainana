@@ -4,7 +4,7 @@ This repository contains group average body maps identified from Arcaro et al. 2
 
 ## Data Description
 
-The data are 4D (x, y, z, functional maps) and include the following sub-briks:
+The data are 4D (x, y, z, functional maps) and include the following sub-briks/frames:
 1. **Group average body maps**
 2. **Group average statistic**
 

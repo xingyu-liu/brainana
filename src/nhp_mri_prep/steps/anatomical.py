@@ -6,6 +6,9 @@ inputs/outputs for Nextflow integration.
 """
 
 import logging
+import os
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
@@ -28,7 +31,11 @@ from ..operations.sitk_rigid_registration import (
 )
 import SimpleITK as sitk
 from ..utils.bids import get_bids_prefix
-from ..utils.templates import discover_atlases_in_space, space_label_for
+from ..utils.templates import (
+    discover_atlases_in_space,
+    get_template_manager,
+    space_label_for,
+)
 from ..utils.mri import get_image_shape, shape_to_ants_input_type
 from fastsurfer_surfrecon.config import AtlasConfig, ReconSurfConfig
 from fastsurfer_surfrecon.pipeline import ReconSurfPipeline
@@ -412,6 +419,73 @@ def anat_registration(
     )
 
 
+def copy_atlas_sidecars(
+    atlas_name: str,
+    dest_dir: Path,
+    source_dir: Optional[Path] = None,
+    template_dir: Optional[Path] = None,
+) -> List[Path]:
+    """Copy an atlas's associated sidecar files into dest_dir alongside its image.
+
+    Copies the template-zoo files that share the ``atlas-{name}`` prefix — the label
+    lookup table ``atlas-{name}.tsv`` and any docs ``atlas-{name}.md`` — verbatim, and
+    the family bibliography ``references.bib`` renamed to ``atlas-{name}.bib``. These
+    sidecars are space- and subject-independent, so the same set is copied into every
+    output space (T1w / scanner / fsnative). Image and provenance files (``.nii.gz``,
+    ``.json``) are skipped, and existing destination files are left untouched.
+
+    Args:
+        atlas_name: Atlas label, e.g. ``ARM2`` (the ``{name}`` in ``atlas-{name}``).
+        dest_dir: Directory to copy sidecars into (the step's ``atlas/`` work dir).
+        source_dir: Template-zoo family directory (parent of the atlas ``.nii.gz``).
+            When None, it is located by globbing the atlas zoo for
+            ``atlas-{name}_space-*.nii.gz`` — the same zoo atlas discovery uses.
+        template_dir: Optional custom template zoo path, used only when source_dir is
+            None; defaults to the bundled template_zoo, matching atlas discovery.
+
+    Returns:
+        List of newly created destination paths (empty when nothing was copied).
+    """
+    if source_dir is None:
+        atlas_root = (
+            get_template_manager(
+                str(template_dir) if template_dir else None
+            ).template_dir
+            / "atlas"
+        )
+        matches = sorted(atlas_root.glob(f"**/atlas-{atlas_name}_space-*.nii.gz"))
+        if not matches:
+            logger.debug(
+                f"System: no template-zoo source for atlas {atlas_name}; no sidecars copied"
+            )
+            return []
+        source_dir = matches[0].parent
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    copied: List[Path] = []
+
+    # Prefix-shared sidecars (atlas-{name}.tsv / .md), copied verbatim. The '.' after the
+    # name excludes the label images, whose next character is '_' (atlas-{name}_space-...).
+    for sidecar in sorted(source_dir.glob(f"atlas-{atlas_name}.*")):
+        if sidecar.name.endswith(".nii.gz") or sidecar.suffix == ".json":
+            continue
+        dest = dest_dir / sidecar.name
+        if dest.exists():
+            continue
+        shutil.copy2(sidecar, dest)
+        copied.append(dest)
+
+    # Family bibliography, renamed to carry the atlas- prefix so it travels with the atlas.
+    bib = source_dir / "references.bib"
+    if bib.is_file():
+        dest = dest_dir / f"atlas-{atlas_name}.bib"
+        if not dest.exists():
+            shutil.copy2(bib, dest)
+            copied.append(dest)
+
+    return copied
+
+
 def anat_backproject_atlases(
     inverse_xfm: Path,
     t1w_reference: Path,
@@ -477,6 +551,7 @@ def anat_backproject_atlases(
     atlas_dir.mkdir(parents=True, exist_ok=True)
 
     additional_files: Dict[str, Path] = {}
+    sidecars: List[Path] = []
     for atlas_name, atlas_path in atlases:
         output_name = f"atlas-{atlas_name}_space-T1w_{output_stem}.nii.gz"
         shape = get_image_shape(str(atlas_path), logger=logger)
@@ -497,12 +572,20 @@ def anat_backproject_atlases(
         out_path = Path(result["imagef_registered"])
         additional_files[atlas_name] = out_path
 
+        # Copy the atlas's associated sidecars (LUT/docs/refs) next to the image so they
+        # travel with the backprojected label volume. atlas_path is the template-zoo
+        # source, so its parent is the family dir holding the sidecars.
+        sidecars.extend(
+            copy_atlas_sidecars(atlas_name, atlas_dir, source_dir=atlas_path.parent)
+        )
+
     return StepOutput(
         output_file=atlas_dir,
         metadata={
             "step": "backproject_atlases",
             "atlases_found": len(additional_files),
             "space": space_name,
+            "sidecars": [str(p) for p in sidecars],
         },
         additional_files=additional_files,
     )
@@ -540,6 +623,8 @@ def anat_reproject_atlases_to_scanner(
     )
 
     additional_files: Dict[str, Path] = {}
+    sidecars: List[Path] = []
+    seen_atlas_names: set = set()
     for atlas_path in atlas_files:
         # Input: atlas-{name}_space-T1w_{stem}.nii.gz -> scanner: atlas-{name}_space-scanner_{stem}.nii.gz
         in_name = atlas_path.name
@@ -572,13 +657,236 @@ def anat_reproject_atlases_to_scanner(
         out_path = Path(result["imagef_registered"])
         additional_files[out_name] = out_path
 
+        # The sidecars (LUT/docs/refs) are space-independent, so carry the same set into
+        # scanner space. Re-discover them from the template zoo by atlas name (this step
+        # receives only projected .nii.gz files, not the zoo source). Copy once per atlas.
+        atlas_name = _atlas_name_from_filename(in_name)
+        if atlas_name not in seen_atlas_names:
+            seen_atlas_names.add(atlas_name)
+            sidecars.extend(copy_atlas_sidecars(atlas_name, atlas_dir))
+
     return StepOutput(
         output_file=atlas_dir,
         metadata={
             "step": "reproject_atlases_to_scanner",
             "atlases_found": len(additional_files),
+            "sidecars": [str(p) for p in sidecars],
         },
         additional_files=additional_files,
+    )
+
+
+# lh/rh only appear as the FreeSurfer CLI --hemi value; filenames use _hemi-L/_hemi-R.
+_SURF_HEMI_MAP = {"L": "lh", "R": "rh"}
+
+
+def _atlas_name_from_filename(filename: str) -> str:
+    """Extract the atlas label from 'atlas-{name}_space-...' -> '{name}'.
+
+    Atlas backprojection writes ``atlas-{name}_space-T1w_{stem}.nii.gz``; we recover
+    ``{name}`` to build the fsnative/surface output names.
+    """
+    stem = filename
+    if stem.startswith("atlas-"):
+        stem = stem[len("atlas-") :]
+    idx = stem.find("_space-")
+    if idx != -1:
+        return stem[:idx]
+    idx = stem.find("_")
+    return stem[:idx] if idx != -1 else stem
+
+
+def anat_project_atlases_to_surface(
+    atlas_files: List[Path],
+    fs_subject_dir: Path,
+    bids_name: Path,
+    working_dir: Path,
+) -> StepOutput:
+    """
+    Project T1w-space atlases onto FastSurfer cortical surfaces (nearest-neighbor).
+
+    Two sub-steps per atlas; labels must never be interpolated or smoothed:
+      1. Resample the T1w-space label volume onto the FastSurfer conformed grid
+         (``mri/T1.mgz``) with ``mri_vol2vol --regheader --interp nearest``. T1w and
+         FastSurfer-conformed space share the same scanner-RAS frame, so this is a
+         grid-only resample with no transform file.
+      2. Sample the FastSurfer-space volume onto the lh/rh surfaces at mid-thickness
+         with ``mri_vol2surf --projfrac 0.5 --interp nearest`` (no ``--surf-fwhm``),
+         writing one ``.func.gii`` per hemisphere.
+
+    ``fs_subject_dir`` is the FastSurfer subject folder (``SUBJECTS_DIR`` is its parent;
+    FreeSurfer subject id is ``fs_subject_dir.name``). The directory existing is how
+    "surface reconstruction succeeded" is detected.
+
+    Outputs go to ``working_dir/atlas/`` with naming:
+      ``atlas-{name}_space-fsnative_{stem}.nii.gz``
+      ``atlas-{name}_space-fsnative_hemi-{L,R}_{stem}.func.gii``
+
+    On missing tool / missing FastSurfer tree / a failed atlas: logs a warning and
+    returns whatever completed, with ``skipped``/``reason`` in metadata (mirrors
+    ``project_tsnr_to_surface``).
+    """
+    atlas_dir = working_dir / "atlas"
+    atlas_dir.mkdir(parents=True, exist_ok=True)
+
+    additional_files: Dict[str, Path] = {}
+    metadata: Dict[str, Any] = {
+        "step": "project_atlases_to_surface",
+        "space": "fsnative",
+    }
+
+    fs_subject_directory = Path(fs_subject_dir)
+    if not fs_subject_directory.is_dir():
+        logger.warning(
+            f"atlas surf: FastSurfer subject dir missing: {fs_subject_directory}"
+        )
+        metadata.update(
+            {"skipped": True, "reason": "missing_fs_subject_dir", "atlases_projected": 0}
+        )
+        return StepOutput(
+            output_file=atlas_dir, metadata=metadata, additional_files=additional_files
+        )
+
+    # Target grid: prefer the conformed T1.mgz, fall back to orig.mgz.
+    target_grid = fs_subject_directory / "mri" / "T1.mgz"
+    if not target_grid.exists():
+        target_grid = fs_subject_directory / "mri" / "orig.mgz"
+    if not target_grid.exists():
+        logger.warning(
+            f"atlas surf: no target grid (T1.mgz/orig.mgz) under {fs_subject_directory}/mri"
+        )
+        metadata.update(
+            {"skipped": True, "reason": "missing_target_grid", "atlases_projected": 0}
+        )
+        return StepOutput(
+            output_file=atlas_dir, metadata=metadata, additional_files=additional_files
+        )
+
+    # Record the grid actually used so callers (e.g. sidecar provenance) need not
+    # re-derive the T1.mgz/orig.mgz fallback and risk drifting from this choice.
+    metadata["target_grid"] = str(target_grid)
+
+    output_stem = get_bids_prefix(bids_name)
+    freesurfer_subject_id = fs_subject_directory.name
+    env = os.environ.copy()
+    # Absolute SUBJECTS_DIR (resolving the staged symlink) matches project_tsnr_to_surface
+    # and avoids FreeSurfer tools mis-resolving a relative '.' if they canonicalize the path.
+    env["SUBJECTS_DIR"] = str(fs_subject_directory.resolve().parent)
+
+    projected = 0
+    sidecars: List[Path] = []
+    seen_atlas_names: set = set()
+    for atlas_path in atlas_files:
+        atlas_path = Path(atlas_path)
+        atlas_name = _atlas_name_from_filename(atlas_path.name)
+
+        # Step 1: T1w -> FastSurfer grid (nearest neighbor, header-based resample).
+        fsnative_vol = (
+            atlas_dir / f"atlas-{atlas_name}_space-fsnative_{output_stem}.nii.gz"
+        )
+        vol2vol_cmd = [
+            "mri_vol2vol",
+            "--mov",
+            str(atlas_path),
+            "--targ",
+            str(target_grid),
+            "--regheader",
+            "--interp",
+            "nearest",
+            "--o",
+            str(fsnative_vol),
+        ]
+        try:
+            subprocess.run(
+                vol2vol_cmd, check=True, env=env, capture_output=True, text=True
+            )
+        except FileNotFoundError:
+            logger.warning(
+                "atlas surf: mri_vol2vol not found; skip surface projection."
+            )
+            metadata.update(
+                {
+                    "skipped": True,
+                    "reason": "mri_vol2vol_not_found",
+                    "atlases_projected": projected,
+                }
+            )
+            return StepOutput(
+                output_file=atlas_dir,
+                metadata=metadata,
+                additional_files=additional_files,
+            )
+        except subprocess.CalledProcessError as exc:
+            logger.warning(
+                f"atlas surf: mri_vol2vol failed for {atlas_path.name}: {exc.stderr}"
+            )
+            fsnative_vol.unlink(missing_ok=True)
+            continue
+        additional_files[fsnative_vol.name] = fsnative_vol
+
+        # The sidecars (LUT/docs/refs) are space-independent; carry the same set into
+        # fsnative space. Re-discover from the template zoo by atlas name (this step gets
+        # only projected .nii.gz files, not the zoo source). Copy once per atlas.
+        if atlas_name not in seen_atlas_names:
+            seen_atlas_names.add(atlas_name)
+            sidecars.extend(copy_atlas_sidecars(atlas_name, atlas_dir))
+
+        # Step 2: FastSurfer volume -> lh/rh surfaces (nearest neighbor, mid-thickness).
+        for hemi_code in ("L", "R"):
+            surf_gii = (
+                atlas_dir
+                / f"atlas-{atlas_name}_space-fsnative_hemi-{hemi_code}_{output_stem}.func.gii"
+            )
+            vol2surf_cmd = [
+                "mri_vol2surf",
+                "--mov",
+                str(fsnative_vol),
+                "--regheader",
+                freesurfer_subject_id,
+                "--hemi",
+                _SURF_HEMI_MAP[hemi_code],
+                "--projfrac",
+                "0.5",
+                "--interp",
+                "nearest",
+                "--out_type",
+                "gii",
+                "--o",
+                str(surf_gii),
+            ]
+            try:
+                subprocess.run(
+                    vol2surf_cmd, check=True, env=env, capture_output=True, text=True
+                )
+            except FileNotFoundError:
+                logger.warning(
+                    "atlas surf: mri_vol2surf not found; skip surface projection."
+                )
+                metadata.update(
+                    {
+                        "skipped": True,
+                        "reason": "mri_vol2surf_not_found",
+                        "atlases_projected": projected,
+                    }
+                )
+                return StepOutput(
+                    output_file=atlas_dir,
+                    metadata=metadata,
+                    additional_files=additional_files,
+                )
+            except subprocess.CalledProcessError as exc:
+                logger.warning(
+                    f"atlas surf: mri_vol2surf failed for {surf_gii.name}: {exc.stderr}"
+                )
+                surf_gii.unlink(missing_ok=True)
+                continue
+            additional_files[surf_gii.name] = surf_gii
+        projected += 1
+
+    metadata["atlases_projected"] = projected
+    metadata["sidecars"] = [str(p) for p in sidecars]
+    return StepOutput(
+        output_file=atlas_dir, metadata=metadata, additional_files=additional_files
     )
 
 

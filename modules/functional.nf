@@ -697,7 +697,7 @@ process FUNC_APPLY_CONFORM {
     from nhp_mri_prep.operations.registration import flirt_apply_transforms
     from nhp_mri_prep.utils.bids import create_bids_output_filename
     from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata
-    from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
+    from nhp_mri_prep.utils.sidecar import write_derivative_sidecar, bold_timeseries_fields
     from pathlib import Path
     import sys
     import os
@@ -849,7 +849,8 @@ process FUNC_APPLY_CONFORM {
 
     # Sidecars for the published preproc bold + boldref (native bold space -> no template block)
     _apply_conform_sources = [str(Path('${bold_file}')), str(Path('${conform_transform}'))]
-    write_derivative_sidecar(bids_preproc_filename_bold, skull_stripped=False, sources=_apply_conform_sources)
+    # 4D preproc bold carries TR + slice-timing-corrected flag; the 3D boldref does not.
+    write_derivative_sidecar(bids_preproc_filename_bold, skull_stripped=False, sources=_apply_conform_sources, **bold_timeseries_fields(bids_name, config))
     write_derivative_sidecar(bids_preproc_filename_boldref, skull_stripped=False, sources=_apply_conform_sources)
 
     # Save metadata
@@ -1176,7 +1177,7 @@ from nhp_mri_prep.steps.types import StepInput
 from nhp_mri_prep.utils.bids import create_bids_output_filename, get_filename_stem, get_bids_prefix
 from nhp_mri_prep.utils.nextflow import create_output_link, save_metadata, load_config
 from nhp_mri_prep.utils.templates import space_label_for, resolve_template
-from nhp_mri_prep.utils.sidecar import write_derivative_sidecar
+from nhp_mri_prep.utils.sidecar import write_derivative_sidecar, bold_timeseries_fields
 from pathlib import Path
 import glob
 import shutil
@@ -1199,10 +1200,13 @@ except Exception:
 # The applied moving image; sources for every produced derivative below.
 _apply_input = str(Path('${input_file}'))
 _apply_is_mask = '${data_type}' == 'mask'
+# TR + slice-timing-corrected flag for 4D preproc bold outputs (never for masks).
+_bold_fields = {} if _apply_is_mask else bold_timeseries_fields(Path('${bids_name}'), config)
 
-def _apply_sidecar(name, *, template_space, extra_sources=None):
+def _apply_sidecar(name, *, template_space, extra_sources=None, timeseries=False):
     # Write a sidecar for a FUNC_APPLY_TRANSFORMS output. template_space=True passes the
     # template source so the TemplateSource block is populated on space-<template> files.
+    # timeseries=True adds RepetitionTime/SliceTimingCorrected (4D desc-preproc_bold only).
     sources = [_apply_input] + (list(extra_sources) if extra_sources else [])
     write_derivative_sidecar(
         name,
@@ -1210,6 +1214,7 @@ def _apply_sidecar(name, *, template_space, extra_sources=None):
         resolved_template_path=_resolved_template if template_space else None,
         roi_type="Brain" if _apply_is_mask else None,
         sources=sources,
+        **(_bold_fields if timeseries else {}),
     )
 
 # Create logger early for use in parsing
@@ -1411,7 +1416,7 @@ if is_sequential:
             modality=modality
         )
     create_output_link(func_all_anat, func_anat_output_name)
-    _apply_sidecar(func_anat_output_name, template_space=False, extra_sources=[str(func2target_transform)])
+    _apply_sidecar(func_anat_output_name, template_space=False, extra_sources=[str(func2target_transform)], timeseries=True)
 
     # Save boldref in anat space (only for BOLD)
     if data_type == "bold":
@@ -1494,7 +1499,7 @@ if is_sequential:
             modality='bold'
         )
     create_output_link(func_all_template, func_template_output_name)
-    _apply_sidecar(func_template_output_name, template_space=True, extra_sources=[str(func2target_transform), str(anat2template_transform_path)])
+    _apply_sidecar(func_template_output_name, template_space=True, extra_sources=[str(func2target_transform), str(anat2template_transform_path)], timeseries=True)
 
     # Save boldref in template space (final output) - only for BOLD
     # For mask, create a duplicate symlink to match BOLD output structure
@@ -1610,7 +1615,7 @@ else:
         )
     create_output_link(result.output_file, bids_output_filename)
     # Sidecar; TemplateSource auto-added only when space-<template> (target_name != T1w)
-    _apply_sidecar(bids_output_filename, template_space=True, extra_sources=[str(func2target_transform)])
+    _apply_sidecar(bids_output_filename, template_space=True, extra_sources=[str(func2target_transform)], timeseries=True)
 
     # Generate BIDS-compliant output filename for tmean (boldref) - only for BOLD
     if data_type == "bold" and "tmean" in result.additional_files:

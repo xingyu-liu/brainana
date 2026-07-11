@@ -26,6 +26,7 @@ from nhp_mri_prep.utils.sidecar import (
     write_dataset_description,
     template_source_block,
     engine_generated_by,
+    bold_timeseries_fields,
     ENGINE_DISPLAY,
 )
 
@@ -315,3 +316,117 @@ def test_write_dataset_description_custom(tmp_path):
     )
     data = json.loads(Path(p).read_text())
     assert data["TemplateSource"]["Custom"] is True
+
+
+# --------------------------------------------------------------------------- #
+# RepetitionTime / SliceTimingCorrected on 4D preproc bold sidecars
+# --------------------------------------------------------------------------- #
+def test_sidecar_writes_repetition_time_and_slice_timing_corrected(tmp_path):
+    data = _sidecar(
+        tmp_path,
+        "sub-01_space-NMT2Sym_desc-preproc_bold.nii.gz",
+        repetition_time=1.7,
+        slice_timing_corrected=True,
+    )
+    assert data["RepetitionTime"] == 1.7
+    assert data["SliceTimingCorrected"] is True
+
+
+def test_sidecar_slice_timing_corrected_false_is_written(tmp_path):
+    # bool(False) is not None -> the key is emitted (distinct from "unknown").
+    data = _sidecar(
+        tmp_path,
+        "sub-01_space-bold_desc-preproc_bold.nii.gz",
+        slice_timing_corrected=False,
+    )
+    assert data["SliceTimingCorrected"] is False
+
+
+def _make_raw_bold(dataset_dir, *, with_session, metadata):
+    """Create a raw BIDS bold pair and return the .nii.gz path for bold_timeseries_fields."""
+    sub = dataset_dir / "sub-01"
+    func = (sub / "ses-001" / "func") if with_session else (sub / "func")
+    func.mkdir(parents=True)
+    stem = (
+        "sub-01_ses-001_task-rest_run-1_bold"
+        if with_session
+        else "sub-01_task-rest_run-1_bold"
+    )
+    (func / f"{stem}.json").write_text(json.dumps(metadata))
+    nii = func / f"{stem}.nii.gz"
+    nii.write_bytes(b"")
+    return nii
+
+
+_STC_ON = {"func": {"slice_timing_correction": {"enabled": True}}}
+_STC_OFF = {"func": {"slice_timing_correction": {"enabled": False}}}
+
+
+def test_bold_timeseries_fields_session_layout(tmp_path):
+    nii = _make_raw_bold(
+        tmp_path,
+        with_session=True,
+        metadata={"RepetitionTime": 1.7, "SliceTiming": [0.0, 0.85], "TaskName": "rest"},
+    )
+    assert bold_timeseries_fields(nii, _STC_ON) == {
+        "repetition_time": 1.7,
+        "slice_timing_corrected": True,
+    }
+
+
+def test_bold_timeseries_fields_no_session_layout(tmp_path):
+    nii = _make_raw_bold(
+        tmp_path,
+        with_session=False,
+        metadata={"RepetitionTime": 1.7, "SliceTiming": [0.0, 0.85]},
+    )
+    # dataset_dir walks up to the sub- ancestor's parent regardless of session nesting.
+    assert bold_timeseries_fields(nii, _STC_ON) == {
+        "repetition_time": 1.7,
+        "slice_timing_corrected": True,
+    }
+
+
+def test_bold_timeseries_fields_stc_disabled_keeps_tr(tmp_path):
+    nii = _make_raw_bold(
+        tmp_path,
+        with_session=True,
+        metadata={"RepetitionTime": 1.7, "SliceTiming": [0.0, 0.85]},
+    )
+    assert bold_timeseries_fields(nii, _STC_OFF) == {
+        "repetition_time": 1.7,
+        "slice_timing_corrected": False,
+    }
+
+
+def test_bold_timeseries_fields_invalid_slice_timing(tmp_path):
+    # max(SliceTiming) > TR -> pipeline auto-disables STC for the run.
+    nii = _make_raw_bold(
+        tmp_path,
+        with_session=True,
+        metadata={"RepetitionTime": 1.0, "SliceTiming": [0.0, 2.0]},
+    )
+    assert bold_timeseries_fields(nii, _STC_ON) == {
+        "repetition_time": 1.0,
+        "slice_timing_corrected": False,
+    }
+
+
+def test_bold_timeseries_fields_missing_json(tmp_path):
+    # No sidecar anywhere -> no TR, STC False; never raises.
+    sub = tmp_path / "sub-01" / "ses-001" / "func"
+    sub.mkdir(parents=True)
+    nii = sub / "sub-01_ses-001_task-rest_run-1_bold.nii.gz"
+    nii.write_bytes(b"")
+    assert bold_timeseries_fields(nii, _STC_ON) == {"slice_timing_corrected": False}
+
+
+def test_bold_timeseries_fields_tr_present_no_slice_timing(tmp_path):
+    # TR but no SliceTiming array -> TR carried, STC False (nothing to correct).
+    nii = _make_raw_bold(
+        tmp_path, with_session=True, metadata={"RepetitionTime": 1.7}
+    )
+    assert bold_timeseries_fields(nii, _STC_ON) == {
+        "repetition_time": 1.7,
+        "slice_timing_corrected": False,
+    }

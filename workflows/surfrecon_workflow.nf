@@ -47,7 +47,10 @@ workflow SURF_RECON_WF {
     // [sub, ses, fastsurfer_dir_name] for downstream func tSNR / QC (empty if surf recon skipped)
     // No `def`: must be workflow-scoped so emit: surf_actual_subject_id_ch resolves (Nextflow 25+).
     surf_actual_subject_id_ch = Channel.empty()
-    
+    // [sub, ses, fastsurfer_subject_dir] task-output path, staged (not read from output_dir)
+    // by consumers so they don't race the async publishDir copy. Empty if surf recon skipped.
+    surf_subject_dir_ch = Channel.empty()
+
     if (surf_recon_enabled && anat_skullstripping_enabled) {
         // Step 0: Calculate session count per subject (for surface reconstruction naming)
         def anat_sessions_per_subject = anat_for_surf_recon
@@ -102,6 +105,8 @@ workflow SURF_RECON_WF {
         surf_actual_subject_id_ch = ANAT_SURFACE_RECONSTRUCTION.out.actual_subject_id
             .map { sub, ses, id_file -> [sub, ses, id_file.text.trim()] }
 
+        surf_subject_dir_ch = ANAT_SURFACE_RECONSTRUCTION.out.subject_dir
+
         // Step 5: Prepare QC input channels
         def surf_qc_bids_lookup = anat_for_surf_recon
             .map { sub, ses, anat_file, bids_name ->
@@ -150,4 +155,5 @@ workflow SURF_RECON_WF {
     emit:
     surf_qc_channels
     surf_actual_subject_id_ch
+    surf_subject_dir_ch
 }
