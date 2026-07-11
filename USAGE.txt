@@ -23,7 +23,7 @@ POSITIONAL ARGUMENTS (Docker)
   output_dir                   Output directory mounted into the container.   Default: /output
                                (Locally, pass these as --bids_dir / --output_dir instead.)
 
-ENTRYPOINT OPTIONS
+GENERAL OPTIONS
   --freesurfer_license PATH    FreeSurfer license file inside the container (required when
                                surface reconstruction is enabled), e.g. /fs_license.txt.
                                Default: (none)
@@ -43,7 +43,7 @@ BIDS FILTERING OPTIONS
                                Default: (all tasks)
   --runs RUN ...               Restrict to specific run indices. Default: (all runs)
 
-WORKFLOW OPTIONS
+PROCESSING OPTIONS
   --anat_only                  Run only the anatomical pipeline; skip functional. Default: False
   --output_space SPACE         Template space for registered outputs. Either a bundled template
                                spec TEMPLATE_NAME[:DESCRIPTION] (e.g. NMT2Sym:res-1 [1 mm],
@@ -62,6 +62,3 @@ FLAG CONNECTORS
   Underscore is canonical (e.g. --work_dir, --no_resume, --freesurfer_license). The hyphenated
   spellings (--work-dir, --no-resume, --freesurfer-license, --output-space, ...) are accepted
   as aliases and normalized automatically.
-
-DOCS
-  Full parameter reference: docs_temp/PARAMETER_MANAGEMENT.md ; user guide: docs/usage_notes.rst

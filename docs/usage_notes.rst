@@ -166,13 +166,6 @@ Command-line arguments
 
 The following options can be passed after the image name (or after ``bids_dir`` and ``output_dir``).
 
-.. note::
-
-   Flag connectors are interchangeable: the canonical form uses underscores
-   (e.g. ``--work_dir``, ``--no_resume``, ``--freesurfer_license``), and the
-   hyphenated spellings (``--work-dir``, ``--no-resume``, ``--freesurfer-license``)
-   remain accepted as aliases.
-
 .. code-block:: text
 
    docker run ... liuxingyu987/brainana:<version> [bids_dir] [output_dir] \
@@ -190,7 +183,7 @@ The following options can be passed after the image name (or after ``bids_dir`` 
 ``output_dir``
    Output directory mounted into the container.
 
-**Entrypoint options**
+**General options**
 
 ``--freesurfer_license PATH``
    Path to the FreeSurfer license file *inside the container* (required when surface
@@ -240,7 +233,7 @@ The following options can be passed after the image name (or after ``bids_dir`` 
 
    Default: (all runs)
 
-**Workflow options**
+**Processing options**
 
 ``--anat_only``
    Run only the anatomical pipeline; skip functional processing.
