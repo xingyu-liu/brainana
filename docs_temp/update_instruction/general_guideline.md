@@ -259,8 +259,14 @@ docker build --build-arg BRAINANA_VERSION=${VERSION} \
 
 # --- Phase C: commit + tag (only after Phase B passes) ---
 git add pyproject.toml CHANGELOG.md README.md docs/ examples/BrainanaLite.ipynb
-git commit -m "Release v${VERSION}"
-git tag v${VERSION}
+git commit -m "chore(release): bump version to ${VERSION}"
+git tag -a v${VERSION} -m "$(cat <<EOF
+chore(release): bump version to ${VERSION}
+
+Key changes since v$(git describe --tags --abbrev=0 HEAD^):
+- <bullet key changes here>
+EOF
+)"
 git push origin main
 git push origin v${VERSION}
 

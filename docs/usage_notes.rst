@@ -241,8 +241,10 @@ The following options can be passed after the image name (or after ``bids_dir`` 
    Default: ``False``
 
 ``--output_space SPACE``
-   Template space for registered outputs. Format: ``TEMPLATE_NAME:DESCRIPTION``.
-   Examples: ``NMT2Sym:res-1`` (1 mm), ``NMT2Sym:res-05`` (0.5 mm), ``T1w`` (native space).
+   Template space for registered outputs. Either a bundled template spec in
+   ``TEMPLATE_NAME[:DESCRIPTION]`` format — examples: ``NMT2Sym:res-1`` (1 mm),
+   ``NMT2Sym:res-05`` (0.5 mm), ``T1w`` (native space) — **or** a path to a custom
+   template image (``.nii`` / ``.nii.gz``). See the FAQ :ref:`custom-template` for details.
 
    Default: ``NMT2Sym:res-05``
 

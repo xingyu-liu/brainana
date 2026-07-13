@@ -10,6 +10,7 @@ FAQ and troubleshooting
 **Setup and configuration**
 
 - `Do I need a config file?`_
+- `Can I use my own template?`_
 - `Can I run without a FreeSurfer license?`_
 - `What if I don't have a compatible GPU?`_
 
@@ -39,6 +40,28 @@ No. Built-in defaults are used for all pipeline steps. To customise the pipeline
 
 1. **Config file (recommended):** Generate a YAML config file with the :ref:`generating-config-file` interactive generator (in :doc:`usage_notes`), mount it into the container (e.g. ``-v <path/to/config.yaml>:/config.yaml``), and pass ``--config /config.yaml``.
 2. **Command-line arguments:** Pass common options directly in the ``docker run`` command (e.g. ``--anat_only``, ``--output_space "NMT2Sym:res-1"``). See :ref:`command-line-arguments`.
+
+.. _custom-template:
+
+.. rst-class:: faq-question
+
+Can I use my own template?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Yes. Instead of a bundled template name, pass a path to your own ``.nii``/``.nii.gz``
+template image as ``--output_space``. Mount the file into the container and pass its
+in-container path:
+
+.. code-block:: bash
+
+   docker run --rm \
+       -v <path/to/bids>:/input -v <path/to/out>:/output \
+       -v <path/to/my_template.nii.gz>:/template.nii.gz \
+       liuxingyu987/brainana:<version> /input /output --output_space /template.nii.gz
+
+Outputs then use the BIDS space label ``template`` (e.g. ``*_space-template_*``). The
+file must exist and end in ``.nii``/``.nii.gz`` or the run aborts at the start. A
+custom template has no bundled atlases, so atlas outputs are skipped for that space.
 
 .. rst-class:: faq-question
 

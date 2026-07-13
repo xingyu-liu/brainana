@@ -42,34 +42,6 @@ template and/or resolution (e.g. ``NMT2Sym:res-05``) via the
 - **D99** (`doi <https://doi.org/10.1016/j.neuroimage.2008.10.058>`_)
 
 
-Custom template
----------------
-
-Instead of a bundled template name, ``output_space`` also accepts a path to your
-own template image. Pass an absolute path to a ``.nii`` / ``.nii.gz`` file (via
-``--output_space`` or ``template.output_space`` in a config YAML). Outputs then
-use the fixed BIDS space label ``template`` (e.g. ``*_space-template_*``), and the
-resolved path is recorded in each derivative's JSON sidecar and in
-``dataset_description.json`` (``TemplateSource.Custom: true``).
-
-.. code-block:: bash
-
-   # Local run
-   ./run_brainana.sh run main.nf \
-       --bids_dir /path/to/bids --output_dir /path/to/out \
-       --output_space /path/to/my_template.nii.gz
-
-   # Docker: mount the template into the container and pass the in-container path
-   docker run --rm \
-       -v /path/to/bids:/input -v /path/to/out:/output \
-       -v /path/to/my_template.nii.gz:/template.nii.gz \
-       liuxingyu987/brainana:<version> /input /output --output_space /template.nii.gz
-
-The path must exist and end in ``.nii``/``.nii.gz`` — otherwise the run aborts
-immediately with an error (there is no silent fallback). A custom template has no
-bundled atlases, so atlas-based outputs are skipped for the ``template`` space.
-
-
 Atlas zoo
 ---------
 
