@@ -584,7 +584,6 @@ def print_available_templates():
 def discover_atlases_in_space(
     space_name: str,
     template_res: Optional[str] = None,
-    template_dir: Optional[str] = None,
 ) -> List[Tuple[str, Path]]:
     """Discover atlases in the given template space.
 
@@ -593,11 +592,10 @@ def discover_atlases_in_space(
     Args:
         space_name: Template space name (e.g. 'NMT2Sym')
         template_res: Optional resolution spec (e.g. 'res-05')
-        template_dir: Optional custom template directory
 
     Returns:
         List of (atlas_name, atlas_file_path) tuples.
     """
-    return get_template_manager(template_dir).discover_atlases(
+    return get_template_manager().discover_atlases(
         space_name=space_name, template_res=template_res
     )

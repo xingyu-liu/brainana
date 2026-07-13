@@ -64,7 +64,8 @@ workflow {
         error "Unknown argument(s): ${flags}\n\n" +
               "${usage}\n\n" +
               "Hint: custom templates use --output_space <file>, not --custom-template. " +
-              "Hyphenated spellings (e.g. --output-space) are accepted and normalized to underscore."
+              "The run_brainana.sh wrapper normalizes hyphenated spellings (e.g. --output-space) " +
+              "to underscore; when invoking nextflow directly, use the underscore form (--output_space)."
     }
 
     // ============================================

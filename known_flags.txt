@@ -26,6 +26,9 @@ runs
 use_gpu
 gpu_count
 max_jobs_per_gpu
+
+# Optional internal override; NOT declared in nextflow.config params{} (params.python_exe
+# defaults to 'python3' when unset). Listed here only so the guard tolerates it when passed.
 python_exe
 
 # --- Wrapper-layer flags (consumed by entrypoint.sh / run_brainana.sh; tolerated by guards) ---

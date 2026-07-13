@@ -214,8 +214,11 @@ def bold_timeseries_fields(
     meta = find_bids_metadata(p, dataset_dir) or {}
 
     tr = meta.get("RepetitionTime")
+    # Default True to match the pipeline gate (defaults.yaml func.slice_timing_correction
+    # .enabled = true, and func_slice_timing_correction defaults it to True); otherwise a
+    # config missing the key would mis-record STC as not applied.
     stc_enabled = bool(
-        config.get("func", {}).get("slice_timing_correction", {}).get("enabled", False)
+        config.get("func", {}).get("slice_timing_correction", {}).get("enabled", True)
     )
     fields: Dict[str, Any] = {
         "slice_timing_corrected": stc_enabled

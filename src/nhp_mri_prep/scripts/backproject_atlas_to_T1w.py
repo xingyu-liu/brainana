@@ -14,7 +14,6 @@ dataset_root = Path(
     "/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana"
 )
 config_file = Path("/home/star/github/brainana/src/nhp_mri_prep/config/defaults.yaml")
-template_dir = Path("/home/star/github/brainana/template_zoo")
 
 overwrite = False
 dry_run = False
@@ -235,7 +234,6 @@ for rec in tqdm(ready_records, desc="Backprojecting atlases to T1w"):
                 bids_name=rec["bids_name"],
                 working_dir=working_dir,
                 config=config,
-                template_dir=Path(template_dir) if template_dir else None,
             )
 
             atlas_dir = Path(step_result.output_file)

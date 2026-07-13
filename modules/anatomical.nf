@@ -900,7 +900,6 @@ result = anat_backproject_atlases(
     bids_name=Path('${bids_name}'),
     working_dir=Path('.'),
     config=config,
-    template_dir=None,
 )
 # Outputs written to ./atlas/ (task work dir); atlases are ROIs in native T1w space
 for _atlas in Path('atlas').glob('*.nii.gz'):

@@ -423,7 +423,6 @@ def copy_atlas_sidecars(
     atlas_name: str,
     dest_dir: Path,
     source_dir: Optional[Path] = None,
-    template_dir: Optional[Path] = None,
 ) -> List[Path]:
     """Copy an atlas's associated sidecar files into dest_dir alongside its image.
 
@@ -440,19 +439,12 @@ def copy_atlas_sidecars(
         source_dir: Template-zoo family directory (parent of the atlas ``.nii.gz``).
             When None, it is located by globbing the atlas zoo for
             ``atlas-{name}_space-*.nii.gz`` — the same zoo atlas discovery uses.
-        template_dir: Optional custom template zoo path, used only when source_dir is
-            None; defaults to the bundled template_zoo, matching atlas discovery.
 
     Returns:
         List of newly created destination paths (empty when nothing was copied).
     """
     if source_dir is None:
-        atlas_root = (
-            get_template_manager(
-                str(template_dir) if template_dir else None
-            ).template_dir
-            / "atlas"
-        )
+        atlas_root = get_template_manager().template_dir / "atlas"
         matches = sorted(atlas_root.glob(f"**/atlas-{atlas_name}_space-*.nii.gz"))
         if not matches:
             logger.debug(
@@ -492,7 +484,6 @@ def anat_backproject_atlases(
     bids_name: Path,
     working_dir: Path,
     config: Dict[str, Any],
-    template_dir: Optional[Path] = None,
 ) -> StepOutput:
     """
     Backproject atlases from template space to T1w space using inverse transform.
@@ -510,7 +501,6 @@ def anat_backproject_atlases(
         bids_name: BIDS filename of T1w output (e.g. sub-X_ses-Y_run-Z_desc-preproc_T1w.nii.gz)
         working_dir: Working directory; atlas outputs go to working_dir/atlas/
         config: Configuration dict (uses template.output_space)
-        template_dir: Optional custom template zoo path
 
     Returns:
         StepOutput with output_file=atlas_dir, additional_files={atlas_name: path}
@@ -527,7 +517,6 @@ def anat_backproject_atlases(
     atlases = discover_atlases_in_space(
         space_name=space_name,
         template_res=template_res,
-        template_dir=str(template_dir) if template_dir else None,
     )
     if not atlases:
         logger.info(
@@ -832,6 +821,7 @@ def anat_project_atlases_to_surface(
             sidecars.extend(copy_atlas_sidecars(atlas_name, atlas_dir))
 
         # Step 2: FastSurfer volume -> lh/rh surfaces (nearest neighbor, mid-thickness).
+        hemi_projected = False
         for hemi_code in ("L", "R"):
             surf_gii = (
                 atlas_dir
@@ -881,7 +871,11 @@ def anat_project_atlases_to_surface(
                 surf_gii.unlink(missing_ok=True)
                 continue
             additional_files[surf_gii.name] = surf_gii
-        projected += 1
+            hemi_projected = True
+        # Count the atlas only if at least one hemisphere surface was produced; both
+        # vol2surf calls can fail (each hits `continue`) while vol2vol succeeded.
+        if hemi_projected:
+            projected += 1
 
     metadata["atlases_projected"] = projected
     metadata["sidecars"] = [str(p) for p in sidecars]

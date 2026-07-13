@@ -20,8 +20,11 @@ def _pyproject_version() -> str:
         return tomllib.load(f)["project"]["version"]
 
 
-def test_get_version_reads_pyproject():
+def test_get_version_reads_pyproject(monkeypatch):
     """get_version() must match pyproject.toml when running from the source tree."""
+    # BRAINANA_IMAGE_TAG takes priority in get_version(); clear it so this test checks
+    # the pyproject path rather than failing under the Docker/release env that sets it.
+    monkeypatch.delenv("BRAINANA_IMAGE_TAG", raising=False)
     assert get_version() == _pyproject_version()
 
 
