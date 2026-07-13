@@ -119,6 +119,9 @@ workflow ANAT_WF {
     
     // Get output_space for display (from effective config)
     def effective_output_space = paramResolver.getParamOutputSpace(params, 'output_space')
+    // Custom templates carry no bundled atlases, so atlas back-/surface-projection has
+    // nothing to do. Decide this once here (a run-level fact) and gate the surface step below.
+    def is_custom_template = paramResolver.isCustomTemplatePath(effective_output_space)
     
     println "============================================"
     println "brainana Nextflow Pipeline - Anatomical"
@@ -541,8 +544,12 @@ workflow ANAT_WF {
     //        anat_after_bias [sub, ses, anat_file, bids_name]
     // Output: anat/atlas_space-T1w/*.nii.gz
     // ============================================
+    // Custom templates carry no bundled atlases, so backprojection would only spawn no-op
+    // tasks; skip it (is_custom_template resolved once above). The empty output channel
+    // cascades safely: scanner input and surface projection become empty, and ARM6 reaches
+    // surface reconstruction via join(..., remainder: true), which keeps every subject.
     anat_backproject_atlases_out = Channel.empty()
-    if (registration_enabled) {
+    if (registration_enabled && !is_custom_template) {
         def anat_after_bias_by_bids = anat_after_bias
             .map { sub, ses, anat_file, bids_name -> [sub, ses, bids_name, anat_file] }
         def backproject_input = anat_reg_transforms
@@ -563,7 +570,7 @@ workflow ANAT_WF {
     // Output: anat/atlas_space-scanner/*.nii.gz
     // ============================================
     anat_backproject_atlases_scanner_out = Channel.empty()
-    if (registration_enabled) {
+    if (registration_enabled && !is_custom_template) {
         def anat_preconform_by_bids = anat_preconform
             .map { sub, ses, anat_file, bids_name -> [sub, ses, bids_name, anat_file] }
         def t1w_atlases_input = anat_backproject_atlases_out
@@ -1192,7 +1199,10 @@ workflow ANAT_WF {
     def surf_subject_dir = (surf_recon_enabled_for_emit && anat_skullstripping_enabled)
         ? SURF_RECON_WF.out.surf_subject_dir_ch
         : Channel.empty()
-    if (registration_enabled && surf_recon_enabled_for_emit && anat_skullstripping_enabled) {
+    // Skip for custom templates: no bundled atlases means zero atlas files to project, and
+    // the process would otherwise still publish only a status JSON, creating an empty
+    // atlas_space-fsnative/ directory.
+    if (registration_enabled && surf_recon_enabled_for_emit && anat_skullstripping_enabled && !is_custom_template) {
         // join yields [sub, ses, bids_name, atlas_files, fs_subject_dir] = the process input tuple.
         def surf_atlas_input = anat_backproject_atlases_out
             .map { sub, ses, atlas_files, bids_name -> [sub, ses, bids_name, atlas_files] }

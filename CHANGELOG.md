@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [1.3.0] - 2026-07-12
+
+### Added
+
+- **Atlas surface projection (fsnative)** — when surface reconstruction is enabled, T1w-space atlases are projected into FastSurfer space and onto the cortical surface (nearest-neighbour throughout), published under `anat/atlas_space-fsnative/` as resampled label volumes `atlas-<name>_space-fsnative_<prefix>.nii.gz` and per-hemisphere maps `atlas-<name>_space-fsnative_hemi-<L|R>_<prefix>.func.gii`
+- **Custom template files** — `--output_space` (`template.output_space`) accepts an absolute path to a `.nii/.nii.gz` file; outputs use the fixed BIDS space label `template`. Strict validation (wrong extension or missing file aborts at run start, no silent fallback); the resolved path is recorded in each sidecar and in `dataset_description.json` (`TemplateSource.Custom`). Custom templates have no bundled atlases, so atlas outputs are skipped for that space
+- **JSON sidecars on derivatives** — anatomical *and* functional publish processes emit BIDS JSON sidecars (`write_derivative_sidecar`) recording `TemplateSource`, `SkullStripped`/`Type`/`Sources`, and BOLD timeseries fields; a `dataset_description.json` is written at run start
+- **Engine-aware transform sidecars** — `*_xfm.json` `GeneratedBy` names the actual registration engine after any runtime fallback (FireANTs / ANTs / ANTsPy / FLIRT / SimpleITK)
+- **Atlas metadata sidecars** — `atlas-{name}.tsv`, `.md`, and `.bib` are copied into every output space (T1w, scanner, fsnative)
+- **Centralized CLI flag handling** — `flags.sh` + `known_flags.txt` as the single source of truth; `-h/--help` prints `USAGE.txt` before any heavy setup; unknown args are rejected fast; underscore is canonical with hyphenated aliases (`--work-dir` → `--work_dir`)
+
+### Changed
+
+- QC reports read the merged Nextflow config, so they reflect CLI overrides such as custom `output_space` templates
+- `stc_enabled` default aligned to `defaults.yaml` (`false` → `true`)
+
+### Fixed
+
+- **Anisotropic skull strip** — resample a NIfTI-path input to isotropic (0.5 mm) before 2.5D U-Net inference, then map back to the native grid; previously an anisotropic T1w distorted the aspect ratio and collapsed the mask, breaking anatomical conform (native grid/affine/header unchanged)
+- Atlas projected counter increments only when a hemisphere is actually projected
+- Dropped the `template_dir` override; the bundled template manager is always used
+- Clarified the `main.nf` hyphen-normalization error message
+
+
 ## [1.2.0] - 2026-07-03
 
 ### Added
@@ -33,9 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restructured functional processing docs: added confound-regressors, tSNR, and despike method sections and renumbered the functional steps
 - Template/atlas zoo note that more atlases are bundled; documented the QC status badge
 
-### Notes
-
-- Install: `pip install "brainana[lite]"` (Lite); full pipeline: `docker pull liuxingyu987/brainana:1.2.0` ([Installation](https://brainana.readthedocs.io/en/stable/installation.html))
 
 ## [1.1.0] - 2026-06-03
 
@@ -70,10 +91,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Obsolete `scripts/brainana_lite.ipynb`, `scripts/bak_*`, and `tests/test_anat_conformation.py`
 
-### Notes
-
-- Full Nextflow/Docker pipeline defaults unchanged (`rigid_method=flirt`, ANTs CLI when present); Lite explicitly overrides to sitk + antspyx
-- Install Lite: `pip install "brainana[lite]"`; full pipeline: `docker pull liuxingyu987/brainana:1.1.0` ([Installation](https://brainana.readthedocs.io/en/stable/installation.html))
 
 ## [1.0.0] - 2026-05-28
 

@@ -110,6 +110,26 @@ def getNestedValue = { config, keyPath, defaultValue = null ->
 }
 
 /**
+ * Return true when output_space is *intended* as a custom template file path.
+ * A registered spec (e.g. "NMT2Sym:res-05") never contains a separator and never
+ * ends in a NIfTI extension; a custom template is a path or a bare NIfTI filename.
+ * String-shape check only (no filesystem access); mirrors is_custom_template_path()
+ * in src/nhp_mri_prep/utils/templates.py and the _looks_like_path check in main.nf.
+ * Returns true for a wrong-extension path (e.g. "/data/tpl.mgz") so downstream
+ * resolution rejects it loudly rather than falling through to registered-spec lookup.
+ */
+def isCustomTemplatePath = { value ->
+    if (value == null) {
+        return false
+    }
+    def str = value.toString().trim()
+    if (str.isEmpty()) {
+        return false
+    }
+    return str.contains("/") || str.endsWith(".nii") || str.endsWith(".nii.gz")
+}
+
+/**
  * Validate output_space format
  * Valid formats: "T1w", "TEMPLATE_NAME", "TEMPLATE_NAME:DESCRIPTION",
  * or a custom template file path (contains '/' or ends in .nii/.nii.gz).
@@ -129,7 +149,7 @@ def validateOutputSpace = { value ->
     }
 
     // Allow a custom template file path (validated for existence in Python at resolve time)
-    if (str.contains("/") || str.endsWith(".nii") || str.endsWith(".nii.gz")) {
+    if (isCustomTemplatePath(str)) {
         return true
     }
 
@@ -790,6 +810,7 @@ with open(output_path, 'w') as f:
         getParamFloat: { params, paramName, defaultValue, min = null, max = null -> getParamFloat(params, paramName, defaultValue, min, max) },
         getParamList: { params, paramName, defaultValue -> getParamList(params, paramName, defaultValue) },
         getParamOutputSpace: { params, paramName, defaultValue = null -> getParamOutputSpace(params, paramName, defaultValue) },
+        isCustomTemplatePath: { value -> isCustomTemplatePath(value) },
         getYamlParam: { yamlKey, defaultValue = null -> getYamlParam(yamlKey, defaultValue) },
         getYamlBool: { yamlKey, defaultValue = null -> getYamlBool(yamlKey, defaultValue) },
         getYamlString: { yamlKey, defaultValue = null -> getYamlString(yamlKey, defaultValue) },

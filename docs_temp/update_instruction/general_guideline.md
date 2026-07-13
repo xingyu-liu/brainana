@@ -26,12 +26,14 @@ For Docker Hub publish, you also need a Docker Hub account and `docker login` be
 
 Release work happens in **four phases**. **Tag** only after pre-tag gates pass on the release commit; **Colab/cloud Lite** with `v${VERSION}` only **after** the tag is pushed to GitHub.
 
-| Phase | What you prove | When |
-| ----- | -------------- | ---- |
-| **A. Release prep** | Version + docs + notebook ref aligned | Uncommitted on `main` until gates pass |
-| **B. Pre-tag gates** | Local code, Docker image, Lite (local) | Before `git commit` / tag |
-| **C. Tag + push** | Immutable `v${VERSION}` on GitHub | After B passes |
-| **D. Post-tag + publish** | Colab/users, GitHub Release, Docker Hub, RTD | After C |
+
+| Phase                     | What you prove                               | When                                   |
+| ------------------------- | -------------------------------------------- | -------------------------------------- |
+| **A. Release prep**       | Version + docs + notebook ref aligned        | Uncommitted on `main` until gates pass |
+| **B. Pre-tag gates**      | Local code, Docker image, Lite (local)       | Before `git commit` / tag              |
+| **C. Tag + push**         | Immutable `v${VERSION}` on GitHub            | After B passes                         |
+| **D. Post-tag + publish** | Colab/users, GitHub Release, Docker Hub, RTD | After C                                |
+
 
 ```mermaid
 flowchart TB
@@ -69,6 +71,8 @@ flowchart TB
   dockerPush --> verify
 ```
 
+
+
 **Rules:**
 
 - Run **Brainana Lite** when you touch the notebook, `brainana[lite]` install path, or lite preprocessing/QC code (see [Brainana Lite testing](#brainana-lite-testing)).
@@ -89,18 +93,20 @@ For version architecture, resolution chain, sidecar stamping, and the full relea
 
 Use one `VERSION` (e.g. `1.1.0`) and update these **together on `main` before pre-tag gates** (leave changes uncommitted until tests pass).
 
-| File / area | What to update | Notes |
-| ----------- | -------------- | ----- |
-| **pyproject.toml** | `version = "${VERSION}"` | Single source of truth; Docker `BRAINANA_VERSION`, Python `get_version()`, and RTD `release` in `docs/conf.py` all follow this. |
-| **`.venv` editable install** | `uv pip install -e .` | Refreshes dist-info so `importlib.metadata` matches; `get_version()` reads `pyproject.toml` directly in the source tree, but pytest still checks dist-info alignment. |
-| **CHANGELOG.md** | Rename `[Unreleased]` → `[${VERSION}] - YYYY-MM-DD`; add empty `[Unreleased]` | Copy the new section into `gh release create --notes-file`. |
-| **README.md** | New features, links, status, Brainana Lite, install pointers | No pinned version required (uses RTD `stable` / `latest`), but README should describe what ships in this release. |
-| **docs/** (RTD) | Pages with old example versions (e.g. `1.0.0`) | `rg -n "${VERSION}\|1\\.0\\.0\|<version>" docs/` |
-| **docs/** (RTD) | New/changed behavior | Add or edit RST pages so **stable** matches the release. |
-| **examples/BrainanaLite.ipynb** | `BRAINANA_REF = "v${VERSION}"` | Git tag uses `v` prefix (e.g. `v1.1.0`). Docker image tag is `${VERSION}` without `v`. Colab tests this ref **after** tag push. |
-| **`scripts/scratch/test_brainana_*.sh`** | `version=${VERSION}` | Output-dir naming only; does not affect stamped sidecar version but avoids confusion. |
-| **RTD build (local)** | `sphinx-build` or `bash docs/build_rtd_local.sh` | Run **after** `pyproject.toml` bump so built HTML shows the new `release` version. |
-| **RTD (hosted)** | No manual upload | After you push tag `v${VERSION}`, RTD builds **stable** from that tag; confirm green on [RTD builds](https://readthedocs.org/projects/brainana/builds/). |
+
+| File / area                              | What to update                                                                | Notes                                                                                                                                                                 |
+| ---------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **pyproject.toml**                       | `version = "${VERSION}"`                                                      | Single source of truth; Docker `BRAINANA_VERSION`, Python `get_version()`, and RTD `release` in `docs/conf.py` all follow this.                                       |
+| `**.venv` editable install**             | `uv pip install -e .`                                                         | Refreshes dist-info so `importlib.metadata` matches; `get_version()` reads `pyproject.toml` directly in the source tree, but pytest still checks dist-info alignment. |
+| **CHANGELOG.md**                         | Rename `[Unreleased]` → `[${VERSION}] - YYYY-MM-DD`; add empty `[Unreleased]` | Copy the new section into `gh release create --notes-file`.                                                                                                           |
+| **README.md**                            | New features, links, status, Brainana Lite, install pointers                  | No pinned version required (uses RTD `stable` / `latest`), but README should describe what ships in this release.                                                     |
+| **docs/** (RTD)                          | Pages with old example versions (e.g. `1.0.0`)                                | `rg -n "${VERSION}|1\\.0\\.0|<version>" docs/`                                                                                                                        |
+| **docs/** (RTD)                          | New/changed behavior                                                          | Add or edit RST pages so **stable** matches the release.                                                                                                              |
+| **examples/BrainanaLite.ipynb**          | `BRAINANA_REF = "v${VERSION}"`                                                | Git tag uses `v` prefix (e.g. `v1.1.0`). Docker image tag is `${VERSION}` without `v`. Colab tests this ref **after** tag push.                                       |
+| `**scripts/scratch/test_brainana_*.sh`** | `version=${VERSION}`                                                          | Output-dir naming only; does not affect stamped sidecar version but avoids confusion.                                                                                 |
+| **RTD build (local)**                    | `sphinx-build` or `bash docs/build_rtd_local.sh`                              | Run **after** `pyproject.toml` bump so built HTML shows the new `release` version.                                                                                    |
+| **RTD (hosted)**                         | No manual upload                                                              | After you push tag `v${VERSION}`, RTD builds **stable** from that tag; confirm green on [RTD builds](https://readthedocs.org/projects/brainana/builds/).              |
+
 
 **Docs / RTD gotchas:**
 
@@ -124,15 +130,15 @@ rg -n "${VERSION}|1\\.0\\.0|<version>" pyproject.toml CHANGELOG.md README.md doc
 
 All must pass **before** `git commit` and **before** `git tag`:
 
-0. After bumping `pyproject.toml`, refresh the editable install: `uv pip install -e .` (from repo root, in `.venv`). Sidecar stamping uses `get_version()` which reads `pyproject.toml` directly, but `pytest tests/test_version.py` also asserts dist-info alignment.
-1. `black --check . && ruff check . && pytest`
-   - **`ruff check .` passes** — dev/scratch helpers are excluded via `[tool.ruff] extend-exclude` + per-file `E402/F401/F541` ignores in `pyproject.toml`; keep new throwaway scripts under `scripts/scratch/`.
-   - **`black --check .` has ~22 files of pre-existing formatting drift** in real source (whitespace only, no logic). Green it with a **dedicated** `chore: black format` commit (`black .`), kept **out of** the release commit — never fold a repo-wide reformat into a release. No CI enforces black/ruff (only the Sphinx PR check exists), so this gate is self-discipline.
-2. `sphinx-build -b html -W --keep-going -c docs docs docs/_build` (or `bash docs/build_rtd_local.sh`)
-3. `docker build --build-arg BRAINANA_VERSION=${VERSION} ...` + pipeline smoke (`scripts/scratch/test_brainana_docker.sh` or `_cpu.sh`)
-4. **Lite local** — `examples/test_BrainanaLite_local_instruction.sh`:
-   - Prefer `uv pip install -e ".[lite]"` from the repo on `main` (`BRAINANA_REF` is ignored when importable).
-   - To test the fresh-clone path pre-tag, temporarily use `BRAINANA_REF = "main"` or a **commit SHA** — not `v${VERSION}` until the tag is on GitHub.
+1. After bumping `pyproject.toml`, refresh the editable install: `uv pip install -e .` (from repo root, in `.venv`). Sidecar stamping uses `get_version()` which reads `pyproject.toml` directly, but `pytest tests/test_version.py` also asserts dist-info alignment.
+2. `black --check . && ruff check . && pytest`
+  - `**ruff check .` passes** — dev/scratch helpers are excluded via `[tool.ruff] extend-exclude` + per-file `E402/F401/F541` ignores in `pyproject.toml`; keep new throwaway scripts under `scripts/scratch/`.
+  - `**black --check .` has ~22 files of pre-existing formatting drift** in real source (whitespace only, no logic). Green it with a **dedicated** `chore: black format` commit (`black .`), kept **out of** the release commit — never fold a repo-wide reformat into a release. No CI enforces black/ruff (only the Sphinx PR check exists), so this gate is self-discipline.
+3. `sphinx-build -b html -W --keep-going -c docs docs docs/_build` (or `bash docs/build_rtd_local.sh`)
+4. `docker build --build-arg BRAINANA_VERSION=${VERSION} ...` + pipeline smoke (`scripts/scratch/test_brainana_docker.sh` or `_cpu.sh`)
+5. **Lite local** — `examples/test_BrainanaLite_local_instruction.sh`:
+  - Prefer `uv pip install -e ".[lite]"` from the repo on `main` (`BRAINANA_REF` is ignored when importable).
+  - To test the fresh-clone path pre-tag, temporarily use `BRAINANA_REF = "main"` or a **commit SHA** — not `v${VERSION}` until the tag is on GitHub.
 
 ---
 
@@ -152,18 +158,20 @@ After `git push origin v${VERSION}`:
 
 ## Brainana Lite testing
 
-Lightweight volumetric T1w workflow in [`examples/BrainanaLite.ipynb`](../examples/BrainanaLite.ipynb). Use it to validate `brainana[lite]` outside Docker (Colab or local Jupyter).
+Lightweight volumetric T1w workflow in `[examples/BrainanaLite.ipynb](../examples/BrainanaLite.ipynb)`. Use it to validate `brainana[lite]` outside Docker (Colab or local Jupyter).
 
 **Colab:** upload or open from GitHub, set `WORKING_DIR` (e.g. Drive path), enable GPU runtime, then **Run All** (same two-pass rule as local).
 
 ### When to run
 
-| Stage | Run Lite? | `BRAINANA_REF` |
-| ----- | --------- | -------------- |
-| Feature dev touching lite path | Yes — before PR | `feat/<topic>` |
-| Release pre-tag on `main` | Yes — with Docker smoke | `main` / commit SHA / local editable (not `v${VERSION}` until tag pushed) |
-| Release post-tag | Yes — Colab required | `v${VERSION}` |
-| Docs-only change | Skip unless notebook/docs for Lite changed | — |
+
+| Stage                          | Run Lite?                                  | `BRAINANA_REF`                                                            |
+| ------------------------------ | ------------------------------------------ | ------------------------------------------------------------------------- |
+| Feature dev touching lite path | Yes — before PR                            | `feat/<topic>`                                                            |
+| Release pre-tag on `main`      | Yes — with Docker smoke                    | `main` / commit SHA / local editable (not `v${VERSION}` until tag pushed) |
+| Release post-tag               | Yes — Colab required                       | `v${VERSION}`                                                             |
+| Docs-only change               | Skip unless notebook/docs for Lite changed | —                                                                         |
+
 
 If a previous run left `WORKING_DIR/brainana_lite_env/` at an old ref, set `FORCE_REINSTALL=True` in the notebook.
 
@@ -220,7 +228,7 @@ github pr create --fill
 cd ~/github/brainana
 git checkout main && git pull origin main
 
-export VERSION=1.2.0          # set to your release
+export VERSION=1.3.0          # set to your release
 export IMAGE=liuxingyu987/brainana
 
 git status   # working tree should be clean before edits
@@ -242,7 +250,7 @@ sphinx-build -b html -W --keep-going -c docs docs docs/_build
 black --check . && ruff check . && pytest
 
 docker build --build-arg BRAINANA_VERSION=${VERSION} \
-  -t ${IMAGE}:${VERSION} -t ${IMAGE}:latest -t brainana:latest .
+  -t ${IMAGE}:${VERSION} -t brainana:latest .
 
 # pipeline smoke — scripts/scratch/test_brainana_docker.sh (or _cpu.sh)
 
@@ -271,18 +279,20 @@ docker push ${IMAGE}:latest   # optional; versioned tag is what users pin
 
 After publishing, confirm each artifact:
 
-| Artifact | Where to check | Expected |
-| -------- | -------------- | -------- |
-| Version in repo | `grep '^version' pyproject.toml` on tag `v${VERSION}` | `${VERSION}` |
-| Brainana Lite notebook | `examples/BrainanaLite.ipynb` on tag `v${VERSION}` | `BRAINANA_REF = "v${VERSION}"` |
-| README | GitHub `main` at release commit | Matches release (features, links) |
-| CHANGELOG | `CHANGELOG.md` on tag | Section `[${VERSION}]` present |
-| Git tag | `git ls-remote --tags origin v${VERSION}` | prints one ref |
-| GitHub Release | [https://github.com/xingyu-liu/brainana/releases](https://github.com/xingyu-liu/brainana/releases) | `v${VERSION}` listed with notes from CHANGELOG |
-| Docker Hub | [https://hub.docker.com/r/liuxingyu987/brainana/tags](https://hub.docker.com/r/liuxingyu987/brainana/tags) | `${VERSION}` (no `v`) and optionally `latest` |
-| RTD builds | [https://readthedocs.org/projects/brainana/builds/](https://readthedocs.org/projects/brainana/builds/) | build for tag `v${VERSION}` is green |
-| RTD stable | [https://brainana.readthedocs.io/en/stable/](https://brainana.readthedocs.io/en/stable/) | `${VERSION}` in built docs; install examples use current tag |
-| RTD latest | [https://brainana.readthedocs.io/en/latest/](https://brainana.readthedocs.io/en/latest/) | tracks `main` after release merge |
+
+| Artifact               | Where to check                                                                                             | Expected                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Version in repo        | `grep '^version' pyproject.toml` on tag `v${VERSION}`                                                      | `${VERSION}`                                                 |
+| Brainana Lite notebook | `examples/BrainanaLite.ipynb` on tag `v${VERSION}`                                                         | `BRAINANA_REF = "v${VERSION}"`                               |
+| README                 | GitHub `main` at release commit                                                                            | Matches release (features, links)                            |
+| CHANGELOG              | `CHANGELOG.md` on tag                                                                                      | Section `[${VERSION}]` present                               |
+| Git tag                | `git ls-remote --tags origin v${VERSION}`                                                                  | prints one ref                                               |
+| GitHub Release         | [https://github.com/xingyu-liu/brainana/releases](https://github.com/xingyu-liu/brainana/releases)         | `v${VERSION}` listed with notes from CHANGELOG               |
+| Docker Hub             | [https://hub.docker.com/r/liuxingyu987/brainana/tags](https://hub.docker.com/r/liuxingyu987/brainana/tags) | `${VERSION}` (no `v`) and optionally `latest`                |
+| RTD builds             | [https://readthedocs.org/projects/brainana/builds/](https://readthedocs.org/projects/brainana/builds/)     | build for tag `v${VERSION}` is green                         |
+| RTD stable             | [https://brainana.readthedocs.io/en/stable/](https://brainana.readthedocs.io/en/stable/)                   | `${VERSION}` in built docs; install examples use current tag |
+| RTD latest             | [https://brainana.readthedocs.io/en/latest/](https://brainana.readthedocs.io/en/latest/)                   | tracks `main` after release merge                            |
+
 
 Additional checks:
 
@@ -290,3 +300,4 @@ Additional checks:
 - Local RTD parity: `bash docs/build_rtd_local.sh` or `sphinx-build -b html -W --keep-going -c docs docs docs/_build` (after `pyproject.toml` bump).
 - Spot-check key docs pages (installation, usage, outputs, Brainana Lite if documented).
 - User pull: `docker pull liuxingyu987/brainana:${VERSION}` succeeds.
+
