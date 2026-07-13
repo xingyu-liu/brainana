@@ -253,8 +253,16 @@ for rec in tqdm(ready_records, desc="Backprojecting atlases to T1w"):
                 continue
 
             rec["out_dir_t1w"].mkdir(parents=True, exist_ok=True)
+            # Copy the label images plus the associated sidecars (LUT/docs/refs) that
+            # anat_backproject_atlases now writes next to them, so the standalone
+            # backfill mirrors the pipeline's atlas_space-T1w output.
+            sidecars = sorted(
+                p
+                for p in atlas_dir.glob("atlas-*.*")
+                if p.suffix in {".tsv", ".md", ".bib"}
+            )
             written = 0
-            for src in generated:
+            for src in generated + sidecars:
                 dst = rec["out_dir_t1w"] / src.name
                 if dst.exists() and not overwrite:
                     continue

@@ -35,6 +35,7 @@ include { ANAT_APPLY_TRANSFORMATION } from '../modules/anatomical.nf'
 include { ANAT_APPLY_TRANSFORM_MASK } from '../modules/anatomical.nf'
 include { ANAT_BACKPROJECT_ATLASES_TO_T1W } from '../modules/anatomical.nf'
 include { ANAT_BACKPROJECT_ATLASES_TO_SCANNER } from '../modules/anatomical.nf'
+include { ANAT_PROJECT_ATLASES_TO_SURFACE } from '../modules/anatomical.nf'
 include { ANAT_PUBLISH_PHASE1 } from '../modules/anatomical.nf'
 include { ANAT_PUBLISH_PHASE1 as ANAT_PUBLISH_T2W } from '../modules/anatomical.nf'
 include { ANAT_T1WT2W_COMBINED } from '../modules/anatomical.nf'
@@ -1176,6 +1177,28 @@ workflow ANAT_WF {
     surf_actual_subject_id = (surf_recon_enabled_for_emit && anat_skullstripping_enabled)
         ? SURF_RECON_WF.out.surf_actual_subject_id_ch
         : Channel.empty()
+
+    // ============================================
+    // Project atlases onto FastSurfer surfaces
+    // ============================================
+    // Only when registration produced T1w atlases AND surf recon ran successfully.
+    // Input: anat_backproject_atlases_out [sub, ses, atlas_files, bids_name]
+    //        surf_subject_dir            [sub, ses, fastsurfer_subject_dir]
+    // Output: anat/atlas_space-fsnative/{*.nii.gz, *_hemi-{L,R}_*.func.gii}
+    // Joining on the FastSurfer subject_dir (a real task-output path) both serializes
+    // this after surf recon AND stages the tree into the work dir, so we never race the
+    // async publishDir copy. Subjects whose surf recon failed emit no dir and are dropped.
+    // ============================================
+    def surf_subject_dir = (surf_recon_enabled_for_emit && anat_skullstripping_enabled)
+        ? SURF_RECON_WF.out.surf_subject_dir_ch
+        : Channel.empty()
+    if (registration_enabled && surf_recon_enabled_for_emit && anat_skullstripping_enabled) {
+        // join yields [sub, ses, bids_name, atlas_files, fs_subject_dir] = the process input tuple.
+        def surf_atlas_input = anat_backproject_atlases_out
+            .map { sub, ses, atlas_files, bids_name -> [sub, ses, bids_name, atlas_files] }
+            .join(surf_subject_dir, by: [0, 1])
+        ANAT_PROJECT_ATLASES_TO_SURFACE(surf_atlas_input, config_file)
+    }
 
     // ============================================
     // COLLECT QC CHANNELS

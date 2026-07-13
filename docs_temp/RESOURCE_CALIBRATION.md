@@ -130,8 +130,9 @@ Recommended values are based on the **maximum peak_rss across all five datasets*
 
 ### 5.1 nextflow.config
 
-1. **Params for executor pool**
-   - Add `--max_cpus` and `--max_memory` (or use env vars)
+1. **Executor pool limits**
+   - Configured via the `NXF_MAX_CPUS` / `NXF_MAX_MEMORY` env vars (not CLI params;
+     see `PARAMETER_MANAGEMENT.md` §3.5)
    - Default: 8 CPUs, 20 GB
 
 2. **Profiles**

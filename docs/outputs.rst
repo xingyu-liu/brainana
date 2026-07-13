@@ -9,8 +9,8 @@ Outputs
 
 Brainana writes all results under the **output directory** you specify (e.g. ``/output`` when using Docker). Outputs follow a BIDS derivatives layout.
 
-Directory layout
-----------------
+Output directory layout
+-----------------------
 
 .. image:: _static/pipeline_details/output_data_structure.png
    :alt: Brainana output directory layout
@@ -24,11 +24,9 @@ The diagram above is the canonical layout.
 Subject directory (``sub-<id>/``)
 ---------------------------------
 
-Session directory (``ses-<id>/``)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. rubric:: Session directory (``ses-<id>/``, optional)
 
-Anatomical outputs (``anat/``)
-""""""""""""""""""""""""""""""
+.. rubric:: Anatomical outputs (``anat/``)
 
 *Scanner-space synthesis*
 
@@ -76,8 +74,7 @@ Atlases are backprojected from template space into two subfolders:
 - ``atlas_space-T1w/`` — ``atlas-<name>_space-T1w_<ses_prefix>.nii.gz``
 - ``atlas_space-scanner/`` — ``atlas-<name>_space-scanner_<ses_prefix>.nii.gz``
 
-Functional outputs (``func/``)
-""""""""""""""""""""""""""""""
+.. rubric:: Functional outputs (``func/``)
 
 Session-level files omit task and run entities. Per-run files include them (see ``<run_prefix>`` above).
 
@@ -147,10 +144,14 @@ Written in BIDS layout; nilearn-compatible for scrubbing via
 - ``<run_prefix>_desc-confounds_timeseries.json`` — Per-column metadata sidecar (method, FD radius, FD/DVARS
   thresholds, and whether tissue regressors were produced).
 
-QC figures (``figures/``)
-^^^^^^^^^^^^^^^^^^^^^^^^^
+.. rubric:: QC figures (``figures/``)
 
 - ``sub-<id>/figures/*.png`` — QC snapshot images for the subject.
+
+Surface reconstruction (``fastsurfer/``)
+----------------------------------------
+
+When surface reconstruction is enabled, FreeSurfer-compatible outputs are written under ``fastsurfer/sub-<id>/`` (or ``fastsurfer/sub-<id>_ses-<id>/`` when multiple sessions are reconstructed separately). This includes ``label/``, ``mri/``, ``surf/``, and ``stats/`` (meshes, parcellations, and morphometric maps).
 
 Quality control report
 ----------------------
@@ -162,11 +163,6 @@ The report is **always generated on completion**, even after a partial failure, 
 - **Pass** — completed successfully.
 - **Pass with warnings** — completed, but one or more optional steps failed; some outputs may be missing.
 - **Fail** — the run aborted early.
-
-Surface reconstruction (``fastsurfer/``)
-----------------------------------------
-
-When surface reconstruction is enabled, FreeSurfer-compatible outputs are written under ``fastsurfer/sub-<id>/`` (or ``fastsurfer/sub-<id>_ses-<id>/`` when multiple sessions are reconstructed separately). This includes ``label/``, ``mri/``, ``surf/``, and ``stats/`` (meshes, parcellations, and morphometric maps).
 
 Pipeline reports (``nextflow_reports/``)
 ----------------------------------------

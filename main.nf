@@ -32,6 +32,42 @@ workflow {
     paramResolver.initialize(params, projectDir)
 
     // ============================================
+    // VALIDATE PARAMETER NAMES (fail fast on unknown flags)
+    // ============================================
+    // Nextflow silently turns any --foo on the command line into params.foo, so a
+    // mistyped flag name would otherwise be ignored and the run would proceed with
+    // defaults (e.g. --custom-template silently doing nothing while the default
+    // template is used). This is the BACKSTOP guard (the bash entry layers reject
+    // unknown flags earlier); it also covers direct `nextflow run main.nf` invocations.
+    //
+    // The accepted names come from the shared allowlist known_flags.txt (single source of
+    // truth, also read by flags.sh). Fail-open: if the file is missing, skip name
+    // validation rather than risk aborting an otherwise-valid run.
+    def knownFlagsFile = new File("${projectDir}/known_flags.txt")
+    def KNOWN_PARAMS = knownFlagsFile.isFile()
+        ? (knownFlagsFile.readLines()
+             .collect { it.replaceAll(/#.*/, '').trim() }
+             .findAll { it } as Set)
+        : ([] as Set)
+    def unknownParams = KNOWN_PARAMS.isEmpty()
+        ? []
+        : params.keySet().findAll { !KNOWN_PARAMS.contains(it as String) }
+    if (unknownParams) {
+        def flags = unknownParams.collect { "--${it}" }.sort().join(', ')
+        // Reuse the canonical usage listing (same text as --help) so the error is a full,
+        // standard argument reference. Falls back to a short synopsis if USAGE.txt is absent.
+        def usageFile = new File("${projectDir}/USAGE.txt")
+        def usage = usageFile.isFile()
+            ? usageFile.text.trim()
+            : "usage: docker run ... <image> [bids_dir] [output_dir] [OPTIONS]\n" +
+              "run with --help for the full argument list."
+        error "Unknown argument(s): ${flags}\n\n" +
+              "${usage}\n\n" +
+              "Hint: custom templates use --output_space <file>, not --custom-template. " +
+              "Hyphenated spellings (e.g. --output-space) are accepted and normalized to underscore."
+    }
+
+    // ============================================
     // VALIDATE CUSTOM TEMPLATE (fail fast, no silent fallback)
     // ============================================
     // When output_space is a custom template file path, reject it up front if the

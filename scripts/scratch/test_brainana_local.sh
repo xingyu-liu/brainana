@@ -20,9 +20,10 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 version=1.2.0
 
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_local_v${version}
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_local_v${version}_atlasinfo
 config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
-custom_template_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/tpl-MEBRAINS_res-1_T1w_brain.nii.gz"
+# custom_template_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/tpl-MEBRAINS_res-1_T1w_brain.nii.gz"
+custom_template_f=""
 
 # bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_example
 # output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_example_local_v${version}

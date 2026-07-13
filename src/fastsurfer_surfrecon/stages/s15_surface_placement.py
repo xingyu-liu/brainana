@@ -109,17 +109,27 @@ class SurfacePlacement(HemisphereStage):
                 raise FileNotFoundError(f"pial.T1 not found for {self.hemi}")
 
         # Create GIFTI surfaces for downstream QC (with CRAS-applied coordinates).
-        for surf_name in ("white", "pial"):
+        # Guard on the binary surface existing: on a resume over an older subject tree,
+        # `inflated` may be absent (s12/s14 skip when their primary outputs already exist),
+        # and converting a missing surface would crash mris_convert.
+        for surf_name in ("white", "pial", "inflated"):
             in_surf = self.hemi_path(surf_name)
             out_gii = self.hemi_path(f"{surf_name}.surf.gii")
             if not out_gii.exists():
+                if not in_surf.exists():
+                    logger.warning(
+                        f"{self.hemi}.{surf_name} surface not found; skipping GIFTI conversion."
+                    )
+                    continue
                 convert_fs_surface_to_gifti(in_surf, out_gii, apply_cras=True)
 
     def should_skip(self) -> bool:
-        """Skip if white, pial and their GIFTI counterparts all exist."""
+        """Skip if white, pial, inflated and their GIFTI counterparts all exist."""
         return (
             self.hemi_path("white").exists()
             and self.hemi_path("pial").exists()
+            and self.hemi_path("inflated").exists()
             and self.hemi_path("white.surf.gii").exists()
             and self.hemi_path("pial.surf.gii").exists()
+            and self.hemi_path("inflated.surf.gii").exists()
         )

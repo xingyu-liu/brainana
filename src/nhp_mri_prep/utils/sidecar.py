@@ -135,6 +135,7 @@ def write_derivative_sidecar(
     roi_type: Optional[str] = None,
     task_name: Optional[str] = None,
     repetition_time: Optional[float] = None,
+    slice_timing_corrected: Optional[bool] = None,
     include_template_source: Optional[bool] = None,
     engine: Optional[str] = None,
     extra: Optional[Dict[str, Any]] = None,
@@ -177,6 +178,8 @@ def write_derivative_sidecar(
         fields["TaskName"] = task_name
     if repetition_time is not None:
         fields["RepetitionTime"] = repetition_time
+    if slice_timing_corrected is not None:
+        fields["SliceTimingCorrected"] = bool(slice_timing_corrected)
     if sources:
         fields["Sources"] = list(sources)
     if extra:
@@ -187,6 +190,40 @@ def write_derivative_sidecar(
     save_metadata(fields, sidecar_path)
     logger.debug(f"System: wrote derivative sidecar - {sidecar_path}")
     return sidecar_path
+
+
+def bold_timeseries_fields(
+    bids_name: Union[str, Path], config: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Sidecar kwargs (``repetition_time``/``slice_timing_corrected``) for a 4D preproc BOLD.
+
+    Reads the raw BOLD json for ``bids_name`` (a full path into the raw dataset) and mirrors
+    the slice-timing-correction gate the pipeline itself applies, so the sidecar reflects what
+    actually happened to this run. Returns a splat-ready dict for ``write_derivative_sidecar``;
+    ``repetition_time`` is omitted when the raw metadata has no TR.
+    """
+    from ..config.bids_adapter import _is_valid_slice_timing_data
+    from .bids import find_bids_metadata
+
+    p = Path(bids_name)
+    dataset_dir = next(
+        (parent.parent for parent in p.parents if parent.name.startswith("sub-")), None
+    )
+    if dataset_dir is None:
+        dataset_dir = p.parent.parent.parent.parent  # legacy session-layout fallback
+    meta = find_bids_metadata(p, dataset_dir) or {}
+
+    tr = meta.get("RepetitionTime")
+    stc_enabled = bool(
+        config.get("func", {}).get("slice_timing_correction", {}).get("enabled", False)
+    )
+    fields: Dict[str, Any] = {
+        "slice_timing_corrected": stc_enabled
+        and _is_valid_slice_timing_data(meta.get("SliceTiming"), tr)
+    }
+    if tr is not None:
+        fields["repetition_time"] = tr
+    return fields
 
 
 def write_dataset_description(

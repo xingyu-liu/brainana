@@ -1,0 +1,35 @@
+# brainana — accepted CLI flag names (bare, no leading "--). SINGLE SOURCE OF TRUTH.
+#
+# Read by flags.sh (entrypoint.sh + run_brainana.sh) and by main.nf to reject
+# unrecognized arguments. One name per line; blank lines and "#" comments ignored.
+#
+# KEEP IN SYNC when adding/renaming a flag:
+#   - nextflow.config  params { }   (the actual Nextflow param declaration)
+#   - USAGE.txt                      (the human-facing --help listing)
+
+# --- User-facing pipeline params (nextflow.config params{}; passed on the CLI / mapped to YAML) ---
+bids_dir
+output_dir
+config_file
+work_dir
+output_space
+anat_only
+subjects
+sessions
+tasks
+runs
+
+# --- Auto-detected / internal params -------------------------------------------------------
+# Declared in nextflow.config params{}, so they are ALWAYS present in params at runtime and
+# MUST stay listed here, or main.nf's guard would abort every run. Not meant to be passed by
+# users (set by hardware detection / config-parse).
+use_gpu
+gpu_count
+max_jobs_per_gpu
+python_exe
+
+# --- Wrapper-layer flags (consumed by entrypoint.sh / run_brainana.sh; tolerated by guards) ---
+config
+no_resume
+no_docker
+freesurfer_license

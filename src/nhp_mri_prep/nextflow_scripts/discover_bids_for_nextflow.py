@@ -28,7 +28,7 @@ from nhp_mri_prep.config.config_validation import validate_config
 from nhp_mri_prep.steps.bids_discovery import discover_bids_dataset
 
 
-def validate_bids(bids_dir: Path, skip_validation: bool) -> bool:
+def validate_bids(bids_dir: Path) -> bool:
     """
     Lightweight, dependency-free sanity check that ``bids_dir`` looks like a
     BIDS dataset the pipeline can process.
@@ -43,15 +43,10 @@ def validate_bids(bids_dir: Path, skip_validation: bool) -> bool:
 
     Args:
         bids_dir: Path to BIDS dataset
-        skip_validation: If True, skip the check
 
     Returns:
-        True if the check passed or was skipped, False otherwise
+        True if the check passed, False otherwise
     """
-    if skip_validation:
-        print("INFO: BIDS validation skipped")
-        return True
-
     has_subject_dir = any(
         p.is_dir() and p.name.startswith("sub-") for p in bids_dir.iterdir()
     )
@@ -169,9 +164,6 @@ def main():
         help="Path to configuration YAML file",
     )
     parser.add_argument(
-        "--skip_bids_validation", action="store_true", help="Skip BIDS validation"
-    )
-    parser.add_argument(
         "--subjects",
         type=str,
         default=None,
@@ -243,12 +235,8 @@ def main():
     if args.runs:
         runs_list = [r.strip() for r in args.runs.split(",")]
 
-    # Validate BIDS dataset structure (honors --skip_bids_validation)
-    if not validate_bids(args.bids_dir, args.skip_bids_validation):
-        print(
-            "Use --skip_bids_validation to bypass this check.",
-            file=sys.stderr,
-        )
+    # Validate BIDS dataset structure (always runs)
+    if not validate_bids(args.bids_dir):
         sys.exit(1)
 
     # Create output directory

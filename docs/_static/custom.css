@@ -21,3 +21,17 @@
   max-width: 100%;
 }
 
+/* Code-block callouts: warm cream background so demo/example blocks read as
+   distinct callouts instead of near-white (#f8f8f8) on the white page.
+   Targets syntax-highlighted blocks (.highlight) and plain literal blocks;
+   does NOT touch .rst-content .highlighted (the yellow search-hit marker). */
+.rst-content div[class^="highlight"],
+.rst-content pre.literal-block {
+  border-color: #efe7d8;
+}
+.rst-content div[class^="highlight"] .highlight,
+.rst-content pre.literal-block,
+.highlight {
+  background: #fbf7f0;
+}
+

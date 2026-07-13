@@ -11,27 +11,11 @@ bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
 output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_docker_v${version}
 config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml
 
-# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_example
-# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_example
+# # bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_example
+# # output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_example
 
-# pet cropped
-# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_pet_cropped
-# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_pet_cropped_noss_cpu
-# config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_pet_noss_cpu.yaml
-
-# run docker
-docker run --rm -t --gpus all \
-    -v "$bids_dir":/input \
-    -v "$output_dir":/output \
-    -v "$fs_license":/fs_license.txt \
-    -v "$config_f":/config.yaml \
-    brainana:latest \
-    /input /output/preprocessed \
-    -w /output/preprocessed_wd \
-    --config /config.yaml \
-    --freesurfer-license /fs_license.txt
-
-# # run docker
+# # ------------------------------------------------------------
+# # run docker without custom template
 # docker run --rm -t --gpus all \
 #     -v "$bids_dir":/input \
 #     -v "$output_dir":/output \
@@ -41,4 +25,23 @@ docker run --rm -t --gpus all \
 #     /input /output/preprocessed \
 #     -w /output/preprocessed_wd \
 #     --config /config.yaml \
-#     --freesurfer-license /fs_license.txt
+#     --freesurfer-license /fs_license.txt 
+
+
+# ------------------------------------------------------------
+# with custom template
+custom_template_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/tpl-MEBRAINS_res-1_T1w_brain.nii.gz
+output_dir=${output_dir}_customtemplate
+
+docker run --rm -t --gpus all \
+    -v "$bids_dir":/input \
+    -v "$output_dir":/output \
+    -v "$fs_license":/fs_license.txt \
+    -v "$config_f":/config.yaml \
+    -v "$custom_template_f":/custom_template.nii.gz \
+    brainana:latest \
+    /input /output/preprocessed \
+    -w /output/preprocessed_wd \
+    --config /config.yaml \
+    --freesurfer-license /fs_license.txt \
+    --output_space /custom_template.nii.gz

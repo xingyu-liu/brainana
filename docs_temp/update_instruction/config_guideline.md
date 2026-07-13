@@ -81,8 +81,8 @@ Most parameters are **YAML-only** (set them in a config file). A small set are a
 | `--runs` | `bids_filtering.runs` |
 
 Workflow-only params (not in YAML) live only in `nextflow.config` `params{}`:
-`bids_dir`, `output_dir`, `config_file`, `work_dir`, `skip_bids_validation`,
-`gpu_enabled`, `gpu_queue`, `use_gpu`, `gpu_count`, `max_jobs_per_gpu`.
+`bids_dir`, `output_dir`, `config_file`, `work_dir`,
+`use_gpu`, `gpu_count`, `max_jobs_per_gpu`, `python_exe`.
 (Executor limits are **env vars**, not params: `NXF_MAX_CPUS`, `NXF_MAX_MEMORY`.)
 
 ---
