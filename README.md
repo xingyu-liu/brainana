@@ -24,6 +24,7 @@ Brainana documentation is hosted on **[Read the Docs](https://brainana.readthedo
 Start with [Installation](https://brainana.readthedocs.io/en/stable/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/stable/usage_notes.html).
 
 Additional references:
+- [Try a demo](https://brainana.readthedocs.io/en/stable/demo.html) — run the full pipeline on the bundled [`examples/dataset_example/`](examples/dataset_example) dataset
 - [Brainana Lite](https://brainana.readthedocs.io/en/stable/brainana_lite.html) (Jupyter / Colab T1w workflow)
 - [Processing details](https://brainana.readthedocs.io/en/stable/processing.html)
 - [Outputs](https://brainana.readthedocs.io/en/stable/outputs.html)

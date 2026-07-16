@@ -48,6 +48,7 @@ Contents
    :caption: USER GUIDE
 
    usage_notes
+   demo
 
 .. toctree::
    :maxdepth: 1

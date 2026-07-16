@@ -64,6 +64,10 @@ If you start with DICOM, you can either:
 
 If you only have a few images (e.g. one), option (1) is usually simpler; for a large dataset, option (2) is often better but needs a bit of extra setup.
 
+.. tip::
+
+   Want to try Brainana on a ready-made dataset first? See :doc:`demo`.
+
 .. _the-freesurfer-license-optional:
 
 The FreeSurfer license (optional)

@@ -1,0 +1,8 @@
+{
+  "Name": "Example dataset (single macaque subject)",
+  "BIDSVersion": "1.8.0",
+  "DatasetType": "raw",
+  "Authors": [
+    "M1"
+  ]
+}
