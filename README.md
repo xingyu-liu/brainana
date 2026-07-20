@@ -14,18 +14,12 @@
 
 **Brainana** provides anatomical and functional (fMRI) processing, image registration, surface reconstruction, fMRIPrep-compatible confound regressors, and HTML QC reports for macaque neuroimaging data in a reproducible workflow (FSL, ANTs, AFNI, FreeSurfer, Nextflow).
 
-> **Status:** Research software, beta stage – feature-complete for main workflows; bugs and edge cases are still possible.
-
-To explore a subject's outputs interactively, use the companion **[Brainana Viewer](https://github.com/arcaro-lab/brainana_tools)** — a cross-platform NiiVue viewer for per-subject (`sub-*`) pipeline output.
+> **Status:** Research software – feature-complete for main workflows; bugs and edge cases are still possible.
 
 ## Getting started
 
-Read the full guide on **[Read the Docs](https://brainana.readthedocs.io/en/stable/)** — start with [Installation](https://brainana.readthedocs.io/en/stable/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/stable/usage_notes.html).
-
-Additional references:
-- [Try a demo](https://brainana.readthedocs.io/en/stable/demo.html) — run the full pipeline on the bundled [`examples/dataset_example/`](examples/dataset_example) dataset
-- [Brainana Lite](https://brainana.readthedocs.io/en/stable/brainana_lite.html) (Jupyter / Colab T1w workflow)
-- [Brainana Viewer](https://brainana.readthedocs.io/en/stable/viewer.html) — companion cross-platform viewer for inspecting per-subject outputs
+Read the **[Docs](https://brainana.readthedocs.io/en/stable/)**, start with [Installation](https://brainana.readthedocs.io/en/stable/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/stable/usage_notes.html). 
+To get a feel for the pipeline, [try the demo](https://brainana.readthedocs.io/en/stable/demo.html) on the bundled [`examples/dataset_example/`](examples/dataset_example) dataset.
 
 ## Brainana Lite
 
@@ -34,8 +28,17 @@ Additional references:
 Lightweight volumetric T1w preprocessing for a single subject (no functional MRI, no surfaces). Run interactively in Jupyter or Google Colab—no Docker required.
 
 - **Notebook:** [`examples/BrainanaLite.ipynb`](examples/BrainanaLite.ipynb) — on Colab, use **Run all**; the first pass may restart the runtime once, then run again.
+- **Docs:** [Brainana Lite guide](https://brainana.readthedocs.io/en/stable/brainana_lite.html) — Jupyter / Colab T1w workflow
 
 For the full multi-modality pipeline with surfaces and QC reports, use the installation above for docker.
+
+## Brainana Viewer
+
+<p align="center">
+  <img src="docs/_static/brainana_viewer_big.png" alt="Brainana Viewer — macaque brain surfaces, atlas overlays, and functional maps" width="100%">
+</p>
+
+To visualize brainana's outputs interactively, use the companion **[Brainana Viewer](https://github.com/arcaro-lab/brainana_tools)** — a cross-platform viewer.
 
 ## Citation
 
