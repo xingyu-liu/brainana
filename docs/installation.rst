@@ -86,6 +86,8 @@ Set up Docker
 
    .. note::
 
-      Replace ``<version>`` with a published Brainana tag from Docker Hub, for example ``1.3.0``. See the `Brainana image tags on Docker Hub <https://hub.docker.com/r/liuxingyu987/brainana/tags>`_ for the list of available versions.
+      Replace ``<version>`` with a published Brainana tag from Docker Hub, for example ``2.0.0``. See the `Brainana image tags on Docker Hub <https://hub.docker.com/r/liuxingyu987/brainana/tags>`_ for the list of available versions.
+
+   This is a one-time ~9 GB download (~23 GB on disk), typically a few minutes on a fast connection and longer on slower networks.
 
 Once the image is ready, see :doc:`usage_notes` to run the pipeline.

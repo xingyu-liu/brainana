@@ -1,527 +1,526 @@
-ID	label	region	name	name_full	hemi
-0	background				
-4	cortex_rh_area_32	cortex	area_32	area_32	rh
-5	cortex_rh_area_25	cortex	area_25	subgenual_cortex	rh
-7	cortex_rh_area_24a/b	cortex	area_24a/b	areas_24a_and_24b	rh
-10	cortex_rh_area_24c	cortex	area_24c	area_24c	rh
-12	cortex_rh_area_24a/b_prime	cortex	area_24a/b_prime	areas_24a'_and_24b'	rh
-15	cortex_rh_area_24c_prime	cortex	area_24c_prime	area_24c'	rh
-18	cortex_rh_area_10	cortex	area_10	frontal_pole	rh
-22	cortex_rh_area_14	cortex	area_14	gyrus_rectus	rh
-27	cortex_rh_area_11	cortex	area_11	area_11	rh
-30	cortex_rh_area_13	cortex	area_13	area_13	rh
-34	cortex_rh_area_12m/o	cortex	area_12m/o	medial_and_orbital_area_12	rh
-39	cortex_rh_Iam/Iapm	cortex	Iam/Iapm	medial_agranular_insular_region	rh
-40	cortex_rh_lat_Ia	cortex	lat_Ia	lateral_agranular_insular_region	rh
-44	cortex_rh_OLF	cortex	OLF	primary_olfactory_cortex	rh
-48	cortex_rh_G	cortex	G	gustatory_cortex	rh
-49	cortex_rh_PrCO	cortex	PrCO	precentral_operular_area	rh
-51	cortex_rh_area_8A	cortex	area_8A	periarcuate_area_8A_(Frontal_Eye_Fields)	rh
-55	cortex_rh_area_8B	cortex	area_8B	area_8B	rh
-60	cortex_rh_area_9	cortex	area_9	area_9	rh
-63	cortex_rh_area_46d	cortex	area_46d	dorsal_area_46	rh
-66	cortex_rh_area_46v/f	cortex	area_46v/f	ventral_and_fundus_portion_of_area_46	rh
-69	cortex_rh_area_12r/l	cortex	area_12r/l	rostral_and_lateral_area_12	rh
-73	cortex_rh_area_45	cortex	area_45	area_45	rh
-76	cortex_rh_area_44	cortex	area_44	area_44	rh
-79	cortex_rh_M1	cortex	M1	primary_motor_cortex	rh
-81	cortex_rh_PMd	cortex	PMd	dorsal_premotor_cortex	rh
-84	cortex_rh_PMv	cortex	PMv	ventral_premotor_cortex	rh
-88	cortex_rh_preSMA	cortex	preSMA	presupplementary_motor_area	rh
-89	cortex_rh_SMA	cortex	SMA	supplementary_motor_area	rh
-93	cortex_rh_area_3a/b	cortex	area_3a/b	areas_3a_and_3b	rh
-94	cortex_rh_areas_1-2	cortex	areas_1-2	areas_1-2	rh
-95	cortex_rh_SII	cortex	SII	secondary_somatosensory_cortex	rh
-98	cortex_rh_V6	cortex	V6	visual_area_V6	rh
-99	cortex_rh_V6A	cortex	V6A	visual_area_V6A	rh
-103	cortex_rh_area_5d	cortex	area_5d	dorsal_area_5	rh
-106	cortex_rh_PEa	cortex	PEa	area_PEa	rh
-108	cortex_rh_MIP	cortex	MIP	medial_intraparietal_area	rh
-109	cortex_rh_fundus_IPS	cortex	fundus_IPS	fundus_of_the_intraparietal_sulcus	rh
-114	cortex_rh_AIP	cortex	AIP	anterior_intraparietal_area	rh
-115	cortex_rh_LIP	cortex	LIP	lateral_intraparietal_area	rh
-118	cortex_rh_LOP	cortex	LOP	lateral_occipital_parietal_area	rh
-119	cortex_rh_MST	cortex	MST	medial_superior_temporal_area	rh
-121	cortex_rh_area_7a/b	cortex	area_7a/b	inferior_parietal_lobule_areas_7a_and_7b	rh
-124	cortex_rh_area_7op	cortex	area_7op	parietal_operculum	rh
-126	cortex_rh_area_7m	cortex	area_7m	area_7_(PGm)_on_the_medial_wall	rh
-129	cortex_rh_area_31	cortex	area_31	area_31	rh
-130	cortex_rh_area_23	cortex	area_23	area_23	rh
-134	cortex_rh_area_v23	cortex	area_v23	area_v23	rh
-136	cortex_rh_area_29	cortex	area_29	area_29	rh
-137	cortex_rh_area_30	cortex	area_30	area_30	rh
-142	cortex_rh_CA_fields	cortex	CA_fields	hippocampus_proper	rh
-145	cortex_rh_DG	cortex	DG	dentate_gyrus	rh
-146	cortex_rh_Sub/proS	cortex	Sub/proS	subiculum_and_prosubiculum	rh
-147	cortex_rh_preS/paraS	cortex	preS/paraS	presubiculum_and_parasubiculum	rh
-149	cortex_rh_TF/TFO	cortex	TF/TFO	areas_TF_and_TFO	rh
-152	cortex_rh_TH	cortex	TH	area_TH	rh
-155	cortex_rh_caudal_ERh	cortex	caudal_ERh	caudal_entorhinal_cortex	rh
-158	cortex_rh_mid_ERh	cortex	mid_ERh	middle_entorhinal_cortex	rh
-159	cortex_rh_rostral_ERh	cortex	rostral_ERh	rostral_entorhinal_cortex	rh
-161	cortex_rh_area_35	cortex	area_35	area_35	rh
-162	cortex_rh_area_36	cortex	area_36	area_36	rh
-166	cortex_rh_TGa	cortex	TGa	agranular_temporal_pole	rh
-168	cortex_rh_TGd	cortex	TGd	dysgranular_temporal_pole	rh
-171	cortex_rh_TGg	cortex	TGg	granular_temporal_pole	rh
-176	cortex_rh_TEO	cortex	TEO	area_TEO	rh
-179	cortex_rh_post_TE	cortex	post_TE	posterior_area_TE	rh
-182	cortex_rh_ant_TE	cortex	ant_TE	anterior_area_TE	rh
-185	cortex_rh_TE_in_STSv	cortex	TE_in_STSv	area_TE_in_the_ventral_STS	rh
-189	cortex_rh_ant_STSf	cortex	ant_STSf	anterior_fundus_of_the_superior_temporal_sulcus	rh
-192	cortex_rh_FST	cortex	FST	floor_of_the_superior_temporal_area	rh
-196	cortex_rh_TPO	cortex	TPO	temporal_parietooccipital_associated_area	rh
-197	cortex_rh_TAa	cortex	TAa	area_TAa	rh
-198	cortex_rh_STGr	cortex	STGr	rostral_superior_temporal_gyrus	rh
-200	cortex_rh_Tpt	cortex	Tpt	temporo-parietal_area	rh
-201	cortex_rh_parabelt	cortex	parabelt	parabelt_areas_of_auditory_cortex	rh
-207	cortex_rh_CL/ML	cortex	CL/ML	caudal_areas_of_the_lateral_belt	rh
-210	cortex_rh_AL/RTL	cortex	AL/RTL	rostral_areas_of_the_lateral_belt	rh
-214	cortex_rh_CM	cortex	CM	caudomedial_belt_region	rh
-215	cortex_rh_RM/RTM	cortex	RM/RTM	rostral_areas_of_the_medial_belt	rh
-218	cortex_rh_RTp	cortex	RTp	polar_rostrotemporal_cortex	rh
-220	cortex_rh_R/RT	cortex	R/RT	rostral_areas_of_the_core	rh
-223	cortex_rh_AI	cortex	AI	primary_auditory_cortex	rh
-226	cortex_rh_Pi	cortex	Pi	parainsula	rh
-227	cortex_rh_Ins	cortex	Ins	insula	rh
-230	cortex_rh_Ri	cortex	Ri	retroinsula	rh
-232	cortex_rh_MT	cortex	MT	middle_temporal_area	rh
-235	cortex_rh_V4d	cortex	V4d	dorsal_visual_area_4	rh
-236	cortex_rh_V4v	cortex	V4v	ventral_visual_area_4	rh
-239	cortex_rh_V3d/V3A	cortex	V3d/V3A	visual_areas_V3d_and_V3A	rh
-242	cortex_rh_V3v	cortex	V3v	ventral_visual_area_3	rh
-243	cortex_rh_V2	cortex	V2	visual_area_2	rh
-246	cortex_rh_V1	cortex	V1	primary_visual_cortex	rh
-1004	cortex_lh_area_32	cortex	area_32	area_32	lh
-1005	cortex_lh_area_25	cortex	area_25	subgenual_cortex	lh
-1007	cortex_lh_area_24a/b	cortex	area_24a/b	areas_24a_and_24b	lh
-1010	cortex_lh_area_24c	cortex	area_24c	area_24c	lh
-1012	cortex_lh_area_24a/b_prime	cortex	area_24a/b_prime	areas_24a'_and_24b'	lh
-1015	cortex_lh_area_24c_prime	cortex	area_24c_prime	area_24c'	lh
-1018	cortex_lh_area_10	cortex	area_10	frontal_pole	lh
-1022	cortex_lh_area_14	cortex	area_14	gyrus_rectus	lh
-1027	cortex_lh_area_11	cortex	area_11	area_11	lh
-1030	cortex_lh_area_13	cortex	area_13	area_13	lh
-1034	cortex_lh_area_12m/o	cortex	area_12m/o	medial_and_orbital_area_12	lh
-1039	cortex_lh_Iam/Iapm	cortex	Iam/Iapm	medial_agranular_insular_region	lh
-1040	cortex_lh_lat_Ia	cortex	lat_Ia	lateral_agranular_insular_region	lh
-1044	cortex_lh_OLF	cortex	OLF	primary_olfactory_cortex	lh
-1048	cortex_lh_G	cortex	G	gustatory_cortex	lh
-1049	cortex_lh_PrCO	cortex	PrCO	precentral_operular_area	lh
-1051	cortex_lh_area_8A	cortex	area_8A	periarcuate_area_8A_(Frontal_Eye_Fields)	lh
-1055	cortex_lh_area_8B	cortex	area_8B	area_8B	lh
-1060	cortex_lh_area_9	cortex	area_9	area_9	lh
-1063	cortex_lh_area_46d	cortex	area_46d	dorsal_area_46	lh
-1066	cortex_lh_area_46v/f	cortex	area_46v/f	ventral_and_fundus_portion_of_area_46	lh
-1069	cortex_lh_area_12r/l	cortex	area_12r/l	rostral_and_lateral_area_12	lh
-1073	cortex_lh_area_45	cortex	area_45	area_45	lh
-1076	cortex_lh_area_44	cortex	area_44	area_44	lh
-1079	cortex_lh_M1	cortex	M1	primary_motor_cortex	lh
-1081	cortex_lh_PMd	cortex	PMd	dorsal_premotor_cortex	lh
-1084	cortex_lh_PMv	cortex	PMv	ventral_premotor_cortex	lh
-1088	cortex_lh_preSMA	cortex	preSMA	presupplementary_motor_area	lh
-1089	cortex_lh_SMA	cortex	SMA	supplementary_motor_area	lh
-1093	cortex_lh_area_3a/b	cortex	area_3a/b	areas_3a_and_3b	lh
-1094	cortex_lh_areas_1-2	cortex	areas_1-2	areas_1-2	lh
-1095	cortex_lh_SII	cortex	SII	secondary_somatosensory_cortex	lh
-1098	cortex_lh_V6	cortex	V6	visual_area_V6	lh
-1099	cortex_lh_V6A	cortex	V6A	visual_area_V6A	lh
-1103	cortex_lh_area_5d	cortex	area_5d	dorsal_area_5	lh
-1106	cortex_lh_PEa	cortex	PEa	area_PEa	lh
-1108	cortex_lh_MIP	cortex	MIP	medial_intraparietal_area	lh
-1109	cortex_lh_fundus_IPS	cortex	fundus_IPS	fundus_of_the_intraparietal_sulcus	lh
-1114	cortex_lh_AIP	cortex	AIP	anterior_intraparietal_area	lh
-1115	cortex_lh_LIP	cortex	LIP	lateral_intraparietal_area	lh
-1118	cortex_lh_LOP	cortex	LOP	lateral_occipital_parietal_area	lh
-1119	cortex_lh_MST	cortex	MST	medial_superior_temporal_area	lh
-1121	cortex_lh_area_7a/b	cortex	area_7a/b	inferior_parietal_lobule_areas_7a_and_7b	lh
-1124	cortex_lh_area_7op	cortex	area_7op	parietal_operculum	lh
-1126	cortex_lh_area_7m	cortex	area_7m	area_7_(PGm)_on_the_medial_wall	lh
-1129	cortex_lh_area_31	cortex	area_31	area_31	lh
-1130	cortex_lh_area_23	cortex	area_23	area_23	lh
-1134	cortex_lh_area_v23	cortex	area_v23	area_v23	lh
-1136	cortex_lh_area_29	cortex	area_29	area_29	lh
-1137	cortex_lh_area_30	cortex	area_30	area_30	lh
-1142	cortex_lh_CA_fields	cortex	CA_fields	hippocampus_proper	lh
-1145	cortex_lh_DG	cortex	DG	dentate_gyrus	lh
-1146	cortex_lh_Sub/proS	cortex	Sub/proS	subiculum_and_prosubiculum	lh
-1147	cortex_lh_preS/paraS	cortex	preS/paraS	presubiculum_and_parasubiculum	lh
-1149	cortex_lh_TF/TFO	cortex	TF/TFO	areas_TF_and_TFO	lh
-1152	cortex_lh_TH	cortex	TH	area_TH	lh
-1155	cortex_lh_caudal_ERh	cortex	caudal_ERh	caudal_entorhinal_cortex	lh
-1158	cortex_lh_mid_ERh	cortex	mid_ERh	middle_entorhinal_cortex	lh
-1159	cortex_lh_rostral_ERh	cortex	rostral_ERh	rostral_entorhinal_cortex	lh
-1161	cortex_lh_area_35	cortex	area_35	area_35	lh
-1162	cortex_lh_area_36	cortex	area_36	area_36	lh
-1166	cortex_lh_TGa	cortex	TGa	agranular_temporal_pole	lh
-1168	cortex_lh_TGd	cortex	TGd	dysgranular_temporal_pole	lh
-1171	cortex_lh_TGg	cortex	TGg	granular_temporal_pole	lh
-1176	cortex_lh_TEO	cortex	TEO	area_TEO	lh
-1179	cortex_lh_post_TE	cortex	post_TE	posterior_area_TE	lh
-1182	cortex_lh_ant_TE	cortex	ant_TE	anterior_area_TE	lh
-1185	cortex_lh_TE_in_STSv	cortex	TE_in_STSv	area_TE_in_the_ventral_STS	lh
-1189	cortex_lh_ant_STSf	cortex	ant_STSf	anterior_fundus_of_the_superior_temporal_sulcus	lh
-1192	cortex_lh_FST	cortex	FST	floor_of_the_superior_temporal_area	lh
-1196	cortex_lh_TPO	cortex	TPO	temporal_parietooccipital_associated_area	lh
-1197	cortex_lh_TAa	cortex	TAa	area_TAa	lh
-1198	cortex_lh_STGr	cortex	STGr	rostral_superior_temporal_gyrus	lh
-1200	cortex_lh_Tpt	cortex	Tpt	temporo-parietal_area	lh
-1201	cortex_lh_parabelt	cortex	parabelt	parabelt_areas_of_auditory_cortex	lh
-1207	cortex_lh_CL/ML	cortex	CL/ML	caudal_areas_of_the_lateral_belt	lh
-1210	cortex_lh_AL/RTL	cortex	AL/RTL	rostral_areas_of_the_lateral_belt	lh
-1214	cortex_lh_CM	cortex	CM	caudomedial_belt_region	lh
-1215	cortex_lh_RM/RTM	cortex	RM/RTM	rostral_areas_of_the_medial_belt	lh
-1218	cortex_lh_RTp	cortex	RTp	polar_rostrotemporal_cortex	lh
-1220	cortex_lh_R/RT	cortex	R/RT	rostral_areas_of_the_core	lh
-1223	cortex_lh_AI	cortex	AI	primary_auditory_cortex	lh
-1226	cortex_lh_Pi	cortex	Pi	parainsula	lh
-1227	cortex_lh_Ins	cortex	Ins	insula	lh
-1230	cortex_lh_Ri	cortex	Ri	retroinsula	lh
-1232	cortex_lh_MT	cortex	MT	middle_temporal_area	lh
-1235	cortex_lh_V4d	cortex	V4d	dorsal_visual_area_4	lh
-1236	cortex_lh_V4v	cortex	V4v	ventral_visual_area_4	lh
-1239	cortex_lh_V3d/V3A	cortex	V3d/V3A	visual_areas_V3d_and_V3A	lh
-1242	cortex_lh_V3v	cortex	V3v	ventral_visual_area_3	lh
-1243	cortex_lh_V2	cortex	V2	visual_area_2	lh
-1246	cortex_lh_V1	cortex	V1	primary_visual_cortex	lh
-504	subcortex_rh_Cl	subcortex	Cl	claustrum	rh
-507	subcortex_rh_DEn	subcortex	DEn	dorsal_endopiriform_claustrum	rh
-508	subcortex_rh_VEn	subcortex	VEn	ventral_endopiriform_claustrum	rh
-509	subcortex_rh_Pir	subcortex	Pir	piriform_cortex	rh
-512	subcortex_rh_Hi	subcortex	Hi	hippocampus	rh
-513	subcortex_rh_S	subcortex	S	subicular_complex	rh
-514	subcortex_rh_fi	subcortex	fi	fimbria	rh
-515	subcortex_rh_f	subcortex	f	fornix	rh
-519	subcortex_rh_BM	subcortex	BM	basomedial_amygdaloid_nucleus	rh
-520	subcortex_rh_VCo	subcortex	VCo	ventral_cortical_amygdaloid_nucleus	rh
-521	subcortex_rh_AHi	subcortex	AHi	amygdalohippocampal_area	rh
-523	subcortex_rh_La	subcortex	La	lateral_amygdaloid_nucleus	rh
-526	subcortex_rh_APir	subcortex	APir	amygdalopiriform_transition_area	rh
-527	subcortex_rh_BL	subcortex	BL	basolateral_amygdaloid_nucleus	rh
-531	subcortex_rh_PaL	subcortex	PaL	paralaminar_amygdaloid_nucleus	rh
-534	subcortex_rh_Ce	subcortex	Ce	central_amygdaloid_nucleus	rh
-536	subcortex_rh_Me	subcortex	Me	medial_amygdaloid_nucleus	rh
-537	subcortex_rh_AA	subcortex	AA	anterior_amygdaloid_area	rh
-539	subcortex_rh_EA	subcortex	EA	extended_amygdala	rh
-540	subcortex_rh_IPAC	subcortex	IPAC	posterior_interstitial_nucleus	rh
-541	subcortex_rh_STIA	subcortex	STIA	intraamygdaloid_stria_terminalis	rh
-545	subcortex_rh_Cd	subcortex	Cd	caudate	rh
-548	subcortex_rh_Pu	subcortex	Pu	putamen	rh
-549	subcortex_rh_ASt	subcortex	ASt	amygdalostriatal_transition	rh
-550	subcortex_rh_ic	subcortex	ic	internal_capsule	rh
-552	subcortex_rh_Acb	subcortex	Acb	accumbens	rh
-553	subcortex_rh_Tu	subcortex	Tu	olfactory_tubercule	rh
-555	subcortex_rh_GP	subcortex	GP	globus_pallidus	rh
-559	subcortex_rh_ac	subcortex	ac	anterior_commissure	rh
-560	subcortex_rh_VP	subcortex	VP	ventral_pallidum	rh
-562	subcortex_rh_BR	subcortex	BR	basal_nucleus_region	rh
-565	subcortex_rh_ST	subcortex	ST	bed_nucleus_of_the_stria_terminalis	rh
-567	subcortex_rh_SFi	subcortex	SFi	septimbrial_nucleus	rh
-568	subcortex_rh_SDB	subcortex	SDB	septum_diagonal_band	rh
-570	subcortex_rh_opt	subcortex	opt	optic_tract	rh
-572	subcortex_rh_PO	subcortex	PO	preoptic_area	rh
-573	subcortex_rh_LTer-VOLT	subcortex	LTer-VOLT	lamina_terminalis	rh
-578	subcortex_rh_Pa	subcortex	Pa	paraventricular_hypothalamus	rh
-580	subcortex_rh_VMH	subcortex	VMH	ventromedial_hypothalamic_nucleus	rh
-581	subcortex_rh_MEm	subcortex	MEm	medial_emminence	rh
-582	subcortex_rh_Arc	subcortex	Arc	arcuate_nucleus	rh
-584	subcortex_rh_SOpt	subcortex	SOpt	supraoptic_hypothalamus	rh
-585	subcortex_rh_AH	subcortex	AH	anterior_hypothalamic_area	rh
-586	subcortex_rh_DM	subcortex	DM	dorsal_medial_hypothalamic_nucleus	rh
-587	subcortex_rh_LHy	subcortex	LHy	lateral_hypothalamic_region	rh
-591	subcortex_rh_STh	subcortex	STh	subthalamic_nucleus	rh
-594	subcortex_rh_PH	subcortex	PH	posterior_hypothalamic_nucleus	rh
-596	subcortex_rh_PeF	subcortex	PeF	prefornical_hypothalamus	rh
-597	subcortex_rh_MM/RM	subcortex	MM/RM	mammillary/retromammillary_hypothalamus	rh
-601	subcortex_rh_APit	subcortex	APit	anterior_pituitary	rh
-602	subcortex_rh_PPit	subcortex	PPit	posterior_pituitary	rh
-604	subcortex_rh_ZI-H	subcortex	ZI-H	zona_incerta_and_lenticular_fascicles	rh
-606	subcortex_rh_Rt	subcortex	Rt	reticular_thalamus	rh
-609	subcortex_rh_AR	subcortex	AR	anterior_thalamus_region	rh
-613	subcortex_rh_CL-PC	subcortex	CL-PC	centrolateral_and_paracentral_thalamus	rh
-614	subcortex_rh_CMn-PF	subcortex	CMn-PF	centromedial-parafascicular_thalamus	rh
-615	subcortex_rh_SPFC	subcortex	SPFC	suprafascicular_nucleus	rh
-617	subcortex_rh_SG	subcortex	SG	supra_geniculate	rh
-618	subcortex_rh_Lim	subcortex	Lim	limitans_thalamus	rh
-619	subcortex_rh_MD	subcortex	MD	mediodorsal_thalamus	rh
-621	subcortex_rh_IMD	subcortex	IMD	intermediodorsal_thalamus	rh
-622	subcortex_rh_PT-PV-sm	subcortex	PT-PV-sm	paratenial-paraventral-thalamus	rh
-623	subcortex_rh_PVP	subcortex	PVP	paraventricular_posterior_thalamus	rh
-624	subcortex_rh_PVA	subcortex	PVA	paraventricular_anterior_thalamus	rh
-625	subcortex_rh_IAM	subcortex	IAM	interanteromedial_thalamus	rh
-626	subcortex_rh_CM	subcortex	CM	central_medial_thalamus	rh
-627	subcortex_rh_Re-Rh-Xi	subcortex	Re-Rh-Xi	Reuniens-rhomboid-xiphoid_thalamus	rh
-630	subcortex_rh_VA	subcortex	VA	ventral_anterior_thalamus	rh
-631	subcortex_rh_VLA	subcortex	VLA	ventral_lateral_anterior_thalamus	rh
-633	subcortex_rh_VLX	subcortex	VLX	ventral_lateral_x_thalamus	rh
-634	subcortex_rh_VLPV	subcortex	VLPV	ventral_lateral_posteroventral_thalamus	rh
-635	subcortex_rh_VLPD	subcortex	VLPD	ventral_lateral_posterodorsal_thalamus	rh
-637	subcortex_rh_VPM-VPL	subcortex	VPM-VPL	ventroposterior_medial_and_lateral_thalamus	rh
-638	subcortex_rh_VMPo-VMB	subcortex	VMPo-VMB	ventromedial_posterior+basal_thalamus	rh
-639	subcortex_rh_VPI	subcortex	VPI	ventroposterior_inferior_thalamus	rh
-640	subcortex_rh_VM	subcortex	VM	ventral_medial_thalamus	rh
-642	subcortex_rh_LP	subcortex	LP	lateral_posterior_thalamus	rh
-643	subcortex_rh_LD	subcortex	LD	lateral_dorsal_thalamus	rh
-645	subcortex_rh_APul	subcortex	APul	anterior_pulvinar	rh
-646	subcortex_rh_MPul	subcortex	MPul	medial_pulvinar	rh
-647	subcortex_rh_LPul	subcortex	LPul	lateral_pulvinar	rh
-648	subcortex_rh_IPul	subcortex	IPul	inferior_pulvinar	rh
-649	subcortex_rh_bsc	subcortex	bsc	brachium_superior_colliculus	rh
-651	subcortex_rh_DLG	subcortex	DLG	dorsal_lateral_geniculate	rh
-652	subcortex_rh_MG	subcortex	MG	medial_geniculate	rh
-654	subcortex_rh_Pi	subcortex	Pi	pineal_gland	rh
-655	subcortex_rh_Hb	subcortex	Hb	habenula	rh
-657	subcortex_rh_PCR	subcortex	PCR	posterior_commissural_region	rh
-661	subcortex_rh_p1Rt	subcortex	p1Rt	p1_mesencephalic_reticulum	rh
-666	subcortex_rh_SC	subcortex	SC	superior_colliculus	rh
-667	subcortex_rh_ICoC	subcortex	ICoC	inferior_colliculus_complex	rh
-671	subcortex_rh_n4	subcortex	n4	fourth_nerve	rh
-672	subcortex_rh_PAG	subcortex	PAG	periaqueductal_gray	rh
-675	subcortex_rh_PBG	subcortex	PBG	parabigeminal_nucleus	rh
-676	subcortex_rh_MiTg	subcortex	MiTg	mircrocellular_tegmentum	rh
-677	subcortex_rh_PrCnF	subcortex	PrCnF	precuneiform_nucleus	rh
-678	subcortex_rh_CnF	subcortex	CnF	cuneiform_nucleus	rh
-679	subcortex_rh_VLTg	subcortex	VLTg	ventrolateral_tegmentum	rh
-680	subcortex_rh_PTg	subcortex	PTg	pedunculopontine_nucleus	rh
-681	subcortex_rh_ATg	subcortex	ATg	anterior_tegmental_nucleus	rh
-683	subcortex_rh_mRt	subcortex	mRt	mesencephalic_reticular_formation	rh
-684	subcortex_rh_RIs	subcortex	RIs	retroisthmic_nucleus	rh
-687	subcortex_rh_OM	subcortex	OM	occulomotor_nuclei	rh
-688	subcortex_rh_mlf	subcortex	mlf	mediolateral_fascicle	rh
-690	subcortex_rh_MR	subcortex	MR	medial_Raphe	rh
-691	subcortex_rh_DR	subcortex	DR	dorsal_Raphe	rh
-692	subcortex_rh_LiR	subcortex	LiR	linear_Raphe	rh
-694	subcortex_rh_R+	subcortex	R+	rubral_region	rh
-698	subcortex_rh_RF	subcortex	RF	retrorubral_field	rh
-699	subcortex_rh_SN	subcortex	SN	substantia_nigra	rh
-700	subcortex_rh_VTA	subcortex	VTA	ventral_tegmental_area	rh
-701	subcortex_rh_IP	subcortex	IP	interpeduncular_nucleus	rh
-702	subcortex_rh_n3	subcortex	n3	occulomotor_nerve	rh
-703	subcortex_rh_cp	subcortex	cp	cerebral_peduncle	rh
-707	subcortex_rh_PBC	subcortex	PBC	parabrachial_complex	rh
-713	subcortex_rh_LC-Me5	subcortex	LC-Me5	locus-coeruleus_region	rh
-714	subcortex_rh_me5	subcortex	me5	mesencephalic_trigeminal_nerve	rh
-715	subcortex_rh_CG	subcortex	CG	central_gray_nucleus	rh
-717	subcortex_rh_LDTg	subcortex	LDTg	lateral_dorsal_tegmentum	rh
-718	subcortex_rh_MDTg	subcortex	MDTg	medial_dorsal_tegmentum	rh
-721	subcortex_rh_ll	subcortex	ll	lateral_lemniscus	rh
-722	subcortex_rh_DLL	subcortex	DLL	dorsal_lateral_leminscus_nucleus	rh
-723	subcortex_rh_ILL-VLL	subcortex	ILL-VLL	intermediate+ventral_lateral_lemniscus_nuclei	rh
-726	subcortex_rh_SubC	subcortex	SubC	subceruleus	rh
-727	subcortex_rh_RtTg	subcortex	RtTg	reticulotegmentum	rh
-728	subcortex_rh_xscp	subcortex	xscp	superior_cerebellar_peduncle_decussation	rh
-729	subcortex_rh_PnO	subcortex	PnO	pontine_reticulum_oral	rh
-730	subcortex_rh_PnC	subcortex	PnC	pontine_reticulum_caudal	rh
-732	subcortex_rh_SO	subcortex	SO	superior_olive	rh
-733	subcortex_rh_ml	subcortex	ml	medial_lemniscus	rh
-734	subcortex_rh_tz	subcortex	tz	trapezoid_bundle_region	rh
-736	subcortex_rh_Pn	subcortex	Pn	pontine_nucleus	rh
-737	subcortex_rh_spf	subcortex	spf	pontine_fibers	rh
-743	subcortex_rh_icp	subcortex	icp	inferior_cerebellar_peduncle	rh
-744	subcortex_rh_oc	subcortex	oc	olivocerebellar_tract	rh
-746	subcortex_rh_Lat	subcortex	Lat	lateral_cerebellar_nucleus	rh
-747	subcortex_rh_Int	subcortex	Int	interposed_cerebellar_nuclei	rh
-750	subcortex_rh_Fas	subcortex	Fas	fastigial_cerebellar_nucleus	rh
-752	subcortex_rh_Fl-PFl	subcortex	Fl-PFl	floculus_parafloculus	rh
-756	subcortex_rh_AVCbCx	subcortex	AVCbCx	anterior_vermis_cerebellar_cortex	rh
-762	subcortex_rh_PVCbCx	subcortex	PVCbCx	posterior_vermis_cerebellar_cortex	rh
-768	subcortex_rh_ICbCx	subcortex	ICbCx	intermediate_cerebellar_cortex	rh
-776	subcortex_rh_LCbCx	subcortex	LCbCx	lateral_cerebellar_cortex	rh
-783	subcortex_rh_Ve	subcortex	Ve	vestibular_nucleus	rh
-784	subcortex_rh_DVC	subcortex	DVC	cochlear_nucleus	rh
-785	subcortex_rh_n8	subcortex	n8	vestibulochoclear_nerve	rh
-786	subcortex_rh_Pr	subcortex	Pr	prepositus_nucleus	rh
-788	subcortex_rh_Nu5	subcortex	Nu5	motor_trigeminal_nucleus	rh
-789	subcortex_rh_Pr5	subcortex	Pr5	principal_trigeminal_nucleus	rh
-790	subcortex_rh_Sp5	subcortex	Sp5	spinal_trigeminal_nucleus	rh
-795	subcortex_rh_CuGr	subcortex	CuGr	cuneate_gracile_nuclei	rh
-796	subcortex_rh_obex	subcortex	obex	obex	rh
-797	subcortex_rh_Sol	subcortex	Sol	solitary_tract_nucleus	rh
-798	subcortex_rh_Nu10-12	subcortex	Nu10-12	visceral_motor_nuclei	rh
-801	subcortex_rh_Nu6	subcortex	Nu6	abducens_motor_nucleus	rh
-802	subcortex_rh_Nu7	subcortex	Nu7	facial_motor_nucleus	rh
-804	subcortex_rh_PCIRt	subcortex	PCIRt	parvicellular_and_intermediate_reticular_nuclei	rh
-805	subcortex_rh_DPGi	subcortex	DPGi	dorsal_paragigantocellular_reticular_nucleus	rh
-806	subcortex_rh_Gi	subcortex	Gi	gigantocellular_reticular_nucleus	rh
-807	subcortex_rh_MdRt	subcortex	MdRt	medullar_reticular_nucleus	rh
-809	subcortex_rh_RMg	subcortex	RMg	Raphe_magnus_nucleus	rh
-810	subcortex_rh_ROb	subcortex	ROb	Raphe_obscurus_nucleus	rh
-813	subcortex_rh_IO	subcortex	IO	inferior_olive	rh
-814	subcortex_rh_LRt	subcortex	LRt	lateral_reticular_nucleus	rh
-816	subcortex_rh_py	subcortex	py	pyramidal_tract	rh
-817	subcortex_rh_pyx	subcortex	pyx	pyramidal_tract_decussation	rh
-818	subcortex_rh_cst	subcortex	cst	corticospinal_tract	rh
-1504	subcortex_lh_Cl	subcortex	Cl	claustrum	lh
-1507	subcortex_lh_DEn	subcortex	DEn	dorsal_endopiriform_claustrum	lh
-1508	subcortex_lh_VEn	subcortex	VEn	ventral_endopiriform_claustrum	lh
-1509	subcortex_lh_Pir	subcortex	Pir	piriform_cortex	lh
-1512	subcortex_lh_Hi	subcortex	Hi	hippocampus	lh
-1513	subcortex_lh_S	subcortex	S	subicular_complex	lh
-1514	subcortex_lh_fi	subcortex	fi	fimbria	lh
-1515	subcortex_lh_f	subcortex	f	fornix	lh
-1519	subcortex_lh_BM	subcortex	BM	basomedial_amygdaloid_nucleus	lh
-1520	subcortex_lh_VCo	subcortex	VCo	ventral_cortical_amygdaloid_nucleus	lh
-1521	subcortex_lh_AHi	subcortex	AHi	amygdalohippocampal_area	lh
-1523	subcortex_lh_La	subcortex	La	lateral_amygdaloid_nucleus	lh
-1526	subcortex_lh_APir	subcortex	APir	amygdalopiriform_transition_area	lh
-1527	subcortex_lh_BL	subcortex	BL	basolateral_amygdaloid_nucleus	lh
-1531	subcortex_lh_PaL	subcortex	PaL	paralaminar_amygdaloid_nucleus	lh
-1534	subcortex_lh_Ce	subcortex	Ce	central_amygdaloid_nucleus	lh
-1536	subcortex_lh_Me	subcortex	Me	medial_amygdaloid_nucleus	lh
-1537	subcortex_lh_AA	subcortex	AA	anterior_amygdaloid_area	lh
-1539	subcortex_lh_EA	subcortex	EA	extended_amygdala	lh
-1540	subcortex_lh_IPAC	subcortex	IPAC	posterior_interstitial_nucleus	lh
-1541	subcortex_lh_STIA	subcortex	STIA	intraamygdaloid_stria_terminalis	lh
-1545	subcortex_lh_Cd	subcortex	Cd	caudate	lh
-1548	subcortex_lh_Pu	subcortex	Pu	putamen	lh
-1549	subcortex_lh_ASt	subcortex	ASt	amygdalostriatal_transition	lh
-1550	subcortex_lh_ic	subcortex	ic	internal_capsule	lh
-1552	subcortex_lh_Acb	subcortex	Acb	accumbens	lh
-1553	subcortex_lh_Tu	subcortex	Tu	olfactory_tubercule	lh
-1555	subcortex_lh_GP	subcortex	GP	globus_pallidus	lh
-1559	subcortex_lh_ac	subcortex	ac	anterior_commissure	lh
-1560	subcortex_lh_VP	subcortex	VP	ventral_pallidum	lh
-1562	subcortex_lh_BR	subcortex	BR	basal_nucleus_region	lh
-1565	subcortex_lh_ST	subcortex	ST	bed_nucleus_of_the_stria_terminalis	lh
-1567	subcortex_lh_SFi	subcortex	SFi	septimbrial_nucleus	lh
-1568	subcortex_lh_SDB	subcortex	SDB	septum_diagonal_band	lh
-1570	subcortex_lh_opt	subcortex	opt	optic_tract	lh
-1572	subcortex_lh_PO	subcortex	PO	preoptic_area	lh
-1573	subcortex_lh_LTer-VOLT	subcortex	LTer-VOLT	lamina_terminalis	lh
-1578	subcortex_lh_Pa	subcortex	Pa	paraventricular_hypothalamus	lh
-1580	subcortex_lh_VMH	subcortex	VMH	ventromedial_hypothalamic_nucleus	lh
-1581	subcortex_lh_MEm	subcortex	MEm	medial_emminence	lh
-1582	subcortex_lh_Arc	subcortex	Arc	arcuate_nucleus	lh
-1584	subcortex_lh_SOpt	subcortex	SOpt	supraoptic_hypothalamus	lh
-1585	subcortex_lh_AH	subcortex	AH	anterior_hypothalamic_area	lh
-1586	subcortex_lh_DM	subcortex	DM	dorsal_medial_hypothalamic_nucleus	lh
-1587	subcortex_lh_LHy	subcortex	LHy	lateral_hypothalamic_region	lh
-1591	subcortex_lh_STh	subcortex	STh	subthalamic_nucleus	lh
-1594	subcortex_lh_PH	subcortex	PH	posterior_hypothalamic_nucleus	lh
-1596	subcortex_lh_PeF	subcortex	PeF	prefornical_hypothalamus	lh
-1597	subcortex_lh_MM/RM	subcortex	MM/RM	mammillary/retromammillary_hypothalamus	lh
-1601	subcortex_lh_APit	subcortex	APit	anterior_pituitary	lh
-1602	subcortex_lh_PPit	subcortex	PPit	posterior_pituitary	lh
-1604	subcortex_lh_ZI-H	subcortex	ZI-H	zona_incerta_and_lenticular_fascicles	lh
-1606	subcortex_lh_Rt	subcortex	Rt	reticular_thalamus	lh
-1609	subcortex_lh_AR	subcortex	AR	anterior_thalamus_region	lh
-1613	subcortex_lh_CL-PC	subcortex	CL-PC	centrolateral_and_paracentral_thalamus	lh
-1614	subcortex_lh_CMn-PF	subcortex	CMn-PF	centromedial-parafascicular_thalamus	lh
-1615	subcortex_lh_SPFC	subcortex	SPFC	suprafascicular_nucleus	lh
-1617	subcortex_lh_SG	subcortex	SG	supra_geniculate	lh
-1618	subcortex_lh_Lim	subcortex	Lim	limitans_thalamus	lh
-1619	subcortex_lh_MD	subcortex	MD	mediodorsal_thalamus	lh
-1621	subcortex_lh_IMD	subcortex	IMD	intermediodorsal_thalamus	lh
-1622	subcortex_lh_PT-PV-sm	subcortex	PT-PV-sm	paratenial-paraventral-thalamus	lh
-1623	subcortex_lh_PVP	subcortex	PVP	paraventricular_posterior_thalamus	lh
-1624	subcortex_lh_PVA	subcortex	PVA	paraventricular_anterior_thalamus	lh
-1625	subcortex_lh_IAM	subcortex	IAM	interanteromedial_thalamus	lh
-1626	subcortex_lh_CM	subcortex	CM	central_medial_thalamus	lh
-1627	subcortex_lh_Re-Rh-Xi	subcortex	Re-Rh-Xi	Reuniens-rhomboid-xiphoid_thalamus	lh
-1630	subcortex_lh_VA	subcortex	VA	ventral_anterior_thalamus	lh
-1631	subcortex_lh_VLA	subcortex	VLA	ventral_lateral_anterior_thalamus	lh
-1633	subcortex_lh_VLX	subcortex	VLX	ventral_lateral_x_thalamus	lh
-1634	subcortex_lh_VLPV	subcortex	VLPV	ventral_lateral_posteroventral_thalamus	lh
-1635	subcortex_lh_VLPD	subcortex	VLPD	ventral_lateral_posterodorsal_thalamus	lh
-1637	subcortex_lh_VPM-VPL	subcortex	VPM-VPL	ventroposterior_medial_and_lateral_thalamus	lh
-1638	subcortex_lh_VMPo-VMB	subcortex	VMPo-VMB	ventromedial_posterior+basal_thalamus	lh
-1639	subcortex_lh_VPI	subcortex	VPI	ventroposterior_inferior_thalamus	lh
-1640	subcortex_lh_VM	subcortex	VM	ventral_medial_thalamus	lh
-1642	subcortex_lh_LP	subcortex	LP	lateral_posterior_thalamus	lh
-1643	subcortex_lh_LD	subcortex	LD	lateral_dorsal_thalamus	lh
-1645	subcortex_lh_APul	subcortex	APul	anterior_pulvinar	lh
-1646	subcortex_lh_MPul	subcortex	MPul	medial_pulvinar	lh
-1647	subcortex_lh_LPul	subcortex	LPul	lateral_pulvinar	lh
-1648	subcortex_lh_IPul	subcortex	IPul	inferior_pulvinar	lh
-1649	subcortex_lh_bsc	subcortex	bsc	brachium_superior_colliculus	lh
-1651	subcortex_lh_DLG	subcortex	DLG	dorsal_lateral_geniculate	lh
-1652	subcortex_lh_MG	subcortex	MG	medial_geniculate	lh
-1654	subcortex_lh_Pi	subcortex	Pi	pineal_gland	lh
-1655	subcortex_lh_Hb	subcortex	Hb	habenula	lh
-1657	subcortex_lh_PCR	subcortex	PCR	posterior_commissural_region	lh
-1661	subcortex_lh_p1Rt	subcortex	p1Rt	p1_mesencephalic_reticulum	lh
-1666	subcortex_lh_SC	subcortex	SC	superior_colliculus	lh
-1667	subcortex_lh_ICoC	subcortex	ICoC	inferior_colliculus_complex	lh
-1671	subcortex_lh_n4	subcortex	n4	fourth_nerve	lh
-1672	subcortex_lh_PAG	subcortex	PAG	periaqueductal_gray	lh
-1675	subcortex_lh_PBG	subcortex	PBG	parabigeminal_nucleus	lh
-1676	subcortex_lh_MiTg	subcortex	MiTg	mircrocellular_tegmentum	lh
-1677	subcortex_lh_PrCnF	subcortex	PrCnF	precuneiform_nucleus	lh
-1678	subcortex_lh_CnF	subcortex	CnF	cuneiform_nucleus	lh
-1679	subcortex_lh_VLTg	subcortex	VLTg	ventrolateral_tegmentum	lh
-1680	subcortex_lh_PTg	subcortex	PTg	pedunculopontine_nucleus	lh
-1681	subcortex_lh_ATg	subcortex	ATg	anterior_tegmental_nucleus	lh
-1683	subcortex_lh_mRt	subcortex	mRt	mesencephalic_reticular_formation	lh
-1684	subcortex_lh_RIs	subcortex	RIs	retroisthmic_nucleus	lh
-1687	subcortex_lh_OM	subcortex	OM	occulomotor_nuclei	lh
-1688	subcortex_lh_mlf	subcortex	mlf	mediolateral_fascicle	lh
-1690	subcortex_lh_MR	subcortex	MR	medial_Raphe	lh
-1691	subcortex_lh_DR	subcortex	DR	dorsal_Raphe	lh
-1692	subcortex_lh_LiR	subcortex	LiR	linear_Raphe	lh
-1694	subcortex_lh_R+	subcortex	R+	rubral_region	lh
-1698	subcortex_lh_RF	subcortex	RF	retrorubral_field	lh
-1699	subcortex_lh_SN	subcortex	SN	substantia_nigra	lh
-1700	subcortex_lh_VTA	subcortex	VTA	ventral_tegmental_area	lh
-1701	subcortex_lh_IP	subcortex	IP	interpeduncular_nucleus	lh
-1702	subcortex_lh_n3	subcortex	n3	occulomotor_nerve	lh
-1703	subcortex_lh_cp	subcortex	cp	cerebral_peduncle	lh
-1707	subcortex_lh_PBC	subcortex	PBC	parabrachial_complex	lh
-1713	subcortex_lh_LC-Me5	subcortex	LC-Me5	locus-coeruleus_region	lh
-1714	subcortex_lh_me5	subcortex	me5	mesencephalic_trigeminal_nerve	lh
-1715	subcortex_lh_CG	subcortex	CG	central_gray_nucleus	lh
-1717	subcortex_lh_LDTg	subcortex	LDTg	lateral_dorsal_tegmentum	lh
-1718	subcortex_lh_MDTg	subcortex	MDTg	medial_dorsal_tegmentum	lh
-1721	subcortex_lh_ll	subcortex	ll	lateral_lemniscus	lh
-1722	subcortex_lh_DLL	subcortex	DLL	dorsal_lateral_leminscus_nucleus	lh
-1723	subcortex_lh_ILL-VLL	subcortex	ILL-VLL	intermediate+ventral_lateral_lemniscus_nuclei	lh
-1726	subcortex_lh_SubC	subcortex	SubC	subceruleus	lh
-1727	subcortex_lh_RtTg	subcortex	RtTg	reticulotegmentum	lh
-1728	subcortex_lh_xscp	subcortex	xscp	superior_cerebellar_peduncle_decussation	lh
-1729	subcortex_lh_PnO	subcortex	PnO	pontine_reticulum_oral	lh
-1730	subcortex_lh_PnC	subcortex	PnC	pontine_reticulum_caudal	lh
-1732	subcortex_lh_SO	subcortex	SO	superior_olive	lh
-1733	subcortex_lh_ml	subcortex	ml	medial_lemniscus	lh
-1734	subcortex_lh_tz	subcortex	tz	trapezoid_bundle_region	lh
-1736	subcortex_lh_Pn	subcortex	Pn	pontine_nucleus	lh
-1737	subcortex_lh_spf	subcortex	spf	pontine_fibers	lh
-1743	subcortex_lh_icp	subcortex	icp	inferior_cerebellar_peduncle	lh
-1744	subcortex_lh_oc	subcortex	oc	olivocerebellar_tract	lh
-1746	subcortex_lh_Lat	subcortex	Lat	lateral_cerebellar_nucleus	lh
-1747	subcortex_lh_Int	subcortex	Int	interposed_cerebellar_nuclei	lh
-1750	subcortex_lh_Fas	subcortex	Fas	fastigial_cerebellar_nucleus	lh
-1752	subcortex_lh_Fl-PFl	subcortex	Fl-PFl	floculus_parafloculus	lh
-1756	subcortex_lh_AVCbCx	subcortex	AVCbCx	anterior_vermis_cerebellar_cortex	lh
-1762	subcortex_lh_PVCbCx	subcortex	PVCbCx	posterior_vermis_cerebellar_cortex	lh
-1768	subcortex_lh_ICbCx	subcortex	ICbCx	intermediate_cerebellar_cortex	lh
-1776	subcortex_lh_LCbCx	subcortex	LCbCx	lateral_cerebellar_cortex	lh
-1783	subcortex_lh_Ve	subcortex	Ve	vestibular_nucleus	lh
-1784	subcortex_lh_DVC	subcortex	DVC	cochlear_nucleus	lh
-1785	subcortex_lh_n8	subcortex	n8	vestibulochoclear_nerve	lh
-1786	subcortex_lh_Pr	subcortex	Pr	prepositus_nucleus	lh
-1788	subcortex_lh_Nu5	subcortex	Nu5	motor_trigeminal_nucleus	lh
-1789	subcortex_lh_Pr5	subcortex	Pr5	principal_trigeminal_nucleus	lh
-1790	subcortex_lh_Sp5	subcortex	Sp5	spinal_trigeminal_nucleus	lh
-1795	subcortex_lh_CuGr	subcortex	CuGr	cuneate_gracile_nuclei	lh
-1796	subcortex_lh_obex	subcortex	obex	obex	lh
-1797	subcortex_lh_Sol	subcortex	Sol	solitary_tract_nucleus	lh
-1798	subcortex_lh_Nu10-12	subcortex	Nu10-12	visceral_motor_nuclei	lh
-1801	subcortex_lh_Nu6	subcortex	Nu6	abducens_motor_nucleus	lh
-1802	subcortex_lh_Nu7	subcortex	Nu7	facial_motor_nucleus	lh
-1804	subcortex_lh_PCIRt	subcortex	PCIRt	parvicellular_and_intermediate_reticular_nuclei	lh
-1805	subcortex_lh_DPGi	subcortex	DPGi	dorsal_paragigantocellular_reticular_nucleus	lh
-1806	subcortex_lh_Gi	subcortex	Gi	gigantocellular_reticular_nucleus	lh
-1807	subcortex_lh_MdRt	subcortex	MdRt	medullar_reticular_nucleus	lh
-1809	subcortex_lh_RMg	subcortex	RMg	Raphe_magnus_nucleus	lh
-1810	subcortex_lh_ROb	subcortex	ROb	Raphe_obscurus_nucleus	lh
-1813	subcortex_lh_IO	subcortex	IO	inferior_olive	lh
-1814	subcortex_lh_LRt	subcortex	LRt	lateral_reticular_nucleus	lh
-1816	subcortex_lh_py	subcortex	py	pyramidal_tract	lh
-1817	subcortex_lh_pyx	subcortex	pyx	pyramidal_tract_decussation	lh
-1818	subcortex_lh_cst	subcortex	cst	corticospinal_tract	lh
--1	WM_rh_ctxWM	WM	ctxWM	cerebral_white_matter	rh
--1001	WM_lh_ctxWM	WM	ctxWM	cerebral_white_matter	lh
--501	WM_rh_cbWM	WM	cbWM	cerebellum_white_matter	rh
--1501	WM_lh_cbWM	WM	cbWM	cerebellum_white_matter	lh
--2	CSF_rh_CSF	CSF	CSF	CSF	rh
--1002	CSF_lh_CSF	CSF	CSF	CSF	lh
-
+ID	label	region	name	name_full	hemi	color
+0	background					
+4	cortex_rh_area_32	cortex	area_32	area_32	rh	#803951
+5	cortex_rh_area_25	cortex	area_25	subgenual_cortex	rh	#801D46
+7	cortex_rh_area_24a/b	cortex	area_24a/b	areas_24a_and_24b	rh	#800035
+10	cortex_rh_area_24c	cortex	area_24c	area_24c	rh	#FF8CB3
+12	cortex_rh_area_24a/b_prime	cortex	area_24a/b_prime	areas_24a'_and_24b'	rh	#FF3B9D
+15	cortex_rh_area_24c_prime	cortex	area_24c_prime	area_24c'	rh	#FFA6E7
+18	cortex_rh_area_10	cortex	area_10	frontal_pole	rh	#D4007B
+22	cortex_rh_area_14	cortex	area_14	gyrus_rectus	rh	#803973
+27	cortex_rh_area_11	cortex	area_11	area_11	rh	#FF3BFC
+30	cortex_rh_area_13	cortex	area_13	area_13	rh	#4F0080
+34	cortex_rh_area_12m/o	cortex	area_12m/o	medial_and_orbital_area_12	rh	#D573FF
+39	cortex_rh_Iam/Iapm	cortex	Iam/Iapm	medial_agranular_insular_region	rh	#9900BF
+40	cortex_rh_lat_Ia	cortex	lat_Ia	lateral_agranular_insular_region	rh	#C931D4
+44	cortex_rh_OLF	cortex	OLF	primary_olfactory_cortex	rh	#FF00E6
+48	cortex_rh_G	cortex	G	gustatory_cortex	rh	#C08CFF
+49	cortex_rh_PrCO	cortex	PrCO	precentral_operular_area	rh	#A673FF
+51	cortex_rh_area_8A	cortex	area_8A	periarcuate_area_8A_(Frontal_Eye_Fields)	rh	#F23BFF
+55	cortex_rh_area_8B	cortex	area_8B	area_8B	rh	#623BFF
+60	cortex_rh_area_9	cortex	area_9	area_9	rh	#080099
+63	cortex_rh_area_46d	cortex	area_46d	dorsal_area_46	rh	#1500B2
+66	cortex_rh_area_46v/f	cortex	area_46v/f	ventral_and_fundus_portion_of_area_46	rh	#2900CC
+69	cortex_rh_area_12r/l	cortex	area_12r/l	rostral_and_lateral_area_12	rh	#3D3980
+73	cortex_rh_area_45	cortex	area_45	area_45	rh	#0800FF
+76	cortex_rh_area_44	cortex	area_44	area_44	rh	#1D4180
+79	cortex_rh_M1	cortex	M1	primary_motor_cortex	rh	#723BFF
+81	cortex_rh_PMd	cortex	PMd	dorsal_premotor_cortex	rh	#739AFF
+84	cortex_rh_PMv	cortex	PMv	ventral_premotor_cortex	rh	#0038D4
+88	cortex_rh_preSMA	cortex	preSMA	presupplementary_motor_area	rh	#2C58BF
+89	cortex_rh_SMA	cortex	SMA	supplementary_motor_area	rh	#1D5080
+93	cortex_rh_area_3a/b	cortex	area_3a/b	areas_3a_and_3b	rh	#395880
+94	cortex_rh_areas_1-2	cortex	areas_1-2	areas_1-2	rh	#8CBEFF
+95	cortex_rh_SII	cortex	SII	secondary_somatosensory_cortex	rh	#1D5880
+98	cortex_rh_V6	cortex	V6	visual_area_V6	rh	#3BB0FF
+99	cortex_rh_V6A	cortex	V6A	visual_area_V6A	rh	#8CDBFF
+103	cortex_rh_area_5d	cortex	area_5d	dorsal_area_5	rh	#00779E
+106	cortex_rh_PEa	cortex	PEa	area_PEa	rh	#73DEFF
+108	cortex_rh_MIP	cortex	MIP	medial_intraparietal_area	rh	#A6DEFF
+109	cortex_rh_fundus_IPS	cortex	fundus_IPS	fundus_of_the_intraparietal_sulcus	rh	#CFBFFF
+114	cortex_rh_AIP	cortex	AIP	anterior_intraparietal_area	rh	#0097A8
+115	cortex_rh_LIP	cortex	LIP	lateral_intraparietal_area	rh	#00A2FF
+118	cortex_rh_LOP	cortex	LOP	lateral_occipital_parietal_area	rh	#33ABDE
+119	cortex_rh_MST	cortex	MST	medial_superior_temporal_area	rh	#397B80
+121	cortex_rh_area_7a/b	cortex	area_7a/b	inferior_parietal_lobule_areas_7a_and_7b	rh	#8CFFEC
+124	cortex_rh_area_7op	cortex	area_7op	parietal_operculum	rh	#00AEFF
+126	cortex_rh_area_7m	cortex	area_7m	area_7_(PGm)_on_the_medial_wall	rh	#1D8067
+129	cortex_rh_area_31	cortex	area_31	area_31	rh	#2CBF8C
+130	cortex_rh_area_23	cortex	area_23	area_23	rh	#00A851
+134	cortex_rh_area_v23	cortex	area_v23	area_v23	rh	#8CFFB3
+136	cortex_rh_area_29	cortex	area_29	area_29	rh	#00FFD4
+137	cortex_rh_area_30	cortex	area_30	area_30	rh	#008017
+142	cortex_rh_CA_fields	cortex	CA_fields	hippocampus_proper	rh	#00BF40
+145	cortex_rh_DG	cortex	DG	dentate_gyrus	rh	#8CFF8E
+146	cortex_rh_Sub/proS	cortex	Sub/proS	subiculum_and_prosubiculum	rh	#00FF80
+147	cortex_rh_preS/paraS	cortex	preS/paraS	presubiculum_and_parasubiculum	rh	#00BF20
+149	cortex_rh_TF/TFO	cortex	TF/TFO	areas_TF_and_TFO	rh	#3E8039
+152	cortex_rh_TH	cortex	TH	area_TH	rh	#AFFF8C
+155	cortex_rh_caudal_ERh	cortex	caudal_ERh	caudal_entorhinal_cortex	rh	#C2FF8C
+158	cortex_rh_mid_ERh	cortex	mid_ERh	middle_entorhinal_cortex	rh	#53801D
+159	cortex_rh_rostral_ERh	cortex	rostral_ERh	rostral_entorhinal_cortex	rh	#A7FF3B
+161	cortex_rh_area_35	cortex	area_35	area_35	rh	#70BF00
+162	cortex_rh_area_36	cortex	area_36	area_36	rh	#668000
+166	cortex_rh_TGa	cortex	TGa	agranular_temporal_pole	rh	#6C801D
+168	cortex_rh_TGd	cortex	TGd	dysgranular_temporal_pole	rh	#6C8039
+171	cortex_rh_TGg	cortex	TGg	granular_temporal_pole	rh	#96FF3B
+176	cortex_rh_TEO	cortex	TEO	area_TEO	rh	#90FF00
+179	cortex_rh_post_TE	cortex	post_TE	posterior_area_TE	rh	#93BF00
+182	cortex_rh_ant_TE	cortex	ant_TE	anterior_area_TE	rh	#ECFF73
+185	cortex_rh_TE_in_STSv	cortex	TE_in_STSv	area_TE_in_the_ventral_STS	rh	#B8E600
+189	cortex_rh_ant_STSf	cortex	ant_STSf	anterior_fundus_of_the_superior_temporal_sulcus	rh	#B7FF00
+192	cortex_rh_FST	cortex	FST	floor_of_the_superior_temporal_area	rh	#FFFA73
+196	cortex_rh_TPO	cortex	TPO	temporal_parietooccipital_associated_area	rh	#FFDE8C
+197	cortex_rh_TAa	cortex	TAa	area_TAa	rh	#FFFAA6
+198	cortex_rh_STGr	cortex	STGr	rostral_superior_temporal_gyrus	rh	#80531D
+200	cortex_rh_Tpt	cortex	Tpt	temporo-parietal_area	rh	#BFB156
+201	cortex_rh_parabelt	cortex	parabelt	parabelt_areas_of_auditory_cortex	rh	#804600
+207	cortex_rh_CL/ML	cortex	CL/ML	caudal_areas_of_the_lateral_belt	rh	#9E7324
+210	cortex_rh_AL/RTL	cortex	AL/RTL	rostral_areas_of_the_lateral_belt	rh	#FFF08C
+214	cortex_rh_CM	cortex	CM	caudomedial_belt_region	rh	#A85700
+215	cortex_rh_RM/RTM	cortex	RM/RTM	rostral_areas_of_the_medial_belt	rh	#944500
+218	cortex_rh_RTp	cortex	RTp	polar_rostrotemporal_cortex	rh	#D48A00
+220	cortex_rh_R/RT	cortex	R/RT	rostral_areas_of_the_core	rh	#F5FF3B
+223	cortex_rh_AI	cortex	AI	primary_auditory_cortex	rh	#BF5600
+226	cortex_rh_Pi	cortex	Pi	parainsula	rh	#801E00
+227	cortex_rh_Ins	cortex	Ins	insula	rh	#DE7A00
+230	cortex_rh_Ri	cortex	Ri	retroinsula	rh	#FFB18C
+232	cortex_rh_MT	cortex	MT	middle_temporal_area	rh	#FF583B
+235	cortex_rh_V4d	cortex	V4d	dorsal_visual_area_4	rh	#802C1D
+236	cortex_rh_V4v	cortex	V4v	ventral_visual_area_4	rh	#FF948C
+239	cortex_rh_V3d/V3A	cortex	V3d/V3A	visual_areas_V3d_and_V3A	rh	#800008
+242	cortex_rh_V3v	cortex	V3v	ventral_visual_area_3	rh	#BF6F56
+243	cortex_rh_V2	cortex	V2	visual_area_2	rh	#FFC273
+246	cortex_rh_V1	cortex	V1	primary_visual_cortex	rh	#FFFFBF
+1004	cortex_lh_area_32	cortex	area_32	area_32	lh	#803951
+1005	cortex_lh_area_25	cortex	area_25	subgenual_cortex	lh	#801D46
+1007	cortex_lh_area_24a/b	cortex	area_24a/b	areas_24a_and_24b	lh	#800035
+1010	cortex_lh_area_24c	cortex	area_24c	area_24c	lh	#FF8CB3
+1012	cortex_lh_area_24a/b_prime	cortex	area_24a/b_prime	areas_24a'_and_24b'	lh	#FF3B9D
+1015	cortex_lh_area_24c_prime	cortex	area_24c_prime	area_24c'	lh	#FFA6E7
+1018	cortex_lh_area_10	cortex	area_10	frontal_pole	lh	#D4007B
+1022	cortex_lh_area_14	cortex	area_14	gyrus_rectus	lh	#803973
+1027	cortex_lh_area_11	cortex	area_11	area_11	lh	#FF3BFC
+1030	cortex_lh_area_13	cortex	area_13	area_13	lh	#4F0080
+1034	cortex_lh_area_12m/o	cortex	area_12m/o	medial_and_orbital_area_12	lh	#D573FF
+1039	cortex_lh_Iam/Iapm	cortex	Iam/Iapm	medial_agranular_insular_region	lh	#9900BF
+1040	cortex_lh_lat_Ia	cortex	lat_Ia	lateral_agranular_insular_region	lh	#C931D4
+1044	cortex_lh_OLF	cortex	OLF	primary_olfactory_cortex	lh	#FF00E6
+1048	cortex_lh_G	cortex	G	gustatory_cortex	lh	#C08CFF
+1049	cortex_lh_PrCO	cortex	PrCO	precentral_operular_area	lh	#A673FF
+1051	cortex_lh_area_8A	cortex	area_8A	periarcuate_area_8A_(Frontal_Eye_Fields)	lh	#F23BFF
+1055	cortex_lh_area_8B	cortex	area_8B	area_8B	lh	#623BFF
+1060	cortex_lh_area_9	cortex	area_9	area_9	lh	#080099
+1063	cortex_lh_area_46d	cortex	area_46d	dorsal_area_46	lh	#1500B2
+1066	cortex_lh_area_46v/f	cortex	area_46v/f	ventral_and_fundus_portion_of_area_46	lh	#2900CC
+1069	cortex_lh_area_12r/l	cortex	area_12r/l	rostral_and_lateral_area_12	lh	#3D3980
+1073	cortex_lh_area_45	cortex	area_45	area_45	lh	#0800FF
+1076	cortex_lh_area_44	cortex	area_44	area_44	lh	#1D4180
+1079	cortex_lh_M1	cortex	M1	primary_motor_cortex	lh	#723BFF
+1081	cortex_lh_PMd	cortex	PMd	dorsal_premotor_cortex	lh	#739AFF
+1084	cortex_lh_PMv	cortex	PMv	ventral_premotor_cortex	lh	#0038D4
+1088	cortex_lh_preSMA	cortex	preSMA	presupplementary_motor_area	lh	#2C58BF
+1089	cortex_lh_SMA	cortex	SMA	supplementary_motor_area	lh	#1D5080
+1093	cortex_lh_area_3a/b	cortex	area_3a/b	areas_3a_and_3b	lh	#395880
+1094	cortex_lh_areas_1-2	cortex	areas_1-2	areas_1-2	lh	#8CBEFF
+1095	cortex_lh_SII	cortex	SII	secondary_somatosensory_cortex	lh	#1D5880
+1098	cortex_lh_V6	cortex	V6	visual_area_V6	lh	#3BB0FF
+1099	cortex_lh_V6A	cortex	V6A	visual_area_V6A	lh	#8CDBFF
+1103	cortex_lh_area_5d	cortex	area_5d	dorsal_area_5	lh	#00779E
+1106	cortex_lh_PEa	cortex	PEa	area_PEa	lh	#73DEFF
+1108	cortex_lh_MIP	cortex	MIP	medial_intraparietal_area	lh	#A6DEFF
+1109	cortex_lh_fundus_IPS	cortex	fundus_IPS	fundus_of_the_intraparietal_sulcus	lh	#CFBFFF
+1114	cortex_lh_AIP	cortex	AIP	anterior_intraparietal_area	lh	#0097A8
+1115	cortex_lh_LIP	cortex	LIP	lateral_intraparietal_area	lh	#00A2FF
+1118	cortex_lh_LOP	cortex	LOP	lateral_occipital_parietal_area	lh	#33ABDE
+1119	cortex_lh_MST	cortex	MST	medial_superior_temporal_area	lh	#397B80
+1121	cortex_lh_area_7a/b	cortex	area_7a/b	inferior_parietal_lobule_areas_7a_and_7b	lh	#8CFFEC
+1124	cortex_lh_area_7op	cortex	area_7op	parietal_operculum	lh	#00AEFF
+1126	cortex_lh_area_7m	cortex	area_7m	area_7_(PGm)_on_the_medial_wall	lh	#1D8067
+1129	cortex_lh_area_31	cortex	area_31	area_31	lh	#2CBF8C
+1130	cortex_lh_area_23	cortex	area_23	area_23	lh	#00A851
+1134	cortex_lh_area_v23	cortex	area_v23	area_v23	lh	#8CFFB3
+1136	cortex_lh_area_29	cortex	area_29	area_29	lh	#00FFD4
+1137	cortex_lh_area_30	cortex	area_30	area_30	lh	#008017
+1142	cortex_lh_CA_fields	cortex	CA_fields	hippocampus_proper	lh	#00BF40
+1145	cortex_lh_DG	cortex	DG	dentate_gyrus	lh	#8CFF8E
+1146	cortex_lh_Sub/proS	cortex	Sub/proS	subiculum_and_prosubiculum	lh	#00FF80
+1147	cortex_lh_preS/paraS	cortex	preS/paraS	presubiculum_and_parasubiculum	lh	#00BF20
+1149	cortex_lh_TF/TFO	cortex	TF/TFO	areas_TF_and_TFO	lh	#3E8039
+1152	cortex_lh_TH	cortex	TH	area_TH	lh	#AFFF8C
+1155	cortex_lh_caudal_ERh	cortex	caudal_ERh	caudal_entorhinal_cortex	lh	#C2FF8C
+1158	cortex_lh_mid_ERh	cortex	mid_ERh	middle_entorhinal_cortex	lh	#53801D
+1159	cortex_lh_rostral_ERh	cortex	rostral_ERh	rostral_entorhinal_cortex	lh	#A7FF3B
+1161	cortex_lh_area_35	cortex	area_35	area_35	lh	#70BF00
+1162	cortex_lh_area_36	cortex	area_36	area_36	lh	#668000
+1166	cortex_lh_TGa	cortex	TGa	agranular_temporal_pole	lh	#6C801D
+1168	cortex_lh_TGd	cortex	TGd	dysgranular_temporal_pole	lh	#6C8039
+1171	cortex_lh_TGg	cortex	TGg	granular_temporal_pole	lh	#96FF3B
+1176	cortex_lh_TEO	cortex	TEO	area_TEO	lh	#90FF00
+1179	cortex_lh_post_TE	cortex	post_TE	posterior_area_TE	lh	#93BF00
+1182	cortex_lh_ant_TE	cortex	ant_TE	anterior_area_TE	lh	#ECFF73
+1185	cortex_lh_TE_in_STSv	cortex	TE_in_STSv	area_TE_in_the_ventral_STS	lh	#B8E600
+1189	cortex_lh_ant_STSf	cortex	ant_STSf	anterior_fundus_of_the_superior_temporal_sulcus	lh	#B7FF00
+1192	cortex_lh_FST	cortex	FST	floor_of_the_superior_temporal_area	lh	#FFFA73
+1196	cortex_lh_TPO	cortex	TPO	temporal_parietooccipital_associated_area	lh	#FFDE8C
+1197	cortex_lh_TAa	cortex	TAa	area_TAa	lh	#FFFAA6
+1198	cortex_lh_STGr	cortex	STGr	rostral_superior_temporal_gyrus	lh	#80531D
+1200	cortex_lh_Tpt	cortex	Tpt	temporo-parietal_area	lh	#BFB156
+1201	cortex_lh_parabelt	cortex	parabelt	parabelt_areas_of_auditory_cortex	lh	#804600
+1207	cortex_lh_CL/ML	cortex	CL/ML	caudal_areas_of_the_lateral_belt	lh	#9E7324
+1210	cortex_lh_AL/RTL	cortex	AL/RTL	rostral_areas_of_the_lateral_belt	lh	#FFF08C
+1214	cortex_lh_CM	cortex	CM	caudomedial_belt_region	lh	#A85700
+1215	cortex_lh_RM/RTM	cortex	RM/RTM	rostral_areas_of_the_medial_belt	lh	#944500
+1218	cortex_lh_RTp	cortex	RTp	polar_rostrotemporal_cortex	lh	#D48A00
+1220	cortex_lh_R/RT	cortex	R/RT	rostral_areas_of_the_core	lh	#F5FF3B
+1223	cortex_lh_AI	cortex	AI	primary_auditory_cortex	lh	#BF5600
+1226	cortex_lh_Pi	cortex	Pi	parainsula	lh	#801E00
+1227	cortex_lh_Ins	cortex	Ins	insula	lh	#DE7A00
+1230	cortex_lh_Ri	cortex	Ri	retroinsula	lh	#FFB18C
+1232	cortex_lh_MT	cortex	MT	middle_temporal_area	lh	#FF583B
+1235	cortex_lh_V4d	cortex	V4d	dorsal_visual_area_4	lh	#802C1D
+1236	cortex_lh_V4v	cortex	V4v	ventral_visual_area_4	lh	#FF948C
+1239	cortex_lh_V3d/V3A	cortex	V3d/V3A	visual_areas_V3d_and_V3A	lh	#800008
+1242	cortex_lh_V3v	cortex	V3v	ventral_visual_area_3	lh	#BF6F56
+1243	cortex_lh_V2	cortex	V2	visual_area_2	lh	#FFC273
+1246	cortex_lh_V1	cortex	V1	primary_visual_cortex	lh	#FFFFBF
+504	subcortex_rh_Cl	subcortex	Cl	claustrum	rh	
+507	subcortex_rh_DEn	subcortex	DEn	dorsal_endopiriform_claustrum	rh	
+508	subcortex_rh_VEn	subcortex	VEn	ventral_endopiriform_claustrum	rh	
+509	subcortex_rh_Pir	subcortex	Pir	piriform_cortex	rh	
+512	subcortex_rh_Hi	subcortex	Hi	hippocampus	rh	
+513	subcortex_rh_S	subcortex	S	subicular_complex	rh	
+514	subcortex_rh_fi	subcortex	fi	fimbria	rh	
+515	subcortex_rh_f	subcortex	f	fornix	rh	
+519	subcortex_rh_BM	subcortex	BM	basomedial_amygdaloid_nucleus	rh	
+520	subcortex_rh_VCo	subcortex	VCo	ventral_cortical_amygdaloid_nucleus	rh	
+521	subcortex_rh_AHi	subcortex	AHi	amygdalohippocampal_area	rh	
+523	subcortex_rh_La	subcortex	La	lateral_amygdaloid_nucleus	rh	
+526	subcortex_rh_APir	subcortex	APir	amygdalopiriform_transition_area	rh	
+527	subcortex_rh_BL	subcortex	BL	basolateral_amygdaloid_nucleus	rh	
+531	subcortex_rh_PaL	subcortex	PaL	paralaminar_amygdaloid_nucleus	rh	
+534	subcortex_rh_Ce	subcortex	Ce	central_amygdaloid_nucleus	rh	
+536	subcortex_rh_Me	subcortex	Me	medial_amygdaloid_nucleus	rh	
+537	subcortex_rh_AA	subcortex	AA	anterior_amygdaloid_area	rh	
+539	subcortex_rh_EA	subcortex	EA	extended_amygdala	rh	
+540	subcortex_rh_IPAC	subcortex	IPAC	posterior_interstitial_nucleus	rh	
+541	subcortex_rh_STIA	subcortex	STIA	intraamygdaloid_stria_terminalis	rh	
+545	subcortex_rh_Cd	subcortex	Cd	caudate	rh	
+548	subcortex_rh_Pu	subcortex	Pu	putamen	rh	
+549	subcortex_rh_ASt	subcortex	ASt	amygdalostriatal_transition	rh	
+550	subcortex_rh_ic	subcortex	ic	internal_capsule	rh	
+552	subcortex_rh_Acb	subcortex	Acb	accumbens	rh	
+553	subcortex_rh_Tu	subcortex	Tu	olfactory_tubercule	rh	
+555	subcortex_rh_GP	subcortex	GP	globus_pallidus	rh	
+559	subcortex_rh_ac	subcortex	ac	anterior_commissure	rh	
+560	subcortex_rh_VP	subcortex	VP	ventral_pallidum	rh	
+562	subcortex_rh_BR	subcortex	BR	basal_nucleus_region	rh	
+565	subcortex_rh_ST	subcortex	ST	bed_nucleus_of_the_stria_terminalis	rh	
+567	subcortex_rh_SFi	subcortex	SFi	septimbrial_nucleus	rh	
+568	subcortex_rh_SDB	subcortex	SDB	septum_diagonal_band	rh	
+570	subcortex_rh_opt	subcortex	opt	optic_tract	rh	
+572	subcortex_rh_PO	subcortex	PO	preoptic_area	rh	
+573	subcortex_rh_LTer-VOLT	subcortex	LTer-VOLT	lamina_terminalis	rh	
+578	subcortex_rh_Pa	subcortex	Pa	paraventricular_hypothalamus	rh	
+580	subcortex_rh_VMH	subcortex	VMH	ventromedial_hypothalamic_nucleus	rh	
+581	subcortex_rh_MEm	subcortex	MEm	medial_emminence	rh	
+582	subcortex_rh_Arc	subcortex	Arc	arcuate_nucleus	rh	
+584	subcortex_rh_SOpt	subcortex	SOpt	supraoptic_hypothalamus	rh	
+585	subcortex_rh_AH	subcortex	AH	anterior_hypothalamic_area	rh	
+586	subcortex_rh_DM	subcortex	DM	dorsal_medial_hypothalamic_nucleus	rh	
+587	subcortex_rh_LHy	subcortex	LHy	lateral_hypothalamic_region	rh	
+591	subcortex_rh_STh	subcortex	STh	subthalamic_nucleus	rh	
+594	subcortex_rh_PH	subcortex	PH	posterior_hypothalamic_nucleus	rh	
+596	subcortex_rh_PeF	subcortex	PeF	prefornical_hypothalamus	rh	
+597	subcortex_rh_MM/RM	subcortex	MM/RM	mammillary/retromammillary_hypothalamus	rh	
+601	subcortex_rh_APit	subcortex	APit	anterior_pituitary	rh	
+602	subcortex_rh_PPit	subcortex	PPit	posterior_pituitary	rh	
+604	subcortex_rh_ZI-H	subcortex	ZI-H	zona_incerta_and_lenticular_fascicles	rh	
+606	subcortex_rh_Rt	subcortex	Rt	reticular_thalamus	rh	
+609	subcortex_rh_AR	subcortex	AR	anterior_thalamus_region	rh	
+613	subcortex_rh_CL-PC	subcortex	CL-PC	centrolateral_and_paracentral_thalamus	rh	
+614	subcortex_rh_CMn-PF	subcortex	CMn-PF	centromedial-parafascicular_thalamus	rh	
+615	subcortex_rh_SPFC	subcortex	SPFC	suprafascicular_nucleus	rh	
+617	subcortex_rh_SG	subcortex	SG	supra_geniculate	rh	
+618	subcortex_rh_Lim	subcortex	Lim	limitans_thalamus	rh	
+619	subcortex_rh_MD	subcortex	MD	mediodorsal_thalamus	rh	
+621	subcortex_rh_IMD	subcortex	IMD	intermediodorsal_thalamus	rh	
+622	subcortex_rh_PT-PV-sm	subcortex	PT-PV-sm	paratenial-paraventral-thalamus	rh	
+623	subcortex_rh_PVP	subcortex	PVP	paraventricular_posterior_thalamus	rh	
+624	subcortex_rh_PVA	subcortex	PVA	paraventricular_anterior_thalamus	rh	
+625	subcortex_rh_IAM	subcortex	IAM	interanteromedial_thalamus	rh	
+626	subcortex_rh_CM	subcortex	CM	central_medial_thalamus	rh	
+627	subcortex_rh_Re-Rh-Xi	subcortex	Re-Rh-Xi	Reuniens-rhomboid-xiphoid_thalamus	rh	
+630	subcortex_rh_VA	subcortex	VA	ventral_anterior_thalamus	rh	
+631	subcortex_rh_VLA	subcortex	VLA	ventral_lateral_anterior_thalamus	rh	
+633	subcortex_rh_VLX	subcortex	VLX	ventral_lateral_x_thalamus	rh	
+634	subcortex_rh_VLPV	subcortex	VLPV	ventral_lateral_posteroventral_thalamus	rh	
+635	subcortex_rh_VLPD	subcortex	VLPD	ventral_lateral_posterodorsal_thalamus	rh	
+637	subcortex_rh_VPM-VPL	subcortex	VPM-VPL	ventroposterior_medial_and_lateral_thalamus	rh	
+638	subcortex_rh_VMPo-VMB	subcortex	VMPo-VMB	ventromedial_posterior+basal_thalamus	rh	
+639	subcortex_rh_VPI	subcortex	VPI	ventroposterior_inferior_thalamus	rh	
+640	subcortex_rh_VM	subcortex	VM	ventral_medial_thalamus	rh	
+642	subcortex_rh_LP	subcortex	LP	lateral_posterior_thalamus	rh	
+643	subcortex_rh_LD	subcortex	LD	lateral_dorsal_thalamus	rh	
+645	subcortex_rh_APul	subcortex	APul	anterior_pulvinar	rh	
+646	subcortex_rh_MPul	subcortex	MPul	medial_pulvinar	rh	
+647	subcortex_rh_LPul	subcortex	LPul	lateral_pulvinar	rh	
+648	subcortex_rh_IPul	subcortex	IPul	inferior_pulvinar	rh	
+649	subcortex_rh_bsc	subcortex	bsc	brachium_superior_colliculus	rh	
+651	subcortex_rh_DLG	subcortex	DLG	dorsal_lateral_geniculate	rh	
+652	subcortex_rh_MG	subcortex	MG	medial_geniculate	rh	
+654	subcortex_rh_Pi	subcortex	Pi	pineal_gland	rh	
+655	subcortex_rh_Hb	subcortex	Hb	habenula	rh	
+657	subcortex_rh_PCR	subcortex	PCR	posterior_commissural_region	rh	
+661	subcortex_rh_p1Rt	subcortex	p1Rt	p1_mesencephalic_reticulum	rh	
+666	subcortex_rh_SC	subcortex	SC	superior_colliculus	rh	
+667	subcortex_rh_ICoC	subcortex	ICoC	inferior_colliculus_complex	rh	
+671	subcortex_rh_n4	subcortex	n4	fourth_nerve	rh	
+672	subcortex_rh_PAG	subcortex	PAG	periaqueductal_gray	rh	
+675	subcortex_rh_PBG	subcortex	PBG	parabigeminal_nucleus	rh	
+676	subcortex_rh_MiTg	subcortex	MiTg	mircrocellular_tegmentum	rh	
+677	subcortex_rh_PrCnF	subcortex	PrCnF	precuneiform_nucleus	rh	
+678	subcortex_rh_CnF	subcortex	CnF	cuneiform_nucleus	rh	
+679	subcortex_rh_VLTg	subcortex	VLTg	ventrolateral_tegmentum	rh	
+680	subcortex_rh_PTg	subcortex	PTg	pedunculopontine_nucleus	rh	
+681	subcortex_rh_ATg	subcortex	ATg	anterior_tegmental_nucleus	rh	
+683	subcortex_rh_mRt	subcortex	mRt	mesencephalic_reticular_formation	rh	
+684	subcortex_rh_RIs	subcortex	RIs	retroisthmic_nucleus	rh	
+687	subcortex_rh_OM	subcortex	OM	occulomotor_nuclei	rh	
+688	subcortex_rh_mlf	subcortex	mlf	mediolateral_fascicle	rh	
+690	subcortex_rh_MR	subcortex	MR	medial_Raphe	rh	
+691	subcortex_rh_DR	subcortex	DR	dorsal_Raphe	rh	
+692	subcortex_rh_LiR	subcortex	LiR	linear_Raphe	rh	
+694	subcortex_rh_R+	subcortex	R+	rubral_region	rh	
+698	subcortex_rh_RF	subcortex	RF	retrorubral_field	rh	
+699	subcortex_rh_SN	subcortex	SN	substantia_nigra	rh	
+700	subcortex_rh_VTA	subcortex	VTA	ventral_tegmental_area	rh	
+701	subcortex_rh_IP	subcortex	IP	interpeduncular_nucleus	rh	
+702	subcortex_rh_n3	subcortex	n3	occulomotor_nerve	rh	
+703	subcortex_rh_cp	subcortex	cp	cerebral_peduncle	rh	
+707	subcortex_rh_PBC	subcortex	PBC	parabrachial_complex	rh	
+713	subcortex_rh_LC-Me5	subcortex	LC-Me5	locus-coeruleus_region	rh	
+714	subcortex_rh_me5	subcortex	me5	mesencephalic_trigeminal_nerve	rh	
+715	subcortex_rh_CG	subcortex	CG	central_gray_nucleus	rh	
+717	subcortex_rh_LDTg	subcortex	LDTg	lateral_dorsal_tegmentum	rh	
+718	subcortex_rh_MDTg	subcortex	MDTg	medial_dorsal_tegmentum	rh	
+721	subcortex_rh_ll	subcortex	ll	lateral_lemniscus	rh	
+722	subcortex_rh_DLL	subcortex	DLL	dorsal_lateral_leminscus_nucleus	rh	
+723	subcortex_rh_ILL-VLL	subcortex	ILL-VLL	intermediate+ventral_lateral_lemniscus_nuclei	rh	
+726	subcortex_rh_SubC	subcortex	SubC	subceruleus	rh	
+727	subcortex_rh_RtTg	subcortex	RtTg	reticulotegmentum	rh	
+728	subcortex_rh_xscp	subcortex	xscp	superior_cerebellar_peduncle_decussation	rh	
+729	subcortex_rh_PnO	subcortex	PnO	pontine_reticulum_oral	rh	
+730	subcortex_rh_PnC	subcortex	PnC	pontine_reticulum_caudal	rh	
+732	subcortex_rh_SO	subcortex	SO	superior_olive	rh	
+733	subcortex_rh_ml	subcortex	ml	medial_lemniscus	rh	
+734	subcortex_rh_tz	subcortex	tz	trapezoid_bundle_region	rh	
+736	subcortex_rh_Pn	subcortex	Pn	pontine_nucleus	rh	
+737	subcortex_rh_spf	subcortex	spf	pontine_fibers	rh	
+743	subcortex_rh_icp	subcortex	icp	inferior_cerebellar_peduncle	rh	
+744	subcortex_rh_oc	subcortex	oc	olivocerebellar_tract	rh	
+746	subcortex_rh_Lat	subcortex	Lat	lateral_cerebellar_nucleus	rh	
+747	subcortex_rh_Int	subcortex	Int	interposed_cerebellar_nuclei	rh	
+750	subcortex_rh_Fas	subcortex	Fas	fastigial_cerebellar_nucleus	rh	
+752	subcortex_rh_Fl-PFl	subcortex	Fl-PFl	floculus_parafloculus	rh	
+756	subcortex_rh_AVCbCx	subcortex	AVCbCx	anterior_vermis_cerebellar_cortex	rh	
+762	subcortex_rh_PVCbCx	subcortex	PVCbCx	posterior_vermis_cerebellar_cortex	rh	
+768	subcortex_rh_ICbCx	subcortex	ICbCx	intermediate_cerebellar_cortex	rh	
+776	subcortex_rh_LCbCx	subcortex	LCbCx	lateral_cerebellar_cortex	rh	
+783	subcortex_rh_Ve	subcortex	Ve	vestibular_nucleus	rh	
+784	subcortex_rh_DVC	subcortex	DVC	cochlear_nucleus	rh	
+785	subcortex_rh_n8	subcortex	n8	vestibulochoclear_nerve	rh	
+786	subcortex_rh_Pr	subcortex	Pr	prepositus_nucleus	rh	
+788	subcortex_rh_Nu5	subcortex	Nu5	motor_trigeminal_nucleus	rh	
+789	subcortex_rh_Pr5	subcortex	Pr5	principal_trigeminal_nucleus	rh	
+790	subcortex_rh_Sp5	subcortex	Sp5	spinal_trigeminal_nucleus	rh	
+795	subcortex_rh_CuGr	subcortex	CuGr	cuneate_gracile_nuclei	rh	
+796	subcortex_rh_obex	subcortex	obex	obex	rh	
+797	subcortex_rh_Sol	subcortex	Sol	solitary_tract_nucleus	rh	
+798	subcortex_rh_Nu10-12	subcortex	Nu10-12	visceral_motor_nuclei	rh	
+801	subcortex_rh_Nu6	subcortex	Nu6	abducens_motor_nucleus	rh	
+802	subcortex_rh_Nu7	subcortex	Nu7	facial_motor_nucleus	rh	
+804	subcortex_rh_PCIRt	subcortex	PCIRt	parvicellular_and_intermediate_reticular_nuclei	rh	
+805	subcortex_rh_DPGi	subcortex	DPGi	dorsal_paragigantocellular_reticular_nucleus	rh	
+806	subcortex_rh_Gi	subcortex	Gi	gigantocellular_reticular_nucleus	rh	
+807	subcortex_rh_MdRt	subcortex	MdRt	medullar_reticular_nucleus	rh	
+809	subcortex_rh_RMg	subcortex	RMg	Raphe_magnus_nucleus	rh	
+810	subcortex_rh_ROb	subcortex	ROb	Raphe_obscurus_nucleus	rh	
+813	subcortex_rh_IO	subcortex	IO	inferior_olive	rh	
+814	subcortex_rh_LRt	subcortex	LRt	lateral_reticular_nucleus	rh	
+816	subcortex_rh_py	subcortex	py	pyramidal_tract	rh	
+817	subcortex_rh_pyx	subcortex	pyx	pyramidal_tract_decussation	rh	
+818	subcortex_rh_cst	subcortex	cst	corticospinal_tract	rh	
+1504	subcortex_lh_Cl	subcortex	Cl	claustrum	lh	
+1507	subcortex_lh_DEn	subcortex	DEn	dorsal_endopiriform_claustrum	lh	
+1508	subcortex_lh_VEn	subcortex	VEn	ventral_endopiriform_claustrum	lh	
+1509	subcortex_lh_Pir	subcortex	Pir	piriform_cortex	lh	
+1512	subcortex_lh_Hi	subcortex	Hi	hippocampus	lh	
+1513	subcortex_lh_S	subcortex	S	subicular_complex	lh	
+1514	subcortex_lh_fi	subcortex	fi	fimbria	lh	
+1515	subcortex_lh_f	subcortex	f	fornix	lh	
+1519	subcortex_lh_BM	subcortex	BM	basomedial_amygdaloid_nucleus	lh	
+1520	subcortex_lh_VCo	subcortex	VCo	ventral_cortical_amygdaloid_nucleus	lh	
+1521	subcortex_lh_AHi	subcortex	AHi	amygdalohippocampal_area	lh	
+1523	subcortex_lh_La	subcortex	La	lateral_amygdaloid_nucleus	lh	
+1526	subcortex_lh_APir	subcortex	APir	amygdalopiriform_transition_area	lh	
+1527	subcortex_lh_BL	subcortex	BL	basolateral_amygdaloid_nucleus	lh	
+1531	subcortex_lh_PaL	subcortex	PaL	paralaminar_amygdaloid_nucleus	lh	
+1534	subcortex_lh_Ce	subcortex	Ce	central_amygdaloid_nucleus	lh	
+1536	subcortex_lh_Me	subcortex	Me	medial_amygdaloid_nucleus	lh	
+1537	subcortex_lh_AA	subcortex	AA	anterior_amygdaloid_area	lh	
+1539	subcortex_lh_EA	subcortex	EA	extended_amygdala	lh	
+1540	subcortex_lh_IPAC	subcortex	IPAC	posterior_interstitial_nucleus	lh	
+1541	subcortex_lh_STIA	subcortex	STIA	intraamygdaloid_stria_terminalis	lh	
+1545	subcortex_lh_Cd	subcortex	Cd	caudate	lh	
+1548	subcortex_lh_Pu	subcortex	Pu	putamen	lh	
+1549	subcortex_lh_ASt	subcortex	ASt	amygdalostriatal_transition	lh	
+1550	subcortex_lh_ic	subcortex	ic	internal_capsule	lh	
+1552	subcortex_lh_Acb	subcortex	Acb	accumbens	lh	
+1553	subcortex_lh_Tu	subcortex	Tu	olfactory_tubercule	lh	
+1555	subcortex_lh_GP	subcortex	GP	globus_pallidus	lh	
+1559	subcortex_lh_ac	subcortex	ac	anterior_commissure	lh	
+1560	subcortex_lh_VP	subcortex	VP	ventral_pallidum	lh	
+1562	subcortex_lh_BR	subcortex	BR	basal_nucleus_region	lh	
+1565	subcortex_lh_ST	subcortex	ST	bed_nucleus_of_the_stria_terminalis	lh	
+1567	subcortex_lh_SFi	subcortex	SFi	septimbrial_nucleus	lh	
+1568	subcortex_lh_SDB	subcortex	SDB	septum_diagonal_band	lh	
+1570	subcortex_lh_opt	subcortex	opt	optic_tract	lh	
+1572	subcortex_lh_PO	subcortex	PO	preoptic_area	lh	
+1573	subcortex_lh_LTer-VOLT	subcortex	LTer-VOLT	lamina_terminalis	lh	
+1578	subcortex_lh_Pa	subcortex	Pa	paraventricular_hypothalamus	lh	
+1580	subcortex_lh_VMH	subcortex	VMH	ventromedial_hypothalamic_nucleus	lh	
+1581	subcortex_lh_MEm	subcortex	MEm	medial_emminence	lh	
+1582	subcortex_lh_Arc	subcortex	Arc	arcuate_nucleus	lh	
+1584	subcortex_lh_SOpt	subcortex	SOpt	supraoptic_hypothalamus	lh	
+1585	subcortex_lh_AH	subcortex	AH	anterior_hypothalamic_area	lh	
+1586	subcortex_lh_DM	subcortex	DM	dorsal_medial_hypothalamic_nucleus	lh	
+1587	subcortex_lh_LHy	subcortex	LHy	lateral_hypothalamic_region	lh	
+1591	subcortex_lh_STh	subcortex	STh	subthalamic_nucleus	lh	
+1594	subcortex_lh_PH	subcortex	PH	posterior_hypothalamic_nucleus	lh	
+1596	subcortex_lh_PeF	subcortex	PeF	prefornical_hypothalamus	lh	
+1597	subcortex_lh_MM/RM	subcortex	MM/RM	mammillary/retromammillary_hypothalamus	lh	
+1601	subcortex_lh_APit	subcortex	APit	anterior_pituitary	lh	
+1602	subcortex_lh_PPit	subcortex	PPit	posterior_pituitary	lh	
+1604	subcortex_lh_ZI-H	subcortex	ZI-H	zona_incerta_and_lenticular_fascicles	lh	
+1606	subcortex_lh_Rt	subcortex	Rt	reticular_thalamus	lh	
+1609	subcortex_lh_AR	subcortex	AR	anterior_thalamus_region	lh	
+1613	subcortex_lh_CL-PC	subcortex	CL-PC	centrolateral_and_paracentral_thalamus	lh	
+1614	subcortex_lh_CMn-PF	subcortex	CMn-PF	centromedial-parafascicular_thalamus	lh	
+1615	subcortex_lh_SPFC	subcortex	SPFC	suprafascicular_nucleus	lh	
+1617	subcortex_lh_SG	subcortex	SG	supra_geniculate	lh	
+1618	subcortex_lh_Lim	subcortex	Lim	limitans_thalamus	lh	
+1619	subcortex_lh_MD	subcortex	MD	mediodorsal_thalamus	lh	
+1621	subcortex_lh_IMD	subcortex	IMD	intermediodorsal_thalamus	lh	
+1622	subcortex_lh_PT-PV-sm	subcortex	PT-PV-sm	paratenial-paraventral-thalamus	lh	
+1623	subcortex_lh_PVP	subcortex	PVP	paraventricular_posterior_thalamus	lh	
+1624	subcortex_lh_PVA	subcortex	PVA	paraventricular_anterior_thalamus	lh	
+1625	subcortex_lh_IAM	subcortex	IAM	interanteromedial_thalamus	lh	
+1626	subcortex_lh_CM	subcortex	CM	central_medial_thalamus	lh	
+1627	subcortex_lh_Re-Rh-Xi	subcortex	Re-Rh-Xi	Reuniens-rhomboid-xiphoid_thalamus	lh	
+1630	subcortex_lh_VA	subcortex	VA	ventral_anterior_thalamus	lh	
+1631	subcortex_lh_VLA	subcortex	VLA	ventral_lateral_anterior_thalamus	lh	
+1633	subcortex_lh_VLX	subcortex	VLX	ventral_lateral_x_thalamus	lh	
+1634	subcortex_lh_VLPV	subcortex	VLPV	ventral_lateral_posteroventral_thalamus	lh	
+1635	subcortex_lh_VLPD	subcortex	VLPD	ventral_lateral_posterodorsal_thalamus	lh	
+1637	subcortex_lh_VPM-VPL	subcortex	VPM-VPL	ventroposterior_medial_and_lateral_thalamus	lh	
+1638	subcortex_lh_VMPo-VMB	subcortex	VMPo-VMB	ventromedial_posterior+basal_thalamus	lh	
+1639	subcortex_lh_VPI	subcortex	VPI	ventroposterior_inferior_thalamus	lh	
+1640	subcortex_lh_VM	subcortex	VM	ventral_medial_thalamus	lh	
+1642	subcortex_lh_LP	subcortex	LP	lateral_posterior_thalamus	lh	
+1643	subcortex_lh_LD	subcortex	LD	lateral_dorsal_thalamus	lh	
+1645	subcortex_lh_APul	subcortex	APul	anterior_pulvinar	lh	
+1646	subcortex_lh_MPul	subcortex	MPul	medial_pulvinar	lh	
+1647	subcortex_lh_LPul	subcortex	LPul	lateral_pulvinar	lh	
+1648	subcortex_lh_IPul	subcortex	IPul	inferior_pulvinar	lh	
+1649	subcortex_lh_bsc	subcortex	bsc	brachium_superior_colliculus	lh	
+1651	subcortex_lh_DLG	subcortex	DLG	dorsal_lateral_geniculate	lh	
+1652	subcortex_lh_MG	subcortex	MG	medial_geniculate	lh	
+1654	subcortex_lh_Pi	subcortex	Pi	pineal_gland	lh	
+1655	subcortex_lh_Hb	subcortex	Hb	habenula	lh	
+1657	subcortex_lh_PCR	subcortex	PCR	posterior_commissural_region	lh	
+1661	subcortex_lh_p1Rt	subcortex	p1Rt	p1_mesencephalic_reticulum	lh	
+1666	subcortex_lh_SC	subcortex	SC	superior_colliculus	lh	
+1667	subcortex_lh_ICoC	subcortex	ICoC	inferior_colliculus_complex	lh	
+1671	subcortex_lh_n4	subcortex	n4	fourth_nerve	lh	
+1672	subcortex_lh_PAG	subcortex	PAG	periaqueductal_gray	lh	
+1675	subcortex_lh_PBG	subcortex	PBG	parabigeminal_nucleus	lh	
+1676	subcortex_lh_MiTg	subcortex	MiTg	mircrocellular_tegmentum	lh	
+1677	subcortex_lh_PrCnF	subcortex	PrCnF	precuneiform_nucleus	lh	
+1678	subcortex_lh_CnF	subcortex	CnF	cuneiform_nucleus	lh	
+1679	subcortex_lh_VLTg	subcortex	VLTg	ventrolateral_tegmentum	lh	
+1680	subcortex_lh_PTg	subcortex	PTg	pedunculopontine_nucleus	lh	
+1681	subcortex_lh_ATg	subcortex	ATg	anterior_tegmental_nucleus	lh	
+1683	subcortex_lh_mRt	subcortex	mRt	mesencephalic_reticular_formation	lh	
+1684	subcortex_lh_RIs	subcortex	RIs	retroisthmic_nucleus	lh	
+1687	subcortex_lh_OM	subcortex	OM	occulomotor_nuclei	lh	
+1688	subcortex_lh_mlf	subcortex	mlf	mediolateral_fascicle	lh	
+1690	subcortex_lh_MR	subcortex	MR	medial_Raphe	lh	
+1691	subcortex_lh_DR	subcortex	DR	dorsal_Raphe	lh	
+1692	subcortex_lh_LiR	subcortex	LiR	linear_Raphe	lh	
+1694	subcortex_lh_R+	subcortex	R+	rubral_region	lh	
+1698	subcortex_lh_RF	subcortex	RF	retrorubral_field	lh	
+1699	subcortex_lh_SN	subcortex	SN	substantia_nigra	lh	
+1700	subcortex_lh_VTA	subcortex	VTA	ventral_tegmental_area	lh	
+1701	subcortex_lh_IP	subcortex	IP	interpeduncular_nucleus	lh	
+1702	subcortex_lh_n3	subcortex	n3	occulomotor_nerve	lh	
+1703	subcortex_lh_cp	subcortex	cp	cerebral_peduncle	lh	
+1707	subcortex_lh_PBC	subcortex	PBC	parabrachial_complex	lh	
+1713	subcortex_lh_LC-Me5	subcortex	LC-Me5	locus-coeruleus_region	lh	
+1714	subcortex_lh_me5	subcortex	me5	mesencephalic_trigeminal_nerve	lh	
+1715	subcortex_lh_CG	subcortex	CG	central_gray_nucleus	lh	
+1717	subcortex_lh_LDTg	subcortex	LDTg	lateral_dorsal_tegmentum	lh	
+1718	subcortex_lh_MDTg	subcortex	MDTg	medial_dorsal_tegmentum	lh	
+1721	subcortex_lh_ll	subcortex	ll	lateral_lemniscus	lh	
+1722	subcortex_lh_DLL	subcortex	DLL	dorsal_lateral_leminscus_nucleus	lh	
+1723	subcortex_lh_ILL-VLL	subcortex	ILL-VLL	intermediate+ventral_lateral_lemniscus_nuclei	lh	
+1726	subcortex_lh_SubC	subcortex	SubC	subceruleus	lh	
+1727	subcortex_lh_RtTg	subcortex	RtTg	reticulotegmentum	lh	
+1728	subcortex_lh_xscp	subcortex	xscp	superior_cerebellar_peduncle_decussation	lh	
+1729	subcortex_lh_PnO	subcortex	PnO	pontine_reticulum_oral	lh	
+1730	subcortex_lh_PnC	subcortex	PnC	pontine_reticulum_caudal	lh	
+1732	subcortex_lh_SO	subcortex	SO	superior_olive	lh	
+1733	subcortex_lh_ml	subcortex	ml	medial_lemniscus	lh	
+1734	subcortex_lh_tz	subcortex	tz	trapezoid_bundle_region	lh	
+1736	subcortex_lh_Pn	subcortex	Pn	pontine_nucleus	lh	
+1737	subcortex_lh_spf	subcortex	spf	pontine_fibers	lh	
+1743	subcortex_lh_icp	subcortex	icp	inferior_cerebellar_peduncle	lh	
+1744	subcortex_lh_oc	subcortex	oc	olivocerebellar_tract	lh	
+1746	subcortex_lh_Lat	subcortex	Lat	lateral_cerebellar_nucleus	lh	
+1747	subcortex_lh_Int	subcortex	Int	interposed_cerebellar_nuclei	lh	
+1750	subcortex_lh_Fas	subcortex	Fas	fastigial_cerebellar_nucleus	lh	
+1752	subcortex_lh_Fl-PFl	subcortex	Fl-PFl	floculus_parafloculus	lh	
+1756	subcortex_lh_AVCbCx	subcortex	AVCbCx	anterior_vermis_cerebellar_cortex	lh	
+1762	subcortex_lh_PVCbCx	subcortex	PVCbCx	posterior_vermis_cerebellar_cortex	lh	
+1768	subcortex_lh_ICbCx	subcortex	ICbCx	intermediate_cerebellar_cortex	lh	
+1776	subcortex_lh_LCbCx	subcortex	LCbCx	lateral_cerebellar_cortex	lh	
+1783	subcortex_lh_Ve	subcortex	Ve	vestibular_nucleus	lh	
+1784	subcortex_lh_DVC	subcortex	DVC	cochlear_nucleus	lh	
+1785	subcortex_lh_n8	subcortex	n8	vestibulochoclear_nerve	lh	
+1786	subcortex_lh_Pr	subcortex	Pr	prepositus_nucleus	lh	
+1788	subcortex_lh_Nu5	subcortex	Nu5	motor_trigeminal_nucleus	lh	
+1789	subcortex_lh_Pr5	subcortex	Pr5	principal_trigeminal_nucleus	lh	
+1790	subcortex_lh_Sp5	subcortex	Sp5	spinal_trigeminal_nucleus	lh	
+1795	subcortex_lh_CuGr	subcortex	CuGr	cuneate_gracile_nuclei	lh	
+1796	subcortex_lh_obex	subcortex	obex	obex	lh	
+1797	subcortex_lh_Sol	subcortex	Sol	solitary_tract_nucleus	lh	
+1798	subcortex_lh_Nu10-12	subcortex	Nu10-12	visceral_motor_nuclei	lh	
+1801	subcortex_lh_Nu6	subcortex	Nu6	abducens_motor_nucleus	lh	
+1802	subcortex_lh_Nu7	subcortex	Nu7	facial_motor_nucleus	lh	
+1804	subcortex_lh_PCIRt	subcortex	PCIRt	parvicellular_and_intermediate_reticular_nuclei	lh	
+1805	subcortex_lh_DPGi	subcortex	DPGi	dorsal_paragigantocellular_reticular_nucleus	lh	
+1806	subcortex_lh_Gi	subcortex	Gi	gigantocellular_reticular_nucleus	lh	
+1807	subcortex_lh_MdRt	subcortex	MdRt	medullar_reticular_nucleus	lh	
+1809	subcortex_lh_RMg	subcortex	RMg	Raphe_magnus_nucleus	lh	
+1810	subcortex_lh_ROb	subcortex	ROb	Raphe_obscurus_nucleus	lh	
+1813	subcortex_lh_IO	subcortex	IO	inferior_olive	lh	
+1814	subcortex_lh_LRt	subcortex	LRt	lateral_reticular_nucleus	lh	
+1816	subcortex_lh_py	subcortex	py	pyramidal_tract	lh	
+1817	subcortex_lh_pyx	subcortex	pyx	pyramidal_tract_decussation	lh	
+1818	subcortex_lh_cst	subcortex	cst	corticospinal_tract	lh	
+-1	WM_rh_ctxWM	WM	ctxWM	cerebral_white_matter	rh	
+-1001	WM_lh_ctxWM	WM	ctxWM	cerebral_white_matter	lh	
+-501	WM_rh_cbWM	WM	cbWM	cerebellum_white_matter	rh	
+-1501	WM_lh_cbWM	WM	cbWM	cerebellum_white_matter	lh	
+-2	CSF_rh_CSF	CSF	CSF	CSF	rh	
+-1002	CSF_lh_CSF	CSF	CSF	CSF	lh	

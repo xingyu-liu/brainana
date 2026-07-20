@@ -25,6 +25,9 @@ About
 
 |
 
+To explore a subject's outputs interactively, use the companion
+`Brainana Viewer <https://github.com/arcaro-lab/brainana_tools>`_.
+
 License
 ^^^^^^^
 Copyright (c) the Brainana Developers. 
@@ -32,10 +35,12 @@ Licensed under the GNU Affero General Public License v3 (AGPL-3.0).
 
 Citation
 ^^^^^^^^
-`Brainana: an end-to-end preprocessing framework for macaque neuroimaging <https://www.biorxiv.org/content/10.64898/2026.06.03.729972v1.abstract>`_
+Brainana: an end-to-end preprocessing framework for macaque neuroimaging `[preprint] <https://www.biorxiv.org/content/10.64898/2026.06.03.729972v1.abstract>`_
+
+----
 
 Contents
---------
+^^^^^^^^
 
 .. toctree::
    :maxdepth: 1
@@ -48,6 +53,7 @@ Contents
    :caption: USER GUIDE
 
    usage_notes
+   demo
 
 .. toctree::
    :maxdepth: 1
@@ -69,6 +75,12 @@ Contents
    :caption: TEMPLATE AND ATLAS
 
    template_atlas_zoo
+
+.. toctree::
+   :maxdepth: 1
+   :caption: VIEWER
+
+   viewer
 
 .. toctree::
    :maxdepth: 1

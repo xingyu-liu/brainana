@@ -28,7 +28,7 @@ Quick start
 
 .. note::
 
-   - **Replace ``<version>``** with a published Brainana tag from Docker Hub, for example ``1.3.0``. See the `Brainana image tags on Docker Hub <https://hub.docker.com/r/liuxingyu987/brainana/tags>`_ for the list of available versions.
+   - **Replace ``<version>``** with a published Brainana tag from Docker Hub, for example ``2.0.0``. See the `Brainana image tags on Docker Hub <https://hub.docker.com/r/liuxingyu987/brainana/tags>`_ for the list of available versions.
    - **No compatible GPU?** Omit ``--gpus all``; the pipeline runs on CPU with no other changes. Details in :ref:`Check GPU access <installation-check-gpu-access>`.
    - **``<path/to/work_dir>``** is a host path for Nextflow's intermediate files. Without this mount, resume is impossible.
    - **Run as your user, not root:** Pre-create the output and work directories on the host and own them before mounting; see :ref:`docker-run-as-user-not-root`.
@@ -63,6 +63,10 @@ If you start with DICOM, you can either:
 (2) Use `bids converter <https://bids.neuroimaging.io/tools/converters.html>`_, which converts DICOM to NIfTI and organises output into BIDS for you.
 
 If you only have a few images (e.g. one), option (1) is usually simpler; for a large dataset, option (2) is often better but needs a bit of extra setup.
+
+.. tip::
+
+   Want to try Brainana on a ready-made dataset first? See :doc:`demo`.
 
 .. _the-freesurfer-license-optional:
 

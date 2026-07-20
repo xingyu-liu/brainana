@@ -4,6 +4,9 @@ __pycache__/
 *$py.class
 *.so
 
+# Jupyter
+.ipynb_checkpoints/
+
 # Distribution / packaging
 .Python
 build/

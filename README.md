@@ -2,7 +2,7 @@
   <img src="docs/_static/brainana_logo_side.png" alt="Brainana logo" width="500">
 </p>
 
-# Brainana: a unified preprocessing framework for macaque MRI
+# Brainana: an end-to-end preprocessing framework for macaque neuroimaging
 
 [![Documentation](https://readthedocs.org/projects/brainana/badge/?version=stable)](https://brainana.readthedocs.io/en/stable/)
 [![Docker](https://img.shields.io/badge/docker-liuxingyu987%2Fbrainana-brightgreen.svg?logo=docker)](https://hub.docker.com/r/liuxingyu987/brainana/tags/)
@@ -14,20 +14,13 @@
 
 **Brainana** provides anatomical and functional (fMRI) processing, image registration, surface reconstruction, fMRIPrep-compatible confound regressors, and HTML QC reports for macaque neuroimaging data in a reproducible workflow (FSL, ANTs, AFNI, FreeSurfer, Nextflow).
 
-> **Status:** Research software, beta stage – feature-complete for main workflows; bugs and edge cases are still possible.
+> **Status:** Research software – feature-complete for main workflows; bugs and edge cases are still possible.
 
-## Documentation
+## Getting started
 
-Brainana documentation is hosted on **[Read the Docs](https://brainana.readthedocs.io/en/stable/)**.
+Brainana runs as a reproducible **[Docker](https://hub.docker.com/r/liuxingyu987/brainana/tags/)** image. Read the **[Docs](https://brainana.readthedocs.io/en/stable/)**, start with [Installation](https://brainana.readthedocs.io/en/stable/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/stable/usage_notes.html). 
 
-
-Start with [Installation](https://brainana.readthedocs.io/en/stable/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/stable/usage_notes.html).
-
-Additional references:
-- [Brainana Lite](https://brainana.readthedocs.io/en/stable/brainana_lite.html) (Jupyter / Colab T1w workflow)
-- [Processing details](https://brainana.readthedocs.io/en/stable/processing.html)
-- [Outputs](https://brainana.readthedocs.io/en/stable/outputs.html)
-- [FAQ](https://brainana.readthedocs.io/en/stable/faq.html)
+To get a feel for the pipeline, [try the demo](https://brainana.readthedocs.io/en/stable/demo.html) on the bundled [`examples/dataset_example/`](examples/dataset_example) dataset.
 
 ## Brainana Lite
 
@@ -36,8 +29,17 @@ Additional references:
 Lightweight volumetric T1w preprocessing for a single subject (no functional MRI, no surfaces). Run interactively in Jupyter or Google Colab—no Docker required.
 
 - **Notebook:** [`examples/BrainanaLite.ipynb`](examples/BrainanaLite.ipynb) — on Colab, use **Run all**; the first pass may restart the runtime once, then run again.
+- **Docs:** [Brainana Lite guide](https://brainana.readthedocs.io/en/stable/brainana_lite.html) — Jupyter / Colab T1w workflow
 
 For the full multi-modality pipeline with surfaces and QC reports, use the installation above for docker.
+
+## Brainana Viewer
+
+<p align="center">
+  <img src="docs/_static/brainana_viewer_big.png" alt="Brainana Viewer — macaque brain surfaces, atlas overlays, and functional maps" width="100%">
+</p>
+
+To visualize brainana's outputs interactively, use the companion **[Brainana Viewer](https://github.com/arcaro-lab/brainana_tools)** — a cross-platform viewer.
 
 ## Citation
 

@@ -4,8 +4,8 @@
    :description: How Brainana selects the T1w anatomical reference for macaque fMRI registration, based on available data and the anat.synthesis_level setting.
    :keywords: anatomical reference, functional registration, macaque fMRI, T1w selection
 
-Anatomical selection for functional processing
-==============================================
+T1w reference for fMRI
+======================
 
 When functional registration is enabled, the T1w reference is selected
 based on what data are available for the subject and on the

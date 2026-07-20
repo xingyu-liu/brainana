@@ -1,0 +1,16 @@
+# Brainana example dataset
+
+A small, ready-to-run BIDS dataset used to demo the Brainana macaque MRI
+preprocessing pipeline. It contains a single subject and session:
+
+    sub-example/ses-001/
+    ├── anat/
+    │   ├── sub-example_ses-001_run-1_T1w.nii.gz   (+ .json)
+    │   ├── sub-example_ses-001_run-2_T1w.nii.gz   (+ .json)
+    │   └── sub-example_ses-001_run-1_T2w.nii.gz   (+ .json)
+    └── func/
+        ├── sub-example_ses-001_task-rest_run-1_bold.nii.gz   (+ .json)
+        └── sub-example_ses-001_task-rest_run-2_bold.nii.gz   (+ .json)
+
+How to run this dataset through Brainana is documented under "Try a demo" in the Docs:
+https://brainana.readthedocs.io

@@ -7,6 +7,14 @@
 
 /* Custom docs styles for Brainana */
 
+/* Index "Contents" toctree: the RTD theme sizes the caption group labels
+   (INSTALLATION, USER GUIDE, …) at 150% — the same as an <h2> — which made them
+   read larger than the "Contents" heading above them. Keep them subordinate. */
+.rst-content .toctree-wrapper > p.caption {
+  font-size: 115%;
+  margin-top: 20px;
+}
+
 /* Tighten vertical spacing for Mermaid diagrams */
 .rst-content .mermaid,
 .rst-content .mermaid svg {
