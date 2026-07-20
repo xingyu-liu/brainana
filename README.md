@@ -2,7 +2,7 @@
   <img src="docs/_static/brainana_logo_side.png" alt="Brainana logo" width="500">
 </p>
 
-# Brainana: a unified preprocessing framework for macaque MRI
+# Brainana: an end-to-end preprocessing framework for macaque neuroimaging
 
 [![Documentation](https://readthedocs.org/projects/brainana/badge/?version=stable)](https://brainana.readthedocs.io/en/stable/)
 [![Docker](https://img.shields.io/badge/docker-liuxingyu987%2Fbrainana-brightgreen.svg?logo=docker)](https://hub.docker.com/r/liuxingyu987/brainana/tags/)
@@ -18,7 +18,8 @@
 
 ## Getting started
 
-Read the **[Docs](https://brainana.readthedocs.io/en/stable/)**, start with [Installation](https://brainana.readthedocs.io/en/stable/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/stable/usage_notes.html). 
+Brainana runs as a reproducible **[Docker](https://hub.docker.com/r/liuxingyu987/brainana/tags/)** image. Read the **[Docs](https://brainana.readthedocs.io/en/stable/)**, start with [Installation](https://brainana.readthedocs.io/en/stable/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/stable/usage_notes.html). 
+
 To get a feel for the pipeline, [try the demo](https://brainana.readthedocs.io/en/stable/demo.html) on the bundled [`examples/dataset_example/`](examples/dataset_example) dataset.
 
 ## Brainana Lite

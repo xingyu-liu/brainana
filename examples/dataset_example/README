@@ -12,15 +12,5 @@ preprocessing pipeline. It contains a single subject and session:
         ├── sub-example_ses-001_task-rest_run-1_bold.nii.gz   (+ .json)
         └── sub-example_ses-001_task-rest_run-2_bold.nii.gz   (+ .json)
 
-Two anatomical T1w runs (plus a T2w) exercise Brainana's multi-run anatomical
-selection; two resting-state functional runs exercise the functional workflow.
-
-Data are acquired on a Siemens Prisma 3T scanner. Site- and scanner-identifying
-metadata fields (institution name/address, device serial number, station name)
-have been removed from the JSON sidecars; acquisition parameters needed by the
-pipeline (repetition/echo time, slice timing, phase-encoding direction, etc.)
-are retained.
-
-How to run this dataset through Brainana is documented under "Example dataset
-(demo)" in the Usage notes:
-https://brainana.readthedocs.io/en/stable/usage_notes.html
+How to run this dataset through Brainana is documented under "Try a demo" in the Docs:
+https://brainana.readthedocs.io
