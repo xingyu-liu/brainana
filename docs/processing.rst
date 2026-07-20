@@ -417,10 +417,8 @@ never scrubbed or modified.
 
 For outputs and directory layout, see :doc:`outputs`.
 
+.. seealso::
 
-.. toctree::
-   :maxdepth: 1
-
-   anat_selection_for_func
-   spaces_and_transforms
+   - :doc:`anat_selection_for_func` — how the T1w reference for fMRI is selected
+   - :doc:`spaces_and_transforms` — spaces and transforms
 

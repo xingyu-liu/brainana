@@ -16,19 +16,16 @@
 
 > **Status:** Research software, beta stage – feature-complete for main workflows; bugs and edge cases are still possible.
 
-## Documentation
+To explore a subject's outputs interactively, use the companion **[Brainana Viewer](https://github.com/arcaro-lab/brainana_tools)** — a cross-platform NiiVue viewer for per-subject (`sub-*`) pipeline output.
 
-Brainana documentation is hosted on **[Read the Docs](https://brainana.readthedocs.io/en/stable/)**.
+## Getting started
 
-
-Start with [Installation](https://brainana.readthedocs.io/en/stable/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/stable/usage_notes.html).
+Read the full guide on **[Read the Docs](https://brainana.readthedocs.io/en/stable/)** — start with [Installation](https://brainana.readthedocs.io/en/stable/installation.html), then [Usage notes](https://brainana.readthedocs.io/en/stable/usage_notes.html).
 
 Additional references:
 - [Try a demo](https://brainana.readthedocs.io/en/stable/demo.html) — run the full pipeline on the bundled [`examples/dataset_example/`](examples/dataset_example) dataset
 - [Brainana Lite](https://brainana.readthedocs.io/en/stable/brainana_lite.html) (Jupyter / Colab T1w workflow)
-- [Processing details](https://brainana.readthedocs.io/en/stable/processing.html)
-- [Outputs](https://brainana.readthedocs.io/en/stable/outputs.html)
-- [FAQ](https://brainana.readthedocs.io/en/stable/faq.html)
+- [Brainana Viewer](https://brainana.readthedocs.io/en/stable/viewer.html) — companion cross-platform viewer for inspecting per-subject outputs
 
 ## Brainana Lite
 
