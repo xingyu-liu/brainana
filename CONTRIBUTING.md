@@ -34,6 +34,22 @@ sphinx-build -b html -W --keep-going -c docs docs docs/_build
 - Add a changelog entry in `CHANGELOG.md` (or explain why none is needed).
 - Ensure docs build passes before requesting review.
 - For dependency changes, ensure the `Dependencies` workflow passes — not just `Docs`.
+- Do **not** bump the version in a feature PR. Edit `CHANGELOG.md` under `[Unreleased]` only;
+  the version bump happens on `main` at release time.
+
+## Bumping the version
+
+Run `python scripts/bump_version.py X.Y.Z` — never edit the version by hand. It updates
+every site the release touches (`pyproject.toml`, the `CHANGELOG.md` heading, the Brainana
+Lite `BRAINANA_REF`, the `docs/*.rst` example Docker tags and the scratch runners), then
+reports anything still on the old version. `--dry-run` previews without writing.
+
+`tests/test_version.py` enforces the one site where staleness breaks users: a
+`BRAINANA_REF` pinned to a `vX.Y.Z` tag must match `pyproject.toml`, because Colab clones
+that ref. Dev refs (`main`, a SHA, `feat/<topic>`) are skipped, so the Brainana Lite smoke
+workflow is unaffected.
+
+Full reference: `docs_temp/update_instruction/version_guideline.md`.
 
 ## Removing or moving a dependency
 

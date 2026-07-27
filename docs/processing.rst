@@ -52,100 +52,52 @@ reference for T2w, functional, and surface workflows.
 2.1 Ingest normalization and synthesis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Every anatomical passes through this stage, whether or not synthesis
-is needed. It first normalizes the input — repairing the header defects
-that have exactly one defensible answer, and reporting the ones that do
-not — then optionally combines multiple runs.
+All anatomicals pass through ingest normalization before later steps;
+optional synthesis runs afterward when multiple T1w/T2w runs exist.
 
-Normalization is a single pass: one read, one write, and no write at
-all when the input is already well formed, so such datasets stay
-byte-for-byte identical. Functional (BOLD) data is not affected by any
-of it.
+- **Purpose:** Fix NIfTI header issues with one unambiguous fix, flag
+  ambiguous ones, and optionally merge multiple anatomicals into one
+  reference.
+- **Pass-through:** One read/write pass; well-formed inputs are not
+  rewritten (byte-identical). 
 
-Repaired automatically
-^^^^^^^^^^^^^^^^^^^^^^
+**Automatic header repairs** (metadata only — no resampling or
+reorientation). Sidecar keys are set when a repair runs; otherwise
+omitted. Rewriting can re-encode ``scl_slope`` / ``scl_inter`` integers
+by one quantization step; scaled values are unchanged.
 
-**Dimensionality.** Some scanners and DICOM converters emit T1w/T2w
-with a trailing singleton frame axis (e.g. ``(144, 144, 60, 1)``,
-``dim[0] = 4``). Such images are geometrically 3D but break tooling
-that requires exactly three dimensions. A trailing singleton is dropped
-losslessly; a genuine multi-volume anatomical is averaged over its last
-axis. Sidecar key ``Input4DCollapsed``.
-
-**Missing orientation.** A NIfTI with ``qform_code = 0`` *and*
-``sform_code = 0`` stores no spatial orientation, and readers do not
-agree on what to assume in its place: nibabel and FSL use the header's
-base affine (LAS, origin at the centre of the voxel grid), while ITK —
-and therefore ANTs — assumes an identity direction in LPS with the
-origin at the *corner*. Left implicit, one grid means two different
-geometries to two different steps of the same run. Brainana writes the
-nibabel/FSL fallback into both qform and sform with code 2, so every
-reader agrees. Sidecar key ``OrientationRecovered``.
-
-**Disagreeing qform and sform.** A NIfTI can store its geometry twice,
-and nothing enforces that the two agree. Which one wins is the
-*reader's* policy — nibabel, FSL and the rest of brainana read the
-sform, while FastSurfer resolves toward the qform — so an unreconciled
-header means registration and segmentation work on different grids.
-Brainana writes the sform into both. Sidecar key
-``QformSformReconciled``.
-
-**Container format.** Uncompressed ``.nii`` inputs are converted to
-``.nii.gz`` once, up front, so no later step handles a raw ``.nii``.
-Not recorded in the sidecar: it changes nothing about the data.
-
-The three header repairs change geometry metadata only; voxel data is
-never resampled, reoriented or otherwise transformed. Note that a
-repaired image is rewritten, so a source carrying ``scl_slope`` /
-``scl_inter`` is re-encoded and its stored integers may differ by one
-quantization step; the scaled values, and plain unscaled data, are
-preserved exactly. Each sidecar key is omitted entirely when its repair
-did not fire.
+- **4D shape** (``Input4DCollapsed``): drop a trailing singleton
+  dimension, or average a true multi-volume anatomical on the last axis.
+- **Missing qform/sform** (``OrientationRecovered``): both codes 0 leaves
+  readers disagreeing (nibabel/FSL vs ITK/ANTs). Brainana writes the
+  nibabel/FSL fallback to qform and sform (code 2).
+- **Conflicting qform/sform** (``QformSformReconciled``): sform is
+  copied to both (brainana/FSL use sform; FastSurfer favors qform).
+- **``.nii`` → ``.nii.gz``:** converted once at ingest (not logged in
+  the sidecar).
 
 .. warning::
 
-   Orientation recovery restores a *convention*, not ground truth. The
-   assumed affine puts +x at the subject's left; if the acquisition ran
-   the other way, the result is a left/right mirror that no rigid or
-   affine registration can undo and that is invisible on inspection. If
-   a sidecar carries ``OrientationRecovered``, confirm handedness
-   against an external record before trusting hemisphere-wise results.
-   This repair applies to anatomicals only — a BOLD run with no stored
-   orientation is still subject to the reader-dependent fallback.
+   ``OrientationRecovered`` assigns a *convention*, not verified
+   handedness. Wrong acquisition direction can yield an invisible
+   left/right mirror. Confirm against external records before
+   hemisphere-level interpretation.
 
-Reported, not repaired
-^^^^^^^^^^^^^^^^^^^^^^
+**Reported only** (``InputHeaderWarnings`` in sidecar and QC **Data
+findings**; section omitted if empty):
 
-Two defects have no safe automatic answer: rescaling or rewriting them
-could just as easily turn a recoverable dataset into confidently wrong
-output. Brainana records them and leaves the decision to you.
+- Voxel sizes not in mm (nibabel vs ITK/ANTs interpret ``xyzt_units``
+  differently).
+- ``pixdim`` inconsistent with the affine (surfaced at ingest instead
+  of failing deep in segmentation).
 
-- **Spatial units other than mm.** nibabel does not convert — it returns
-  raw ``pixdim`` whatever ``xyzt_units`` says — so a metre-unit header
-  is read with voxel sizes 1000× too small, while ITK/ANTs converts it
-  correctly.
-- **``pixdim`` disagreeing with the affine.** A self-inconsistent
-  header. FastSurfer aborts on this deep inside segmentation; brainana
-  surfaces it at ingest instead.
-
-Both are written to the sidecar as ``InputHeaderWarnings`` and shown in
-the **Data findings** section of the subject's QC report, alongside a
-summary of whatever was repaired. That section is omitted entirely when
-there is nothing to report.
-
-Synthesis (conditional)
-^^^^^^^^^^^^^^^^^^^^^^^
-
-When multiple T1w or T2w images exist per session or per subject,
-Brainana can synthesize a single anatomical reference.
+**Synthesis (conditional)**
 
 - **When:** Multiple T1w or T2w per session or subject (configurable
-  synthesis level).
-- **Method:** The first image (by lexicographic order) is used as the
-  fixed reference. Each other image is rigidly coregistered to the
-  reference using ANTs (``antsRegistration`` with a rigid transform).
-  All coregistered images, including the reference, are averaged in
-  the reference space.
+  level).
+- **Method:** Lexicographically first image is the fixed reference;
+  other images are rigidly registered with ANTs, then all runs are
+  averaged in reference space.
 
 
 2.2 Conform to reference

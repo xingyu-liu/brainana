@@ -1,23 +1,17 @@
 fs_license=/mnt/DataDrive3/xliu/prep_test/freesurfer_license.txt
-version=2.0.0
+version=2.1.0
 
-# # ------------------------------------------------------------
+# # # ------------------------------------------------------------
 # # # # 1. devtest
 # bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
 # output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_docker_v${version}
 # config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml
 
-# # ------------------------------------------------------------
-# # # # long - T1w and T2w and Surface
-# bids_dir=/mnt/DataDrive3/swap/test_brainana/raw/long_test
-# output_dir=/mnt/DataDrive3/swap/test_brainana/preproc/long_test_T1wT2wSurf
-# config_f=/mnt/DataDrive3/swap/test_brainana/preproc/long_test_T1wT2wSurf/config.yaml
-
 # ------------------------------------------------------------
 # # # newcastle - sub-03
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_newcastle
 output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_newcastle
-config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1_surf-off.yaml
+config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml
 
 # run docker without custom template
 docker run --rm -t --gpus all \
