@@ -83,7 +83,9 @@ def mris_extract_main_component(
         str(input_surf),
         str(output_surf),
     ]
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, expect_outputs=[output_surf]
+    )
     return output_surf
 
 
@@ -142,7 +144,9 @@ def mris_remesh(
             cmd.extend(["--iters", str(iters)])
 
     cmd.extend(["--input", str(input_surf), "--output", str(output_surf)])
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, expect_outputs=[output_surf]
+    )
     return output_surf
 
 
@@ -198,7 +202,9 @@ def mris_smooth(
         cmd.extend(["-seed", str(seed)])
 
     cmd.extend([str(input_surf), str(output_surf)])
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, expect_outputs=[output_surf]
+    )
     return output_surf
 
 
@@ -249,7 +255,9 @@ def mris_inflate(
         cmd.extend(["-n", str(n_iterations)])
 
     cmd.extend([str(input_surf), str(output_surf)])
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, expect_outputs=[output_surf]
+    )
     return output_surf
 
 
@@ -392,7 +400,13 @@ def mris_place_surface(
     if subjects_dir:
         env = {"SUBJECTS_DIR": str(subjects_dir)}
 
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir, env=env)
+    run_fs_command(
+        cmd,
+        log_file=log_file,
+        subject_dir=subject_dir,
+        env=env,
+        expect_outputs=[output_surf],
+    )
     return output_surf
 
 
@@ -679,7 +693,9 @@ def mris_remove_intersection(
         str(input_surf),
         str(output_surf),
     ]
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, expect_outputs=[output_surf]
+    )
     return output_surf
 
 

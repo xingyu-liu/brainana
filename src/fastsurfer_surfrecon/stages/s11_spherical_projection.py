@@ -8,6 +8,7 @@ import logging
 import shutil
 
 from .base import HemisphereStage
+from ..processing.surface_fix import assert_surface_invariants
 from ..processing.spherical import spherically_project_surface
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,19 @@ class SphericalProjection(HemisphereStage):
                 f"{smoothwm_nofix} not found. " "Smoothing stage must run first."
             )
 
+        # Entry gate. spherically_project() rejects non-closed meshes with a
+        # bare "Can only project closed meshes", which names neither the file
+        # nor the defect. Checking here reports the offending surface and its
+        # actual V/F/closed/oriented/euler state instead.
+        assert_surface_invariants(
+            smoothwm_nofix,
+            closed=True,
+            oriented=False,  # orientation is not required to project
+            euler=None,  # not topology-corrected yet
+            context=f"{self.hemi} s11 input",
+            strict=self.config.processing.strict_surface_checks,
+        )
+
         # FastSurfer creates qsphere.nofix directly, so we do the same
         # Also create sphere for consistency with FreeSurfer naming
         spherically_project_surface(
@@ -62,6 +76,14 @@ class SphericalProjection(HemisphereStage):
         if not sphere.exists():
             shutil.copy(qsphere_nofix, sphere)
 
-    def should_skip(self) -> bool:
-        """Skip if sphere exists."""
-        return self.hemi_path("sphere").exists()
+    def expected_outputs(self) -> list:
+        """Both spheres this stage writes.
+
+        Previously only `sphere` was checked, but s12 rewrites `sphere` too --
+        so a half-finished s11 could be masked by a later stage's output.
+        `qsphere.nofix` is written only here.
+        """
+        return [
+            self.hemi_path("qsphere.nofix"),
+            self.hemi_path("sphere"),
+        ]

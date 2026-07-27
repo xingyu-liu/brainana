@@ -26,8 +26,8 @@ import numpy as np
 import SimpleITK as sitk
 from sklearn.metrics import normalized_mutual_info_score
 
-# Add src/ to path for nhp_mri_prep imports (scripts/ -> nhp_mri_prep -> src)
-_src_dir = Path(__file__).resolve().parent.parent.parent
+# Add src/ to path (scripts/dev/nhp_mriprep/ -> scripts/dev/ -> scripts/ -> repo root)
+_src_dir = Path(__file__).resolve().parents[3] / "src"
 if str(_src_dir) not in sys.path:
     sys.path.insert(0, str(_src_dir))
 
@@ -1715,7 +1715,7 @@ def run_modality_benchmark(
 # %%  --- PARAMS (edit here) ---
 
 OUTPUT_DIR = Path(
-    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/results_params_anat_v5"
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/results_params_func"
 )
 INPUT_DIRS = {
     "anat": Path(
@@ -1728,7 +1728,7 @@ INPUT_DIRS = {
         "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/input_T2w"
     ),
 }
-MODALITIES = ("anat",)  # ("anat", "func", "t2w",)
+MODALITIES = ("func",)  # ("anat", "func", "t2w",)
 TEMPLATE = None  # Path(...) to override per-image fixed; None = auto from input dir
 RESUME = True  # skip complete variants; apply-only if transform exists without conformed outputs
 VERBOSE = False

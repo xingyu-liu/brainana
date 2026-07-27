@@ -20,8 +20,8 @@ import argparse
 from os import environ as env
 from pathlib import Path
 
-from brainana.src.fastsurfer_nn.seg_statistics.mri_segstats import print_and_exit
-from brainana.src.fastsurfer_nn.seg_statistics.segstats import (
+from .mri_segstats import print_and_exit
+from .segstats import (
     VERSION,
     HelpFormatter,
     main,

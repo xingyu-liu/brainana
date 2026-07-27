@@ -156,6 +156,6 @@ class Registration(HemisphereStage):
         """Check if registration is disabled."""
         return not (self.config.processing.fsaparc or self.config.processing.fssurfreg)
 
-    def should_skip(self) -> bool:
-        """Skip if sphere.reg exists."""
-        return self.hemi_path("sphere.reg").exists()
+    def expected_outputs(self) -> list:
+        """Spherical registration to the atlas."""
+        return [self.hemi_path("sphere.reg")]

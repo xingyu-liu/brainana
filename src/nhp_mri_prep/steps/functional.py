@@ -11,7 +11,6 @@ from typing import Dict, Any, Optional, List
 
 from .types import StepInput, StepOutput
 from ..operations.preprocessing import (
-    reorient,
     slice_timing_correction,
     motion_correction,
     despike,
@@ -79,60 +78,6 @@ def _generate_pass_through_motion_params(
         )
 
     return additional_files
-
-
-def func_reorient(input: StepInput, template_file: Optional[Path] = None) -> StepOutput:
-    """
-    Reorient functional image to template orientation or RAS, and generate tmean.
-
-    Args:
-        input: StepInput with input_file, working_dir, config, metadata
-        template_file: Optional template file for reorientation target
-
-    Returns:
-        StepOutput with reoriented file and tmean
-    """
-    # Determine target for reorientation
-    target_file = None
-    target_orientation = None
-
-    if template_file:
-        target_file = str(template_file)
-    else:
-        target_orientation = "RAS"
-
-    # Call operation (with tmean generation)
-    result = reorient(
-        imagef=str(input.input_file),
-        working_dir=str(input.working_dir),
-        output_name=input.output_name or "func_reoriented.nii.gz",
-        logger=logger,
-        target_file=target_file,
-        target_orientation=target_orientation,
-        generate_tmean=True,
-    )
-
-    output_file = (
-        Path(result["imagef_reoriented"])
-        if result.get("imagef_reoriented")
-        else input.input_file
-    )
-    tmean_file = Path(result["imagef_tmean"]) if result.get("imagef_tmean") else None
-
-    additional_files = {}
-    if tmean_file:
-        additional_files["tmean"] = tmean_file
-
-    return StepOutput(
-        output_file=output_file,
-        metadata={
-            "step": "reorient",
-            "modality": "func",
-            "target_file": str(template_file) if template_file else None,
-            "target_orientation": target_orientation,
-        },
-        additional_files=additional_files,
-    )
 
 
 def func_slice_timing_correction(input: StepInput) -> StepOutput:

@@ -17,8 +17,14 @@ process ANAT_SYNTHESIS {
     
     output:
     tuple val(subject_id), val(session_id), path("*.nii.gz"), file("bids_name.txt"), emit: synthesized
-    path "metadata.json", emit: metadata
-    
+    // Must be "*.json", not "metadata.json": publishDir only ever publishes files that
+    // are *declared outputs*, so narrowing this to metadata.json meant the derivative
+    // sidecar was written into the task dir and then silently dropped -- the publishDir
+    // pattern below says `json` and the saveAs closure exists precisely to suppress
+    // metadata.json, but there was no other json output for it to let through. Every
+    // other process in this file already declares "*.json" for the same reason.
+    path "*.json", emit: metadata
+
     script:
     def anat_files_list = anat_files.collect { "'${it}'" }.join(', ')
     def first_file = anat_files[0]
@@ -56,6 +62,32 @@ result = anat_synthesis(
 
 synthesized = result.metadata.get("synthesized", False)
 
+# Ingest normalization findings. Every key below is omitted entirely when nothing
+# fired, so a well-formed dataset gets byte-identical sidecars. Container format
+# (.nii -> .nii.gz) is deliberately not recorded: it changes nothing about the data.
+reports = result.metadata.get("input_normalization", [])
+
+# 4D->3D collapse: a trailing singleton frame axis dropped, or a genuine
+# multi-volume anatomical averaged over its last axis.
+dim_actions = [r["dim"] for r in reports if r.get("dim", "unchanged") != "unchanged"]
+
+# Orientation recovered for inputs that stored none (qform_code == 0 and
+# sform_code == 0). Its presence means the geometry of this image is an assumed
+# convention, not something the acquisition recorded -- see the left/right caveat.
+orientation_actions = [
+    r["orientation"] for r in reports if r.get("orientation", "unchanged") != "unchanged"
+]
+
+# qform and sform disagreed and were resolved toward the sform, so ANTs and
+# FastSurfer now read the same grid that registration uses.
+geometry_actions = [
+    r["geometry"] for r in reports if r.get("geometry", "unchanged") != "unchanged"
+]
+
+# Header defects with no safe automatic repair (non-mm units, pixdim/affine
+# mismatch). Reported rather than fixed -- these also surface in the QC report.
+header_warnings = [w for r in reports for w in r.get("warnings", [])]
+
 modality = detect_modality(bids_name)
 bids_output_filename, bids_name_for_downstream = create_synthesized_bids_filename(
     original_file=bids_name,
@@ -67,11 +99,20 @@ bids_output_filename, bids_name_for_downstream = create_synthesized_bids_filenam
 create_output_link(result.output_file, bids_output_filename)
 
 # JSON sidecar (synthesized anatomical, native scanner space -> no template block)
+sidecar_extra = {"Synthesized": synthesized}
+if dim_actions:
+    sidecar_extra["Input4DCollapsed"] = dim_actions
+if orientation_actions:
+    sidecar_extra["OrientationRecovered"] = orientation_actions
+if geometry_actions:
+    sidecar_extra["QformSformReconciled"] = geometry_actions
+if header_warnings:
+    sidecar_extra["InputHeaderWarnings"] = header_warnings
 write_derivative_sidecar(
     bids_output_filename,
     skull_stripped=False,
     sources=[str(f) for f in anat_files],
-    extra={"Synthesized": synthesized},
+    extra=sidecar_extra,
 )
 
 # Save metadata
@@ -81,83 +122,6 @@ save_metadata(result.metadata)
 with open('bids_name.txt', 'w') as f:
     f.write(bids_name_for_downstream)
 PYTHON_EOF
-    """
-}
-
-process ANAT_REORIENT {
-    label 'cpu'
-    tag "${subject_id}_${session_id}"
-    
-    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/anat",
-        mode: 'copy',
-        enabled: false
-    
-    input:
-    tuple val(subject_id), val(session_id), path(input_file), val(bids_name)
-    path config_file
-    
-    output:
-    tuple val(subject_id), val(session_id), path("*.nii.gz"), val(bids_name), emit: output
-    path "*.json", emit: metadata
-    
-    script:
-    """
-    \${PYTHON:-python3} <<EOF
-from nhp_mri_prep.steps.anatomical import anat_reorient
-from nhp_mri_prep.steps.types import StepInput
-from nhp_mri_prep.utils.templates import resolve_template, space_label_for
-from nhp_mri_prep.utils.bids import create_bids_output_filename
-from nhp_mri_prep.utils.nextflow import (
-    load_config, detect_modality, save_metadata, create_output_link
-)
-from pathlib import Path
-
-# Load config
-config = load_config('${config_file}')
-
-# Get BIDS naming template (for BIDS filename generation)
-bids_name = Path('${bids_name}')
-
-# Determine modality from BIDS naming template filename
-modality = detect_modality(bids_name)
-
-# Get effective_output_space from effective config file
-config = load_config('${config_file}')
-effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
-
-# Resolve template if needed
-template_file = None
-if effective_output_space:
-    template_file = Path(resolve_template(effective_output_space))
-
-# Create step input
-input_obj = StepInput(
-    input_file=Path('${input_file}'),
-    working_dir=Path('work'),
-    config=config,
-    output_name='anat_reoriented.nii.gz',
-    metadata={
-        'subject_id': '${subject_id}',
-        'session_id': '${session_id}'
-    }
-)
-
-# Run step
-result = anat_reorient(input_obj, template_file=template_file)
-
-# Generate BIDS-compliant output filename
-bids_output_filename = create_bids_output_filename(
-    original_file_path=bids_name,
-    suffix='desc-reorient',
-    modality=modality
-)
-
-# Use symlink to avoid duplication - Nextflow publishDir will handle final copy
-create_output_link(result.output_file, bids_output_filename)
-
-# Save metadata
-save_metadata(result.metadata)
-EOF
     """
 }
 

@@ -6,6 +6,13 @@ Batch prediction script for processing multiple NIfTI files.
 # %%
 import logging
 from pathlib import Path
+import sys
+
+# Add src/ to path (scripts/dev/nhp_skullstrip/ -> scripts/dev/ -> scripts/ -> repo root)
+_src_dir = Path(__file__).resolve().parents[3] / "src"
+if str(_src_dir) not in sys.path:
+    sys.path.insert(0, str(_src_dir))
+
 from nhp_skullstrip_nn.inference.prediction import predict_volumes
 from nhp_skullstrip_nn.utils.gpu import get_device
 from nhp_skullstrip_nn.utils.log import setup_logging

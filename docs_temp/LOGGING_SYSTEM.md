@@ -215,7 +215,7 @@ Here's how logging flows through a typical Nextflow process:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Nextflow Process (e.g., ANAT_REORIENT)                  │
+│ Nextflow Process (e.g., ANAT_CONFORM)                   │
 ├─────────────────────────────────────────────────────────┤
 │                                                           │
 │ 1. Process starts                                         │

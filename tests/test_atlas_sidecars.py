@@ -43,7 +43,11 @@ def test_copies_sidecars_and_renames_bib(tmp_path):
     assert not (dest / "references.bib").exists()
     # The label image is never copied.
     assert not (dest / "atlas-FOO_space-NMT2Sym_res-05.nii.gz").exists()
-    assert {p.name for p in copied} == {"atlas-FOO.tsv", "atlas-FOO.md", "atlas-FOO.bib"}
+    assert {p.name for p in copied} == {
+        "atlas-FOO.tsv",
+        "atlas-FOO.md",
+        "atlas-FOO.bib",
+    }
 
 
 def test_no_bib_copies_only_prefixed_sidecars(tmp_path):
@@ -104,11 +108,14 @@ def test_rediscovers_arm_from_zoo(tmp_path):
     assert "atlas-ARM1.bib" in names
 
 
-@pytest.mark.skipif(not _zoo_has("D99"), reason="D99 atlas not in template zoo")
+@pytest.mark.skipif(
+    not _zoo_has("CortHierarchy"), reason="CortHierarchy atlas not in template zoo"
+)
 def test_rediscovers_bib_only_atlas_from_zoo(tmp_path):
-    # D99 has no .tsv/.md sidecar, only the family references.bib.
-    copied = copy_atlas_sidecars("D99", tmp_path)
-    assert {p.name for p in copied} == {"atlas-D99.bib"}
+    # CortHierarchy has no .tsv/.md sidecar, only the family references.bib.
+    # (This test used to point at D99, which gained an atlas-D99.tsv in v2.0.0.)
+    copied = copy_atlas_sidecars("CortHierarchy", tmp_path)
+    assert {p.name for p in copied} == {"atlas-CortHierarchy.bib"}
 
 
 def test_unknown_atlas_returns_empty(tmp_path):

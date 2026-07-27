@@ -323,7 +323,15 @@ def sample_volume_to_surface(
     # Compute vertex normals using LaPy
     T = TriaMesh(vertices, faces)
     if not T.is_oriented():
-        logger.warning("Surface not oriented, flipping normals")
+        # Oriented in memory only, for correct vertex normals -- the file on
+        # disk is left alone. This should be unreachable: s12 gates `orig` on
+        # closed+oriented+euler==2 and mris_place_surface preserves
+        # connectivity, so reaching here means an upstream gate was bypassed
+        # or a surface was modified out of band. Logged at ERROR accordingly.
+        logger.error(
+            "Surface is not consistently oriented; flipping normals in memory "
+            "for sampling. An upstream topology gate should have caught this."
+        )
         T.orient_()
 
     # Sample coordinates (with projection along normal)

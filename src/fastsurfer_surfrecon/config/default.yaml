@@ -20,6 +20,10 @@ processing:
   hires_threshold: 0.999  # Voxel size threshold for hires mode
   hires: auto  # High-resolution mode. Use true/false to force, or 'auto' to detect from voxel size
   
+  # Surface topology gates. false = log surface invariant violations at ERROR
+  # and continue; true = raise. The s12 gate on orig always raises regardless.
+  strict_surface_checks: false
+
   # Non-human options (for macaque processing)
   skip_cc: true            # Skip corpus callosum segmentation
   skip_talairach: true     # Skip Talairach registration (no eTIV)

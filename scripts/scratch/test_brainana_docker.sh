@@ -1,16 +1,23 @@
 fs_license=/mnt/DataDrive3/xliu/prep_test/freesurfer_license.txt
 version=2.0.0
 
-# # # 1. prime-de
-# # site=site-amu      
-# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/${site}
-# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/${site}
+# # ------------------------------------------------------------
+# # # # 1. devtest
+# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
+# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_docker_v${version}
+# config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml
+
+# # ------------------------------------------------------------
+# # # # long - T1w and T2w and Surface
+# bids_dir=/mnt/DataDrive3/swap/test_brainana/raw/long_test
+# output_dir=/mnt/DataDrive3/swap/test_brainana/preproc/long_test_T1wT2wSurf
+# config_f=/mnt/DataDrive3/swap/test_brainana/preproc/long_test_T1wT2wSurf/config.yaml
 
 # ------------------------------------------------------------
-# # # 2. devtest
-bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_docker_v${version}
-config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml
+# # # newcastle - sub-03
+bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_newcastle
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_newcastle
+config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1_surf-off.yaml
 
 # run docker without custom template
 docker run --rm -t --gpus all \
@@ -23,6 +30,12 @@ docker run --rm -t --gpus all \
     -w /output/preprocessed_wd \
     --config /config.yaml \
     --freesurfer-license /fs_license.txt 
+
+# ------------------------------------------------------------
+# # # 2. prime-de
+# # site=site-amu      
+# bids_dir=/mnt/DataDrive2/macaque/data_raw/macaque_mri/PRIME-DE/${site}
+# output_dir=/mnt/DataDrive2/macaque/data_preproc/macaque_mri/PRIME-DE_brainana/${site}
 
 # # # ------------------------------------------------------------
 # # # 3. sub-example

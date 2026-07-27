@@ -17,6 +17,11 @@ import re
 from ..utils.bids import parse_bids_entities, BIDS_ENTITY_ORDER
 from ..config.config_io import get_nested_config_value
 from .run_status import render_run_status_content
+from .data_findings import (
+    collect_ingest_findings,
+    has_findings,
+    render_data_findings_content,
+)
 
 
 # Configuration constants
@@ -571,13 +576,18 @@ class HtmlGenerator:
 
     @staticmethod
     def create_navigation_menu(
-        organized_snapshots: Dict[str, Any], has_run_status: bool = False
+        organized_snapshots: Dict[str, Any],
+        has_run_status: bool = False,
+        has_data_findings: bool = False,
     ) -> str:
         """Create navigation menu (flat top bar; multi-group modalities get a dropdown)."""
         nav_items = ['<a href="#Summary">Summary</a>']
 
         if has_run_status:
             nav_items.append('<a href="#Status">Run status</a>')
+
+        if has_data_findings:
+            nav_items.append('<a href="#DataFindings">Data findings</a>')
 
         # Add modality sections with dropdowns if they have content
         for modality, title in [
@@ -721,6 +731,20 @@ class HtmlGenerator:
         if not content:
             return ""
         return HtmlGenerator.create_section("Status", "Run status", content)
+
+    @staticmethod
+    def create_data_findings_section(report_data: Dict[str, Any]) -> str:
+        """Create the ingest-normalization findings section.
+
+        Deliberately separate from the run-status tier: that tier answers "did the
+        pipeline execute", and demoting a green run to "pass with warnings" because
+        a header had odd units would train people to ignore the badge. Renders
+        nothing when the subject's inputs were well-formed.
+        """
+        content = render_data_findings_content(report_data.get("data_findings"))
+        if not content:
+            return ""
+        return HtmlGenerator.create_section("DataFindings", "Data findings", content)
 
     @staticmethod
     def create_modality_section(
@@ -1453,6 +1477,11 @@ def generate_qc_report(
 
         from nhp_mri_prep.version import get_version
 
+        # Ingest-normalization findings live in the published derivative sidecars.
+        # snapshot_dir is <output_dir>/sub-XXX/figures, so its parent is the subject
+        # directory — the same layout assumption organize_by_hierarchy already makes.
+        data_findings = collect_ingest_findings(snapshot_dir.parent, logger)
+
         report_data = {
             "metadata": {
                 "generation_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1466,6 +1495,7 @@ def generate_qc_report(
             "dataset_context": merged_context,
             "available_entities": snapshot_data["available_entities"],
             "run_status": run_status,
+            "data_findings": data_findings,
         }
 
         # Generate HTML report
@@ -1487,12 +1517,15 @@ def _generate_html_report(
 
     # Generate all sections
     navigation = HtmlGenerator.create_navigation_menu(
-        report_data["organized_snapshots"], bool(report_data.get("run_status"))
+        report_data["organized_snapshots"],
+        bool(report_data.get("run_status")),
+        has_findings(report_data.get("data_findings")),
     )
     summary = HtmlGenerator.create_summary_section(
         report_data, report_data["configuration"]
     )
     status = HtmlGenerator.create_status_section(report_data)
+    data_findings = HtmlGenerator.create_data_findings_section(report_data)
     anatomical = HtmlGenerator.create_modality_section(
         "Anatomical", report_data["organized_snapshots"]["anatomical"], "Structural"
     )
@@ -1511,10 +1544,11 @@ def _generate_html_report(
     html_content = _create_html_template().format(
         STYLE=_REPORT_CSS,
         SCRIPT=_REPORT_JS,
-        SUBJECT=report_data["metadata"]["subject_id"],
+        SUBJECT=report_path.stem,
         NAVIGATION_MENU=navigation,
         SUMMARY_SECTION=summary,
         STATUS_SECTION=status,
+        DATA_FINDINGS_SECTION=data_findings,
         ANATOMICAL_SECTION=anatomical,
         FUNCTIONAL_SECTION=functional,
         FIELD_MAPPING_SECTION=field_mapping,
@@ -1603,6 +1637,12 @@ h1.section + .group-head{border-top:none;padding-top:0;margin-top:20px}
 .status.warn{border-left-color:var(--bn-warn)}
 .status.fail{border-left-color:var(--bn-fail)}
 .status .headline{display:flex;align-items:center;gap:8px;font-weight:600;font-size:1.05em;margin:0 0 6px;color:var(--bn-ink)}
+.status .fgroup{margin:14px 0 6px;font-size:.8em;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--bn-muted)}
+.status .findings{list-style:none;padding:0;margin:0}
+.status .findings li{margin:0 0 12px;padding-left:14px;border-left:2px solid var(--bn-border);font-size:.95em;color:var(--bn-text)}
+.status .findings li:last-child{margin-bottom:0}
+.status .fnote{margin-top:4px;color:var(--bn-muted);font-size:.92em;line-height:1.5}
+.status .ffiles{margin-top:6px;font-size:.88em;color:var(--bn-muted);overflow-wrap:anywhere}
 .status .badge{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:var(--bn-r-pill);border:1px solid currentColor;color:var(--bn-muted)}
 .status.ok .badge{color:var(--bn-ok)}.status.warn .badge{color:var(--bn-warn)}.status.fail .badge{color:var(--bn-fail)}
 .status p{margin:8px 0;font-size:.95em;color:var(--bn-text)}
@@ -1647,6 +1687,7 @@ def _create_html_template() -> str:
 <main>
 {SUMMARY_SECTION}
 {STATUS_SECTION}
+{DATA_FINDINGS_SECTION}
 {ANATOMICAL_SECTION}
 {FUNCTIONAL_SECTION}
 {FIELD_MAPPING_SECTION}

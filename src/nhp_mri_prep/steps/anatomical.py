@@ -14,7 +14,6 @@ from typing import Dict, Any, Optional, List
 
 from .types import StepInput, StepOutput
 from ..operations.preprocessing import (
-    reorient,
     conform_to_template,
     bias_correction,
     apply_segmentation,
@@ -36,7 +35,11 @@ from ..utils.templates import (
     get_template_manager,
     space_label_for,
 )
-from ..utils.mri import get_image_shape, shape_to_ants_input_type
+from ..utils.mri import (
+    normalize_anat_input,
+    get_image_shape,
+    shape_to_ants_input_type,
+)
 from fastsurfer_surfrecon.config import AtlasConfig, ReconSurfConfig
 from fastsurfer_surfrecon.pipeline import ReconSurfPipeline
 
@@ -60,14 +63,52 @@ def anat_synthesis(
     Returns:
         StepOutput with synthesized anatomical file
     """
+    if not anat_files:
+        return StepOutput(
+            output_file=None,
+            metadata={
+                "step": "anat_synthesis",
+                "synthesized": False,
+                "num_runs": 0,
+                "input_normalization": [],
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # Normalize every input before anything else touches it. This is the single
+    # process every anatomical passes through (T1w and T2w, subject- and
+    # session-level, synthesis needed or not), so repairing here means no
+    # downstream step has to know about malformed anatomical headers.
+    # normalize_anat_input covers dimensionality, missing orientation, qform/sform
+    # disagreement and container format in one read/write, and reports the header
+    # defects that have no safe automatic repair.
+    #
+    # Basenames are preserved because the synthesis branch below parses BIDS
+    # entities out of them. The destination MUST stay under working_dir: the
+    # ANAT_SYNTHESIS process declares `path("*.nii.gz")` as its output and
+    # publishes on the same pattern, both non-recursive over the task dir root,
+    # so a stray file there would become a second channel element and a spurious
+    # published derivative.
+    norm_dir = Path(working_dir) / "input_normalized"
+    normalized_files = []
+    normalization_reports = []
+    for anat_file in anat_files:
+        normalized, report = normalize_anat_input(
+            anat_file, norm_dir / Path(anat_file).name, logger=logger
+        )
+        normalized_files.append(normalized)
+        normalization_reports.append({"source": str(anat_file), **report})
+    anat_files = normalized_files
+
     if len(anat_files) <= 1:
         # No synthesis needed
         return StepOutput(
-            output_file=anat_files[0] if anat_files else None,
+            output_file=anat_files[0],
             metadata={
                 "step": "anat_synthesis",
                 "synthesized": False,
                 "num_runs": len(anat_files),
+                "input_normalization": normalization_reports,
             },
         )
 
@@ -117,54 +158,7 @@ def anat_synthesis(
             "step": "anat_synthesis",
             "synthesized": True,
             "num_runs": len(anat_files),
-        },
-    )
-
-
-def anat_reorient(input: StepInput, template_file: Optional[Path] = None) -> StepOutput:
-    """
-    Reorient anatomical image to template orientation or RAS.
-
-    Args:
-        input: StepInput with input_file, working_dir, config, metadata
-        template_file: Optional template file for reorientation target
-
-    Returns:
-        StepOutput with reoriented file
-    """
-    # Determine target for reorientation
-    target_file = None
-    target_orientation = None
-
-    if template_file:
-        target_file = str(template_file)
-    else:
-        target_orientation = "RAS"
-
-    # Call operation
-    result = reorient(
-        imagef=str(input.input_file),
-        working_dir=str(input.working_dir),
-        output_name=input.output_name or "anat_reoriented.nii.gz",
-        logger=logger,
-        target_file=target_file,
-        target_orientation=target_orientation,
-        generate_tmean=False,
-    )
-
-    output_file = (
-        Path(result["imagef_reoriented"])
-        if result.get("imagef_reoriented")
-        else input.input_file
-    )
-
-    return StepOutput(
-        output_file=output_file,
-        metadata={
-            "step": "reorient",
-            "modality": "anat",
-            "target_file": str(template_file) if template_file else None,
-            "target_orientation": target_orientation,
+            "input_normalization": normalization_reports,
         },
     )
 
@@ -730,7 +724,11 @@ def anat_project_atlases_to_surface(
             f"atlas surf: FastSurfer subject dir missing: {fs_subject_directory}"
         )
         metadata.update(
-            {"skipped": True, "reason": "missing_fs_subject_dir", "atlases_projected": 0}
+            {
+                "skipped": True,
+                "reason": "missing_fs_subject_dir",
+                "atlases_projected": 0,
+            }
         )
         return StepOutput(
             output_file=atlas_dir, metadata=metadata, additional_files=additional_files

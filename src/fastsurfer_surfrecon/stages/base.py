@@ -16,6 +16,14 @@ if TYPE_CHECKING:
     from ..io.subjects_dir import SubjectsDir
 
 
+class StageOutputError(RuntimeError):
+    """A stage returned successfully but did not produce its declared outputs.
+
+    Usually means an external command exited 0 without writing, or an early
+    `return` inside the stage skipped work it was supposed to do.
+    """
+
+
 class PipelineStage(ABC):
     """
     Abstract base class for pipeline stages.
@@ -116,6 +124,15 @@ class PipelineStage(ABC):
 
                 set_current_stage_id(None)
 
+        # Postcondition. Runs before "Completed" is logged, so that message
+        # means the stage produced what it promised rather than merely that
+        # _run() returned without raising.
+        try:
+            self.verify_outputs()
+        except Exception as e:
+            self.logger.error(f"Failed {stage_desc} (postcondition): {e}")
+            raise
+
         self._end_time = time.time()
         elapsed = self._end_time - self._start_time
         self.logger.info(f"Completed {stage_desc} in {elapsed:.1f}s")
@@ -168,20 +185,62 @@ class PipelineStage(ABC):
         """
         return False
 
+    def expected_outputs(self) -> list[Path]:
+        """
+        Files this stage guarantees to have produced when it succeeds.
+
+        Declaring these drives both the skip check and the postcondition, so a
+        stage cannot claim to be complete without them. Return an empty list
+        for stages that are not cacheable (they will always run).
+
+        IMPORTANT: list what this stage writes *last*, not just its headline
+        artifact. A stage that writes output A early and output B at the end
+        must declare both, or a run that died between them looks complete on
+        the next invocation and its later steps are silently skipped.
+
+        Returns
+        -------
+        list[Path]
+            Output paths, or [] if the stage should never be skipped.
+        """
+        return []
+
+    def verify_outputs(self) -> None:
+        """
+        Postcondition checked after _run() and before the stage is logged done.
+
+        The default asserts every declared output exists. Override to add
+        semantic checks (e.g. mesh invariants) and call super() first.
+
+        Raises
+        ------
+        StageOutputError
+            If any declared output is missing.
+        """
+        missing = [p for p in self.expected_outputs() if not p.exists()]
+        if missing:
+            where = f" ({self.hemi})" if self.hemi else ""
+            raise StageOutputError(
+                f"{self.name}{where} finished without producing: "
+                + ", ".join(str(m) for m in missing)
+            )
+
     def should_skip(self) -> bool:
         """
         Check if stage should be skipped (outputs already exist).
 
-        Override in subclasses to implement caching/skip logic
-        based on existing outputs. This should NOT check if the stage
-        is disabled - use is_disabled() for that.
+        Defaults to "every declared output exists". Override in subclasses only
+        where that rule does not apply -- e.g. stages whose outputs vary by
+        config branch, or which must always re-run. This should NOT check if
+        the stage is disabled - use is_disabled() for that.
 
         Returns
         -------
         bool
             True if stage should be skipped (outputs exist)
         """
-        return False
+        outputs = self.expected_outputs()
+        return bool(outputs) and self.outputs_exist(*outputs)
 
     def outputs_exist(self, *paths: Path) -> bool:
         """

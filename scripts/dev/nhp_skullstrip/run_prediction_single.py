@@ -8,8 +8,8 @@ import logging
 import sys
 from pathlib import Path
 
-# Add src/ to path for nhp_mri_prep package (scripts/ -> nhp_mri_prep -> src)
-_src = Path(__file__).resolve().parent.parent.parent
+# Add src/ to path (scripts/dev/nhp_skullstrip/ -> scripts/dev/ -> scripts/ -> repo root)
+_src = Path(__file__).resolve().parents[3] / "src"
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
@@ -20,7 +20,7 @@ from nhp_skullstrip_nn.model import ModelLoader
 
 # %%
 # anat
-input_f = "/mnt/DataDrive3/swap/test_brainana/preproc/frosty/preprocessed_wd/work/6a/8a27d1712df2ff97ec2a68d8458003/sub-frostyT1_run-1_space-scanner_T1w.nii.gz"
+input_f = "/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_newcastle_fixed/sub-03/ses-anat/anat/sub-03_ses-anat_T1w.nii.gz"
 model_f = "/home/star/github/brainana/src/nhp_skullstrip_nn/pretrained_model/T1w_brainmask.pth"
 
 # # func

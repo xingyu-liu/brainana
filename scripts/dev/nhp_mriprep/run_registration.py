@@ -5,24 +5,26 @@ import os
 import sys
 from pathlib import Path
 
-# Add src/ to path for nhp_mri_prep package (scripts/ -> nhp_mri_prep -> src)
-_src = Path(__file__).resolve().parent.parent.parent
+# Add src/ to path (scripts/dev/nhp_mriprep/ -> scripts/dev/ -> scripts/ -> repo root)
+_src = Path(__file__).resolve().parents[3] / "src"
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
 from nhp_mri_prep.operations.registration import ants_register
 
 # %%
-moving_f = Path(
-    "/home/star/github/atlas/template/MNI152NLin6Asym/tpl-MNI152NLin6Asym_res-01_T1w_brain.nii.gz"
-)
 fixed_f = Path(
-    "/home/star/github/atlas/template/MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_T1w_brain.nii.gz"
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/input_T2w/fixed_newcastle.nii.gz"
 )
-working_dir = Path("/home/star/github/atlas/xfm/temp")
+moving_f = Path(
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/input_T2w/moving_newcastle.nii.gz"
+)
+working_dir = Path(
+    "/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/anat_conformation/test_T2w"
+)
 
 method = "ants"
-xfm_type = "syn"
+xfm_type = "translation"
 enable_fireants = True
 
 # %%

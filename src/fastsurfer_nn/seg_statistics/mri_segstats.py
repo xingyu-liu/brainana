@@ -22,7 +22,7 @@ from itertools import chain, pairwise
 from pathlib import Path
 from typing import Any, TypeVar
 
-from fastsurfer_nn.segstats import (
+from .segstats import (
     VERSION,
     HelpFormatter,
     add_two_help_messages,

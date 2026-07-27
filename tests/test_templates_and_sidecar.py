@@ -125,12 +125,30 @@ def test_resolve_template_registered_spec_unchanged():
 @pytest.mark.parametrize(
     "data,sidecar",
     [
-        ("sub-01_space-NMT2Sym_desc-preproc_T1w.nii.gz", "sub-01_space-NMT2Sym_desc-preproc_T1w.json"),
-        ("sub-01_from-T1w_to-template_mode-image_xfm.mat", "sub-01_from-T1w_to-template_mode-image_xfm.json"),
-        ("sub-01_from-T1w_to-NMT2Sym_mode-image_xfm.h5", "sub-01_from-T1w_to-NMT2Sym_mode-image_xfm.json"),
-        ("sub-01_hemi-L_desc-cortex_mask.label.gii", "sub-01_hemi-L_desc-cortex_mask.json"),
-        ("sub-01_desc-confounds_timeseries.tsv", "sub-01_desc-confounds_timeseries.json"),
-        ("/abs/dir/sub-01_space-template_desc-brain_mask.nii.gz", "sub-01_space-template_desc-brain_mask.json"),
+        (
+            "sub-01_space-NMT2Sym_desc-preproc_T1w.nii.gz",
+            "sub-01_space-NMT2Sym_desc-preproc_T1w.json",
+        ),
+        (
+            "sub-01_from-T1w_to-template_mode-image_xfm.mat",
+            "sub-01_from-T1w_to-template_mode-image_xfm.json",
+        ),
+        (
+            "sub-01_from-T1w_to-NMT2Sym_mode-image_xfm.h5",
+            "sub-01_from-T1w_to-NMT2Sym_mode-image_xfm.json",
+        ),
+        (
+            "sub-01_hemi-L_desc-cortex_mask.label.gii",
+            "sub-01_hemi-L_desc-cortex_mask.json",
+        ),
+        (
+            "sub-01_desc-confounds_timeseries.tsv",
+            "sub-01_desc-confounds_timeseries.json",
+        ),
+        (
+            "/abs/dir/sub-01_space-template_desc-brain_mask.nii.gz",
+            "sub-01_space-template_desc-brain_mask.json",
+        ),
     ],
 )
 def test_create_bids_sidecar_filename(data, sidecar):
@@ -300,7 +318,9 @@ def test_xfm_sidecar_unknown_engine_falls_back(tmp_path):
 # --------------------------------------------------------------------------- #
 def test_write_dataset_description(tmp_path):
     p = write_dataset_description(
-        tmp_path, output_space="NMT2Sym:res-05", resolved_template_path="/zoo/NMT2Sym.nii.gz"
+        tmp_path,
+        output_space="NMT2Sym:res-05",
+        resolved_template_path="/zoo/NMT2Sym.nii.gz",
     )
     data = json.loads(Path(p).read_text())
     assert Path(p).name == "dataset_description.json"
@@ -312,7 +332,9 @@ def test_write_dataset_description(tmp_path):
 
 def test_write_dataset_description_custom(tmp_path):
     p = write_dataset_description(
-        tmp_path, output_space="/data/custom.nii.gz", resolved_template_path="/data/custom.nii.gz"
+        tmp_path,
+        output_space="/data/custom.nii.gz",
+        resolved_template_path="/data/custom.nii.gz",
     )
     data = json.loads(Path(p).read_text())
     assert data["TemplateSource"]["Custom"] is True
@@ -366,7 +388,11 @@ def test_bold_timeseries_fields_session_layout(tmp_path):
     nii = _make_raw_bold(
         tmp_path,
         with_session=True,
-        metadata={"RepetitionTime": 1.7, "SliceTiming": [0.0, 0.85], "TaskName": "rest"},
+        metadata={
+            "RepetitionTime": 1.7,
+            "SliceTiming": [0.0, 0.85],
+            "TaskName": "rest",
+        },
     )
     assert bold_timeseries_fields(nii, _STC_ON) == {
         "repetition_time": 1.7,
@@ -423,9 +449,7 @@ def test_bold_timeseries_fields_missing_json(tmp_path):
 
 def test_bold_timeseries_fields_tr_present_no_slice_timing(tmp_path):
     # TR but no SliceTiming array -> TR carried, STC False (nothing to correct).
-    nii = _make_raw_bold(
-        tmp_path, with_session=True, metadata={"RepetitionTime": 1.7}
-    )
+    nii = _make_raw_bold(tmp_path, with_session=True, metadata={"RepetitionTime": 1.7})
     assert bold_timeseries_fields(nii, _STC_ON) == {
         "repetition_time": 1.7,
         "slice_timing_corrected": False,

@@ -35,6 +35,6 @@ def test_dist_info_matches_pyproject():
         installed = version("brainana")
     except PackageNotFoundError:
         pytest.skip("brainana not installed")
-    assert installed == expected, (
-        f"dist-info stale: {installed!r} != {expected!r}; run: uv pip install -e ."
-    )
+    assert (
+        installed == expected
+    ), f"dist-info stale: {installed!r} != {expected!r}; run: uv pip install -e ."

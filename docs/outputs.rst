@@ -164,6 +164,8 @@ The report is **always generated on completion**, even after a partial failure, 
 - **Pass with warnings** — completed, but one or more optional steps failed; some outputs may be missing.
 - **Fail** — the run aborted early.
 
+The badge describes whether the *pipeline* ran, not whether your *data* was well formed. When an input header needed repairing — or had a problem brainana could not safely repair — a separate **Data findings** section appears, splitting the two cases into "Repaired automatically" and "Not repaired — no safe automatic fix". It is omitted entirely for a well-formed dataset. See the ingest normalization stage in :doc:`processing` for what each finding means; the same information is written to the derivative JSON sidecars.
+
 Pipeline reports (``nextflow_reports/``)
 ----------------------------------------
 

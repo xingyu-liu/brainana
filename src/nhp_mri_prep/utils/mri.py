@@ -8,9 +8,476 @@ import logging
 import nibabel as nib
 import numpy as np
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 from nibabel.orientations import aff2axcodes
-from .system import run_command
+
+
+# ---------------------------------------------------------------------------
+# Dimensionality normalization (anatomical images)
+# ---------------------------------------------------------------------------
+
+# NIfTI intent codes whose trailing dimension encodes vector/tensor components
+# rather than repeated acquisitions. Collapsing these would corrupt the data —
+# ANTs displacement fields are (X, Y, Z, 1, 3) with intent 1007.
+_NON_SCALAR_INTENT_CODES = frozenset(
+    {
+        1004,  # NIFTI_INTENT_GENMATRIX
+        1005,  # NIFTI_INTENT_SYMMATRIX
+        1006,  # NIFTI_INTENT_DISPVECT
+        1007,  # NIFTI_INTENT_VECTOR
+        1008,  # NIFTI_INTENT_POINTSET
+        1009,  # NIFTI_INTENT_TRIANGLE
+        1010,  # NIFTI_INTENT_QUATERNION
+        2003,  # NIFTI_INTENT_RGB_VECTOR
+    }
+)
+
+
+def as_3d_image(
+    img: nib.Nifti1Image,
+    logger: Optional[logging.Logger] = None,
+) -> Tuple[nib.Nifti1Image, str]:
+    """Return a 3-D view of a scalar anatomical image, plus what was done to it.
+
+    Some scanners and DICOM converters emit anatomicals with a trailing singleton
+    frame axis, e.g. ``(144, 144, 60, 1)`` with ``dim[0] == 4``. Such images are
+    geometrically 3-D but break any code that assumes ``ndim == 3`` — notably
+    ``nibabel.processing.resample_to_output``, which raises outright.
+
+    Args:
+        img: Loaded NIfTI image.
+        logger: Logger instance (optional).
+
+    Returns:
+        ``(image, action)`` where *action* is one of:
+
+        - ``"unchanged"``: input was already 3-D; the **same object** is returned,
+          so no data is read, no dtype changes, and nothing is re-quantized.
+        - ``"squeezed"``: trailing singleton dimension(s) dropped losslessly
+          (affine, qform/sform codes, pixdim and on-disk dtype all preserved).
+        - ``"mean"``: a genuine multi-volume 4-D image collapsed by averaging over
+          the last axis, written as float32.
+
+    Raises:
+        ValueError: If the image carries a vector/tensor intent code, has fewer
+            than 3 dimensions, or still has more than 4 dimensions after
+            squeezing (e.g. a ``(X, Y, Z, 1, 3)`` displacement field).
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    intent_code = int(img.header["intent_code"])
+    if intent_code in _NON_SCALAR_INTENT_CODES:
+        raise ValueError(
+            f"Refusing to collapse an image with non-scalar intent code {intent_code} "
+            f"(shape {img.shape}); its trailing axis holds vector/tensor components, "
+            f"not repeated volumes."
+        )
+
+    if len(img.shape) < 3:
+        raise ValueError(f"Expected a 3-D or 4-D image, got shape {img.shape}")
+
+    if len(img.shape) == 3:
+        return img, "unchanged"
+
+    # squeeze_image only trims *trailing* singleton axes, so a (X, Y, Z, 1, 3)
+    # vector field survives it untouched (and is rejected by the guard below).
+    squeezed = nib.funcs.squeeze_image(img)
+    if len(squeezed.shape) == 3:
+        logger.info(f"Collapsed singleton frame axis: {img.shape} -> {squeezed.shape}")
+        return squeezed, "squeezed"
+
+    if len(squeezed.shape) > 4:
+        raise ValueError(
+            f"Cannot collapse a {len(squeezed.shape)}-D image (shape {img.shape}) to 3-D"
+        )
+
+    # Genuine multi-volume 4-D: average over the frame axis. float32 rather than
+    # the source dtype — re-quantizing the mean of N int16 volumes back to int16
+    # would lose precision for no benefit (cf. calculate_func_tmean above).
+    logger.warning(
+        f"Multi-volume anatomical {squeezed.shape} detected; averaging over the "
+        f"last axis to obtain a 3-D image."
+    )
+    mean_data = np.mean(squeezed.get_fdata(), axis=-1).astype(np.float32)
+    out = nib.Nifti1Image(mean_data, squeezed.affine, squeezed.header)
+    # Nifti1Image honours the header's dtype, so an int16 source header would
+    # silently truncate the float32 mean unless we override it here.
+    out.header.set_data_dtype(np.float32)
+    out.header.set_zooms(squeezed.header.get_zooms()[:3])
+    return out, "mean"
+
+
+def _reject_in_place(imagef: Path, outputf: Path) -> None:
+    """Refuse to write a normalized image over its own source file.
+
+    Not a style rule — on an uncompressed ``.nii`` this is a process-killing bug,
+    not an exception. nibabel mmaps the ArrayProxy, ``np.asanyarray(img.dataobj)``
+    hands back a view onto that mapping rather than a copy, and ``nib.save`` then
+    truncates the file the view points at. The next page fault raises SIGBUS, which
+    no ``except`` can catch: the interpreter dies with exit 135 and no traceback,
+    so Nextflow reports a task that vanished. ``.nii.gz`` happens to survive it
+    (gzip cannot mmap), which is what makes it dangerous — an all-``.nii.gz`` test
+    suite stays green while real ``.nii`` datasets die.
+    """
+    try:
+        same = imagef.resolve() == outputf.resolve()
+    except OSError:
+        same = False
+    if same:
+        raise ValueError(
+            f"Refusing to normalize {imagef.name} onto itself ({outputf}); "
+            f"the output path must differ from the input path."
+        )
+
+
+def ensure_3d(
+    imagef: Union[str, Path],
+    outputf: Optional[Union[str, Path]] = None,
+    logger: Optional[logging.Logger] = None,
+) -> Tuple[Path, str]:
+    """Guarantee a 3-D image on disk, writing a new file only when needed.
+
+    Wrapper around :func:`as_3d_image` for the path-in/path-out callers in this
+    codebase. A 3-D input is a no-op: the input path is returned and nothing is
+    written, so datasets that were already well-formed stay byte-for-byte
+    identical.
+
+    For anatomicals at ingest use :func:`normalize_anat_input` instead — it applies
+    this plus the orientation and geometry repairs in a single read/write. This
+    function remains for callers that only need the dimensionality guarantee
+    (``conform_to_template``, which also handles functional temporal means).
+
+    The input file is never modified in place — Nextflow stages task inputs
+    read-only, so a rewrite must go somewhere else. When a rewrite is needed and
+    *outputf* is None this raises, forcing callers to name a destination rather
+    than defaulting to somewhere unsafe (a read-only BIDS tree, or a task-dir
+    root where a stray ``*.nii.gz`` would be picked up by an output glob).
+
+    Args:
+        imagef: Input NIfTI image path.
+        outputf: Destination for the normalized image. Only used — and only
+            required — when the input is not already 3-D.
+        logger: Logger instance (optional).
+
+    Returns:
+        ``(path, action)``; see :func:`as_3d_image` for the action values. For
+        ``"unchanged"`` the returned path is *imagef*.
+
+    Raises:
+        ValueError: If a rewrite is needed but *outputf* is None, if *outputf*
+            names the input file itself, or for any reason listed in
+            :func:`as_3d_image`.
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    imagef = Path(imagef)
+    if outputf is not None:
+        _reject_in_place(imagef, Path(outputf))
+
+    src = nib.load(str(imagef))
+    img, action = as_3d_image(src, logger)
+
+    if action == "unchanged":
+        return imagef, action
+
+    if outputf is None:
+        raise ValueError(
+            f"{imagef.name} has shape {src.shape} and needs collapsing to 3-D, "
+            f"but no output path was given."
+        )
+
+    outputf = Path(outputf)
+    outputf.parent.mkdir(parents=True, exist_ok=True)
+    nib.save(img, str(outputf))
+    logger.info(f"Output: 3-D normalized image written - {outputf}")
+    return outputf, action
+
+
+# ---------------------------------------------------------------------------
+# Geometry normalization and header inspection (anatomical images)
+# ---------------------------------------------------------------------------
+
+
+def as_oriented_image(
+    img: nib.Nifti1Image,
+    logger: Optional[logging.Logger] = None,
+) -> Tuple[nib.Nifti1Image, str]:
+    """Guarantee a stored orientation, returning the image and what was done to it.
+
+    A NIfTI with ``qform_code == 0`` and ``sform_code == 0`` carries no spatial
+    orientation at all. Readers do not fail on this — they each *invent* a
+    fallback, and they do not invent the same one:
+
+    - nibabel and FSL use the header's base affine: LAS with the origin at the
+      centre of the voxel grid.
+    - ITK (and therefore ANTs) uses an identity direction matrix in its own LPS
+      world, with the origin at the *corner* of the grid.
+
+    So an orientation-less input silently means different geometry to different
+    steps of the same pipeline. Two files that are genuinely on one grid come out
+    disagreeing by an axis flip and a translation of half the field of view, and
+    images of *different* sizes get corner-aligned rather than centre-aligned.
+
+    This makes the fallback explicit instead of implicit. The affine written is
+    ``header.get_base_affine()`` — precisely what nibabel and FSL already assume —
+    so nothing about the pipeline's current numeric behaviour changes; the point
+    is that ITK now reads the same geometry as everyone else. Only geometry
+    metadata changes: the voxel array is never resampled or reoriented. It is
+    re-encoded on write, though, so a source carrying ``scl_slope``/``scl_inter``
+    can shift by one quantization step in its stored integers (the scaled values,
+    and plain unscaled data, round-trip exactly).
+
+    An image that already declares an orientation is a no-op: the **same object**
+    is returned, so well-formed data is never rewritten.
+
+    Note:
+        This recovers a *convention*, not ground truth. The assumed affine puts
+        +x at the subject's left; if the acquisition actually ran the other way,
+        the result is a left/right mirror, which no downstream rigid or affine
+        registration can undo and which is invisible on inspection. Confirm
+        handedness against an external record before trusting hemisphere-wise
+        results from a dataset that needed this repair.
+
+    Args:
+        img: Loaded NIfTI image.
+        logger: Logger instance (optional).
+
+    Returns:
+        ``(image, action)`` where *action* is one of:
+
+        - ``"unchanged"``: input already had a qform or sform.
+        - ``"assumed-<code>-centered"`` (e.g. ``"assumed-LAS-centered"``): the
+          base affine was stamped into both qform and sform with code 2
+          (scanner anat).
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    header = img.header
+    if int(header["qform_code"]) > 0 or int(header["sform_code"]) > 0:
+        return img, "unchanged"
+
+    # The affine nibabel/FSL already fall back to for this header: LAS, origin at
+    # the centre of the voxel grid. Derived rather than hand-built so the written
+    # geometry is by construction the one the pipeline is already using.
+    affine = header.get_base_affine()
+    orientation = get_image_orientation_from_affine(affine)
+
+    logger.warning(
+        f"Data: image has qform_code=0 and sform_code=0 (no stored orientation). "
+        f"Assuming {orientation} with a centred origin, the convention nibabel "
+        f"and FSL already fall back to for this header. Verify left/right against "
+        f"an external record before trusting hemisphere-wise results."
+    )
+
+    # Pass the source header through so descrip/xyzt_units/dtype survive, then
+    # override the geometry explicitly — the Nifti1Image constructor picks its own
+    # qform/sform codes, and we want code 2 (scanner anat) on both, deterministically.
+    out = nib.Nifti1Image(np.asanyarray(img.dataobj), affine, header)
+    out.header.set_data_dtype(header.get_data_dtype())
+    out.set_qform(affine, code=2)
+    out.set_sform(affine, code=2)
+    return out, f"assumed-{orientation}-centered"
+
+
+def reconcile_qform_sform(
+    img: nib.Nifti1Image,
+    logger: Optional[logging.Logger] = None,
+) -> Tuple[nib.Nifti1Image, str]:
+    """Make a disagreeing qform and sform agree, resolving toward the sform.
+
+    A NIfTI may store its geometry twice, and nothing enforces that the two agree.
+    When they disagree, which one a reader believes is a matter of that reader's
+    policy — so the same file means two different grids to two different tools:
+
+    - nibabel and FSL prefer the **sform**, and so does every other step in this
+      pipeline (``img.affine`` is the sform whenever ``sform_code > 0``).
+    - FastSurfer's ``check_affine_in_nifti`` (``fastsurfer_nn/data_loader/conform.py``)
+      detects the mismatch and resolves it toward the **qform**, overwriting the
+      sform with it before segmentation runs.
+
+    So an unreconciled mismatch means brainana registers against one geometry and
+    segments against another, with only a warning buried in the FastSurfer log to
+    say so. Writing the sform into both makes every reader agree, and because the
+    sform is what this pipeline already reads, it changes no current numeric
+    behaviour. The sform's own code is preserved rather than forced to a constant —
+    it carries meaning (1 scanner, 2 aligned, 4 MNI) that is worth keeping.
+
+    Only geometry metadata changes; the voxel array is never resampled (see
+    :func:`as_oriented_image` for the one caveat on re-encoding). An image whose
+    forms already agree — or which has only one of them — is a no-op and the
+    **same object** is returned.
+
+    Args:
+        img: Loaded NIfTI image.
+        logger: Logger instance (optional).
+
+    Returns:
+        ``(image, action)`` where *action* is ``"unchanged"`` or
+        ``"qform-set-from-sform"``.
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    header = img.header
+    q_code = int(header["qform_code"])
+    s_code = int(header["sform_code"])
+
+    # Nothing to reconcile unless both are actually present. The neither-present
+    # case belongs to as_oriented_image; a single present form is unambiguous.
+    if q_code <= 0 or s_code <= 0:
+        return img, "unchanged"
+
+    sform = img.get_sform()
+    if np.allclose(sform, img.get_qform(), atol=1e-3):
+        return img, "unchanged"
+
+    logger.warning(
+        f"Data: qform and sform disagree (qform_code={q_code}, sform_code={s_code}). "
+        f"Resolving toward the sform, which nibabel, FSL and the rest of this "
+        f"pipeline already read; without this, FastSurfer would resolve toward the "
+        f"qform and segment against a different grid than registration used."
+    )
+
+    out = nib.Nifti1Image(np.asanyarray(img.dataobj), sform, header)
+    out.header.set_data_dtype(header.get_data_dtype())
+    out.set_sform(sform, code=s_code)
+    out.set_qform(sform, code=s_code)
+    return out, "qform-set-from-sform"
+
+
+def inspect_header(img: nib.Nifti1Image) -> list:
+    """Report header defects that have no safe automatic repair. Read-only.
+
+    These are the cases where guessing would be worse than reporting. Rescaling a
+    metre-unit header or rewriting pixdim to match an affine could just as easily
+    turn a recoverable dataset into confidently wrong output, so the findings are
+    surfaced — in the log, the JSON sidecar and the QC report — and the call is
+    left to whoever knows the acquisition.
+
+    Args:
+        img: Loaded NIfTI image, after any repairs have been applied.
+
+    Returns:
+        A list of human-readable finding strings; empty when the header is sane.
+    """
+    findings = []
+    header = img.header
+
+    # NIfTI treats unset spatial units as mm, so only an explicit non-mm unit is a
+    # finding. nibabel does not convert: get_zooms() returns raw pixdim whatever
+    # the unit says, so every voxel size in this pipeline would be off by the unit
+    # factor while ITK/ANTs reads it correctly.
+    xyz_unit = header.get_xyzt_units()[0]
+    if xyz_unit not in ("mm", "unknown"):
+        findings.append(
+            f"Spatial units are '{xyz_unit}', not mm. nibabel does not rescale "
+            f"pixdim, so brainana reads voxel sizes "
+            f"{tuple(round(float(z), 6) for z in header.get_zooms()[:3])} verbatim "
+            f"while ITK/ANTs converts them to mm. Convert the header to mm before "
+            f"processing."
+        )
+
+    # Same comparison FastSurfer's check_affine_in_nifti makes before it aborts,
+    # done here so the problem surfaces at ingest rather than deep in segmentation.
+    vox_affine = np.sqrt((img.affine[:3, :3] * img.affine[:3, :3]).sum(0))
+    vox_header = np.asarray(header.get_zooms()[:3], dtype=float)
+    if not np.allclose(vox_affine, vox_header, atol=1e-3):
+        findings.append(
+            f"Header pixdim {tuple(round(float(v), 4) for v in vox_header)} "
+            f"disagrees with the affine's voxel scale "
+            f"{tuple(round(float(v), 4) for v in vox_affine)}. The header is "
+            f"self-inconsistent; FastSurfer aborts on this during segmentation."
+        )
+
+    return findings
+
+
+def normalize_anat_input(
+    imagef: Union[str, Path],
+    outputf: Union[str, Path],
+    logger: Optional[logging.Logger] = None,
+) -> Tuple[Path, Dict[str, Any]]:
+    """Normalize one anatomical at ingest: one read, one write, one report.
+
+    Applies every repair an anatomical needs before any other step touches it,
+    then reports what could not be repaired. Composing the repairs in memory
+    rather than chaining path-in/path-out helpers means a file needing three
+    repairs still costs a single load and a single save.
+
+    Repairs applied, in order:
+
+    1. :func:`as_3d_image` — drop a trailing singleton frame axis, or mean-collapse
+       a genuine multi-volume anatomical.
+    2. :func:`as_oriented_image` — stamp an orientation when the header stores none.
+    3. :func:`reconcile_qform_sform` — resolve a qform/sform disagreement toward
+       the sform.
+    4. Container format — the output is always gzipped, so no downstream step
+       handles a raw ``.nii``.
+
+    Then :func:`inspect_header` records what is wrong but not safely fixable.
+
+    A well-formed, already-gzipped input is a true no-op: *imagef* is returned and
+    nothing is written, so such datasets stay byte-for-byte identical.
+
+    Args:
+        imagef: Input NIfTI image path.
+        outputf: Destination. The extension is forced to ``.nii.gz``; the stem is
+            preserved, because the synthesis step parses BIDS entities out of it.
+        logger: Logger instance (optional).
+
+    Returns:
+        ``(path, report)``. *report* has keys ``dim``, ``orientation``, ``geometry``
+        (each an action string, ``"unchanged"`` when the repair did not fire) and
+        ``warnings`` (a possibly-empty list from :func:`inspect_header`).
+
+    Raises:
+        ValueError: If *outputf* names *imagef* itself, or for any reason listed in
+            :func:`as_3d_image`.
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    from .bids import get_filename_stem
+
+    imagef = Path(imagef)
+    outputf = Path(outputf)
+    outputf = outputf.parent / f"{get_filename_stem(outputf)}.nii.gz"
+    _reject_in_place(imagef, outputf)
+
+    src = nib.load(str(imagef))
+    img, dim_action = as_3d_image(src, logger)
+    img, orient_action = as_oriented_image(img, logger)
+    img, geom_action = reconcile_qform_sform(img, logger)
+    warnings = inspect_header(img)
+
+    for finding in warnings:
+        logger.warning(f"Data: {imagef.name} - {finding}")
+
+    report = {
+        "dim": dim_action,
+        "orientation": orient_action,
+        "geometry": geom_action,
+        "warnings": warnings,
+    }
+
+    repaired = any(
+        action != "unchanged" for action in (dim_action, orient_action, geom_action)
+    )
+    # A raw .nii is rewritten even when nothing else changed: it is the format that
+    # makes an accidental read-write of the same path fatal (see _reject_in_place),
+    # and normalizing it here means no later step has to think about it.
+    needs_gzip = not str(imagef).endswith(".nii.gz")
+
+    if not repaired and not needs_gzip:
+        return imagef, report
+
+    outputf.parent.mkdir(parents=True, exist_ok=True)
+    nib.save(img, str(outputf))
+    logger.info(f"Output: normalized anatomical written - {outputf}")
+    return outputf, report
 
 
 def calculate_func_tmean(
@@ -172,128 +639,6 @@ def get_image_resolution(
     except Exception as e:
         logger.error(f"Step: image resolution retrieval failed - {e}")
         raise RuntimeError(f"Image resolution retrieval failed: {e}")
-
-
-def get_image_orientation(
-    imagef: str,
-    logger: Optional[logging.Logger] = None,
-) -> str:
-    """Get the orientation code of an image file.
-
-    Args:
-        imagef: Input image file
-        logger: Optional logger instance
-
-    Returns:
-        Orientation code string (e.g., 'RAS', 'LPI', 'RPS')
-
-    Raises:
-        RuntimeError: If orientation retrieval fails
-    Note:
-        this function can get the orientation without loading the image file
-        Be careful about afni and fsl or nibable using opposite orientation code.
-        For example, RAS in fsl is actually LPI in afni.
-        So when using afni's orientation code, always use afni's reorientation function.
-    """
-    if logger is None:
-        logger = logging.getLogger(__name__)
-
-    # use 3dinfo to get the orientation of the image file
-    command_3dinfo = ["3dinfo", "-orient", str(imagef)]
-    returncode, stdout, stderr = run_command(command_3dinfo, step_logger=logger)
-    if returncode == 0:
-        orientation = stdout.strip()  # Remove newline characters
-        logger.debug(f"Data: image orientation - {orientation}")
-        return orientation
-    else:
-        logger.error(
-            f"Step: image orientation retrieval failed - return code {returncode}"
-        )
-        raise RuntimeError(f"Failed to get image orientation: {stderr}")
-
-
-def reorient_image_to_orientation(
-    imagef: str,
-    orientation: str,
-    outputf: str,
-    logger: Optional[logging.Logger] = None,
-) -> Dict[str, str]:
-    """Reorient image to a specific orientation.
-
-    Args:
-        imagef: Input image file
-        orientation: Target orientation string (e.g., 'RAS', 'LPI', 'RPS')
-        outputf: Output image file
-        logger: Logger instance
-
-    Returns:
-        Dictionary with output file path
-    """
-    if logger is None:
-        logger = logging.getLogger(__name__)
-
-    # Validate orientation string (should be 3 characters)
-    if len(orientation) != 3:
-        raise ValueError(
-            f"Orientation must be a 3-character string (e.g., 'RAS'), got '{orientation}'"
-        )
-
-    valid_chars = set("RLAPIS")
-    if not all(c in valid_chars for c in orientation.upper()):
-        raise ValueError(
-            f"Orientation contains invalid characters. Must be from {{R, L, A, P, I, S}}, got '{orientation}'"
-        )
-
-    orientation = orientation.upper()
-    logger.info(f"Data: target orientation - {orientation}")
-
-    # use 3dresample to reorient the image to the target orientation
-    command_3dresample = [
-        "3dresample",
-        "-input",
-        str(imagef),
-        "-prefix",
-        str(outputf),
-        "-orient",
-        orientation,
-    ]
-    returncode, stdout, stderr = run_command(command_3dresample, step_logger=logger)
-    if returncode == 0:
-        logger.info(f"Output: image reoriented successfully - {outputf}")
-    else:
-        logger.error(f"Step: image reorientation failed - return code {returncode}")
-        logger.error(f"System: stderr - {stderr}")
-        raise RuntimeError(f"Image reorientation failed: {stderr}")
-
-    return {"output": outputf}
-
-
-def reorient_image_to_target(
-    imagef: str,
-    targetf: str,
-    outputf: str,
-    logger: Optional[logging.Logger] = None,
-) -> Dict[str, str]:
-    """Reorient image to match the orientation of a target file.
-
-    Args:
-        imagef: Input image file
-        targetf: Target image file (orientation will be extracted from this file)
-        outputf: Output image file
-        logger: Logger instance
-
-    Returns:
-        Dictionary with output file path
-    """
-    if logger is None:
-        logger = logging.getLogger(__name__)
-
-    # Get orientation from target file
-    orientation = get_image_orientation(targetf, logger)
-    logger.info(f"Data: target file orientation - {orientation}")
-
-    # Use the orientation-based reorientation function
-    return reorient_image_to_orientation(imagef, orientation, outputf, logger)
 
 
 def get_opposite_orientation(direction: str) -> str:

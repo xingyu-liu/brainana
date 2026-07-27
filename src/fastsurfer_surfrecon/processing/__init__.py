@@ -3,6 +3,28 @@ Core processing functions for FastSurfer surface reconstruction.
 
 This module contains the computational functions that perform
 the actual image and surface processing operations.
+
+Dependency import policy
+------------------------
+Rule A -- declared core dependencies (numpy, scipy, nibabel, lapy, pymeshfix)
+are imported unguarded at module scope. Never wrap them in
+``try/except ImportError``. A missing core dependency is a corrupt
+environment: it must fail at import, in the first second, not degrade into a
+warning that surfaces hours into a run.
+
+Rule B -- genuinely optional dependencies get a guarded import, a module-level
+capability flag, and an explicit log at the fallback -- and the fallback must
+be correctness-equivalent, differing only in cost. ``spherical.py``'s
+scikit-sparse/CHOLMOD fallback is the reference implementation. If a fallback
+would change *results*, the dependency is not optional; promote it to Rule A.
+
+Rule C -- never rely on a transitive *optional* dependency of a dependency.
+``pymeshfix.MeshFix`` is unusable without pyvista, which is only a
+``pymeshfix[extras]`` dependency that no resolver installs for us. Use the
+pyvista-free ``pymeshfix._meshfix.PyTMesh`` API instead (see
+``topology_fix.py``). A grep for ``import pyvista`` cannot see this class of
+requirement, which is why it must be covered by a test that actually calls the
+third-party API rather than merely importing it.
 """
 
 # Bias correction
@@ -51,6 +73,8 @@ from .surface_fix import (
     fix_surface_orientation,
     verify_surface_ras,
     validate_surface,
+    assert_surface_invariants,
+    SurfaceInvariantError,
 )
 
 __all__ = [
@@ -87,4 +111,6 @@ __all__ = [
     "fix_surface_orientation",
     "verify_surface_ras",
     "validate_surface",
+    "assert_surface_invariants",
+    "SurfaceInvariantError",
 ]

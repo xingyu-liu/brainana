@@ -17,19 +17,18 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # ========================
 # Test parameters (edit paths/config here)
-version=2.0.0
+version=2.1.0
 
 bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_devtest
-output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_local_v${version}_atlasinfo
+output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_devtest_local_v${version}
 config_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1.yaml"
 # custom_template_f="/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/tpl-MEBRAINS_res-1_T1w_brain.nii.gz"
 custom_template_f=""
 
-# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_example
-# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_example_local_v${version}
-
-# bids_dir=/mnt/DataDrive3/swap/test_brainana/raw/frosty
-# output_dir=/mnt/DataDrive3/swap/test_brainana/preproc/frosty
+# # newcastle
+# bids_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/dataset_newcastle
+# output_dir=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/dataset_newcastle_sub0101
+# config_f=/mnt/DataDrive3/xliu/prep_test/brainana_test/preproc/config_res-1_surf-off_anatonly.yaml
 
 : "${ENABLE_GPU:=1}" # GPU visibility: 1 = expose GPU(s) to brainana, 0 = CPU-only (CUDA hidden)
 

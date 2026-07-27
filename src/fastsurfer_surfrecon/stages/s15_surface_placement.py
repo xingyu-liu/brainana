@@ -7,6 +7,7 @@ Places white and pial surfaces.
 import logging
 import shutil
 
+from ..processing.surface_fix import assert_surface_invariants
 from .base import HemisphereStage
 from ..io.surface import convert_fs_surface_to_gifti
 from ..wrappers.mris import mris_place_surface
@@ -123,13 +124,32 @@ class SurfacePlacement(HemisphereStage):
                     continue
                 convert_fs_surface_to_gifti(in_surf, out_gii, apply_cras=True)
 
-    def should_skip(self) -> bool:
-        """Skip if white, pial, inflated and their GIFTI counterparts all exist."""
-        return (
-            self.hemi_path("white").exists()
-            and self.hemi_path("pial").exists()
-            and self.hemi_path("inflated").exists()
-            and self.hemi_path("white.surf.gii").exists()
-            and self.hemi_path("pial.surf.gii").exists()
-            and self.hemi_path("inflated.surf.gii").exists()
-        )
+    def expected_outputs(self) -> list:
+        """Final surfaces plus their GIFTI counterparts."""
+        return [
+            self.hemi_path("white"),
+            self.hemi_path("pial"),
+            self.hemi_path("inflated"),
+            self.hemi_path("white.surf.gii"),
+            self.hemi_path("pial.surf.gii"),
+            self.hemi_path("inflated.surf.gii"),
+        ]
+
+    def verify_outputs(self) -> None:
+        """white and pial inherit orig's connectivity from mris_place_surface.
+
+        Given the s12 gate on orig, a violation here means placement itself
+        damaged the mesh. Warn-only by default: these are the surfaces most
+        likely to have historically tolerated deviations, so the cohort audit
+        should inform whether to make them strict.
+        """
+        super().verify_outputs()
+        for name in ("white", "pial"):
+            assert_surface_invariants(
+                self.hemi_path(name),
+                closed=True,
+                oriented=True,
+                euler=2,
+                context=f"{self.hemi} s15 {name}",
+                strict=self.config.processing.strict_surface_checks,
+            )

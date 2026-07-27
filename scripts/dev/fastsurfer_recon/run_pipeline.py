@@ -9,8 +9,8 @@ import sys
 import logging
 from pathlib import Path
 
-# Add src/ to path for fastsurfer_surfrecon package (scripts/ -> fastsurfer_surfrecon -> src)
-_src = Path(__file__).resolve().parent.parent.parent
+# Add src/ to path (scripts/dev/fastsurfer_recon/ -> scripts/dev/ -> scripts/ -> repo root)
+_src = Path(__file__).resolve().parents[3] / "src"
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 

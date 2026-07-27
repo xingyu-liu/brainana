@@ -4,6 +4,13 @@ import shutil
 import tempfile
 import traceback
 
+import sys
+
+# Add src/ to path (scripts/dev/nhp_mriprep/ -> scripts/dev/ -> scripts/ -> repo root)
+_src_dir = Path(__file__).resolve().parents[3] / "src"
+if str(_src_dir) not in sys.path:
+    sys.path.insert(0, str(_src_dir))
+
 from nhp_mri_prep.steps.anatomical import anat_backproject_atlases
 from nhp_mri_prep.utils.nextflow import load_config
 from tqdm.auto import tqdm

@@ -111,6 +111,15 @@ class ClaustrumFix(PipelineStage):
                 "intersection of ARM6 atlas and primary segmentation. "
                 "brain.finalsurfs.mgz will not be modified."
             )
+            # Still write the backup, even though nothing was changed. It is
+            # this stage's completion marker (see should_skip), so omitting it
+            # made the stage re-run on every invocation. Writing it also keeps
+            # s13 on a single, consistent intensity volume rather than silently
+            # falling back to a different file for these subjects.
+            backup_f = self.sd.mri("brain.finalsurfs_orig.mgz")
+            if not backup_f.exists():
+                shutil.copy(brain_f, backup_f)
+                logger.info(f"Wrote unmodified backup: {backup_f.name}")
             return
 
         logger.info(f"Claustrum mask: {n_voxels} voxels to fill")

@@ -3,8 +3,8 @@ import glob
 import sys
 from pathlib import Path
 
-# Add src/ to path for nhp_mri_prep imports (scripts/ -> nhp_mri_prep -> src)
-_src_dir = Path(__file__).resolve().parent.parent.parent
+# Add src/ to path (scripts/dev/nhp_mriprep/ -> scripts/dev/ -> scripts/ -> repo root)
+_src_dir = Path(__file__).resolve().parents[3] / "src"
 if str(_src_dir) not in sys.path:
     sys.path.insert(0, str(_src_dir))
 try:

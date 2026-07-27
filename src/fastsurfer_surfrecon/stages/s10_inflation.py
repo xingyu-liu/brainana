@@ -49,7 +49,12 @@ class Inflation(HemisphereStage):
         )
 
     def should_skip(self) -> bool:
-        """Skip if inflated exists or if spherical projection has run (sphere/qsphere.nofix exists)."""
+        """Skip if inflated exists, or if a later stage's output proves it ran.
+
+        Custom rather than expected_outputs(): this deliberately ORs across
+        s11/s12 side effects, because s12 deletes inflated.nofix after
+        consuming it -- so this stage's own output legitimately disappears.
+        """
         # Check for both inflated and inflated.nofix
         # Also check if s11 (spherical projection) has run, which indicates s10 has completed
         # This handles the case where s12 deletes inflated.nofix after using it

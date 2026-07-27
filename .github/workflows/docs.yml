@@ -23,6 +23,11 @@ jobs:
           # Docs-only install (matches .readthedocs.yaml): Sphinx stack + package
           # metadata without torch/SimpleITK/fireants. pip cannot resolve the
           # fireants==1.5.0 / SimpleITK>=2.3.0 pin conflict (uv override is local-only).
+          #
+          # NOTE: --no-deps is deliberate, but it means this workflow can never
+          # detect a missing or wrong dependency -- it does not resolve the
+          # dependency set at all. Do not "fix" it. The dependency guard is
+          # .github/workflows/deps.yml, which installs for real.
           pip install "sphinx>=7.0" "myst-parser>=2.0" "sphinx-rtd-theme>=2.0" "sphinx-copybutton>=0.5.0" "sphinxcontrib-mermaid>=0.9" "sphinxext-opengraph>=0.9"
           pip install --no-deps -e .
 
