@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "brainana"
-version = "2.0.0"
+version = "2.1.0"
 description = "A Python package for preprocessing and registration of macaque neuroimaging data with BIDS dataset support"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = {text = "AGPL-3.0"}
@@ -61,14 +61,32 @@ dependencies = [
     # fastsurfer_surfrecon dependencies
     "pydantic>=2.0.0",
     "lapy>=1.0.0",
-    "pymeshfix>=0.16.0",
+    # pymeshfix: used via its array API only (PyTMesh), never via a pyvista mesh.
+    # Floor is 0.18.1, not 0.16: in 0.18.0 MeshFix.__init__ probes
+    # find_spec("pyvista.core") *before* dispatching on array input, and that
+    # RAISES ModuleNotFoundError rather than returning None when pyvista is
+    # absent. pyvista is only a `pymeshfix[extras]` dependency, so no resolver
+    # installs it for us -- meaning the old floor described a version that
+    # could not work. Guarded by tests/surfrecon/test_topology_fix.py, which
+    # performs a real repair rather than merely importing the package.
+    "pymeshfix>=0.18.1",
     # Utilities
     "tqdm>=4.67.1",
     "pyyaml>=6.0",
     "requests>=2.31.0",
 ]
 # Note: tomli not needed since requires-python >= 3.11 (has built-in tomllib)
-# Removed from core (unused anywhere in src/): pyvista, joblib, typer, rich.
+# Removed from core: joblib, typer, rich -- verified unused: no module-scope import
+# in src/, AND no transitive *runtime* need. Both halves matter.
+#
+# WARNING to future edits: `grep "import <pkg>" src/` is NOT sufficient evidence that a
+# dependency is unused. pyvista was removed from this list on 2026-06-02 on exactly that
+# evidence and silently broke surface topology repair for 55 days, because pyvista is a
+# call-time need of pymeshfix rather than an import of ours. tensorboard was removed in
+# the same commit for the same reason and hotfixed 20 minutes later (it is reached via
+# torch.utils.tensorboard). Before removing a dependency, run the `Dependencies` workflow,
+# which installs for real -- docs.yml installs with --no-deps and can never catch this.
+# See tests/test_dependency_declarations.py and tests/surfrecon/test_topology_fix.py.
 # tensorboard is training-only (fastsurfer_nn/training/trainer.py, guarded import) -> moved to [train].
 # Moved to optional extras (not on the anatomical/lite import path): pybids -> [func];
 # scikit-learn, seaborn -> [train]; surfplot -> [surf]; psutil -> [full] (guarded/optional
@@ -106,6 +124,11 @@ train = [
     # tensorboard: training-only run logging (torch.utils.tensorboard in fastsurfer_nn/training/trainer.py).
     # The import there is guarded, so inference/lite work without it; training needs it installed.
     "tensorboard>=2.0.0",
+    # psutil: ALSO declared in [full] for the guarded resource report in environment.py.
+    # Declared here too because training data prep imports it UNGUARDED at module scope
+    # (fastsurfer_nn/training/step2_create_hdf5.py, nhp_skullstrip_nn/train/step2_create_hdf5.py),
+    # and [full] deliberately excludes [train] -- so [train] must be self-sufficient.
+    "psutil>=5.0.0",
 ]
 # Full preprocessing pipeline runtime (the Nextflow/Docker image installs this): surfaces +
 # functional/BIDS + optional resource reporting. Deliberately EXCLUDES [train] (training-only).
@@ -179,13 +202,15 @@ extend-exclude = ["scripts/scratch"]
 # define config vars (e.g. USE_GPU) across cells that per-cell analysis can't see.
 "scripts/*.ipynb" = ["E402"]
 "examples/*.ipynb" = ["E402", "F821"]
-# Standalone debug/entrypoint scripts prepend src/ before imports and keep
-# demo/optional imports around; exempt import-ordering and unused-import rules.
-"src/**/scripts/**/*.py" = ["E402", "F401", "F541"]
 "src/**/training/**/*.py" = ["E402"]
 "src/**/train/**/*.py" = ["E402"]
 "src/**/nextflow_scripts/**/*.py" = ["E402"]
-"tests/surf_recon/redo_*.py" = ["E402"]
+# Edit-the-source dev drivers, grouped by the package they drive. They prepend src/
+# before importing and keep demo/optional imports around, so import-ordering and
+# unused-import rules do not apply. No equivalent exemption exists for src/** any
+# more: everything of this shape has been moved here, and the only scripts left in
+# the package tree (nhp_skullstrip_nn/scripts/) are a real argparse CLI.
+"scripts/dev/**/*.py" = ["E402", "F401", "F541"]
 
 [tool.black]
 extend-exclude = "scripts/scratch"

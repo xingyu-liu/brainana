@@ -1,0 +1,121 @@
+name: Dependencies
+
+# The dependency guard. docs.yml installs with `--no-deps` (deliberately -- it
+# only builds docs), so it can never detect a missing or wrong dependency. This
+# workflow is the one that can.
+#
+# Four layers, none of which subsumes another:
+#   lock         -- uv.lock and pyproject.toml disagree
+#   import-core  -- a shipped module needs an extra the core install lacks
+#   test-full    -- a third-party API that only fails when CALLED (the pyvista
+#                   class of bug: nothing imports pyvista by name, so no import
+#                   check can see it -- only performing a real mesh repair can)
+#   import-lite  -- the Colab/antspyx resolution path, weekly
+
+on:
+  pull_request:
+    paths:
+      - "pyproject.toml"
+      - "uv.lock"
+      - "src/**"
+      - "tests/**"
+      - ".github/workflows/deps.yml"
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC, to catch upstream releases
+  workflow_dispatch:
+
+concurrency:
+  group: deps-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.6.16"
+  # 3.11 only: it is what .venv and the bookworm-based Docker builder use. A
+  # 3.12 axis would double cost to test a configuration nothing ships.
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  lock:
+    name: uv.lock in sync with pyproject.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Check lockfile is up to date
+        run: uv lock --check
+
+  import-core:
+    # CORE DEPENDENCIES ONLY -- no extras, no dev group. This is the strictest
+    # environment every shipped module must survive being imported in, and the
+    # only one where a missing extra is detectable at all. In a full install
+    # everything imports fine and the bug is invisible: exactly the shape of
+    # the stale venv that hid the pyvista breakage for 55 days.
+    name: import every shipped module (core deps only)
+    runs-on: ubuntu-latest
+    needs: lock
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - name: Install core dependencies only
+        run: uv sync --locked --python ${{ env.PYTHON_VERSION }}
+      - name: Walk the package tree and import everything
+        run: uv run --no-sync python tests/tools/import_all.py --profile core
+
+  test-full:
+    # The production dependency set (mirrors the Dockerfile's `--extra full`)
+    # plus train/dev so the suite can run. This is the layer that catches
+    # call-time third-party breakage.
+    name: tests on the full dependency set
+    runs-on: ubuntu-latest
+    needs: lock
+    steps:
+      - uses: actions/checkout@v4
+      - name: System libraries
+        # scikit-sparse (via the `surf` extra) compiles against SuiteSparse and
+        # has no wheels. Without this the job fails at install and tells us
+        # nothing about the code. Mirrors the Dockerfile's build deps.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libsuitesparse-dev
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - name: Install [full] + [train] + [dev]
+        run: >-
+          uv sync --locked --python ${{ env.PYTHON_VERSION }}
+          --extra full --extra train --extra dev
+      - name: Walk the package tree and import everything
+        run: uv run --no-sync python tests/tools/import_all.py --profile full
+      - name: Unit tests
+        run: uv run --no-sync pytest -q
+
+  import-lite:
+    # antspyx is a large wheel on a resolution path nothing else covers (the
+    # Colab notebook, where no ANTs CLI exists). Worth covering, not worth
+    # per-PR latency.
+    name: import (lite extra)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: lock
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync --locked --python ${{ env.PYTHON_VERSION }} --extra lite
+      - run: uv run --no-sync python tests/tools/import_all.py --profile lite

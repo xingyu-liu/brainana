@@ -47,7 +47,19 @@ class WhitePreaparc(HemisphereStage):
                 output_stats=autodet_stats,
                 input_vol=stats_input_vol,
                 wm_vol=self.sd.mri("wm.mgz"),
-                surface=self.hemi_path("orig.premesh"),
+                # `orig`, not `orig.premesh` (upstream recon-surf.sh uses the
+                # premesh here). The two are interchangeable for this purpose --
+                # measured on real subjects, gwstats output is byte-identical
+                # from either, including on hemispheres where the premesh was
+                # non-oriented or where pymeshfix changed the vertex count.
+                # `orig` is preferred because it is the surface this stage then
+                # places from, and because s12 guarantees it is closed,
+                # outward-oriented and genus 0. `orig.premesh` carries no such
+                # guarantee, and after a pymeshfix repair it is by definition
+                # the *unrepaired* mesh. gwstats samples intensities along
+                # surface normals, so an inverted or torn scaffold silently
+                # inverts the gray/white estimates rather than failing.
+                surface=self.hemi_path("orig"),
                 log_file=self.config.log_file,
             )
 
@@ -77,9 +89,9 @@ class WhitePreaparc(HemisphereStage):
             subjects_dir=self.config.subjects_dir,
         )
 
-    def should_skip(self) -> bool:
-        """Skip if white.preaparc and autodet.gw.stats.{hemi}.dat exist."""
-        return (
-            self.hemi_path("white.preaparc").exists()
-            and (self.sdir / f"autodet.gw.stats.{self.hemi}.dat").exists()
-        )
+    def expected_outputs(self) -> list:
+        """Pre-parcellation white surface and the GW intensity stats it used."""
+        return [
+            self.hemi_path("white.preaparc"),
+            self.sdir / f"autodet.gw.stats.{self.hemi}.dat",
+        ]

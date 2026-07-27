@@ -34,8 +34,6 @@ from .sitk_rigid_registration import (
 from ..utils import (
     run_command,
     calculate_func_tmean,
-    reorient_image_to_target,
-    reorient_image_to_orientation,
     get_image_shape,
 )
 from ..utils.logger import quiet_external_output
@@ -43,7 +41,7 @@ from ..config import validate_slice_timing_config
 from ..utils.mri import (
     apply_brain_mask,
     correct_affine_for_mismatch_orientation,
-    get_opposite_orientation,
+    ensure_3d,
     pad_image,
 )
 
@@ -184,117 +182,6 @@ def correct_orientation_mismatch(
         raise RuntimeError(f"Orientation mismatch correction failed: {e}") from e
 
 
-def reorient(
-    imagef: Union[str, Path],
-    working_dir: Union[str, Path],
-    output_name: str,
-    logger: Optional[logging.Logger] = None,
-    target_file: Optional[Union[str, Path]] = None,
-    target_orientation: Optional[str] = None,
-    generate_tmean: bool = False,
-) -> Dict[str, str]:
-    """Reorient the input file (anatomical or functional).
-
-    Args:
-        imagef: Input image file (anatomical or functional)
-        working_dir: Working directory
-        output_name: Name of output file
-        logger: Logger instance
-        target_file: Optional target file for reorientation (takes precedence over target_orientation)
-        target_orientation: Optional target orientation string (e.g., 'RAS', 'LPI') when no target_file is provided
-        generate_tmean: Whether to generate temporal mean (True for func, False for anat)
-
-    Returns:
-        Dictionary with output file paths
-
-    Raises:
-        FileNotFoundError: If input file doesn't exist
-        RuntimeError: If reorient fails
-        ValueError: If configuration parameters are invalid
-    """
-    if logger is None:
-        logger = logging.getLogger(__name__)
-
-    # Validate inputs
-    image_path = validate_input_file(imagef, logger)
-    work_dir = ensure_working_directory(working_dir, logger)
-
-    logger.info("Workflow: starting reorient")
-    logger.info(f"Data: input image - {os.path.basename(image_path)}")
-    logger.info(f"System: working directory - {work_dir}")
-
-    # Initialize outputs dictionary
-    outputs = {"imagef_reoriented": None, "imagef_tmean": None}
-
-    if target_file is not None:
-        logger.info("Step: reorienting image to target file")
-        image_reoriented_path = work_dir / output_name
-        reorient_image_to_target(image_path, target_file, image_reoriented_path, logger)
-        outputs["imagef_reoriented"] = str(image_reoriented_path)
-        logger.info(
-            f"Output: image reoriented to target - {os.path.basename(image_reoriented_path)}"
-        )
-        # update the image_path to the reoriented image
-        image_path = str(image_reoriented_path)
-
-    elif target_orientation is not None:
-        # Validate and normalize target orientation
-        target_orientation = str(target_orientation).upper().strip()
-        if len(target_orientation) != 3:
-            raise ValueError(
-                f"target_orientation must be a 3-character string (e.g., 'RAS', 'LPI'), "
-                f"got '{target_orientation}' (length: {len(target_orientation)})"
-            )
-
-        valid_chars = set("RLAPIS")
-        if not all(c in valid_chars for c in target_orientation):
-            invalid_chars = [c for c in target_orientation if c not in valid_chars]
-            raise ValueError(
-                f"target_orientation contains invalid characters: {invalid_chars}. "
-                f"Must be from {{R, L, A, P, I, S}}, got '{target_orientation}'"
-            )
-
-        logger.info(f"Step: reorienting image to orientation {target_orientation}")
-
-        # AFNI uses opposite orientation convention compared to NIfTI/FSL.
-        # For example, RAS in NIfTI/FSL corresponds to LPI in AFNI.
-        # Convert the target orientation (NIfTI/FSL convention) to AFNI's convention
-        # by flipping each direction using get_opposite_orientation.
-        target_orientation_afni = "".join(
-            [get_opposite_orientation(d) for d in target_orientation]
-        )
-        logger.info(
-            f"Data: target orientation (NIfTI/FSL) - {target_orientation}, "
-            f"converted to AFNI convention - {target_orientation_afni}"
-        )
-
-        image_reoriented_path = work_dir / output_name
-        reorient_image_to_orientation(
-            image_path, target_orientation_afni, image_reoriented_path, logger
-        )
-        outputs["imagef_reoriented"] = str(image_reoriented_path)
-        logger.info(
-            f"Output: image reoriented to {target_orientation} - {os.path.basename(image_reoriented_path)}"
-        )
-        # update the image_path to the reoriented image
-        image_path = str(image_reoriented_path)
-
-    if generate_tmean:
-        logger.info("Step: generating temporal mean")
-        # Generate Tmean of the functional data
-        image_tmean_path = work_dir / (output_name.split(".nii")[0] + "_tmean.nii.gz")
-        calculate_func_tmean(image_path, str(image_tmean_path), logger)
-        outputs["imagef_tmean"] = str(image_tmean_path)
-        logger.info(
-            f"Output: temporal mean generated - {os.path.basename(image_tmean_path)}"
-        )
-
-    logger.info(
-        f"Workflow: reorient completed - {len([v for v in outputs.values() if v is not None])} outputs generated"
-    )
-    return outputs
-
-
 def conform_to_template(
     imagef: Union[str, Path],
     template_file: Union[str, Path],
@@ -350,6 +237,14 @@ def conform_to_template(
     image_path = validate_input_file(imagef, logger)
     template_path = validate_input_file(template_file, logger)
     work_dir = ensure_working_directory(working_dir, logger)
+
+    # This function is contractually 3D-in for both modalities: func_conform passes
+    # the tmean, never the 4D BOLD. Make that explicit so a 4D anatomical can neither
+    # crash step 1 (skullstripping) nor silently survive step 5 — flirt -applyxfm
+    # propagates a trailing frame axis, while the sitk backend collapses it.
+    image_path, _ = ensure_3d(
+        image_path, work_dir / "input_3d" / Path(image_path).name, logger=logger
+    )
 
     logger.info("Workflow: starting conform to template")
     logger.info(f"Data: input image - {os.path.basename(image_path)}")

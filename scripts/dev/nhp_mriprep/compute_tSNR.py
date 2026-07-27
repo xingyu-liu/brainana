@@ -6,6 +6,14 @@ import nibabel as nib
 import pathlib
 import matplotlib.pyplot as plt
 from matplotlib import colors, cm
+import sys
+from pathlib import Path
+
+# Add src/ to path (scripts/dev/nhp_mriprep/ -> scripts/dev/ -> scripts/ -> repo root)
+_src_dir = Path(__file__).resolve().parents[3] / "src"
+if str(_src_dir) not in sys.path:
+    sys.path.insert(0, str(_src_dir))
+
 from nhp_mri_prep.quality_control.mri_plotting import (
     create_grid_mri_image,
     PLOT_VOL_DPI,

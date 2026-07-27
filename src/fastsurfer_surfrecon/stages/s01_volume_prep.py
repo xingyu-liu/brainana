@@ -63,14 +63,11 @@ class VolumePrep(PipelineStage):
             logger.info("Linking orig.mgz to rawavg.mgz")
             rawavg.symlink_to("orig.mgz")
 
-    def should_skip(self) -> bool:
-        """Skip if all required files exist."""
-        aseg_orig = self.sd.mri(f"aparc.{self.config.atlas.name}atlas+aseg.orig.mgz")
-        mask = self.config.mask or self.sd.mask
-        aseg_nocc = self.sd.mri("aseg.auto_noCCseg.mgz")
-        return (
-            self.sd.orig.exists()
-            and aseg_orig.exists()
-            and mask.exists()
-            and aseg_nocc.exists()
-        )
+    def expected_outputs(self) -> list:
+        """Input volumes this stage verifies/links into the subject tree."""
+        return [
+            self.sd.orig,
+            self.sd.mri(f"aparc.{self.config.atlas.name}atlas+aseg.orig.mgz"),
+            self.config.mask or self.sd.mask,
+            self.sd.mri("aseg.auto_noCCseg.mgz"),
+        ]

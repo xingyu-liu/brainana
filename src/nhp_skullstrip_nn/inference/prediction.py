@@ -50,6 +50,34 @@ def _is_anisotropic(zooms, decimals: int = 2) -> bool:
     return bool(z.max() - z.min() > 1e-9)
 
 
+def _collapse_to_3d(img):
+    """Return a 3D version of ``img``, dropping or averaging any frame axis.
+
+    Some scanners emit anatomicals with a trailing singleton frame axis, e.g.
+    ``(144, 144, 60, 1)``. nibabel's ``resample_to_output`` rejects anything that is
+    not exactly 3D, so the anisotropic guard below has to collapse first.
+
+    Mirrors ``VolumeDataset.__getitem__`` (``data/datasets.py``), which averages a 4D
+    image over its last axis, so the isotropic and anisotropic paths agree on what
+    the network is fed. Kept self-contained (rather than importing nhp_mri_prep's
+    ``ensure_3d``) so this inference package stays independently installable.
+    """
+    img = nib.funcs.squeeze_image(img)
+    if len(img.shape) == 3:
+        return img
+    if len(img.shape) != 4:
+        raise ValueError(
+            f"Cannot collapse a {len(img.shape)}-D image to 3D for inference"
+        )
+    data = np.mean(img.get_fdata(), axis=-1).astype(np.float32)
+    out = nib.Nifti1Image(data, img.affine, img.header)
+    # Nifti1Image honours the header dtype, so an int16 source header would
+    # silently truncate the float32 mean unless it is overridden here.
+    out.header.set_data_dtype(np.float32)
+    out.header.set_zooms(img.header.get_zooms()[:3])
+    return out
+
+
 def _resample_file_to_native(path: str, native_ref_img, order: int) -> None:
     """Resample a NIfTI written on the isotropic inference grid back onto the
     native grid (shape + affine of ``native_ref_img``) and overwrite it in place.
@@ -174,13 +202,21 @@ def predict_volumes(
         and input_label is None
     ):
         native_ref_img = nib.load(str(input_image))
+        if len(native_ref_img.shape) > 3:
+            # resample_to_output below only accepts 3D. Collapsing here also makes
+            # the back-mapping reference 3D. The isotropic branch is untouched: it
+            # clears native_ref_img and never rebinds input_image, so a 4D file
+            # still reaches VolumeDataset and is averaged there exactly as before.
+            native_ref_img = _collapse_to_3d(native_ref_img)
         if _is_anisotropic(native_ref_img.header.get_zooms()):
             iso_mm = float(resample_anisotropic_mm)
             print(
                 f"Anisotropic voxels {tuple(np.round(native_ref_img.header.get_zooms()[:3], 3))} mm "
                 f"detected; resampling to {iso_mm} mm isotropic for inference."
             )
-            iso_img = resample_to_output(native_ref_img, [iso_mm, iso_mm, iso_mm], order=3)
+            iso_img = resample_to_output(
+                native_ref_img, [iso_mm, iso_mm, iso_mm], order=3
+            )
             iso_tmp_dir = tempfile.mkdtemp(prefix="nhp_skullstrip_iso_")
             iso_path = os.path.join(iso_tmp_dir, "input_isotropic.nii.gz")
             nib.save(iso_img, iso_path)

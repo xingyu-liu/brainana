@@ -43,6 +43,6 @@ class BiasCorrection(PipelineStage):
             threads=self.config.processing.threads,
         )
 
-    def should_skip(self) -> bool:
-        """Skip if orig_nu.mgz exists."""
-        return self.sd.orig_nu.exists()
+    def expected_outputs(self) -> list:
+        """Bias-corrected, WM-normalised volume."""
+        return [self.sd.orig_nu]

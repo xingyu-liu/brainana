@@ -77,7 +77,6 @@ class CCSegmentation(PipelineStage):
         """
         return False
 
-    def should_skip(self) -> bool:
-        """Skip if aseg.auto exists."""
-        aseg_auto = self.sd.mri("aseg.auto.mgz")
-        return aseg_auto.exists()
+    def expected_outputs(self) -> list:
+        """Segmentation with the corpus callosum painted in."""
+        return [self.sd.mri("aseg.auto.mgz")]

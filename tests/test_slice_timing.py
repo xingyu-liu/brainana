@@ -84,11 +84,25 @@ class TestSliceTimingPatternAnalysis:
         assert result == "seq+z"
 
     def test_different_direction(self):
-        """Test with different slice encoding direction."""
+        """A non-z encoding direction still yields a '+z' AFNI tpattern.
+
+        The return value is passed to AFNI's ``3dTshift -tpattern``, whose
+        vocabulary is always z-relative (seq+z, alt+z, ...) -- there is no
+        "seq+y". The caller physically swaps the slice axis to z before
+        invoking 3dTshift, so the direction argument only selects whether the
+        timings are reversed, never the letter in the pattern name.
+        """
         timing_values = [0.0, 0.5, 1.0, 1.5]
         result = determine_tpattern(timing_values, "y")
 
-        assert result == "seq+y"
+        assert result == "seq+z"
+
+    def test_negative_direction_reverses_order(self):
+        """The '-' in the direction is the part that changes the result."""
+        timing_values = [0.0, 0.5, 1.0, 1.5]
+
+        assert determine_tpattern(timing_values, "y") == "seq+z"
+        assert determine_tpattern(timing_values, "y-") == "seq-z"
 
     def test_complex_alternating_pattern(self):
         """Test complex alternating pattern with 8 slices."""

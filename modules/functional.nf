@@ -2,87 +2,6 @@
  * Functional processing modules for nhp_mri_prep Nextflow pipeline
  */
 
-process FUNC_REORIENT {
-    label 'cpu'
-    tag "${subject_id}_${session_id}_${run_identifier}"
-    
-    publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
-        mode: 'copy',
-        enabled: false
-    
-    input:
-    tuple val(subject_id), val(session_id), val(run_identifier), path(input_file), val(bids_name)
-    path config_file  // Effective config file with all resolved parameters
-    
-    output:
-    tuple val(subject_id), val(session_id), val(run_identifier), path("*desc-reorient_bold.nii.gz"), val(bids_name), emit: output
-    path "*.json", emit: metadata
-    
-    script:
-    """
-    \${PYTHON:-python3} <<EOF
-    from nhp_mri_prep.steps.functional import func_reorient
-    from nhp_mri_prep.steps.types import StepInput
-    from nhp_mri_prep.utils.templates import resolve_template, space_label_for
-    from nhp_mri_prep.utils.bids import create_bids_output_filename
-    from nhp_mri_prep.utils.nextflow import load_config, save_metadata, create_output_link
-    from pathlib import Path
-    import shutil
-    import os
-    
-    # Initialize run_identifier
-    run_identifier = '${run_identifier}'
-    
-    # Load config
-    config = load_config('${config_file}')
-    
-    # Get BIDS naming template (for BIDS filename generation)
-    bids_name = Path('${bids_name}')
-    
-    # Get effective_output_space from effective config file
-    effective_output_space = config.get('template', {}).get('output_space', 'NMT2Sym:res-05')
-    
-    # Resolve template if needed
-    template_file = None
-    if effective_output_space:
-        template_file = Path(resolve_template(effective_output_space))
-    
-    # Create step input
-    input_obj = StepInput(
-        input_file=Path('${input_file}'),
-        working_dir=Path('work'),
-        config=config,
-        output_name='func_reoriented.nii.gz',
-        metadata={
-            'subject_id': '${subject_id}',
-            'session_id': '${session_id}',
-            'run_identifier': run_identifier
-        }
-    )
-    
-    # Run step
-    result = func_reorient(input_obj, template_file=template_file)
-    
-    # Generate BIDS-compliant output filename
-    bids_output_filename = create_bids_output_filename(
-        original_file_path=bids_name,
-        suffix='desc-reorient',
-        modality='bold'
-    )
-    
-    # Create BIDS-compliant symlink for Nextflow output and publishDir
-    create_output_link(result.output_file, bids_output_filename)
-    
-    # Create symlinks for additional files (e.g., tmean) - keep as symlinks until published
-    for key, f in result.additional_files.items():
-        create_output_link(f, f.name)
-    
-    # Save metadata
-    save_metadata(result.metadata)
-    EOF
-    """
-}
-
 process FUNC_SLICE_TIMING {
     label 'cpu'
     tag "${subject_id}_${session_id}_${run_identifier}"
@@ -2199,7 +2118,7 @@ process FUNC_TSNR_SURF_PROJECTION {
 
     // Downstream QC reads outputs from the work dir only; no need to copy into output_dir.
     // Global process.publishDir is a map without `path`; a process with no publishDir can
-    // merge to a null target on finalize. Match FUNC_REORIENT: explicit path + enabled: false.
+    // merge to a null target on finalize. Match FUNC_SLICE_TIMING: explicit path + enabled: false.
     publishDir "${params.output_dir}/sub-${subject_id}${session_id ? "/ses-${session_id}" : ""}/func",
         mode: 'copy',
         enabled: false

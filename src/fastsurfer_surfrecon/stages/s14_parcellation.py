@@ -219,7 +219,15 @@ class Parcellation(HemisphereStage):
                         )
 
     def should_skip(self) -> bool:
-        """Skip if mapped parcellation exists."""
+        """Skip if mapped parcellation exists.
+
+        Kept as a custom check rather than expected_outputs(): the later
+        visualisation block rewrites `smoothwm` and `inflated` *in place*
+        rather than creating new files, so declaring them would not
+        distinguish a complete run from one that died before that block.
+        Known limitation -- a crash between the annot write and the viz block
+        leaves this stage looking complete.
+        """
         aparc_mapped = self.hemi_label(
             f"aparc.{self.config.atlas.name}atlas.mapped.annot"
         )

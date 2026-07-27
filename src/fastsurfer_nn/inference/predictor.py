@@ -600,7 +600,10 @@ class RunModelOnData:
         resampled_data = map_image(
             conformed_data_img,
             out_affine=self._input_native_img.affine,
-            out_shape=self._input_native_img.shape,
+            # [:3] — a native image with a trailing frame axis, e.g. (X, Y, Z, 1),
+            # would otherwise hand scipy.ndimage.affine_transform a 4-tuple
+            # output_shape for 3D data ("affine matrix has wrong number of columns").
+            out_shape=self._input_native_img.shape[:3],
             order=order,
         )
 

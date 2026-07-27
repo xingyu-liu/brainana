@@ -102,7 +102,9 @@ def mri_pretess(
         str(norm),
         str(output_vol),
     ]
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, expect_outputs=[output_vol]
+    )
     return output_vol
 
 
@@ -144,7 +146,9 @@ def mri_mc(
         str(label),
         str(output_surf),
     ]
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, expect_outputs=[output_surf]
+    )
     return output_surf
 
 
@@ -198,7 +202,9 @@ def mri_mask(
             str(output_vol),
         ]
     )
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, expect_outputs=[output_vol]
+    )
     return output_vol
 
 
@@ -298,7 +304,9 @@ def mri_normalize(
                 cmd.append(str(value))
 
     cmd.extend([str(input_vol), str(output_vol)])
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, expect_outputs=[output_vol]
+    )
     return output_vol
 
 
@@ -481,7 +489,9 @@ def mri_surf2volseg(
     if rh_pial:
         cmd.extend(["--rh-pial", str(rh_pial)])
 
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, expect_outputs=[output_vol]
+    )
     return output_vol
 
 
@@ -525,7 +535,9 @@ def mri_add_xform_to_header(
         str(input_vol),
         str(output_vol),
     ]
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, expect_outputs=[output_vol]
+    )
     return output_vol
 
 
@@ -602,7 +614,9 @@ def mri_fill(
             )
 
     cmd.extend([str(wm_vol), str(output_vol)])
-    run_fs_command(cmd, log_file=log_file, subject_dir=subject_dir)
+    run_fs_command(
+        cmd, log_file=log_file, subject_dir=subject_dir, expect_outputs=[output_vol]
+    )
     return output_vol
 
 

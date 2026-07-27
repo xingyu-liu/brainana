@@ -6,11 +6,14 @@ Uses Pydantic for validation and YAML for configuration files.
 
 from pathlib import Path
 from typing import Optional, Literal
+import logging
 import os
 
 import nibabel as nib
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
 
 # Brainana repo root (config.py -> fastsurfer_surfrecon -> src -> brainana)
 _BRAINANA_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -124,6 +127,18 @@ class ProcessingConfig(BaseModel):
     )
     hires: bool | Literal["auto"] = Field(
         description="High-resolution mode. Use True/False to force, or 'auto' to detect from voxel size"
+    )
+
+    # Surface topology gates. Defaulted (not required) so existing config files
+    # keep loading. When False, a surface that fails an invariant is reported at
+    # ERROR and the run continues; when True it raises. Kept warn-only by
+    # default until a cohort audit establishes how many historically-successful
+    # subjects the strict checks would newly reject. The s12 gate on `orig` is
+    # unconditional regardless of this flag -- nothing downstream is meaningful
+    # past a broken orig.
+    strict_surface_checks: bool = Field(
+        default=False,
+        description="Raise (instead of logging) when a surface fails a topology invariant",
     )
 
     # Non-human options (default True for macaque)
@@ -374,8 +389,19 @@ class ReconSurfConfig(BaseModel):
                 img = nib.load(orig_path)
                 vox_size = img.header.get_zooms()[0]
                 return vox_size < self.processing.hires_threshold
-            except Exception:
-                # If we can't read the voxel size, default to False
+            except Exception as e:
+                # Default to False, but say so: this silently changes
+                # tessellation, inflation, and the -hires flag on roughly eight
+                # recon-all invocations. Failing over without a word made an
+                # unreadable orig.mgz look like a deliberate low-res run.
+                logger.warning(
+                    "Could not read voxel size from %s (%s: %s); assuming "
+                    "hires=False. This changes tessellation and the -hires "
+                    "flag on downstream recon-all calls.",
+                    orig_path,
+                    type(e).__name__,
+                    e,
+                )
                 return False
         return bool(self.processing.hires)
 

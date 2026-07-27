@@ -7,6 +7,7 @@ Creates smoothwm.nofix from orig.nofix, before topology fix.
 
 import logging
 
+from ..processing.surface_fix import assert_surface_invariants
 from .base import HemisphereStage
 from ..wrappers.mris import mris_smooth
 
@@ -40,6 +41,18 @@ class Smoothing(HemisphereStage):
             subject_dir=self.sd.subject_dir,
         )
 
-    def should_skip(self) -> bool:
-        """Skip if smoothwm.nofix exists."""
-        return self.hemi_path("smoothwm.nofix").exists()
+    def expected_outputs(self) -> list:
+        """Smoothed surface, before topology correction."""
+        return [self.hemi_path("smoothwm.nofix")]
+
+    def verify_outputs(self) -> None:
+        """Smoothing moves vertices; it must not change connectivity."""
+        super().verify_outputs()
+        assert_surface_invariants(
+            self.hemi_path("smoothwm.nofix"),
+            closed=True,
+            oriented=True,
+            euler=None,
+            context=f"{self.hemi} s09 smoothing",
+            strict=self.config.processing.strict_surface_checks,
+        )

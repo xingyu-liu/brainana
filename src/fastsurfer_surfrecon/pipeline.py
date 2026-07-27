@@ -151,6 +151,54 @@ class ReconSurfPipeline:
         # Set global cmd log file so all commands are logged
         set_cmd_log_file(cmd_log_path)
 
+    # ------------------------------------------------------------------
+    # Stage ordering. These are the single source of truth: the phase
+    # methods below and the driver scripts in scripts/ all build their
+    # stage lists from here, so a stage added in one place cannot silently
+    # go missing from another.
+    # ------------------------------------------------------------------
+
+    def volume_stages(self) -> list:
+        """Volume-processing stages, in execution order (s01-s07b)."""
+        return [
+            VolumePrep(self.config, self.sd),
+            BiasCorrection(self.config, self.sd),
+            MaskAseg(self.config, self.sd),
+            Talairach(self.config, self.sd),
+            NormT1(self.config, self.sd),
+            CCSegmentation(self.config, self.sd),
+            WMFilled(self.config, self.sd),
+            ClaustrumFix(self.config, self.sd),
+        ]
+
+    def surface_stages(self, hemi: str) -> list:
+        """Per-hemisphere surface stages, in execution order (s08-s17).
+
+        Statistics is deliberately excluded: mris_anatomical_stats needs both
+        hemispheres' pial surfaces, so it runs sequentially after both
+        hemispheres finish.
+        """
+        return [
+            Tessellation(self.config, self.sd, hemi),
+            Smoothing(self.config, self.sd, hemi),
+            Inflation(self.config, self.sd, hemi),
+            SphericalProjection(self.config, self.sd, hemi),
+            TopologyFix(self.config, self.sd, hemi),
+            WhitePreaparc(self.config, self.sd, hemi),
+            Parcellation(self.config, self.sd, hemi),
+            SurfacePlacement(self.config, self.sd, hemi),
+            ComputeMorphometry(self.config, self.sd, hemi),
+            Registration(self.config, self.sd, hemi),
+        ]
+
+    def post_surface_stages(self) -> list:
+        """Volume stages that need both hemispheres and the ribbon (s20-s22)."""
+        return [
+            AsegRefinement(self.config, self.sd),
+            AparcMapping(self.config, self.sd),
+            WMParcMapping(self.config, self.sd),
+        ]
+
     def _run_volume_phase(self) -> None:
         """
         Volume preprocessing phase.
@@ -169,19 +217,7 @@ class ReconSurfPipeline:
         logger.info("Phase 1: Volume Processing")
         logger.info("=" * 60)
 
-        # Volume stages (sequential)
-        stages = [
-            VolumePrep(self.config, self.sd),
-            BiasCorrection(self.config, self.sd),
-            MaskAseg(self.config, self.sd),
-            Talairach(self.config, self.sd),
-            NormT1(self.config, self.sd),
-            CCSegmentation(self.config, self.sd),
-            WMFilled(self.config, self.sd),
-            ClaustrumFix(self.config, self.sd),
-        ]
-
-        for stage in stages:
+        for stage in self.volume_stages():
             stage.run()
 
     def _run_surface_phase(self) -> None:
@@ -210,23 +246,7 @@ class ReconSurfPipeline:
             """Process a single hemisphere."""
             logger.info(f"Processing hemisphere: {hemi}")
 
-            # Surface stages (sequential per hemisphere)
-            # Note: Statistics is excluded here because mris_anatomical_stats
-            # requires both hemispheres' pial surfaces, so it must run sequentially
-            stages = [
-                Tessellation(self.config, self.sd, hemi),
-                Smoothing(self.config, self.sd, hemi),
-                Inflation(self.config, self.sd, hemi),
-                SphericalProjection(self.config, self.sd, hemi),
-                TopologyFix(self.config, self.sd, hemi),
-                WhitePreaparc(self.config, self.sd, hemi),
-                Parcellation(self.config, self.sd, hemi),
-                SurfacePlacement(self.config, self.sd, hemi),
-                ComputeMorphometry(self.config, self.sd, hemi),
-                Registration(self.config, self.sd, hemi),
-            ]
-
-            for stage in stages:
+            for stage in self.surface_stages(hemi):
                 stage.run()
 
         hemis = ["lh", "rh"]
@@ -255,14 +275,46 @@ class ReconSurfPipeline:
             Statistics(self.config, self.sd, hemi).run()
 
         # Post-surface volume stages (need both hemispheres' surfaces and ribbon)
-        post_surface_stages = [
-            AsegRefinement(self.config, self.sd),
-            AparcMapping(self.config, self.sd),
-            WMParcMapping(self.config, self.sd),
-        ]
-
-        for stage in post_surface_stages:
+        for stage in self.post_surface_stages():
             stage.run()
+
+        self._write_surface_qc(hemis)
+
+    def _write_surface_qc(self, hemis: list) -> None:
+        """Record the topology of every key surface to scripts/surface_qc.json.
+
+        Gives a per-subject record of what the meshes actually looked like,
+        which is what makes a cohort audit possible -- e.g. deciding whether
+        strict_surface_checks can be turned on by default without rejecting
+        subjects that have always been considered successful.
+
+        Never fails the run: this is diagnostics, not a gate.
+        """
+        import json
+
+        from .processing.surface_fix import validate_surface
+
+        try:
+            report = {"subject": self.config.subject_id, "surfaces": {}}
+            for hemi in hemis:
+                for name in (
+                    "orig.nofix",
+                    "smoothwm.nofix",
+                    "orig.premesh",
+                    "orig",
+                    "white",
+                    "pial",
+                ):
+                    path = self.sd.surf_dir / f"{hemi}.{name}"
+                    if path.exists():
+                        report["surfaces"][f"{hemi}.{name}"] = validate_surface(path)
+
+            out = self.sd.scripts_dir / "surface_qc.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(report, indent=2))
+            logger.info(f"Wrote surface QC report: {out}")
+        except Exception as e:
+            logger.warning(f"Could not write surface QC report: {e}")
 
     def _run_stats_phase(self) -> None:
         """
@@ -302,6 +354,16 @@ class ReconSurfPipeline:
         Exception
             Re-raises any exception from item processing, stopping all parallel tasks.
         """
+        # Collect every item's outcome before raising.
+        #
+        # Raising from inside the `with` does not cancel the other workers --
+        # ThreadPoolExecutor.__exit__ calls shutdown(wait=True), so they run to
+        # completion anyway and their results (or their own exceptions) were
+        # simply discarded. That made a right-hemisphere failure look like it
+        # had also destroyed the left hemisphere's work, and hid the second
+        # error entirely when both failed.
+        failures: dict = {}
+
         with ThreadPoolExecutor(max_workers=len(items)) as executor:
             futures = {executor.submit(func, item): item for item in items}
 
@@ -311,7 +373,25 @@ class ReconSurfPipeline:
                     future.result()
                 except Exception as e:
                     logger.error(f"Error processing {item}: {e}")
-                    raise
+                    failures[item] = e
+
+        for item in items:
+            status = "FAILED" if item in failures else "ok"
+            logger.info("  %-4s %s", str(item), status)
+
+        if failures:
+            summary = "; ".join(
+                f"{item}: {type(exc).__name__}: {exc}" for item, exc in failures.items()
+            )
+            succeeded = [i for i in items if i not in failures]
+            raise RuntimeError(
+                f"{len(failures)} of {len(items)} items failed -- {summary}"
+                + (
+                    f" (completed: {', '.join(map(str, succeeded))})"
+                    if succeeded
+                    else ""
+                )
+            ) from next(iter(failures.values()))
 
     def _write_done_file(self) -> None:
         """Write the done file with run information."""

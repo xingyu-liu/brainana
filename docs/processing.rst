@@ -49,19 +49,55 @@ optionally tissue segmentations. These outputs provide the anatomical
 reference for T2w, functional, and surface workflows.
 
 
-2.1 Anatomical synthesis (multiple T1w/T2w)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2.1 Ingest normalization and synthesis
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When multiple T1w or T2w images exist per session or per subject,
-Brainana can synthesize a single anatomical reference.
+All anatomicals pass through ingest normalization before later steps;
+optional synthesis runs afterward when multiple T1w/T2w runs exist.
+
+- **Purpose:** Fix NIfTI header issues with one unambiguous fix, flag
+  ambiguous ones, and optionally merge multiple anatomicals into one
+  reference.
+- **Pass-through:** One read/write pass; well-formed inputs are not
+  rewritten (byte-identical). 
+
+**Automatic header repairs** (metadata only — no resampling or
+reorientation). Sidecar keys are set when a repair runs; otherwise
+omitted. Rewriting can re-encode ``scl_slope`` / ``scl_inter`` integers
+by one quantization step; scaled values are unchanged.
+
+- **4D shape** (``Input4DCollapsed``): drop a trailing singleton
+  dimension, or average a true multi-volume anatomical on the last axis.
+- **Missing qform/sform** (``OrientationRecovered``): both codes 0 leaves
+  readers disagreeing (nibabel/FSL vs ITK/ANTs). Brainana writes the
+  nibabel/FSL fallback to qform and sform (code 2).
+- **Conflicting qform/sform** (``QformSformReconciled``): sform is
+  copied to both (brainana/FSL use sform; FastSurfer favors qform).
+- **``.nii`` → ``.nii.gz``:** converted once at ingest (not logged in
+  the sidecar).
+
+.. warning::
+
+   ``OrientationRecovered`` assigns a *convention*, not verified
+   handedness. Wrong acquisition direction can yield an invisible
+   left/right mirror. Confirm against external records before
+   hemisphere-level interpretation.
+
+**Reported only** (``InputHeaderWarnings`` in sidecar and QC **Data
+findings**; section omitted if empty):
+
+- Voxel sizes not in mm (nibabel vs ITK/ANTs interpret ``xyzt_units``
+  differently).
+- ``pixdim`` inconsistent with the affine (surfaced at ingest instead
+  of failing deep in segmentation).
+
+**Synthesis (conditional)**
 
 - **When:** Multiple T1w or T2w per session or subject (configurable
-  synthesis level).
-- **Method:** The first image (by lexicographic order) is used as the
-  fixed reference. Each other image is rigidly coregistered to the
-  reference using ANTs (``antsRegistration`` with a rigid transform).
-  All coregistered images, including the reference, are averaged in
-  the reference space.
+  level).
+- **Method:** Lexicographically first image is the fixed reference;
+  other images are rigidly registered with ANTs, then all runs are
+  averaged in reference space.
 
 
 2.2 Conform to reference
@@ -364,11 +400,11 @@ never scrubbed or modified.
      - Step
      - Main tool / method
    * - Anatomical
+     - Ingest normalization
+     - nibabel header repair (4D collapse, missing qform/sform)
+   * - Anatomical
      - Synthesis
      - ANTs rigid + average
-   * - Anatomical
-     - Reorient
-     - AFNI 3dresample
    * - Anatomical
      - Conform
      - FLIRT + UNet skull-strip + 3dresample
@@ -387,9 +423,6 @@ never scrubbed or modified.
    * - Functional
      - Slice timing
      - AFNI 3dTshift
-   * - Functional
-     - Reorient
-     - AFNI 3dresample
    * - Functional
      - Motion correction
      - FSL mcflirt

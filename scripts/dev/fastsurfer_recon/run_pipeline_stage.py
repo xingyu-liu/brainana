@@ -11,8 +11,8 @@ import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Add src/ to path for fastsurfer_surfrecon package (scripts/ -> fastsurfer_surfrecon -> src)
-_src = Path(__file__).resolve().parent.parent.parent
+# Add src/ to path (scripts/dev/fastsurfer_recon/ -> scripts/dev/ -> scripts/ -> repo root)
+_src = Path(__file__).resolve().parents[3] / "src"
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
@@ -46,7 +46,7 @@ from fastsurfer_surfrecon.stages import (
     AparcMapping,
     WMParcMapping,
 )
-from fastsurfer_surfrecon.scripts.stage_utils import (
+from fastsurfer_surfrecon.stages.ordering import (
     stage_order_value,
     validate_step,
 )

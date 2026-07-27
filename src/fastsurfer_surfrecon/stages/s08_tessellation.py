@@ -5,12 +5,15 @@ Creates initial surface using marching cubes or FreeSurfer tessellation.
 """
 
 import logging
-import re
 import numpy as np
 
+from ..processing.surface_fix import (
+    assert_surface_invariants,
+    verify_surface_ras,
+)
 from .base import HemisphereStage
 from ..wrappers.mri import mri_pretess, mri_mc
-from ..wrappers.mris import mris_info, mris_extract_main_component, mris_remesh
+from ..wrappers.mris import mris_extract_main_component, mris_remesh
 from ..wrappers.base import run_recon_all, FreeSurferError
 from ..processing.surface_fix import fix_mc_surface_header
 
@@ -80,18 +83,11 @@ class Tessellation(HemisphereStage):
             )
 
             # Verify surfaceRAS header
-            info = mris_info(
+            verify_surface_ras(
                 orig_nofix,
                 log_file=self.config.log_file,
                 subject_dir=self.sd.subject_dir,
             )
-            # Check for surfaceRAS with flexible whitespace (mris_info uses variable spacing)
-            if not re.search(r"vertex\s+locs\s*:\s*surfaceRAS", info):
-                logger.error(f"mris_info full output:\n{info}")
-                raise RuntimeError(
-                    f"Incorrect header in {orig_nofix}: "
-                    "vertex locs is not set to surfaceRAS"
-                )
 
             # Extract main component
             logger.info(f"Extracting main component for {self.hemi}")
@@ -111,18 +107,11 @@ class Tessellation(HemisphereStage):
             )
 
             # Verify surfaceRAS header again after extraction
-            info = mris_info(
+            verify_surface_ras(
                 orig_nofix,
                 log_file=self.config.log_file,
                 subject_dir=self.sd.subject_dir,
             )
-            # Check for surfaceRAS with flexible whitespace (mris_info uses variable spacing)
-            if not re.search(r"vertex\s+locs\s*:\s*surfaceRAS", info):
-                logger.error(f"mris_info full output after extraction:\n{info}")
-                raise RuntimeError(
-                    f"Incorrect header in {orig_nofix} after extraction: "
-                    "vertex locs is not set to surfaceRAS"
-                )
 
             # Decimate for hires (try less decimation first on "too small" errors)
             if self.config.hires:
@@ -155,6 +144,23 @@ class Tessellation(HemisphereStage):
                     if last_error is not None:
                         raise last_error
 
-    def should_skip(self) -> bool:
-        """Skip if orig.nofix exists."""
-        return self.hemi_path("orig.nofix").exists()
+    def expected_outputs(self) -> list:
+        """Tessellated surface, before topology correction."""
+        return [self.hemi_path("orig.nofix")]
+
+    def verify_outputs(self) -> None:
+        """Marching-cubes output must be a closed, oriented manifold.
+
+        euler is deliberately unchecked: this surface has not been topology
+        corrected yet, so a non-genus-0 result here is expected and normal
+        (sub-01's rh was euler -32 at this point and still recoverable).
+        """
+        super().verify_outputs()
+        assert_surface_invariants(
+            self.hemi_path("orig.nofix"),
+            closed=True,
+            oriented=True,
+            euler=None,
+            context=f"{self.hemi} s08 tessellation",
+            strict=self.config.processing.strict_surface_checks,
+        )

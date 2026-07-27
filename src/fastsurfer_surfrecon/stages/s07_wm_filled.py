@@ -150,10 +150,10 @@ class WMFilled(PipelineStage):
         else:
             logger.info("filled.mgz already exists")
 
-    def should_skip(self) -> bool:
-        """Skip if wm, filled, and aseg.presurf exist."""
-        return (
-            self.sd.mri("wm.mgz").exists()
-            and self.sd.mri("filled.mgz").exists()
-            and self.sd.mri("aseg.presurf.mgz").exists()
-        )
+    def expected_outputs(self) -> list:
+        """White-matter volume and the filled hemispheres."""
+        return [
+            self.sd.mri("wm.mgz"),
+            self.sd.mri("filled.mgz"),
+            self.sd.mri("aseg.presurf.mgz"),
+        ]

@@ -104,7 +104,11 @@ class Talairach(PipelineStage):
         return False
 
     def should_skip(self) -> bool:
-        """Skip if transforms exist (or nu.mgz and talairach.xfm if disabled)."""
+        """Skip if transforms exist (or nu.mgz and talairach.xfm if disabled).
+
+        Custom rather than expected_outputs(): which files count as "done"
+        depends on the no_talairach config branch.
+        """
         if self.config.processing.no_talairach:
             # When disabled, we need both nu.mgz and the dummy talairach.xfm
             # If either doesn't exist, we need to run to create them

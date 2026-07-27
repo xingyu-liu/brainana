@@ -5,8 +5,8 @@ import logging
 import sys
 from pathlib import Path
 
-# Add src/ to path (scripts/ -> fastsurfer_nn -> src)
-_src_dir = Path(__file__).resolve().parent.parent.parent
+# Add src/ to path (scripts/dev/fastsurfer_seg/ -> scripts/dev/ -> scripts/ -> repo root)
+_src_dir = Path(__file__).resolve().parents[3] / "src"
 if str(_src_dir) not in sys.path:
     sys.path.insert(0, str(_src_dir))
 

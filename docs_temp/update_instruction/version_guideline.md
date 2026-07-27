@@ -179,6 +179,22 @@ Editable installs (`.venv`, conda) update code on the fly but **freeze the versi
 
 Use one `VERSION` (e.g. `1.2.0`) and update these **together on `main` before pre-tag gates** (leave uncommitted until tests pass).
 
+**Run the script — do not walk the table by hand:**
+
+```bash
+python scripts/bump_version.py ${VERSION}             # apply
+python scripts/bump_version.py ${VERSION} --dry-run   # preview only
+```
+
+It applies every **bold** row below, prints a per-file `old -> new` report, then re-runs
+the quick grep and lists anything still mentioning the old version. The table remains the
+reference for *what* it touches and why; the two unbold rows it cannot do
+(`uv pip install -e .` and the Docker build-arg) are printed as reminders when it finishes.
+
+The v2.1.0 bump was done by hand and missed four of these files, which is why the script
+exists. `scripts/scratch/test_brainana_*.sh` is matched by glob, so a new scratch runner is
+picked up automatically; runners with no `version=` line are skipped silently.
+
 | File / area | What to update | Notes |
 | ----------- | -------------- | ----- |
 | **pyproject.toml** | `version = "${VERSION}"` | Single source of truth |
@@ -195,11 +211,19 @@ Use one `VERSION` (e.g. `1.2.0`) and update these **together on `main` before pr
 
 **Quick grep before build:**
 
+`bump_version.py` runs this sweep itself and prints what is left, so this is the manual
+equivalent — useful when verifying a bump someone else made, or on a tag.
+
 ```bash
 export VERSION=1.2.0   # set to your release
 grep '^version' pyproject.toml
 rg -n "${VERSION}|1\\.0\\.0|<version>" pyproject.toml CHANGELOG.md README.md docs/
 ```
+
+Expect one legitimate hit after a bump: the previous release's own `## [X.Y.Z]` heading in
+`CHANGELOG.md`. `docs/_build/` and the bundled example QC report also match — the former is
+regenerated, the latter carries a minified JS blob that matches almost any digit sequence;
+the script filters both out.
 
 ---
 
@@ -244,12 +268,11 @@ All must pass **before** `git commit` and **before** `git tag`. Full gate list i
 
 | Step | Command / action |
 |------|------------------|
-| Bump `pyproject.toml` | `version = "X.Y.Z"` |
-| Refresh `.venv` dist-info | `uv pip install -e .` |
-| Update `CHANGELOG.md` | `[Unreleased]` → `[X.Y.Z] - YYYY-MM-DD` |
-| Update notebook ref | `BRAINANA_REF = "vX.Y.Z"` in `BrainanaLite.ipynb` |
-| Update scratch scripts | `version=X.Y.Z` in `test_brainana_*.sh` |
-| Grep for stale references | see quick grep above |
+| Bump every version site | `python scripts/bump_version.py X.Y.Z` |
+| ↳ covers | `pyproject.toml`, `CHANGELOG.md` heading, `BrainanaLite.ipynb` ref, `docs/*.rst` example tags, `test_brainana_*.sh` |
+| Write the CHANGELOG body | move `[Unreleased]` entries under the new heading |
+| Refresh `.venv` dist-info | `uv pip install -e .` (script cannot do this) |
+| Grep for stale references | script prints this; see quick grep above to re-check |
 | Run version tests | `pytest tests/test_version.py -v` |
 | Build Docker | `--build-arg BRAINANA_VERSION=X.Y.Z` |
 | Verify sidecar version | inspect `GeneratedBy.Version` in a test run |
@@ -265,7 +288,14 @@ All must pass **before** `git commit` and **before** `git tag`. Full gate list i
 |------|------|----------------|
 | `test_get_version_reads_pyproject` | `tests/test_version.py` | `get_version()` matches `pyproject.toml` |
 | `test_dist_info_matches_pyproject` | `tests/test_version.py` | dist-info matches pyproject (fails → run `uv pip install -e .`) |
+| `test_notebook_ref_matches_pyproject` | `tests/test_version.py` | `BRAINANA_REF` matches pyproject **when pinned to a `vX.Y.Z` tag**; skipped for `main` / SHA / `feat/<topic>` (see section 8) |
 | Sidecar `GeneratedBy.Version` | `tests/test_templates_and_sidecar.py` | Sidecars stamp `get_version()` |
+
+Only `BRAINANA_REF` is guarded among the section 4 files, because it is the only one where
+staleness is *breaking* rather than cosmetic: Colab clones that ref, so a stale pin silently
+installs the wrong code. A stale `docs/` example tag or scratch `version=` is harmless — the
+old Docker tag is still published, and the scratch variable only names output directories.
+Enforcing those would block releases on cosmetics and train people to bypass the guard.
 
 ---
 
@@ -299,6 +329,9 @@ The `version=` variable in `scripts/scratch/test_brainana_*.sh` only names outpu
 
 - Pre-tag: use `main`, commit SHA, or local editable install — not `v${VERSION}` until the tag exists on GitHub.
 - Post-tag: Colab smoke requires `BRAINANA_REF = "v${VERSION}"` after push.
+- `test_notebook_ref_matches_pyproject` (section 7) only fires on the pinned `vX.Y.Z` form,
+  precisely so it cannot fail during this pre-tag window. `python scripts/bump_version.py
+  X.Y.Z --pre-tag` sets the ref to `main` instead of the tag for the same reason.
 
 ---
 

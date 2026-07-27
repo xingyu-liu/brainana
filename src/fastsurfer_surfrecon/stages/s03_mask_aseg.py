@@ -51,6 +51,6 @@ class MaskAseg(PipelineStage):
             )
             shutil.copy(aseg_nocc, aseg_presurf)
 
-    def should_skip(self) -> bool:
-        """Skip if aseg.presurf.mgz exists."""
-        return self.sd.mri("aseg.presurf.mgz").exists()
+    def expected_outputs(self) -> list:
+        """Masked (or copied) presurf segmentation."""
+        return [self.sd.mri("aseg.presurf.mgz")]

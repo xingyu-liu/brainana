@@ -9,6 +9,7 @@ import subprocess
 import logging
 import os
 import shutil
+import time
 from pathlib import Path
 from typing import Optional, Sequence, Any
 
@@ -151,6 +152,7 @@ def run_fs_command(
     check: bool = True,
     capture_output: bool = True,
     timeout: Optional[float] = None,
+    expect_outputs: Sequence[Path] = (),
 ) -> subprocess.CompletedProcess:
     """
     Run a FreeSurfer command.
@@ -177,6 +179,11 @@ def run_fs_command(
         Capture stdout and stderr
     timeout : float, optional
         Timeout in seconds
+    expect_outputs : sequence of Path, optional
+        Files the command must have written. Checked after a successful exit.
+        A FreeSurfer binary that exits 0 without writing anything is otherwise
+        indistinguishable from success, and the failure only surfaces later,
+        in whichever stage tries to read the missing file.
 
     Returns
     -------
@@ -186,7 +193,8 @@ def run_fs_command(
     Raises
     ------
     FreeSurferError
-        If command fails and check=True
+        If the command fails and check=True, or if it exits 0 without
+        producing everything in expect_outputs.
     """
     # Convert all arguments to strings
     cmd_list = [str(c) for c in cmd]
@@ -229,6 +237,7 @@ def run_fs_command(
                 f.write(f"cd {subject_dir}\n")
             f.write(f"{' '.join(cmd_list)}\n")
 
+    started = time.monotonic()
     try:
         result = subprocess.run(
             cmd_list,
@@ -259,6 +268,11 @@ def run_fs_command(
                 f.write(f"[stderr]\n{result.stderr}")
             f.write(f"[exit code: {result.returncode}]\n")
 
+    elapsed = time.monotonic() - started
+    logger.debug(
+        "%s finished in %.1fs (exit %d)", cmd_list[0], elapsed, result.returncode
+    )
+
     # Check for errors
     if check and result.returncode != 0:
         error_msg = result.stderr or result.stdout or "Unknown error"
@@ -267,6 +281,23 @@ def run_fs_command(
             cmd=cmd_str,
             returncode=result.returncode,
         )
+
+    # Postcondition: exit 0 is not proof that anything was written.
+    if expect_outputs and result.returncode == 0:
+        # Wrappers relativise output paths against subject_dir (that is the
+        # command's cwd), so resolve them the same way. Path.__truediv__
+        # returns the right-hand side unchanged when it is already absolute,
+        # so absolute outputs pass through untouched.
+        base = Path(subject_dir) if subject_dir else (Path(cwd) if cwd else Path.cwd())
+        missing = [Path(p) for p in expect_outputs if not (base / p).exists()]
+        if missing:
+            raise FreeSurferError(
+                f"{cmd_list[0]} exited 0 but did not produce: "
+                + ", ".join(str(m) for m in missing)
+                + f"\nCommand: {cmd_str}",
+                cmd=cmd_str,
+                returncode=result.returncode,
+            )
 
     return result
 

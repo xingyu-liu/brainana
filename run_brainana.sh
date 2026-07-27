@@ -15,6 +15,14 @@ fi
 # Set Nextflow home directory (for global cache, history, etc.)
 export NXF_HOME="${NXF_HOME:-$HOME/.nextflow}"
 
+# Pin the Nextflow version for local runs, matching the Docker image.
+# Without this, a freshly installed launcher self-downloads the newest release;
+# Nextflow 26.x defaults to the strict config parser, which rejects the Groovy in
+# nextflow.config (nvidia-smi .execute(), Math.floor, try/catch) and fails at parse time.
+# In Docker, NXF_VER is already exported by the image, so the :- default is a no-op there.
+# Keep in sync with ARG NEXTFLOW_VERSION in the Dockerfile.
+export NXF_VER="${NXF_VER:-25.10.2}"
+
 # Log path must live under NXF_HOME when NXF_LOG is unset. Do not use $HOME here:
 # after gosu to a numeric UID, HOME may be "/" so $HOME/.nextflow becomes //.nextflow
 # and mkdir fails with permission denied.

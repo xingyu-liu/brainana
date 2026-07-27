@@ -10,9 +10,14 @@ import shutil
 from .base import HemisphereStage
 from ..wrappers.mris import mris_fix_topology, mris_remove_intersection
 from ..wrappers.mris import mris_smooth, mris_inflate
-from ..processing.surface_fix import fix_surface_orientation
+from ..processing.surface_fix import (
+    SurfaceInvariantError,
+    assert_surface_invariants,
+    fix_surface_orientation,
+    validate_surface,
+)
 from ..processing.spherical import spherically_project_surface
-from ..processing.topology_fix import get_euler_number, repair_surface_pymeshfix
+from ..processing.topology_fix import repair_surface_pymeshfix
 
 logger = logging.getLogger(__name__)
 
@@ -53,28 +58,8 @@ class TopologyFix(HemisphereStage):
             )
             shutil.copy(sphere, qsphere_nofix)
 
-        # Verify all required inputs exist before proceeding
-        # These files should have been created in previous stages:
-        #   - qsphere.nofix: stage 11 (spherical projection)
-        #   - inflated.nofix: stage 10 (inflation)
-        #   - orig.nofix: stage 08 (tessellation)
         inflated_nofix = self.hemi_path("inflated.nofix")
         orig_nofix = self.hemi_path("orig.nofix")
-        if not qsphere_nofix.exists():
-            raise FileNotFoundError(
-                f"{self.hemi}.qsphere.nofix not found. "
-                "This should be created in stage 11 (spherical_projection)."
-            )
-        if not inflated_nofix.exists():
-            raise FileNotFoundError(
-                f"{self.hemi}.inflated.nofix not found. "
-                "This should be created in stage 10 (inflation)."
-            )
-        if not orig_nofix.exists():
-            raise FileNotFoundError(
-                f"{self.hemi}.orig.nofix not found. "
-                "This should be created in stage 08 (tessellation)."
-            )
 
         logger.info(f"Fixing topology for {self.hemi}...")
 
@@ -85,6 +70,31 @@ class TopologyFix(HemisphereStage):
         # Output: orig.premesh (preliminary mesh with fixed topology)
         premesh = self.hemi_path("orig.premesh")
         if not premesh.exists():
+            # Inputs are verified here, not at the top of the stage, because they
+            # are needed *only* by mris_fix_topology. Step 4 below deletes
+            # inflated.nofix once it has been consumed, so an unconditional check
+            # would make every resume of this stage fail on a file the stage
+            # itself removed.
+            #   - qsphere.nofix: stage 11 (spherical projection)
+            #   - inflated.nofix: stage 10 (inflation)
+            #   - orig.nofix:     stage 08 (tessellation)
+            if not qsphere_nofix.exists():
+                raise FileNotFoundError(
+                    f"{self.hemi}.qsphere.nofix not found. "
+                    "This should be created in stage 11 (spherical_projection)."
+                )
+            if not inflated_nofix.exists():
+                raise FileNotFoundError(
+                    f"{self.hemi}.inflated.nofix not found. It is created in "
+                    "stage 10 (inflation) and consumed here. If you are re-running "
+                    f"this stage, delete {self.hemi}.orig.premesh and re-run stage 10."
+                )
+            if not orig_nofix.exists():
+                raise FileNotFoundError(
+                    f"{self.hemi}.orig.nofix not found. "
+                    "This should be created in stage 08 (tessellation)."
+                )
+
             logger.info(f"Running mris_fix_topology for {self.hemi}...")
             mris_fix_topology(
                 subject=self.config.subject_id,
@@ -100,17 +110,35 @@ class TopologyFix(HemisphereStage):
                 subjects_dir=self.config.subjects_dir,
             )
 
-        # If premesh has Euler != 2, run pymeshfix iteratively (max 5) to close boundary
-        # edges and fix orientation; stop when Euler == 2.
+        # If the premesh is not a clean genus-0 sphere, run pymeshfix iteratively
+        # (max 5) to close boundary edges and fix orientation.
+        #
+        # The predicate is closed AND oriented AND euler == 2, not euler alone.
+        # Euler is not sufficient: a mesh with one triangle wound backwards is
+        # closed with euler 2 but is not oriented, and mris_fix_topology can
+        # leave boundary edges behind. All three are computed in-process, so
+        # there is no path where the check silently does not happen.
         premesh_for_orig = premesh
-        euler = get_euler_number(premesh)
-        if euler is not None and euler != 2:
+        info = validate_surface(premesh)
+        logger.info(
+            "%s.orig.premesh: V=%d F=%d closed=%s oriented=%s euler=%s",
+            self.hemi,
+            info["n_vertices"],
+            info["n_faces"],
+            info["is_closed"],
+            info["is_oriented"],
+            info["euler"],
+        )
+
+        if not (info["is_closed"] and info["is_oriented"] and info["euler"] == 2):
             premesh_pymeshfix = self.hemi_path("orig.premesh.pymeshfix")
             max_iterations = 5
-            logger.info(
-                f"Premesh Euler number {euler} (target 2). Running pymeshfix up to {max_iterations} iterations..."
+            logger.warning(
+                f"{self.hemi} premesh has defective topology. "
+                f"Running pymeshfix up to {max_iterations} iterations..."
             )
             current_input = premesh
+            repaired = None
             for iteration in range(max_iterations):
                 # Use temp output when input and output would be the same path
                 if current_input.resolve() == premesh_pymeshfix.resolve():
@@ -119,48 +147,90 @@ class TopologyFix(HemisphereStage):
                     )
                 else:
                     output_path = premesh_pymeshfix
-                if not repair_surface_pymeshfix(current_input, output_path):
-                    logger.warning(
-                        f"pymeshfix failed at iteration {iteration + 1}, using current mesh"
-                    )
-                    break
+                repaired = repair_surface_pymeshfix(current_input, output_path)
                 if output_path.suffix == ".tmp":
                     shutil.move(output_path, premesh_pymeshfix)
-                euler_after = get_euler_number(premesh_pymeshfix)
-                logger.info(f"  Iteration {iteration + 1}: Euler = {euler_after}")
-                if euler_after is not None and euler_after == 2:
+                    repaired = validate_surface(premesh_pymeshfix)
+                logger.info(
+                    "  Iteration %d: V=%d F=%d closed=%s oriented=%s euler=%s",
+                    iteration + 1,
+                    repaired["n_vertices"],
+                    repaired["n_faces"],
+                    repaired["is_closed"],
+                    repaired["is_oriented"],
+                    repaired["euler"],
+                )
+                if (
+                    repaired["is_closed"]
+                    and repaired["is_oriented"]
+                    and repaired["euler"] == 2
+                ):
                     logger.info(
-                        f"  Topology corrected (Euler=2) after {iteration + 1} iteration(s)"
+                        f"  Topology corrected after {iteration + 1} iteration(s)"
                     )
                     premesh_for_orig = premesh_pymeshfix
                     break
                 current_input = premesh_pymeshfix
             else:
-                premesh_for_orig = premesh_pymeshfix
-                logger.warning(
-                    f"Euler still != 2 after {max_iterations} iterations; using pymeshfix result"
+                # Do not promote a still-defective mesh to orig. Everything
+                # downstream (surface placement, parcellation, morphometry)
+                # inherits this mesh's connectivity, so continuing here only
+                # moves the failure somewhere less diagnosable.
+                raise SurfaceInvariantError(
+                    premesh_pymeshfix,
+                    repaired or {},
+                    ["topology repair did not converge"],
+                    context=f"{self.hemi} pymeshfix, {max_iterations} iterations",
                 )
-        elif euler is not None and euler == 2:
+        else:
             logger.info(
-                "Premesh already has correct topology (Euler=2), skipping pymeshfix"
+                f"{self.hemi} premesh topology OK (closed, oriented, euler=2), "
+                "skipping pymeshfix"
             )
+
+        # Gate: nothing defective may become orig. mris_place_surface preserves
+        # connectivity, so white/pial inherit this mesh's topology exactly --
+        # which makes this the single highest-value check in the pipeline.
+        assert_surface_invariants(
+            premesh_for_orig,
+            closed=True,
+            oriented=True,
+            euler=2,
+            context=f"{self.hemi} pre-orig",
+        )
 
         # Step 2: Copy premesh to orig (final fixed surface)
         # The premesh (or pymeshfix result) is the topology-fixed version that becomes the final orig surface.
-        if not orig.exists():
-            logger.info(f"Copying {self.hemi}.orig.premesh to {self.hemi}.orig...")
+        #
+        # Always re-copy rather than skipping when orig exists. orig is written
+        # here at step 2 of 8, so a run that died later leaves an orig that does
+        # not correspond to premesh_for_orig. Tracking whether it was rewritten
+        # lets the later steps know their inputs changed.
+        orig_regenerated = False
+        if not orig.exists() or not self._same_file(premesh_for_orig, orig):
+            logger.info(f"Copying {premesh_for_orig.name} to {self.hemi}.orig...")
             shutil.copy(premesh_for_orig, orig)
+            orig_regenerated = True
 
         # Step 3: Remove surface intersections
         # Even after topology fix, the surface may have self-intersections.
         # This step removes any remaining intersections to ensure a clean surface.
-        logger.info(f"Removing intersections from {self.hemi}.orig...")
-        mris_remove_intersection(
-            input_surf=orig,
-            output_surf=orig,  # In-place operation
-            log_file=self.config.log_file,
-            subject_dir=self.sd.subject_dir,
-        )
+        #
+        # Guarded on orig_regenerated: this is an in-place, non-idempotent
+        # operation, so re-running it on an already-processed orig would keep
+        # eroding the surface on every resume.
+        if orig_regenerated:
+            logger.info(f"Removing intersections from {self.hemi}.orig...")
+            mris_remove_intersection(
+                input_surf=orig,
+                output_surf=orig,  # In-place operation
+                log_file=self.config.log_file,
+                subject_dir=self.sd.subject_dir,
+            )
+        else:
+            logger.info(
+                f"{self.hemi}.orig already current; skipping intersection removal"
+            )
 
         # Step 4: Clean up temporary files
         # inflated.nofix is no longer needed after topology fix (it was only needed as input).
@@ -181,8 +251,10 @@ class TopologyFix(HemisphereStage):
         )
 
         # Step 6: re-create smoothwm from fixed orig after topology fix
+        # Regenerated whenever orig changed: reusing a smoothwm derived from a
+        # superseded orig silently mixes two different meshes.
         smoothwm = self.hemi_path("smoothwm")
-        if not smoothwm.exists():
+        if orig_regenerated or not smoothwm.exists():
             logger.info(
                 f"Creating {self.hemi}.smoothwm from fixed {self.hemi}.orig (smooth, {self.config.processing.smooth_iterations} iterations)..."
             )
@@ -198,7 +270,7 @@ class TopologyFix(HemisphereStage):
 
         # Step 7: re-create inflated from smoothwm after topology fix
         inflated = self.hemi_path("inflated")
-        if not inflated.exists():
+        if orig_regenerated or not inflated.exists():
             logger.info(
                 f"Creating {self.hemi}.inflated from {self.hemi}.smoothwm (inflate2, {self.config.processing.inflate2_iterations or 'default'} iterations)..."
             )
@@ -227,6 +299,42 @@ class TopologyFix(HemisphereStage):
         )
         shutil.copy(sphere, qsphere)
 
-    def should_skip(self) -> bool:
-        """Skip if orig exists."""
-        return self.hemi_path("orig").exists()
+    @staticmethod
+    def _same_file(a, b) -> bool:
+        """True if two paths hold identical bytes (cheap size check first)."""
+        if not (a.exists() and b.exists()):
+            return False
+        if a.stat().st_size != b.stat().st_size:
+            return False
+        return a.read_bytes() == b.read_bytes()
+
+    def expected_outputs(self) -> list:
+        """Everything this stage guarantees on success.
+
+        Note `sphere` is deliberately absent: stage 11 also writes it, so
+        including it here would let stage 11's output satisfy this stage's skip
+        check. `qsphere` is written last by this stage and by no other, which
+        makes it the honest completion marker.
+        """
+        return [
+            self.hemi_path("orig"),
+            self.hemi_path("smoothwm"),
+            self.hemi_path("inflated"),
+            self.hemi_path("qsphere"),
+        ]
+
+    def verify_outputs(self) -> None:
+        """Postcondition: outputs exist AND orig is a clean genus-0 sphere."""
+        super().verify_outputs()
+        assert_surface_invariants(
+            self.hemi_path("orig"),
+            closed=True,
+            oriented=True,
+            # outward matters as much as consistent: pymeshfix can return a
+            # consistently-wound but inverted mesh, which every other topology
+            # check passes and which silently inverts normal-based sampling
+            # downstream (e.g. the gray/white intensity estimates in s13).
+            outward=True,
+            euler=2,
+            context=f"{self.hemi} s12 output",
+        )
